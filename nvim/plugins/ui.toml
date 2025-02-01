@@ -1,0 +1,54 @@
+[[plugins]]
+repo = 'rcarriga/nvim-notify'
+on_event = 'CursorHold'
+on_lua = 'noice'
+lua_source = '''
+  local notify = require("notify")
+  notify.setup({
+    stages = "slide",
+    max_width = 50,
+    timeout = 1800,
+  })
+  vim.notify = notify
+'''
+
+[[plugins]]
+repo = 'MunifTanjim/nui.nvim'
+
+[[plugins]]
+repo = 'folke/noice.nvim'
+depends = ['nui.nvim', 'nvim-treesitter']
+on_event = ['CmdlineEnter']
+hooks_file = '$HOOK_DIR/noice.lua'
+
+[[plugins]]
+repo = 'j-hui/fidget.nvim'
+rev = "v1.5.0"
+on_event = 'LspAttach'
+hooks_file = "$HOOK_DIR/fidget.lua"
+
+[[plugins]]
+repo = 'matsui54/denops-popup-preview.vim'
+depends = 'denops.vim'
+on_event = 'LspAttach'
+lua_source = '''
+  vim.fn["popup_preview#enable"]()
+  vim.keymap.set("i", "<C-f>", function()
+    vim.fn["popup_preview#scroll"](4)
+  end)
+  vim.keymap.set("i", "<C-b>", function()
+    vim.fn["popup_preview#scroll"](-4)
+  end)
+'''
+
+[[plugins]]
+repo = 'matsui54/denops-signature_help'
+depends = 'denops.vim'
+on_event = 'LspAttach'
+lua_source = '''
+  vim.fn["signature_help#enable"]()
+  vim.g.signature_help_config = {
+    contentsStyle = "labels",
+    viewStyle = "floating"
+  }
+'''

@@ -1,0 +1,23 @@
+[[plugins]]
+repo = 'nvim-lualine/lualine.nvim'
+depends = ['nvim-web-devicons', 'fluoromachine.nvim']
+on_event = ['BufNewFile', 'BufRead']
+hooks_file = '$HOOK_DIR/lualine.lua'
+
+[[plugins]]
+repo = 'SmiteshP/nvim-navic'
+depends = ['nvim-lspconfig']
+on_lua = 'lualine'
+hooks_file = '$HOOK_DIR/navic.lua'
+
+[[plugins]]
+repo = 'pnx/lualine-lsp-status'
+depends = ['nvim-lspconfig']
+on_lua = 'lualine'
+
+[[plugins]]
+repo = 'akinsho/bufferline.nvim'
+depends = ['nvim-web-devicons']
+rev = "*"
+on_event = ['BufNewFile', 'BufRead']
+hooks_file = '$HOOK_DIR/bufferline.lua'

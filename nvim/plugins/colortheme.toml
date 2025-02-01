@@ -1,0 +1,9 @@
+# [[plugins]]
+# repo = 'diegoulloao/neofusion.nvim'
+# on_event = 'VimEnter'
+# hooks_file = "$HOOK_DIR/neofusion.lua"
+
+[[plugins]]
+repo = 'maxmx03/fluoromachine.nvim'
+on_event = 'VimEnter'
+hooks_file = "$HOOK_DIR/fluoromachine.lua"

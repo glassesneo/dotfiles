@@ -1,0 +1,10 @@
+[[plugins]]
+repo = 'vim-skk/skkeleton'
+depends = 'denops.vim'
+on_event = 'InsertEnter'
+on_source = 'ddc.vim'
+hooks_file = '$HOOK_DIR/skk.lua'
+
+[[plugins]]
+repo = 'delphinus/skkeleton_indicator.nvim'
+on_source = 'skkeleton'

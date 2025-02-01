@@ -1,0 +1,8 @@
+[[plugins]]
+repo = '3rd/image.nvim'
+lua_source = '''
+  require("image").setup({
+    backend = "kitty",
+    processor = "magick_cli"
+  })
+'''

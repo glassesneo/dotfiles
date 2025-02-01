@@ -1,0 +1,30 @@
+# [[plugins]]
+# repo = 'alaviss/nim.nvim'
+# on_ft = ['nim', 'nims', 'nimble']
+
+[[plugins]]
+repo = 'ray-x/go.nvim'
+on_ft = ['go', 'gomod', 'gowork', 'gotmpl']
+
+# [[plugins]]
+# repo = 'benlubas/molten-nvim'
+# on_event = ['BufRead *.ipynb', 'BufNewFile *.ipynb']
+# depends = ['image.nvim']
+# lua_source = '''
+#   vim.g.molten_image_provider = "image.nvim"
+#   vim.g.molten_output_win_max_height = 500
+# '''
+#
+# [[plugins]]
+# repo = 'GCBallesteros/jupytext.nvim'
+# lazy = false
+#
+# [[plugins]]
+# repo = 'GCBallesteros/NotebookNavigator.nvim'
+# depends = ['molten-nvim']
+# lazy = false
+# lua_source = '''
+#   vim.api.nvim_create_user_command("RunNBCell", function()
+#     require('notebook-navigator').run_cell()
+#   end, {})
+# '''

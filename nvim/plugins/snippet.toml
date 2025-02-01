@@ -1,0 +1,35 @@
+# [[plugins]]
+# repo = 'L3MON4D3/LuaSnip'
+# rev = 'v2.*'
+# depends = ['nvim-treesitter', 'friendly-snippets']
+# on_source = 'ddc.vim'
+# lua_source = '''
+#   require("luasnip.loaders.from_vscode").lazy_load({
+#     paths = {
+#       "$XDG_CACHE_HOME/dpp/repos/github.com/rafamadriz/friendly-snippets",
+#     },
+#   })
+# '''
+
+[[plugins]]
+repo = 'uga-rosa/denippet.vim'
+on_source = ['ddc.vim']
+lua_post_source = """
+for _, snip in ipairs(vim.fn.globpath(vim.fs.joinpath(vim.fn['dpp#get']('friendly-snippets').path, 'snippets'), '**/*.json', true, true)) do
+  vim.fn['denippet#load'](snip)
+end
+"""
+
+[[plugins]]
+repo = 'rafamadriz/friendly-snippets'
+on_source = ['denippet.vim']
+
+# [[plugins]]
+# repo = 'TwIStOy/luasnip-snippets'
+# depends = ['LuaSnip']
+# on_event = 'LspAttach'
+# lua_source = """
+# require("luasnip-snippets").setup({
+#   disable_langs = { "dart" },
+# })
+# """

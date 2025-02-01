@@ -1,0 +1,9 @@
+[[plugins]]
+repo = 'tpope/vim-fugitive'
+on_cmd = 'Git'
+
+[[plugins]]
+repo = 'lewis6991/gitsigns.nvim'
+on_event = ['BufNewFile', 'BufRead']
+on_lua = 'lualine'
+hooks_file = '$HOOK_DIR/gitsigns.lua'
