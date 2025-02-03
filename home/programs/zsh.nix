@@ -1,4 +1,7 @@
 { config, ... }:
+let
+  userName = builtins.getEnv "USER";
+in
 {
   programs.zsh = {
     enable = true;
@@ -15,7 +18,7 @@
       projectroot = "`git rev-parse --show-toplevel`";
     };
     envExtra = ''
-      PATH=/nix/var/nix/profiles/default/bin:~/.nix-profile/bin:$PATH
+      PATH=/nix/var/nix/profiles/default/bin:/etc/profiles/per-user/${userName}/bin:$PATH
     '';
     history = {
       extended = true;
