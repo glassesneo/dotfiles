@@ -8,45 +8,44 @@
       cleanup = "zap";
     };
 
-    taps = [ "homebrew/services" ];
+    taps = [
+      "homebrew/services"
+      "FelixKratz/formulae"
+    ];
 
     # `brew install`
     brews = [
       "mas"
       "emscripten"
+      {
+        name = "sketchybar";
+        start_service = true;
+        restart_service = "changed";
+      }
     ];
 
     # `brew install --cask`
     casks = [
-      # "amazon-q"
       "arc"
       "canva"
-      "chatgpt"
       "discord"
       "ghostty"
-      "hot"
       "karabiner-elements"
       "keycastr"
       "kitty"
       "monitorcontrol"
       "notion"
-      "one-switch"
       "orbstack"
       "proton-drive"
       "proton-pass"
       "raycast"
       "slack"
-      "warp"
-      "wave"
       "zoom"
-      # "sketchybar"
     ];
 
     masApps = {
       XCode = 497799835;
       LINE = 539883307;
-      RunCat = 1429033973;
-      # Perplexity = 6714467650;
     };
   };
 }

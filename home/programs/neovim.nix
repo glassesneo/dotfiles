@@ -17,6 +17,9 @@
       # lsp
       efm-langserver
       vim-language-server
+      # sh
+      bash-language-server
+      nufmt
       #typescript
       biome
       typescript-language-server

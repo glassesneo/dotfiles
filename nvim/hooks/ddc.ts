@@ -27,7 +27,7 @@ export class Config extends BaseConfig {
         "CmdlineChanged",
       ],
       cmdlineSources: {
-        ":": ["file", "cmdline", "cmdline-history", "around"],
+        ":": ["file", "cmdline", "cmdline_history", "around"],
         "/": commonSources,
       },
       sourceOptions: {
@@ -57,7 +57,7 @@ export class Config extends BaseConfig {
           forceCompletionPattern: "\\S/\\S*|\\.\\w*",
           minAutoCompleteLength: 1,
         },
-        "cmdline-history": {
+        cmdline_history: {
           mark: "[>_] his",
           sorters: [],
           minAutoCompleteLength: 1,
@@ -102,7 +102,7 @@ export class Config extends BaseConfig {
           converters: fuzzyConverters,
           minAutoCompleteLength: 6,
         },
-        "shell-native": {
+        shell_native: {
           mark: "[sh]",
           matchers: headMatchers,
           sorters: ["sorter_rank"],
@@ -140,7 +140,7 @@ export class Config extends BaseConfig {
             await args.denops.call("denippet#anonymous", body);
           },
         },
-        "shell-native": {
+        shell_native: {
           shell: "zsh",
         },
       },
@@ -200,14 +200,17 @@ export class Config extends BaseConfig {
     });
 
     const enabledFiletypes = [
+      "bash",
       "elm",
       "lua",
       "nim",
       "nix",
+      "nu",
       "python",
       "scala",
       "sql",
       "mysql",
+      "sh",
       "svelte",
       "toml",
       "typescript",
@@ -226,7 +229,7 @@ export class Config extends BaseConfig {
 
     args.contextBuilder.patchFiletype("deol", {
       specialBufferCompletion: true,
-      sources: ["shell-native"].concat(commonSources),
+      sources: ["shell_native"].concat(commonSources),
       sourceOptions: {
         _: {
           keywordPattern: "[0-9a-zA-Z_./#:-]*",

@@ -12,6 +12,9 @@ end
 local efm_languages = {}
 
 local filetype_config = {
+  bash = {
+    filetypes = { "bash", "sh" },
+  },
   elm = {
     efm = {
       {
@@ -60,6 +63,12 @@ local filetype_config = {
         formatCommand = "nixfmt -",
         formatStdin = true,
       },
+    },
+  },
+  nu = {
+    efm = {
+      formatCommand = "nufmt --stdin",
+      formatStdin = true,
     },
   },
   python = {
@@ -173,6 +182,7 @@ local servers = {
       languages = efm_languages,
     },
   },
+  bashls = {},
   denols = {
     single_file_support = true,
     root_dir = lspconfig.util.root_pattern("deno.json"),
@@ -259,6 +269,7 @@ local servers = {
   --     single_file_support = false,
   --   },
   -- },
+  nushell = {},
   pylyzer = {
     settings = {
       python = {

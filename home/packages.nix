@@ -7,6 +7,7 @@
     direnv
     duf
     fd
+    fzf
     jq
     ripgrep
     sl

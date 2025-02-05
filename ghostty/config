@@ -1,0 +1,8 @@
+keybind = cmd+t=new_tab
+keybind = cmd+shift+]=next_tab
+keybind = cmd+shift+[=previous_tab
+font-family = "Hackgen Console NF"
+font-size = 15
+font-feature = -dlig
+theme = Elementary
+window-inherit-working-directory = false

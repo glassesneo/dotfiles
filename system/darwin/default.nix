@@ -12,9 +12,9 @@ in
   };
 
   imports = [
-    ../common.nix
-    ./systems.nix
+    ../common
     ./apps
+    ./systems.nix
   ];
   networking = {
     hostName = hostName;

@@ -36,7 +36,7 @@
             inherit inputs;
           };
           modules = [
-            ./home/hosts/ubuntu-dev-vm-01.nix
+            ./home/ubuntu-dev-vm-01.nix
           ];
         };
       };
@@ -44,7 +44,7 @@
         "macos-personal-laptop-01" = nix-darwin.lib.darwinSystem {
           system = system;
           modules = [
-            (import ./system/darwin/configuration.nix { hostName = "macos-personal-laptop-01"; })
+            (import ./system/darwin { hostName = "macos-personal-laptop-01"; })
             home-manager.darwinModules.home-manager
             {
               home-manager = {
@@ -52,7 +52,7 @@
                 useUserPackages = true;
                 # extraSpecialArgs = specialArgs;
                 verbose = true;
-                users."${userName}" = import ./home/hosts/macos-personal-laptop-01.nix;
+                users."${userName}" = import ./home/macos-personal-laptop-01.nix;
               };
             }
           ];

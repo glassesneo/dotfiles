@@ -80,6 +80,7 @@ lua_source = '''
     enable_autocmd = false,
     languages = {
       nim = "# %s",
+      nu = "# %s",
       toml = "# %s",
       v = "// %s",
     },

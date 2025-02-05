@@ -17,8 +17,11 @@ in
     shellGlobalAliases = {
       projectroot = "`git rev-parse --show-toplevel`";
     };
-    envExtra = ''
-      PATH=/nix/var/nix/profiles/default/bin:/etc/profiles/per-user/${userName}/bin:$PATH
+    initExtra = ''
+      if [[ $- == *i* ]]; then
+        # execute nushell if running interactively
+        exec nu
+      fi
     '';
     history = {
       extended = true;

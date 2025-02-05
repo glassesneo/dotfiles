@@ -5,9 +5,9 @@
       "$schema" = "https://starship.rs/config-schema.json";
       scan_timeout = 10;
       format = ''
-        [┌⦘](bold green)$all
-        [│](bold green)$character $directory
-        [└────>](bold green) 
+        [┌⦘](bold bright-green)$all
+        [│](bold bright-green)$character $directory
+        [└────>](bold bright-green) 
       '';
       add_newline = true;
       character = {
@@ -33,8 +33,4 @@
       };
     };
   };
-
-  programs.zsh.initExtra = ''
-    eval "$(starship init zsh)"
-  '';
 }
