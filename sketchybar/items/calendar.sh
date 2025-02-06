@@ -7,6 +7,8 @@ calendar=(
   label.shadow.drawing=off
 
   background.color="$CALENDAR_BACKGROUND"
+  background.border_color="$CALENDAR"
+  background.border_width=2
   update_freq=30
   script="$PLUGIN_DIR/calendar.sh"
   # label="$(date +'%b %d(%a) %H:%M')"

@@ -6,3 +6,4 @@ font-size = 15
 font-feature = -dlig
 theme = Elementary
 window-inherit-working-directory = false
+macos-titlebar-style = hidden

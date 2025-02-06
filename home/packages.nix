@@ -3,6 +3,7 @@
   home.packages = with pkgs; [
     bat
     btop
+    coreutils
     devbox
     direnv
     duf

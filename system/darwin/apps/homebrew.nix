@@ -19,7 +19,7 @@
       "emscripten"
       {
         name = "sketchybar";
-        start_service = true;
+        start_service = false;
         restart_service = "changed";
       }
     ];
@@ -33,7 +33,6 @@
       "karabiner-elements"
       "keycastr"
       "kitty"
-      "monitorcontrol"
       "notion"
       "orbstack"
       "proton-drive"
@@ -41,6 +40,7 @@
       "raycast"
       "slack"
       "zoom"
+      "nikitabobko/tap/aerospace"
     ];
 
     masApps = {
