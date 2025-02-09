@@ -9,6 +9,13 @@
       url = "github:LnL7/nix-darwin";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    nixgl = {
+      url = "github:nix-community/nixgl";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    # ghostty = {
+    #   url = "github:ghostty-org/ghostty/v1.1.0";
+    # };
   };
 
   outputs =
@@ -17,6 +24,8 @@
       nixpkgs,
       home-manager,
       nix-darwin,
+      nixgl,
+      # ghostty
     }:
     let
       userName = builtins.getEnv "USER";
@@ -25,6 +34,7 @@
       pkgs = import nixpkgs {
         inherit system;
         config.allowUnfree = true;
+        overlays = [ nixgl.overlays.default ];
       };
     in
     {
@@ -42,7 +52,7 @@
       };
       darwinConfigurations = {
         "macos-personal-laptop-01" = nix-darwin.lib.darwinSystem {
-          system = system;
+          inherit system inputs;
           modules = [
             (import ./system/darwin { hostName = "macos-personal-laptop-01"; })
             home-manager.darwinModules.home-manager
@@ -50,13 +60,14 @@
               home-manager = {
                 useGlobalPkgs = true;
                 useUserPackages = true;
-                # extraSpecialArgs = specialArgs;
+                extraSpecialArgs = {
+                  inherit inputs;
+                };
                 verbose = true;
                 users."${userName}" = import ./home/macos-personal-laptop-01.nix;
               };
             }
           ];
-
         };
       };
     };

@@ -3,9 +3,6 @@
     "ghostty" = {
       source = ../../ghostty;
     };
-    "kitty" = {
-      source = ../../kitty;
-    };
     "aerospace" = {
       source = ../../aerospace;
     };

@@ -60,7 +60,7 @@ local filetype_config = {
   nix = {
     efm = {
       {
-        formatCommand = "nixfmt -",
+        formatCommand = "nixfmt --strict -",
         formatStdin = true,
       },
     },
@@ -264,11 +264,11 @@ local servers = {
       },
     },
   },
-  -- nim_langserver = {
-  --   settings = {
-  --     single_file_support = false,
-  --   },
-  -- },
+  nim_langserver = {
+    settings = {
+      single_file_support = false,
+    },
+  },
   nushell = {},
   pylyzer = {
     settings = {

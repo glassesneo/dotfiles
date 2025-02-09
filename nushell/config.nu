@@ -1,5 +1,4 @@
 # aliases
-alias ls = eza
 alias bd = cd ..
 alias tree = eza --tree
 alias projectroot = git rev-parse --show-toplevel

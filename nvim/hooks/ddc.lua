@@ -1,11 +1,53 @@
 --- lua_add {{{
+local utils = require("utils")
+local artemis = require("artemis")
+-- completion keymaps
+local pum_forward = function()
+  artemis.fn.pum.map.insert_relative(1, "loop")
+end
+local pum_backward = function()
+  artemis.fn.pum.map.insert_relative(-1, "loop")
+end
+local pum_forward_term = function()
+  artemis.fn.pum.map.select_relative(1, "loop")
+end
+local pum_backward_term = function()
+  artemis.fn.pum.map.select_relative(-1, "loop")
+end
+local pum_confirm = function()
+  artemis.fn.pum.map.confirm()
+end
+
+vim.keymap.set({ "i" }, "<C-n>", pum_forward)
+vim.keymap.set({ "i" }, "<C-p>", pum_backward)
+
+vim.keymap.set({ "t" }, "<C-n>", pum_forward_term)
+vim.keymap.set({ "t" }, "<C-p>", pum_backward_term)
+
+vim.keymap.set({ "i", "t" }, "<C-y>", pum_confirm)
+vim.api.nvim_create_user_command("CommandlinePre", function()
+  vim.keymap.set("c", "<C-n>", pum_forward)
+  vim.keymap.set("c", "<C-p>", pum_backward)
+  vim.keymap.set("c", "<C-y>", pum_confirm)
+
+  vim.api.nvim_create_autocmd({ "User" }, {
+    pattern = "DDCCmdlineLeave",
+    once = true,
+    callback = function()
+      utils.unmap("c", "<C-n>", { silent = true })
+      utils.unmap("c", "<C-p>", { silent = true })
+      utils.unmap("c", "<C-y>", { silent = true })
+    end,
+  })
+  artemis.fn.ddc.enable_cmdline_completion()
+end, {})
+
 vim.keymap.set("n", ":", "<Cmd>CommandlinePre<CR>:")
 
 -- vim.keymap.set("n", "/", "<Cmd>CommandlinePre<CR>/")
 --- }}}
 
 --- lua_source {{{
-local utils = require("utils")
 local artemis = require("artemis")
 
 artemis.fn.ddc.custom.load_config(vim.env.HOOK_DIR .. "/ddc.ts")
@@ -59,45 +101,4 @@ artemis.fn.pum.set_local_option("c", {
   -- preview = false,
 })
 
--- completion keymaps
-local pum_forward = function()
-  artemis.fn.pum.map.insert_relative(1, "loop")
-end
-local pum_backward = function()
-  artemis.fn.pum.map.insert_relative(-1, "loop")
-end
-local pum_forward_term = function()
-  artemis.fn.pum.map.select_relative(1, "loop")
-end
-local pum_backward_term = function()
-  artemis.fn.pum.map.select_relative(-1, "loop")
-end
-local pum_confirm = function()
-  artemis.fn.pum.map.confirm()
-end
-
-vim.keymap.set({ "i" }, "<C-n>", pum_forward)
-vim.keymap.set({ "i" }, "<C-p>", pum_backward)
-
-vim.keymap.set({ "t" }, "<C-n>", pum_forward_term)
-vim.keymap.set({ "t" }, "<C-p>", pum_backward_term)
-
-vim.keymap.set({ "i", "t" }, "<C-y>", pum_confirm)
-
-vim.api.nvim_create_user_command("CommandlinePre", function()
-  vim.keymap.set("c", "<C-n>", pum_forward)
-  vim.keymap.set("c", "<C-p>", pum_backward)
-  vim.keymap.set("c", "<C-y>", pum_confirm)
-
-  vim.api.nvim_create_autocmd({ "User" }, {
-    pattern = "DDCCmdlineLeave",
-    once = true,
-    callback = function()
-      utils.unmap("c", "<C-n>", { silent = true })
-      utils.unmap("c", "<C-p>", { silent = true })
-      utils.unmap("c", "<C-y>", { silent = true })
-    end,
-  })
-  artemis.fn.ddc.enable_cmdline_completion()
-end, {})
 --- }}}

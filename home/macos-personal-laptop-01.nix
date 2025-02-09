@@ -4,6 +4,7 @@
     ./common.nix
     ./darwin/homebrew.nix
     ./darwin/services.nix
+    ./darwin/gui.nix
     ./packages.nix
     ./programs
   ];

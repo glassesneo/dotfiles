@@ -12,7 +12,7 @@ after-login-command = []
 # You can use it to add commands that run after AeroSpace startup.
 # 'after-startup-command' is run after 'after-login-command'
 # Available commands : https://nikitabobko.github.io/AeroSpace/commands
-after-startup-command = ["exec-and-forget sketchybar --reload"]
+after-startup-command = ["exec-and-forget sketchybar --reload", "exec-and-forget borders"]
 
 exec-on-workspace-change = ["/bin/bash", "-c", "sketchybar --trigger aerospace_workspace_change FOCUSED_WORKSPACE=$AEROSPACE_FOCUSED_WORKSPACE"]
 
@@ -107,6 +107,7 @@ alt-j = 'focus down'
 alt-k = 'focus up'
 alt-l = 'focus right'
 
+alt-t = 'layout tiling floating'
 alt-q = 'close'
 
 # See: https://nikitabobko.github.io/AeroSpace/commands#move

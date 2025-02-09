@@ -5,8 +5,8 @@
     btop
     coreutils
     devbox
-    direnv
     duf
+    fastfetch
     fd
     fzf
     jq

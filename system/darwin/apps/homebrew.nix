@@ -22,25 +22,29 @@
         start_service = false;
         restart_service = "changed";
       }
+      {
+        name = "borders";
+        start_service = false;
+        restart_service = "changed";
+      }
     ];
 
     # `brew install --cask`
     casks = [
       "arc"
       "canva"
-      "discord"
       "ghostty"
       "karabiner-elements"
       "keycastr"
-      "kitty"
       "notion"
       "orbstack"
       "proton-drive"
       "proton-pass"
       "raycast"
-      "slack"
-      "zoom"
+      # "slack"
+      # "zoom"
       "nikitabobko/tap/aerospace"
+      # "font-sketchybar-app-font"
     ];
 
     masApps = {
