@@ -10,11 +10,9 @@ local lspformat_on_attach = function(client, bufnr)
 end
 
 local efm_languages = {}
+local efm_filetypes = {}
 
 local filetype_config = {
-  bash = {
-    filetypes = { "bash", "sh" },
-  },
   elm = {
     efm = {
       {
@@ -23,24 +21,6 @@ local filetype_config = {
       },
     },
   },
-  -- go = {
-  --   efm = {
-  --     {
-  --       formatCommand = "gofmt",
-  --       formatStdin = true,
-  --       lintCommand = "golangci-lint run",
-  --       lintStdin = true,
-  --     },
-  --   },
-  -- },
-  -- haskell = {
-  --   efm = {
-  --     {
-  --       formatCommand = "stack exec fourmolu --stdin-input-file",
-  --       formatStdin = true,
-  --     },
-  --   },
-  -- },
   lua = {
     efm = {
       {
@@ -60,17 +40,17 @@ local filetype_config = {
   nix = {
     efm = {
       {
-        formatCommand = "nixfmt --strict -",
+        formatCommand = "nixfmt -",
         formatStdin = true,
       },
     },
   },
-  nu = {
-    efm = {
-      formatCommand = "nufmt --stdin",
-      formatStdin = true,
-    },
-  },
+  -- nu = {
+  --   efm = {
+  --     formatCommand = "nufmt --stdin",
+  --     formatStdin = true,
+  --   },
+  -- },
   python = {
     efm = {
       {
@@ -88,6 +68,15 @@ local filetype_config = {
       },
     },
   },
+  sh = {
+    filetypes = { "bash", "sh" },
+    efm = {
+      {
+        formatCommand = "shfmt -",
+        formatStdin = true,
+      },
+    },
+  },
   sql = {
     filetypes = { "sql", "mysql" },
     efm = {
@@ -98,25 +87,24 @@ local filetype_config = {
       },
     },
   },
-  svelte = {},
-  toml = {
-    efm = {
-      {
-        formatCommand = "taplo format -",
-        formatStdin = true,
-      },
-    },
-  },
-  typescript = {
-    filetypes = { "typescript", "typescriptreact", "javascript" },
-    efm = {
-      {
-        formatCommand = "biome check --apply --stdin-file-path '${INPUT}'",
-        formatStdin = true,
-        rootMarkers = { "biome.json", "package.json" },
-      },
-    },
-  },
+  -- toml = {
+  --   efm = {
+  --     {
+  --       formatCommand = "taplo format -",
+  --       formatStdin = true,
+  --     },
+  --   },
+  -- },
+  -- typescript = {
+  --   filetypes = { "typescript", "typescriptreact", "javascript" },
+  --   efm = {
+  --     {
+  --       formatCommand = "biome check --apply --stdin-file-path '${INPUT}'",
+  --       formatStdin = true,
+  --       rootMarkers = { "biome.json", "package.json" },
+  --     },
+  --   },
+  -- },
   kotlin = {
     filetypes = { "kotlin", "kotlin.kts" },
     efm = {
@@ -149,6 +137,10 @@ local filetype_config = {
 ---@param ft string
 ---@param config { efm: table, extraSources: string[] }
 local register_language = function(ft, config)
+  if config.efm ~= nil then
+    efm_languages[ft] = config.efm
+    table.insert(efm_filetypes, ft)
+  end
   efm_languages[ft] = config.efm or {}
 end
 
@@ -181,11 +173,13 @@ local servers = {
       },
       languages = efm_languages,
     },
+    filetypes = efm_filetypes,
   },
   bashls = {},
   denols = {
+    on_attach = lspformat_on_attach,
     single_file_support = true,
-    root_dir = lspconfig.util.root_pattern("deno.json"),
+    root_dir = lspconfig.util.root_pattern("deno.json", "deno.jsonc"),
     settings = {
       deno = {
         inlayHints = {
@@ -215,8 +209,6 @@ local servers = {
   elmls = {
     root_dir = lspconfig.util.root_pattern("elm.json"),
   },
-  gopls = {},
-  -- hls = {},
   kotlin_language_server = {
     settings = {
       kotlin = {
@@ -264,11 +256,7 @@ local servers = {
       },
     },
   },
-  nim_langserver = {
-    settings = {
-      single_file_support = false,
-    },
-  },
+  nim_langserver = {},
   nushell = {},
   pylyzer = {
     settings = {
@@ -293,7 +281,9 @@ local servers = {
       },
     },
   },
-  taplo = {},
+  taplo = {
+    on_attach = lspformat_on_attach,
+  },
   ts_ls = {
     root_dir = lspconfig.util.root_pattern("package.json"),
     single_file_support = false,

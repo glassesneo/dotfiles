@@ -10,23 +10,18 @@
 
     taps = [
       "homebrew/services"
-      "FelixKratz/formulae"
+      # "FelixKratz/formulae"
     ];
 
     # `brew install`
     brews = [
       "mas"
       "emscripten"
-      {
-        name = "sketchybar";
-        start_service = false;
-        restart_service = "changed";
-      }
-      {
-        name = "borders";
-        start_service = false;
-        restart_service = "changed";
-      }
+      # {
+      #   name = "sketchybar";
+      #   start_service = false;
+      #   restart_service = "changed";
+      # }
     ];
 
     # `brew install --cask`
@@ -42,9 +37,8 @@
       "proton-pass"
       "raycast"
       # "slack"
-      # "zoom"
-      "nikitabobko/tap/aerospace"
-      # "font-sketchybar-app-font"
+      "zoom"
+      # "nikitabobko/tap/aerospace"
     ];
 
     masApps = {

@@ -19,6 +19,7 @@
       vim-language-server
       # sh
       bash-language-server
+      shfmt
       nufmt
       #typescript
       biome

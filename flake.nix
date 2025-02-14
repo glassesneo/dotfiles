@@ -25,7 +25,7 @@
       home-manager,
       nix-darwin,
       nixgl,
-      # ghostty
+    # ghostty
     }:
     let
       userName = builtins.getEnv "USER";
