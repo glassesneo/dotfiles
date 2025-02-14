@@ -38,7 +38,6 @@
       "raycast"
       # "slack"
       "zoom"
-      # "nikitabobko/tap/aerospace"
     ];
 
     masApps = {

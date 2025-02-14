@@ -36,6 +36,7 @@
       nimlangserver
       # nix
       nil
+      # nixd
       nixfmt-rfc-style
       # scala
       scalafmt

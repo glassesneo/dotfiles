@@ -1,18 +1,18 @@
-{ pkgs, ... }: {
+{ pkgs, ... }:
+{
   xdg.configFile = {
     "kitty" = {
-        source = ../../kitty;
-      };
+      source = ../../kitty;
+    };
   };
 
   home.packages = with pkgs; [
     # ghostty
     discord
     kitty
-    # raycast
+    maccy
     slack
     zed-editor
     # zoom
   ];
 }
-

@@ -257,6 +257,7 @@ local servers = {
     },
   },
   nim_langserver = {},
+  -- nixd = {},
   nushell = {},
   pylyzer = {
     settings = {

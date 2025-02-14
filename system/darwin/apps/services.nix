@@ -69,8 +69,8 @@
         #                 Monitor pattern is the same as for 'workspace-to-monitor-force-assignment'.
         #                 See: https://nikitabobko.github.io/AeroSpace/guide#assign-workspaces-to-monitors
         gaps = {
-          inner.horizontal = 5;
-          inner.vertical = 5;
+          inner.horizontal = 10;
+          inner.vertical = 10;
           outer.left = 5;
           outer.bottom = 5;
           outer.top = 40;
