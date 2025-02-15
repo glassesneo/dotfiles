@@ -1,7 +1,7 @@
 [[plugins]]
 repo = 'rcarriga/nvim-notify'
 on_event = 'CursorHold'
-on_lua = 'noice'
+# on_lua = 'noice'
 lua_source = '''
   local notify = require("notify")
   notify.setup({

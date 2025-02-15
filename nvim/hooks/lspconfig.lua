@@ -40,17 +40,11 @@ local filetype_config = {
   nix = {
     efm = {
       {
-        formatCommand = "nixfmt -",
+        formatCommand = "alejandra -",
         formatStdin = true,
       },
     },
   },
-  -- nu = {
-  --   efm = {
-  --     formatCommand = "nufmt --stdin",
-  --     formatStdin = true,
-  --   },
-  -- },
   python = {
     efm = {
       {
@@ -72,7 +66,7 @@ local filetype_config = {
     filetypes = { "bash", "sh" },
     efm = {
       {
-        formatCommand = "shfmt -",
+        formatCommand = "shfmt --indent 4 -",
         formatStdin = true,
       },
     },
@@ -87,14 +81,6 @@ local filetype_config = {
       },
     },
   },
-  -- toml = {
-  --   efm = {
-  --     {
-  --       formatCommand = "taplo format -",
-  --       formatStdin = true,
-  --     },
-  --   },
-  -- },
   -- typescript = {
   --   filetypes = { "typescript", "typescriptreact", "javascript" },
   --   efm = {

@@ -1,8 +1,6 @@
-{ pkgs, ... }:
-let
+{pkgs, ...}: let
   userName = builtins.getEnv "USER";
-in
-{
+in {
   users.users."${userName}" = {
     name = userName;
     home = builtins.getEnv "HOME";

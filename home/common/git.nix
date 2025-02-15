@@ -1,5 +1,4 @@
-{ config, ... }:
-{
+{config, ...}: {
   xdg.configFile.".gitmsg" = {
     source = ../../git/.gitmsg;
     target = "git/.gitmsg";
@@ -28,5 +27,4 @@
       ".envrc"
     ];
   };
-
 }

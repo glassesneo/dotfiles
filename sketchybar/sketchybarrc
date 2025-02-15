@@ -22,18 +22,18 @@ AEROSPACE_PATH="/run/current-system/sw/bin/aerospace"
 # https://felixkratz.github.io/SketchyBar/config/tricks#color-picker
 
 bar=(
-  position=top
-  height=30
-  color="$BAR_COLOR"
-  shadow=off
-  sticky=on
-  padding_right=2
-  padding_left=2
-  margin=10
-  corner_radius=5
-  topmost=window
-  blur_radius=0
-  y_offset=7
+    position=top
+    height=30
+    color="$BAR_COLOR"
+    shadow=off
+    sticky=on
+    padding_right=2
+    padding_left=2
+    margin=10
+    corner_radius=5
+    topmost=window
+    blur_radius=0
+    y_offset=7
 )
 
 sketchybar --bar "${bar[@]}"
@@ -44,19 +44,19 @@ sketchybar --bar "${bar[@]}"
 # https://felixkratz.github.io/SketchyBar/config/items
 
 default=(
-  padding_left=7
-  padding_right=7
-  icon.font="$FONT:Bold:17.0"
-  label.font="$FONT:Bold:15.0"
-  icon.color="$WHITE"
-  label.color="$WHITE"
-  icon.padding_left=4
-  icon.padding_right=4
-  label.padding_left=4
-  label.padding_right=4
-  background.height=24
-  background.corner_radius=20
-  background.border_width=2
+    padding_left=7
+    padding_right=7
+    icon.font="$FONT:Bold:17.0"
+    label.font="$FONT:Bold:15.0"
+    icon.color="$WHITE"
+    label.color="$WHITE"
+    icon.padding_left=4
+    icon.padding_right=4
+    label.padding_left=4
+    label.padding_right=4
+    background.height=24
+    background.corner_radius=20
+    background.border_width=2
 )
 sketchybar --default "${default[@]}"
 
@@ -68,23 +68,23 @@ sketchybar --default "${default[@]}"
 sketchybar --add event aerospace_workspace_change
 
 for m in $("$AEROSPACE_PATH" list-monitors); do
-  for sid in $("$AEROSPACE_PATH" list-workspaces --monitor "$m"); do
-    space_opt=(
-      padding_left=1
-      padding_right=1
-      label.padding_left=1
-      label.padding_right=1
-      background.color=0x44ffffff
-      background.corner_radius=5
-      background.height=25
-      label="$sid"
-      click_script="$AEROSPACE_PATH workspace $sid"
-      script="$PLUGIN_DIR/aerospace.sh $sid"
-    )
-    sketchybar --add item "space.$sid" left \
-               --subscribe "space.$sid" aerospace_workspace_change \
-               --set "space.$sid" "${space_opt[@]}"
-  done
+    for sid in $("$AEROSPACE_PATH" list-workspaces --monitor "$m"); do
+        space_opt=(
+            padding_left=1
+            padding_right=1
+            label.padding_left=1
+            label.padding_right=1
+            background.color=0x44ffffff
+            background.corner_radius=5
+            background.height=25
+            label="$sid"
+            click_script="$AEROSPACE_PATH workspace $sid"
+            script="$PLUGIN_DIR/aerospace.sh $sid"
+        )
+        sketchybar --add item "space.$sid" left \
+            --subscribe "space.$sid" aerospace_workspace_change \
+            --set "space.$sid" "${space_opt[@]}"
+    done
 done
 
 ##### Adding Left Items #####
@@ -92,8 +92,8 @@ done
 # only the properties deviating from the current defaults need to be set
 
 sketchybar --add item front_app left \
-           --set front_app icon.drawing=off script="$PLUGIN_DIR/front_app.sh" \
-           --subscribe front_app front_app_switched
+    --set front_app icon.drawing=off script="$PLUGIN_DIR/front_app.sh" \
+    --subscribe front_app front_app_switched
 
 ##### Adding Right Items #####
 # In the same way as the left items we can add items to the right side.

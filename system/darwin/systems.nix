@@ -8,9 +8,7 @@
 ###################################################################################
 let
   hostName = builtins.getEnv "HOST";
-in
-{
-
+in {
   system = {
     stateVersion = 4;
     # activationScripts are executed every time you boot the system or run `nixos-rebuild` / `darwin-rebuild`.
@@ -67,7 +65,7 @@ in
         ApplePressAndHoldEnabled = true; # enable press and hold
 
         InitialKeyRepeat = 12; # normal minimum is 15 (225 ms), maximum is 120 (1800 ms)
-        # sets how fast it repeats once it starts. 
+        # sets how fast it repeats once it starts.
         KeyRepeat = 1; # normal minimum is 2 (30 ms), maximum is 120 (1800 ms)
 
         _HIHideMenuBar = true;
@@ -143,4 +141,3 @@ in
   # Add ability to use TouchID for sudo authentication
   security.pam.enableSudoTouchIdAuth = true;
 }
-

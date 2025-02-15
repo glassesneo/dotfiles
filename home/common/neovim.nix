@@ -1,5 +1,4 @@
-{ pkgs, ... }:
-{
+{pkgs, ...}: {
   xdg.configFile.nvim.source = ../../nvim;
 
   home.sessionVariables = {
@@ -36,7 +35,7 @@
       nimlangserver
       # nix
       nil
-      # nixd
+      alejandra
       nixfmt-rfc-style
       # scala
       scalafmt

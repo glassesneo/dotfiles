@@ -4,7 +4,6 @@
     aerospace = {
       enable = true;
       settings = {
-
         # Place a copy of this config to ~/.aerospace.toml
         # After that you can edit ~/.aerospace.toml to your liking
 
@@ -14,7 +13,7 @@
         # You can use it to add commands that run after login to macOS user session.
         # 'start-at-login' needs to be 'true' for 'after-login-command' to work
         # Available commands: https://nikitabobko.github.io/AeroSpace/commands
-        after-login-command = [ ];
+        after-login-command = [];
 
         # You can use it to add commands that run after AeroSpace startup.
         # 'after-startup-command' is run after 'after-login-command'
@@ -59,7 +58,7 @@
         # Drop it from your config if you don't like this behavior
         # See https://nikitabobko.github.io/AeroSpace/guide#on-focus-changed-callbacks
         # See https://nikitabobko.github.io/AeroSpace/commands#move-mouse
-        on-focused-monitor-changed = [ "move-mouse monitor-lazy-center" ];
+        on-focused-monitor-changed = ["move-mouse monitor-lazy-center"];
 
         # Gaps between windows (inner-*) and between monitor edges (outer-*).
         # Possible values:
@@ -148,7 +147,6 @@
 
           # See: https://nikitabobko.github.io/AeroSpace/commands#mode
           alt-shift-semicolon = "mode service";
-
         };
 
         # All possible keys:
@@ -175,7 +173,6 @@
         # 'service' binding mode declaration.
         # See: https://nikitabobko.github.io/AeroSpace/guide#binding-modes
         mode.service.binding = {
-
           esc = [
             "reload-config"
             "mode main"

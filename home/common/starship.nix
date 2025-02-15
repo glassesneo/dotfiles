@@ -7,7 +7,7 @@
       format = ''
         [┌⦘](bold bright-green)$all
         [│](bold bright-green)$character $directory
-        [└────>](bold bright-green) 
+        [└────>](bold bright-green)
       '';
       add_newline = true;
       character = {

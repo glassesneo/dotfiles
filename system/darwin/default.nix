@@ -1,10 +1,8 @@
-{ hostName, ... }:
-let
+{hostName, ...}: let
   # userName = builtins.getEnv "USER";
   # hostName = builtins.getEnv "HOST";
   system = builtins.currentSystem;
-in
-{
+in {
   services.nix-daemon.enable = true;
   nixpkgs = {
     config.allowUnfree = true;
