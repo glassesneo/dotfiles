@@ -9,10 +9,6 @@
       url = "github:LnL7/nix-darwin";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    nixgl = {
-      url = "github:nix-community/nixgl";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
     # ghostty = {
     #   url = "github:ghostty-org/ghostty/v1.1.0";
     # };
@@ -24,7 +20,6 @@
       nixpkgs,
       home-manager,
       nix-darwin,
-      nixgl,
     # ghostty
     }:
     let
@@ -34,13 +29,12 @@
       pkgs = import nixpkgs {
         inherit system;
         config.allowUnfree = true;
-        overlays = [ nixgl.overlays.default ];
       };
     in
     {
-      # for non-NixOS
+      # for non-NixOS with home-manager
       homeConfigurations = {
-        "${userName}@ubuntu-dev-vm-01" = home-manager.lib.homeManagerConfiguration {
+        ${userName} = home-manager.lib.homeManagerConfiguration {
           inherit pkgs;
           extraSpecialArgs = {
             inherit inputs;
@@ -50,6 +44,7 @@
           ];
         };
       };
+      # for darwin with home-manager
       darwinConfigurations = {
         "macos-personal-laptop-01" = nix-darwin.lib.darwinSystem {
           inherit system inputs;
