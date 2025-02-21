@@ -30,3 +30,8 @@ vim.keymap.set("x", "gc", [[mzgc`z]], { silent = true })
 for _, quote in ipairs({ [["]], [[']], [[`]] }) do
   vim.keymap.set({ "x", "o" }, "a" .. quote, "2i" .. quote)
 end
+
+vim.keymap.set("i", "<Left>", "<-", { silent = true })
+vim.keymap.set("i", "<Right>", "->", { silent = true })
+vim.keymap.set("i", "<S-Left>", "<=", { silent = true })
+vim.keymap.set("i", "<S-Right>", "=>", { silent = true })

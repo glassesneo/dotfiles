@@ -10,7 +10,7 @@ source "$CONFIG_DIR/colors.sh"
 ITEM_DIR="$CONFIG_DIR/items"
 PLUGIN_DIR="$CONFIG_DIR/plugins"
 
-FONT="Hack Nerd Font"
+FONT="HackGen Console NF"
 
 AEROSPACE_PATH="/run/current-system/sw/bin/aerospace"
 
@@ -111,6 +111,8 @@ source "$ITEM_DIR/calendar.sh"
 source "$ITEM_DIR/volume.sh"
 source "$ITEM_DIR/battery.sh"
 source "$ITEM_DIR/cpu.sh"
+# an experimental one --- not yet working
+# source "$ITEM_DIR/music.sh"
 
 ##### Force all scripts to run the first time (never do this in a script) #####
 sketchybar --update

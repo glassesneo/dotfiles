@@ -21,6 +21,14 @@ local filetype_config = {
       },
     },
   },
+  -- haskell = {
+  --   efm = {
+  --     {
+  --       formatCommand = "fourmolu --stdin-input-file",
+  --       formatStdin = true,
+  --     },
+  --   },
+  -- },
   lua = {
     efm = {
       {
@@ -194,6 +202,25 @@ local servers = {
   },
   elmls = {
     root_dir = lspconfig.util.root_pattern("elm.json"),
+  },
+  hls = {
+    on_attach = lspformat_on_attach,
+    settings = {
+      haskell = {
+        formattingProvider = "fourmolu",
+        plugin = {
+          class = {
+            codeLensOn = true,
+          },
+          ["explicit-fields"] = {
+            inlayHintsOn = true,
+          },
+          importLens = {
+            inlayHintsOn = true,
+          },
+        },
+      },
+    },
   },
   kotlin_language_server = {
     settings = {

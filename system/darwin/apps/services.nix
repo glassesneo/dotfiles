@@ -1,6 +1,9 @@
-{
+{pkgs, ...}: {
   services = {
-    sketchybar.enable = true;
+    sketchybar = {
+      enable = true;
+      extraPackages = with pkgs; [jq];
+    };
     aerospace = {
       enable = true;
       settings = {

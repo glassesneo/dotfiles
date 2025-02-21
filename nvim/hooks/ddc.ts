@@ -203,6 +203,8 @@ export class Config extends BaseConfig {
       "bash",
       "elm",
       "lua",
+      "haskell",
+      "lhaskell",
       "nim",
       "nix",
       "nu",
