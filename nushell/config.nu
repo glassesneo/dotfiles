@@ -1,3 +1,8 @@
+# $env.config.edit_mode = "vi"
+$env.config.show_banner = false
+$env.config.rm.always_trash = true
+$env.config.buffer_editor = "nvim"
+
 # aliases
 alias bd = cd ..
 alias tree = eza --tree
