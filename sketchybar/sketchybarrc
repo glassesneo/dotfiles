@@ -12,7 +12,7 @@ PLUGIN_DIR="$CONFIG_DIR/plugins"
 
 FONT="HackGen Console NF"
 
-AEROSPACE_PATH="/run/current-system/sw/bin/aerospace"
+# AEROSPACE_PATH="/run/current-system/sw/bin/aerospace"
 
 ##### Bar Appearance #####
 # Configuring the general appearance of the bar.
@@ -67,25 +67,39 @@ sketchybar --default "${default[@]}"
 
 sketchybar --add event aerospace_workspace_change
 
-for m in $("$AEROSPACE_PATH" list-monitors); do
-    for sid in $("$AEROSPACE_PATH" list-workspaces --monitor "$m"); do
-        space_opt=(
-            padding_left=1
-            padding_right=1
-            label.padding_left=1
-            label.padding_right=1
-            background.color=0x44ffffff
-            background.corner_radius=5
-            background.height=25
-            label="$sid"
-            click_script="$AEROSPACE_PATH workspace $sid"
-            script="$PLUGIN_DIR/aerospace.sh $sid"
-        )
-        sketchybar --add item "space.$sid" left \
-            --subscribe "space.$sid" aerospace_workspace_change \
-            --set "space.$sid" "${space_opt[@]}"
-    done
+for sid in $(aerospace list-workspaces --all); do
+    sketchybar --add item space."$sid" left \
+        --subscribe space."$sid" aerospace_workspace_change \
+        --set space."$sid" \
+        background.color=0x44ffffff \
+        background.corner_radius=5 \
+        background.height=20 \
+        background.drawing=off \
+        label="$sid" \
+        click_script="aerospace workspace $sid" \
+        script="$PLUGIN_DIR/aerospace.sh $sid"
 done
+
+# for m in $("$AEROSPACE_PATH" list-monitors); do
+#     for sid in $("$AEROSPACE_PATH" list-workspaces --monitor "$m"); do
+#         space_opt=(
+#             padding_left=1
+#             padding_right=1
+#             label.padding_left=1
+#             label.padding_right=1
+#             background.color=0x44ffffff
+#             background.corner_radius=5
+#             background.height=25
+#             background.drawing=off
+#             label="$sid"
+#             click_script="$AEROSPACE_PATH workspace $sid"
+#             script="$PLUGIN_DIR/aerospace.sh $sid"
+#         )
+#         sketchybar --add item "space.$sid" left \
+#             --subscribe "space.$sid" aerospace_workspace_change \
+#             --set "space.$sid" "${space_opt[@]}"
+#     done
+# done
 
 ##### Adding Left Items #####
 # We add some regular items to the left side of the bar, where

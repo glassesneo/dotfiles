@@ -1,6 +1,6 @@
 {
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     home-manager = {
       url = "github:nix-community/home-manager";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -9,6 +9,7 @@
       url = "github:LnL7/nix-darwin";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    flake-utils.url = "github:numtide/flake-utils";
     # ghostty = {
     #   url = "github:ghostty-org/ghostty/v1.1.0";
     # };
@@ -19,6 +20,7 @@
     nixpkgs,
     home-manager,
     nix-darwin,
+    ...
     # ghostty
   }: let
     userName = builtins.getEnv "USER";
