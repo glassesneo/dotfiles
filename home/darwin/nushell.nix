@@ -16,6 +16,7 @@
       '';
       completions = names: (lib.strings.concatMapStrings completion names);
     in ''
+      alias reload-sketchybar = nu ~/.config/sketchybar/sketchybarrc.nu
       ${completions ["bat" "eza" "gh" "git" "less" "man" "nix" "ssh" "tar" "typst"]}
     '';
     plugins = with pkgs.nushellPlugins; [
