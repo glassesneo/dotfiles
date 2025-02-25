@@ -31,7 +31,8 @@
     ./gh.nix
     ./eza.nix
     ./neovim.nix
-    ./starship.nix
+    ./oh-my-posh.nix
+    # ./starship.nix
     ./zsh.nix
   ];
 }
