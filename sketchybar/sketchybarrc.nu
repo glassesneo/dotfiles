@@ -21,20 +21,18 @@ def run [plugin_dir: string] {
         y_offset=3,
         color=$"($base)"
         border_width=3
-        border_color=$"($surface0)"
+        border_color=$"($mantle)"
 
       --default
         icon.font=$"($font):Bold:18.0"
         label.font=$"($font):Bold:16.0"
-        label.padding_left=4
-        label.padding_right=4
+        label.padding_left=6
+        label.padding_right=6
         label.color=$"($text)"
-        icon.padding_left=5
-        icon.padding_right=5
-        icon.background.corner_radius=8
-        icon.background.height=25
+        icon.padding_left=6
+        icon.padding_right=6
         icon.color=$"($text)"
-        background.color=$"($base)"
+        # background.color=$"($base)"
         background.corner_radius=8
   )
 
@@ -56,9 +54,9 @@ def run [plugin_dir: string] {
     )
   }
 
-  use ./plugins/datetime.nu; datetime calendar item
-  use ./plugins/volume.nu; volume item
+  use ./plugins/datetime.nu; datetime clock item; datetime calendar item
   use ./plugins/battery.nu; battery item
+  use ./plugins/volume.nu; volume item
   use ./plugins/front_app.nu; front_app item
 }
 

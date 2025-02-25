@@ -24,15 +24,16 @@ def main () {
   }
   let volume: int = $env.INFO | into int
   let icon: string = match $volume {
-    61..100 => "󰕾",
-    31..60 => "󰖀",
-    1..30 => "󰕿",
-    _ => "󰖁"
+    61..100 => {kind: "󰕾", color: $text},
+    31..60 => {kind: "󰖀", color: $text},
+    1..30 => {kind: "󰕿", color: $text},
+    _ => {kind: "󰖁", color: $red}
   }
 
   (
     sketchybar --set $name
-      icon=$"($icon)"
+      icon=$"($icon.kind)"
+      icon.color=$"($icon.color)"
       volume=$"($volume)%"
   )
 }

@@ -12,7 +12,7 @@ export def item () {
     sketchybar
       --add item $name right
       --set $name
-        # icon.color=$"($sky)"
+        # label.color=$"($subtext0)"
         script=$"($nu.current-exe) ($current_path)"
         update_freq=120
       --subscribe $name system_woke power_source_change
@@ -28,19 +28,25 @@ def main () {
     | get 0
     | into int
 
-  let icon: string = if (pmset -g batt | lines | find 'AC Power' | length) == 0 {
-    match $percentage {
-      91..100 => ""
-      61..90 => ""
-      31..60 => ""
-      11..30 => ""
-      _ => ""
+  let icon: record<kind: string, color: string> = if (pmset -g batt | lines | find 'AC Power' | length) != 0 {
+    {
+      kind: "",
+      color: $"($peach)"
     }
-  } else { "" }
+  } else {
+     match $percentage {
+      91..100 => {kind: "", color: $"($teal)"}
+      61..90 => {kind: "", color: $"($green)"}
+      31..60 => {kind: "", color: $"($yellow)"}
+      11..30 => {kind: "", color: $"($peach)"}
+      _ => {kind: "", color: $"($red)"}
+    }
+  }
 
   (
     sketchybar --set $name
-      icon=$"($icon)"
+      icon=$"($icon.kind)"
+      icon.color=$"($icon.color)"
       label=$"($percentage)%"
   )
 }
