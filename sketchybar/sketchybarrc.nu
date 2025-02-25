@@ -36,28 +36,11 @@ def run [plugin_dir: string] {
         background.corner_radius=8
   )
 
-  sketchybar --add event aerospace_workspace_change
-
-  aerospace list-workspaces --all | lines | each {|space_id|
-    let space = $"space.($space_id)"
-
-    (
-      sketchybar
-        --add item $space left
-        --subscribe $space aerospace_workspace_change
-        --set $space
-          label=$"($space_id)"
-          label.padding_left=2
-          label.padding_right=2
-          click_script="aerospace workspace ($space_id)"
-          background.height=20
-    )
-  }
-
+  use ./plugins/workspace.nu; workspace item; workspace trigger
+  use ./plugins/front_app.nu; front_app item
   use ./plugins/datetime.nu; datetime clock item; datetime calendar item
   use ./plugins/battery.nu; battery item
   use ./plugins/volume.nu; volume item
-  use ./plugins/front_app.nu; front_app item
 }
 
 def main () {
