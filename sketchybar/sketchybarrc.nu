@@ -1,6 +1,5 @@
 #!/usr/bin/env nu
 use std/log
-use utils.nu
 use colors.nu
 
 const font = "HackGen Console NF"
@@ -8,10 +7,6 @@ const font = "HackGen Console NF"
 def run [plugin_dir: string] {
   sketchybar --reload
 
-  let bar = [
-  ] | utils list_to_args
-
-  sketchybar --bar $bar
   (
     sketchybar
       --bar
@@ -19,31 +14,34 @@ def run [plugin_dir: string] {
         blur_radius=30
         position=top
         margin=5,
-        corner_radius=5,
+        corner_radius=8,
         topmost=window,
         shadow=off,
         sticky=off,
         y_offset=3,
-        color=$"($bar_color)"
+        color=$"($base)"
+        border_width=3
+        border_color=$"($surface0)"
 
       --default
-        icon.font=$"($font):Bold:16.0"
+        icon.font=$"($font):Bold:18.0"
         label.font=$"($font):Bold:16.0"
-        icon.padding_left=4
-        icon.padding_right=4
         label.padding_left=4
         label.padding_right=4
         label.color=$"($text)"
+        icon.padding_left=5
+        icon.padding_right=5
+        icon.background.corner_radius=8
+        icon.background.height=25
+        icon.color=$"($text)"
         background.color=$"($base)"
-        background.corner_radius=5
-        background.height=24
-        # background.border_width=2
-        # background.border_color=$"($base)"
+        background.corner_radius=8
   )
   # sketchybar --default label.color=$"($text)" background.color=$"($base)"
 
-  use ./plugins/calendar.nu; calendar item
+  use ./plugins/datetime.nu; datetime calendar item
   use ./plugins/volume.nu; volume item
+  use ./plugins/battery.nu; battery item
 
   sketchybar --add event aerospace_workspace_change
 
@@ -55,8 +53,9 @@ def run [plugin_dir: string] {
         --add item $space left
         --subscribe $space aerospace_workspace_change
         --set $space
-          label.color=$"($text)"
           label=$"($space_id)"
+          label.padding_left=2
+          label.padding_right=2
           click_script="aerospace workspace ($space_id)"
           background.height=20
     )

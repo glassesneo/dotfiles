@@ -17,9 +17,8 @@
 # export const yellow =         "0xffE0AF68"
 # export const orange =         "0xffFF9E64"
 
-export const rosewater = "0xfff5e0dc"
-export const mauve = "0xffcba6f7"
+export const rosewater = "0xffdc8a78"
+export const sky = "0xff89dceb"
+export const text = "0xfff5f5f5"
+export const surface0 = "0xff313244"
 export const base = "0xff1e1e2e"
-export const text = "0xffcdd6f4"
-
-export const bar_color = $base
