@@ -1,4 +1,8 @@
-{hostName, ...}: let
+{
+  pkgs,
+  hostName,
+  ...
+}: let
   # userName = builtins.getEnv "USER";
   # hostName = builtins.getEnv "HOST";
   system = builtins.currentSystem;
@@ -38,6 +42,9 @@ in {
         Minute = 0;
       };
       options = "--delete-older-than 7d";
+    };
+    envVars = {
+      SKETCHYBAR_APP_FONT_PATH = "${pkgs.sketchybar-app-font}/bin/icon_map.sh";
     };
   };
 }

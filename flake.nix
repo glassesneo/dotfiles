@@ -47,8 +47,13 @@
     darwinConfigurations = {
       "macos-personal-laptop-01" = nix-darwin.lib.darwinSystem {
         inherit system inputs;
+        specialArgs = {
+          inherit inputs;
+          hostName = "macos-personal-laptop-01";
+        };
         modules = [
-          (import ./system/darwin {hostName = "macos-personal-laptop-01";})
+          ./system/darwin
+          # (import ./system/darwin {hostName = "macos-personal-laptop-01";})
           home-manager.darwinModules.home-manager
           {
             home-manager = {

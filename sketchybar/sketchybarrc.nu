@@ -37,11 +37,6 @@ def run [plugin_dir: string] {
         background.color=$"($base)"
         background.corner_radius=8
   )
-  # sketchybar --default label.color=$"($text)" background.color=$"($base)"
-
-  use ./plugins/datetime.nu; datetime calendar item
-  use ./plugins/volume.nu; volume item
-  use ./plugins/battery.nu; battery item
 
   sketchybar --add event aerospace_workspace_change
 
@@ -60,6 +55,11 @@ def run [plugin_dir: string] {
           background.height=20
     )
   }
+
+  use ./plugins/datetime.nu; datetime calendar item
+  use ./plugins/volume.nu; volume item
+  use ./plugins/battery.nu; battery item
+  use ./plugins/front_app.nu; front_app item
 }
 
 def main () {
