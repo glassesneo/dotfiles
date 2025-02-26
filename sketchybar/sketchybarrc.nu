@@ -2,7 +2,7 @@
 use std/log
 use colors.nu
 
-const font = "Hack Nerd Font Mono"
+const font = "Hack Nerd Font"
 
 def run [plugin_dir: string] {
   sketchybar --reload
@@ -30,10 +30,10 @@ def run [plugin_dir: string] {
         padding_left=5
         padding_right=5
         icon.font=$"($font):Bold:19"
-        label.font=$"($font):Bold:17"
-        icon.padding_left=12
+        label.font=$"($font):Regular:17"
         label.padding_left=6
         label.padding_right=12
+        icon.padding_left=12
         label.color=$"($text)"
         # icon.padding_left=6
         # icon.padding_right=6
@@ -43,7 +43,8 @@ def run [plugin_dir: string] {
 
   use ./plugins/workspace.nu; workspace item
   use ./plugins/front_app.nu; front_app item
-  use ./plugins/datetime.nu; datetime clock item; datetime calendar item
+  use ./plugins/media.nu; media item
+  use ./plugins/datetime.nu; datetime item
   use ./plugins/battery.nu; battery item
   use ./plugins/volume.nu; volume item
 }

@@ -21,7 +21,7 @@ export def item () {
       --subscribe $name system_woke power_source_change
   )
 
-  templates set_item_unit $name $crust $peach
+  templates set_item_unit $name $crust $overlay0
 }
 
 def main () {

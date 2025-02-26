@@ -17,9 +17,9 @@ def create_workspace (space_id: string, display: int) {
         padding_right=0
         label=$"($space_id)"
         label.color=$"($text)"
-        label.font.size=16
-        label.padding_left=14
-        label.padding_right=14
+        label.font.size=17
+        label.padding_left=10
+        label.padding_right=10
         label.highlight=off
         label.highlight_color=$"($red)"
         icon.drawing=off

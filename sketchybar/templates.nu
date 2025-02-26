@@ -3,7 +3,7 @@ use ./colors.nu
 
 export const item_unit = {
   background: {
-    corner_radius: 30,
+    corner_radius: 20,
     height: 34,
     border_width: 1,
   }

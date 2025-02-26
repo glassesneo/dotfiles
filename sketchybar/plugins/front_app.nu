@@ -23,17 +23,18 @@ export def item () {
     sketchybar
       --add item $name left
       --set $name
+        padding_left=30
+        # background.clip=1.0
         display=active
+        label.font.style=Bold
         icon.font="sketchybar-app-font:Regular:20.0"
         icon.padding_right="2"
-        padding_left=16
-        padding_right=16
         background.border_color=$"($text)"
         script=$"($nu.current-exe) ($current_path)"
       --subscribe $name front_app_switched
   )
 
-  # templates set_item_unit $name $crust
+  # templates set_item_unit_without_border $name "0x00000000"
 }
 
 def main () {
