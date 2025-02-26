@@ -75,7 +75,7 @@
           inner.vertical = 10;
           outer.left = 5;
           outer.bottom = 5;
-          outer.top = 40;
+          outer.top = 50;
           outer.right = 5;
         };
 
@@ -215,10 +215,10 @@
     };
     jankyborders = {
       enable = true;
-      active_color = "0xc0ff00f2";
-      inactive_color = "0xff0080ff";
+      active_color = "0xcffca9ee6";
+      inactive_color = "0xff737994";
       style = "round";
-      width = 5.0;
+      width = 5.5;
       hidpi = true;
     };
   };

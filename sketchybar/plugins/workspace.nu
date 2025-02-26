@@ -24,7 +24,7 @@ export def item () {
           label.padding_left=2
           label.padding_right=2
           label.highlight=off
-          label.highlight_color=$"($sapphire)"
+          label.highlight_color=$"($teal)"
           label.background.height=22
           label.background.corner_radius=4
           label.background.padding_left=10

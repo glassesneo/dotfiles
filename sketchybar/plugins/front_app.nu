@@ -9,6 +9,7 @@ def icon_color (): string -> string {
     "Arc" => $pink
     "Ghostty" => $blue
     "Obsidian" => $mauve
+    "Kitty" => $flamingo
     _ => $text
   }
 }

@@ -10,30 +10,28 @@ def run [plugin_dir: string] {
   (
     sketchybar
       --bar
-        height=32
+        height=40
         blur_radius=30
         position=top
         margin=5,
-        corner_radius=8,
+        corner_radius=10,
         topmost=window,
         shadow=off,
-        sticky=off,
-        y_offset=3,
+        sticky=on,
+        y_offset=5,
         color=$"($base)"
-        border_width=3
-        border_color=$"($mantle)"
+        # border_width=4
+        # border_color=$"($mantle)"
 
       --default
-        icon.font=$"($font):Bold:18.0"
-        label.font=$"($font):Bold:16.0"
+        icon.font=$"($font):Bold:20.0"
+        label.font=$"($font):Bold:18.0"
         label.padding_left=6
         label.padding_right=6
         label.color=$"($text)"
         icon.padding_left=6
         icon.padding_right=6
         icon.color=$"($text)"
-        # background.color=$"($base)"
-        background.corner_radius=8
   )
 
   use ./plugins/workspace.nu; workspace item; workspace trigger

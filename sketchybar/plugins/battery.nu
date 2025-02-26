@@ -12,7 +12,7 @@ export def item () {
     sketchybar
       --add item $name right
       --set $name
-        # label.color=$"($subtext0)"
+        label.color=$"($sapphire)"
         script=$"($nu.current-exe) ($current_path)"
         update_freq=120
       --subscribe $name system_woke power_source_change
