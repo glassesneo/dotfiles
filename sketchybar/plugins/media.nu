@@ -16,6 +16,7 @@ export def item () {
         label.padding_left=12
         label.padding_right=12
         label.color=$"($text)"
+        label.font.family="HackGen Console NF"
         label.font.size=14
         label.font.style=Bold
         label.max_chars=30

@@ -4,7 +4,7 @@ use ../colors.nu
 use ../templates.nu
 
 def format_datetime (): datetime -> string {
-  $in | format date `%a, %d %b  %H:%M`
+  $in | format date `%a, %b %d  %H:%M`
 }
 
 export const name = "datetime"

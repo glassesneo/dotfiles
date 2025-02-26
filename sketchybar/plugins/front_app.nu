@@ -23,7 +23,7 @@ export def item () {
     sketchybar
       --add item $name left
       --set $name
-        padding_left=30
+        padding_left=15
         # background.clip=1.0
         display=active
         label.font.style=Bold
