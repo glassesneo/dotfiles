@@ -1,13 +1,14 @@
 #!/usr/bin/env nu
 use std/log
 use ../colors.nu
+use ../templates.nu
 
 def format_clock (): datetime -> string {
   $in | format date `%H:%M`
 }
 
 def format_calendar (): datetime -> string {
-  $in | format date `%Y-%m-%d (%a)`
+  $in | format date `%a %d. %b`
 }
 
 def map-to-icon (): string -> string {
@@ -27,17 +28,18 @@ export module clock {
       sketchybar
         --add item $name right
         --set $name
-          padding_left=4
           padding_right=0
           label=$"($output)"
           label.color=$"($lavender)"
-          label.padding_right=0
-          icon.font.size=20
+          icon.font.size=26
           icon.color=$"($blue)"
-          icon.padding_right=0
+          # icon.padding_left=15
+          # label.padding_right=15
           script=$"($nu.current-exe) ($current_path)"
           update_freq=1
     )
+
+    templates set_item_unit $name $crust $lavender
   }
 }
 
@@ -55,11 +57,15 @@ export module calendar {
         --set $name
           icon=""
           icon.color=$"($peach)"
+          # icon.padding_left=15
+          # label.padding_right=15
           label=$"($output)"
           label.color=$"($yellow)"
           # script=$"($nu.current-exe) ($current_path)"
           # update_freq=1
     )
+
+    templates set_item_unit $name $crust $yellow
   }
 }
 

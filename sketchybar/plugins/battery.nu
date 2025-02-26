@@ -1,6 +1,7 @@
 #!/usr/bin/env nu
 use std/log
 use ../colors.nu
+use ../templates.nu
 
 export const name = "battery"
 
@@ -12,11 +13,15 @@ export def item () {
     sketchybar
       --add item $name right
       --set $name
-        label.color=$"($sapphire)"
+        icon.padding_left=12
+        label.padding_right=12
         script=$"($nu.current-exe) ($current_path)"
         update_freq=120
+
       --subscribe $name system_woke power_source_change
   )
+
+  templates set_item_unit $name $crust $peach
 }
 
 def main () {

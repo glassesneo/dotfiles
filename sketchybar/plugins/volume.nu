@@ -1,6 +1,7 @@
 #!/usr/bin/env nu
 use std/log
 use ../colors.nu
+use ../templates.nu
 
 export const name = "volume"
 
@@ -12,10 +13,14 @@ export def item () {
     sketchybar
       --add item $name right
       --set $name
-        # icon.color=$"($sky)"
+        # icon.padding_left=10
+        # label.padding_right=10
         script=$"($nu.current-exe) ($current_path)"
+        background.border_color=$"($text)"
       --subscribe $name volume_change
   )
+
+  templates set_item_unit $name $crust $overlay0
 }
 
 def main () {
@@ -34,6 +39,6 @@ def main () {
     sketchybar --set $name
       icon=$"($icon.kind)"
       icon.color=$"($icon.color)"
-      volume=$"($volume)%"
+      label=$"($volume)%"
   )
 }

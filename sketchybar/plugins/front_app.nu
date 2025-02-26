@@ -1,6 +1,7 @@
 #!/usr/bin/env nu
 use std/log
 use ../colors.nu
+use ../templates.nu
 
 export const name = "front_app"
 
@@ -23,11 +24,15 @@ export def item () {
       --add item $name left
       --set $name
         icon.font="sketchybar-app-font:Regular:20.0"
+        icon.padding_right="2"
         padding_left=16
-        padding_right=4
+        padding_right=16
+        background.border_color=$"($text)"
         script=$"($nu.current-exe) ($current_path)"
       --subscribe $name front_app_switched
   )
+
+  # templates set_item_unit $name $crust
 }
 
 def main () {

@@ -215,10 +215,11 @@
     };
     jankyborders = {
       enable = true;
-      active_color = "0xcffca9ee6";
-      inactive_color = "0xff737994";
+      # active_color = "0xcffc6d0f5";
+      active_color = "0xffffffff";
+      inactive_color = "0x00000000";
       style = "round";
-      width = 5.5;
+      width = 5.0;
       hidpi = true;
     };
   };

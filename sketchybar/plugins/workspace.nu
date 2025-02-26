@@ -1,6 +1,7 @@
 #!/usr/bin/env nu
 use std/log
 use ../colors.nu
+use ../templates.nu
 
 export const name = "workspace"
 
@@ -19,23 +20,30 @@ export def item () {
       sketchybar
         --add item $space left
         --set $space
+          padding_left=0
+          padding_right=0
           label=$"($space_id)"
-          label.color=$"($overlay0)"
-          label.padding_left=2
-          label.padding_right=2
+          label.color=$"($text)"
+          label.font.size=16
+          label.padding_left=14
+          label.padding_right=14
           label.highlight=off
-          label.highlight_color=$"($teal)"
-          label.background.height=22
-          label.background.corner_radius=4
-          label.background.padding_left=10
-          label.background.padding_right=10
-          # label.background.drawing=off
-          # label.background.color=$"($overlay2)"
+          label.highlight_color=$"($red)"
+          icon.drawing=off
           click_script=$"aerospace workspace ($space_id)"
           script=$"($nu.current-exe) ($current_path) ($space_id)"
         --subscribe $space aerospace_workspace_change
     )
   }
+
+  (
+    sketchybar
+      --add bracket workspaces '/workspace\..*/'
+      --set workspaces
+        background.color=$"($surface0)"
+        background.corner_radius=8
+        background.height=28
+  )
 }
 
 export def trigger () {
@@ -52,6 +60,5 @@ def main [space_id: string] {
   (
     sketchybar --set $env.NAME
       label.highlight=$"($state)"
-      # label.background.drawing=$"($state)"
   )
 }
