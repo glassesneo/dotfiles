@@ -23,6 +23,7 @@
         # Available commands : https://nikitabobko.github.io/AeroSpace/commands
         after-startup-command = [
           "exec-and-forget sketchybar"
+          "exec-and-forget reload-sketchybar"
           "exec-and-forget borders"
         ];
 
