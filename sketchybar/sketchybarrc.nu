@@ -41,7 +41,7 @@ def run [plugin_dir: string] {
         y_offset=0
   )
 
-  use ./plugins/workspace.nu; workspace item; workspace trigger
+  use ./plugins/workspace.nu; workspace item
   use ./plugins/front_app.nu; front_app item
   use ./plugins/datetime.nu; datetime clock item; datetime calendar item
   use ./plugins/battery.nu; battery item

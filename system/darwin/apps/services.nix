@@ -85,11 +85,11 @@
           "3" = "main";
           "4" = "main";
           "5" = "main";
-          A = "secondary";
-          B = "secondary";
-          C = "secondary";
-          D = "secondary";
-          E = "secondary";
+          A = ["secondary" "main"];
+          B = ["secondary" "main"];
+          C = ["secondary" "main"];
+          D = ["secondary" "main"];
+          E = ["secondary" "main"];
         };
 
         # 'main' binding mode declaration

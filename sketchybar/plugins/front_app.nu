@@ -23,6 +23,7 @@ export def item () {
     sketchybar
       --add item $name left
       --set $name
+        display=active
         icon.font="sketchybar-app-font:Regular:20.0"
         icon.padding_right="2"
         padding_left=16
