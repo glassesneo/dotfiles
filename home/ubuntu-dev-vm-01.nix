@@ -21,7 +21,9 @@
     ];
   };
 
+  xdg.enable = true;
   programs.home-manager.enable = true;
+
   imports = [
     ./common/direnv.nix
     ./common/git.nix
