@@ -12,7 +12,7 @@ export const name = "datetime"
 export def item () {
   log info $"Rendering ($name)"
   let output = date now | format_datetime
-  let current_path: string = $env.FILE_PWD | path join "plugins/" | path join "datetime.nu"
+  let current_path = $name | templates get_current_path
 
   (
     sketchybar

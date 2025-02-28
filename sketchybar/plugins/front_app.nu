@@ -7,7 +7,7 @@ export const name = "front_app"
 
 export def item () {
   log info $"Rendering ($name)"
-  let current_path: string = $env.FILE_PWD | path join "plugins/" | path join "front_app.nu"
+  let current_path = $name | templates get_current_path
 
   (
     sketchybar
@@ -20,26 +20,23 @@ export def item () {
         label.font.size=18
         icon.font="sketchybar-app-font:Regular:20.0"
         icon.padding_right=2
+        popup.background.border_width=2
+        popup.background.border_color=$text
+        popup.background.corner_radius=5
         script=$"($nu.current-exe) ($current_path)"
-      --subscribe $name front_app_switched
+      --subscribe $name
+        front_app_switched
+        mouse.entered
+        mouse.exited
   )
 
   # templates set_item_unit_without_border $name "0x00000000"
 }
 
-def main () {
-  if $env.SENDER != "front_app_switched" {
-    return
-  }
-
+def switch_front_app (app_name: string) {
   let content = cat ~/.config/sketchybar_icon_map.sh
-  let icon = bash -c $"($content)" -- $env.INFO
+  let icon = bash -c $"($content)" -- $app_name
 
-  # (
-  #   sketchybar
-  #     --animate tanh 15
-  #     --set $name
-  # )
   (
     sketchybar
       --set $name
@@ -54,5 +51,21 @@ def main () {
         icon.y_offset=7
         icon.y_offset=0
   )
+}
+
+def display_popup () {
+  (
+    sketchybar
+      --set $name
+        popup.drawing=on
+  )
+}
+
+def main () {
+  match $env.SENDER {
+    "front_app_switched" => {
+      switch_front_app $env.INFO
+    }
+  }
 }
 

@@ -7,7 +7,7 @@ export const name = "battery"
 
 export def item () {
   log info $"Rendering ($name)"
-  let current_path: string = $env.FILE_PWD | path join "plugins/" | path join "battery.nu"
+  let current_path = $name | templates get_current_path
 
   (
     sketchybar
@@ -15,6 +15,7 @@ export def item () {
       --set $name
         icon.font.style=Regular
         icon.font.size=16
+        icon.padding_right=5
         label.font.style=Bold
         label.font.size=19
         script=$"($nu.current-exe) ($current_path)"

@@ -41,3 +41,7 @@ export def icon_color (): string -> string {
   }
 }
 
+export def get_current_path []: string -> string {
+  let filename = $"($in).nu"
+  $env.FILE_PWD | path join $"plugins/" | path join $filename
+}

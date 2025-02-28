@@ -7,13 +7,14 @@ export const name = "media"
 
 export def item () {
   log info $"Rendering ($name)"
-  let current_path: string = $env.FILE_PWD | path join "plugins/" | path join "media.nu"
+  let current_path = $name | templates get_current_path
 
   (
     sketchybar
       --add item $name center
       --set $name
-        label="-"
+        display=active
+        label="──"
         label.padding_left=12
         label.padding_right=12
         label.color=$"($text)"
@@ -22,36 +23,92 @@ export def item () {
         label.font.style=Bold
         label.max_chars=30
         label.scroll_duration=180
-        scroll_texts=on
+        scroll_texts=off
         icon=""
         icon.color=$"($text)"
         script=$"($nu.current-exe) ($current_path)"
         update_freq=120
-      --subscribe $name media_change
+      --subscribe $name
+        media_change
+        mouse.entered
+        mouse.exited
+  )
+  # for storing media info
+  # label: text to display
+  # icon: player state
+  (
+    sketchybar
+      --add item current_media center
+      --set current_media
+        drawing=off
   )
 
-  # templates set_item_unit_without_border $name "0x00000000"
   templates set_item_unit $name $crust $overlay0
 }
 
+def label_text (): record<state: string, title: string, artist: string> -> string {
+  $"($in | get title) - ($in | get artist)"
+}
+
+def show_media_info (label_text: string) {
+  (
+    sketchybar
+      --animate tanh 30
+      --set $name
+        label=$"($label_text)"
+        scroll_texts=on
+  )
+}
+
+def hide_media_info () {
+  (
+    sketchybar
+      --animate tanh 30
+      --set $name
+        label="──"
+        icon.color=$"($text)"
+        scroll_texts=off
+  )
+}
+
+def update_media (media_info: record<state: string, title: string, artist: string>) {
+  let state = $media_info | get state
+  match $state {
+    "playing" => {
+      sketchybar --set $name icon.color=$"($red)"
+      show_media_info ($media_info | label_text)
+    }
+    "paused" => {
+      hide_media_info
+    }
+    _ => {
+      hide_media_info
+    }
+  }
+}
+
 def main () {
-  let info = $env.INFO | from json
-  let state = $info | get state
-  if $state == "playing" {
-    (
-      sketchybar
-        --animate tanh 30
-        --set $name
-          label=$"($info | get title) - ($info | get artist)"
-          icon.color=$"($red)"
-    )
-  } else {
-    (
-      sketchybar
-        --animate tanh 30
-        --set $name
-          label="──"
-          icon.color=$"($text)"
-    )
+  match $env.SENDER {
+    "media_change" => {
+      let media_info = $env.INFO | from json | select state title artist
+      (
+        sketchybar --set current_media
+          label=$"($media_info | label_text)"
+          icon=$"($media_info | get state)"
+      )
+      update_media $media_info
+    }
+    "mouse.entered" => {
+      let label_text = sketchybar --query current_media | from json | get label.value
+      show_media_info $label_text
+    }
+    "mouse.exited" => {
+      let state = sketchybar --query current_media | from json | get icon.value
+      if ($state) == "playing" {
+        return
+      }
+      hide_media_info
+    }
+    _ => {}
   }
 }

@@ -6,7 +6,7 @@ use ../templates.nu
 export const name = "workspace"
 
 def create_workspace (space_id: string, display: int) {
-  let current_path: string = $env.FILE_PWD | path join "plugins/" | path join "workspace.nu"
+  let current_path = $name | templates get_current_path
   let space = $"($name).($space_id)"
   (
     sketchybar

@@ -1,6 +1,7 @@
 # $env.config.edit_mode = "vi"
 $env.config.show_banner = false
 $env.config.buffer_editor = "nvim"
+$env.bar_current_media = {}
 
 # aliases
 alias bd = cd ..
