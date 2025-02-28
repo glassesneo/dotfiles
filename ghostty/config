@@ -4,6 +4,7 @@ keybind = cmd+shift+[=previous_tab
 font-family = "Hackgen Console NF"
 font-size = 15
 font-feature = -dlig
+background-opacity = 0.75
 theme = catppuccin-mocha
 window-inherit-working-directory = false
 macos-titlebar-style = hidden

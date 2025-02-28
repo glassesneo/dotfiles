@@ -2,7 +2,7 @@
   services = {
     sketchybar = {
       enable = true;
-      extraPackages = with pkgs; [jq];
+      extraPackages = with pkgs; [nushell];
     };
     aerospace = {
       enable = true;
@@ -22,9 +22,8 @@
         # 'after-startup-command' is run after 'after-login-command'
         # Available commands : https://nikitabobko.github.io/AeroSpace/commands
         after-startup-command = [
-          "exec-and-forget sketchybar"
-          "exec-and-forget reload-sketchybar"
-          "exec-and-forget borders"
+          "exec-and-forget ${pkgs.sketchybar}/bin/sketchybar"
+          "exec-and-forget ${pkgs.jankyborders}/bin/borders"
         ];
 
         exec-on-workspace-change = [

@@ -21,7 +21,7 @@ export def item () {
         padding_right=0
         label=$"($output)"
         label.color=$"($sapphire)"
-        label.font.style=Bold
+        label.font.style="Bold Italic"
         label.font.size=16
         icon.drawing=off
         # icon.font.size=26

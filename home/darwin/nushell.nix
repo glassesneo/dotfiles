@@ -26,7 +26,6 @@
         else '''';
     in
       ''
-        alias reload-sketchybar = nu ~/.config/sketchybar/sketchybarrc.nu
         ${completions ["bat" "eza" "gh" "git" "less" "man" "nix" "ssh" "tar" "typst"]}
       ''
       + starship_config;

@@ -1,11 +1,11 @@
-#!/usr/bin/env nu
+#!/usr/bin/env -S nu --stdin
 use std/log
 use colors.nu
 
 const font = "Hack Nerd Font"
 
 def run [plugin_dir: string] {
-  sketchybar --reload
+  # sketchybar --reload
 
   (
     sketchybar
@@ -30,7 +30,7 @@ def run [plugin_dir: string] {
         padding_left=5
         padding_right=5
         icon.font=$"($font):Bold:19"
-        label.font=$"($font):Regular:17"
+        label.font=$"($font):Regular:16"
         label.padding_left=6
         label.padding_right=12
         icon.padding_left=12
@@ -52,7 +52,9 @@ def run [plugin_dir: string] {
 def main () {
   log info "sketchybar: loading config.."
 
-  let plugin_dir: string = $env.XDG_CONFIG_HOME | path join "plugins"
+  let config_home = $env | get --ignore-errors XDG_CONFIG_HOME | default $"($env.HOME)/.config"
+  let plugin_dir: string = $config_home | path join "plugins"
+  # let plugin_dir: string = $env.XDG_CACHE_HOME | path join "plugins"
   run plugin_dir
 
   log info "sketchybar: finish loading config"

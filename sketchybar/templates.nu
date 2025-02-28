@@ -30,3 +30,14 @@ export def set_item_unit_without_border [name: string, bg: string] {
         background.height=$"($item_unit.background.height)"
   )
 }
+
+export def icon_color (): string -> string {
+  match $in {
+    "Arc" => $pink
+    "Ghostty" => $blue
+    "Obsidian" => $mauve
+    "Kitty" => $flamingo
+    _ => $text
+  }
+}
+

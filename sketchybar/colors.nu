@@ -1,5 +1,6 @@
 #!/usr/bin/env nu
 
+# catppuccin frappe
 export const rosewater = "0xfff2d5cf"
 export const flamingo = "0xffeebebe"
 export const pink = "0xfff4b8e4"

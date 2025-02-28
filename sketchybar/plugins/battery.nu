@@ -13,15 +13,16 @@ export def item () {
     sketchybar
       --add item $name right
       --set $name
-        icon.padding_left=12
-        label.padding_right=12
+        icon.font.style=Regular
+        icon.font.size=16
+        label.font.style=Bold
+        label.font.size=19
         script=$"($nu.current-exe) ($current_path)"
         update_freq=120
-
       --subscribe $name system_woke power_source_change
   )
 
-  templates set_item_unit $name $crust $overlay0
+  # templates set_item_unit $name $crust $overlay0
 }
 
 def main () {
@@ -48,10 +49,25 @@ def main () {
     }
   }
 
+  # (
+  #   sketchybar
+  #     --animate tanh 20
+  #     --set $name label.y_offset=5
+  # )
+
   (
     sketchybar --set $name
-      icon=$"($icon.kind)"
-      icon.color=$"($icon.color)"
-      label=$"($percentage)%"
+      label=$"($icon.kind)"
+      label.color=$"($icon.color)"
+      icon=$"($percentage)%"
   )
+
+  (
+    sketchybar
+      --animate tanh 20
+      --set $name
+        label.y_offset=7
+        label.y_offset=0
+  )
+
 }

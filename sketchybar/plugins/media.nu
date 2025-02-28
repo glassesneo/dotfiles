@@ -13,13 +13,15 @@ export def item () {
     sketchybar
       --add item $name center
       --set $name
+        label="-"
         label.padding_left=12
         label.padding_right=12
         label.color=$"($text)"
         label.font.family="HackGen Console NF"
-        label.font.size=14
+        label.font.size=15
         label.font.style=Bold
         label.max_chars=30
+        label.scroll_duration=180
         scroll_texts=on
         icon=""
         icon.color=$"($text)"
@@ -37,16 +39,19 @@ def main () {
   let state = $info | get state
   if $state == "playing" {
     (
-      sketchybar --set $name
-        label=$"($info | get title) - ($info | get artist)"
-        icon.color=$"($mauve)"
-        scroll_texts=on
+      sketchybar
+        --animate tanh 30
+        --set $name
+          label=$"($info | get title) - ($info | get artist)"
+          icon.color=$"($red)"
     )
   } else {
     (
-      sketchybar --set $name
-        icon.color=$"($text)"
-        scroll_texts=off
+      sketchybar
+        --animate tanh 30
+        --set $name
+          label="──"
+          icon.color=$"($text)"
     )
   }
 }

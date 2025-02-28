@@ -18,8 +18,8 @@ def create_workspace (space_id: string, display: int) {
         label=$"($space_id)"
         label.color=$"($text)"
         label.font.size=17
-        label.padding_left=10
-        label.padding_right=10
+        label.padding_left=8
+        label.padding_right=8
         label.highlight=off
         label.highlight_color=$"($red)"
         icon.drawing=off
@@ -34,6 +34,7 @@ def set_workspace_display (space_id: string, display: int) {
   let space = $"($name).($space_id)"
   (
     sketchybar
+      --animate tanh 30
       --set $space
         display=$"($display)"
   )
@@ -67,15 +68,20 @@ export def item () {
 def main [space_id: string] {
   match $env.SENDER {
     "aerospace_workspace_change" => {
-      let state = if $space_id == ($env.FOCUSED_WORKSPACE? | default "") {
-        "on"
-      } else {
-        "off"
-      }
+      # let state = if $space_id == ($env.FOCUSED_WORKSPACE? | default "") {
+      #   "on"
+      # } else {
+      #   "off"
+      # }
+      let state = $space_id == ($env.FOCUSED_WORKSPACE? | default "")
+      # let font_size = if $state {18} else {13}
 
       (
-        sketchybar --set $env.NAME
-          label.highlight=$"($state)"
+        sketchybar
+          # --animate tanh 10
+          --set $env.NAME
+            label.highlight=$"($state)"
+            # label.font.size=$"($font_size)"
       )
     }
     _ => {}
