@@ -4,7 +4,7 @@ use colors.nu
 
 const font = "Hack Nerd Font"
 
-def run [plugin_dir: string] {
+def run () {
   # sketchybar --reload
 
   (
@@ -53,10 +53,10 @@ def run [plugin_dir: string] {
 def main () {
   log info "sketchybar: loading config.."
 
-  let config_home = $env | get --ignore-errors XDG_CONFIG_HOME | default $"($env.HOME)/.config"
-  let plugin_dir: string = $config_home | path join "plugins"
+  # let config_home = $env | get --ignore-errors XDG_CONFIG_HOME | default $"($env.HOME)/.config"
+  # let plugin_dir: string = $config_home | path join "plugins"
   # let plugin_dir: string = $env.XDG_CACHE_HOME | path join "plugins"
-  run plugin_dir
+  run
 
   log info "sketchybar: finish loading config"
   sketchybar --update
@@ -65,8 +65,8 @@ def main () {
 def 'main test' () {
   log info "sketchybar: loading test config.."
 
-  let plugin_dir: string = $env.FILE_PWD | path join "plugins/"
-  run plugin_dir
+  # let plugin_dir: string = $env.FILE_PWD | path join "plugins/"
+  run
 
   log info "sketchybar: finish loading test config"
   sketchybar --update

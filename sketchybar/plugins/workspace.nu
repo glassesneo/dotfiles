@@ -63,26 +63,30 @@ export def item () {
       --subscribe workspaces display_change
 
   )
+
+  let focused_workspace = aerospace list-workspaces --focused --format '%{workspace}' --json
+  | from json
+  | get 0.workspace
+  let space = $"($name).($focused_workspace)"
+  (
+    sketchybar --set $space
+      label.highlight=on
+  )
+}
+
+def toggle_highlight (space_id: string) {
+  let state = $space_id == ($env.FOCUSED_WORKSPACE? | default "")
+  (
+    sketchybar
+      --set $env.NAME
+        label.highlight=$"($state)"
+  )
 }
 
 def main [space_id: string] {
   match $env.SENDER {
     "aerospace_workspace_change" => {
-      # let state = if $space_id == ($env.FOCUSED_WORKSPACE? | default "") {
-      #   "on"
-      # } else {
-      #   "off"
-      # }
-      let state = $space_id == ($env.FOCUSED_WORKSPACE? | default "")
-      # let font_size = if $state {18} else {13}
-
-      (
-        sketchybar
-          # --animate tanh 10
-          --set $env.NAME
-            label.highlight=$"($state)"
-            # label.font.size=$"($font_size)"
-      )
+      toggle_highlight $space_id
     }
     _ => {}
   }

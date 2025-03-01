@@ -7,6 +7,7 @@ export const name = "volume"
 
 export def item () {
   log info $"Rendering ($name)"
+  let current_path = $name | templates get_current_path
 
   (
     sketchybar
@@ -14,5 +15,29 @@ export def item () {
       --rename "Control Center,Sound" $name
       --set $name
         label.drawing=off
+        alias.color=$"($text)"
+        alias.scale=1.1
+        script=$"($nu.current-exe) ($current_path)"
+      --subscribe $name volume_change
   )
+}
+
+def main () {
+  if $env.SENDER != "volume_change" {
+    return
+  }
+  
+  let volume = $env.INFO | into int
+  let color = if $volume == 0 {
+    $red
+  } else {
+    $text
+  }
+
+  (
+    sketchybar
+      --set $name
+        alias.color=$"($color)"
+  )
+
 }
