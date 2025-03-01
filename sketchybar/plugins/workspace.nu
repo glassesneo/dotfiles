@@ -1,12 +1,12 @@
 #!/usr/bin/env nu
 use std/log
 use ../colors.nu
-use ../templates.nu
+use ../utils.nu
 
 export const name = "workspace"
 
 def create_workspace (space_id: string, display: int) {
-  let current_path = $name | templates get_current_path
+  let current_path = $name | utils get_current_path
   let space = $"($name).($space_id)"
   (
     sketchybar

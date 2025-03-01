@@ -1,13 +1,13 @@
 #!/usr/bin/env nu
 use std/log
 use ../colors.nu
-use ../templates.nu
+use ../utils.nu
 
 export const name = "front_app"
 
 export def item () {
   log info $"Rendering ($name)"
-  let current_path = $name | templates get_current_path
+  let current_path = $name | utils get_current_path
 
   (
     sketchybar
@@ -30,7 +30,7 @@ export def item () {
         mouse.exited
   )
 
-  # templates set_item_unit_without_border $name "0x00000000"
+  # utils set_item_unit_without_border $name "0x00000000"
 }
 
 def switch_front_app (app_name: string) {
@@ -42,7 +42,7 @@ def switch_front_app (app_name: string) {
       --set $name
         icon=$"($icon)"
         label=$"($env.INFO)"
-        icon.color=$"($env.INFO | templates icon_color)"
+        icon.color=$"($env.INFO | utils icon_color)"
   )
   (
     sketchybar

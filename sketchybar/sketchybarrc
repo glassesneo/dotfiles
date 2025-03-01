@@ -5,8 +5,6 @@ use colors.nu
 const font = "Hack Nerd Font"
 
 def run () {
-  # sketchybar --reload
-
   (
     sketchybar
       --bar
@@ -14,13 +12,9 @@ def run () {
         blur_radius=30
         position=top
         # margin=5,
-        # corner_radius=10,
-        # corner_radius.bottom_left=12
-        # corner_radius.bottom_right=12
         topmost=window,
         shadow=off,
         sticky=on,
-        # y_offset=5,
         color=$"($opaque_crust)"
         # color=0x00ffffff
         # border_width=4
@@ -38,7 +32,6 @@ def run () {
         # icon.padding_left=6
         # icon.padding_right=6
         icon.color=$"($text)"
-        y_offset=0
   )
 
   use ./plugins/workspace.nu; workspace item
@@ -53,9 +46,6 @@ def run () {
 def main () {
   log info "sketchybar: loading config.."
 
-  # let config_home = $env | get --ignore-errors XDG_CONFIG_HOME | default $"($env.HOME)/.config"
-  # let plugin_dir: string = $config_home | path join "plugins"
-  # let plugin_dir: string = $env.XDG_CACHE_HOME | path join "plugins"
   run
 
   log info "sketchybar: finish loading config"
@@ -65,7 +55,6 @@ def main () {
 def 'main test' () {
   log info "sketchybar: loading test config.."
 
-  # let plugin_dir: string = $env.FILE_PWD | path join "plugins/"
   run
 
   log info "sketchybar: finish loading test config"

@@ -1,13 +1,13 @@
 #!/usr/bin/env nu
 use std/log
 use ../colors.nu
-use ../templates.nu
+use ../utils.nu
 
 export const name = "battery"
 
 export def item () {
   log info $"Rendering ($name)"
-  let current_path = $name | templates get_current_path
+  let current_path = $name | utils get_current_path
 
   (
     sketchybar
@@ -23,7 +23,7 @@ export def item () {
       --subscribe $name system_woke power_source_change
   )
 
-  # templates set_item_unit $name $crust $overlay0
+  # utils set_item_unit $name $crust $overlay0
 }
 
 def main () {

@@ -1,13 +1,13 @@
 #!/usr/bin/env nu
 use std/log
 use ../colors.nu
-use ../templates.nu
+use ../utils.nu
 
 export const name = "volume"
 
 export def item () {
   log info $"Rendering ($name)"
-  let current_path = $name | templates get_current_path
+  let current_path = $name | utils get_current_path
 
   (
     sketchybar
