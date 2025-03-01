@@ -24,15 +24,9 @@ export def item () {
         label.font.style="Bold Italic"
         label.font.size=16
         icon.drawing=off
-        # icon.font.size=26
-        icon.color=$"($blue)"
-        # icon.padding_left=15
-        # label.padding_right=15
         script=$"($nu.current-exe) ($current_path)"
         update_freq=1
   )
-
-  # utils set_item_unit $name $crust $overlay0
 }
 
 def main () {

@@ -47,7 +47,7 @@ export def item () {
 }
 
 def label_text (): record<state: string, title: string, artist: string> -> string {
-  $"($in | get title) - ($in | get artist)"
+  $"($in | get title) • ($in | get artist)"
 }
 
 def show_media_info (label_text: string) {
