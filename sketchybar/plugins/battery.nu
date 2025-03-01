@@ -35,39 +35,28 @@ def main () {
     | get 0
     | into int
 
-  let icon: record<kind: string, color: string> = if (pmset -g batt | lines | find 'AC Power' | length) != 0 {
-    {
-      kind: "",
-      color: $"($peach)"
-    }
-  } else {
-     match $percentage {
-      91..100 => {kind: "", color: $"($teal)"}
-      61..90 => {kind: "", color: $"($green)"}
-      31..60 => {kind: "", color: $"($yellow)"}
-      11..30 => {kind: "", color: $"($peach)"}
-      _ => {kind: "", color: $"($red)"}
-    }
+  if (pmset -g batt | lines | find "AC Power" | length) != 0 {
+    (
+      sketchybar
+        --set $name
+          label=""
+          label.color=$"($peach)"
+          icon=$"($percentage)%"
+    )
+    return
   }
-
-  # (
-  #   sketchybar
-  #     --animate tanh 20
-  #     --set $name label.y_offset=5
-  # )
+  let icon: record<kind: string, color: string> = match $percentage {
+    91..100 => {kind: "", color: $"($teal)"}
+    61..90 => {kind: "", color: $"($green)"}
+    31..60 => {kind: "", color: $"($yellow)"}
+    11..30 => {kind: "", color: $"($peach)"}
+    _ => {kind: "", color: $"($red)"}
+  }
 
   (
     sketchybar --set $name
       label=$"($icon.kind)"
       label.color=$"($icon.color)"
       icon=$"($percentage)%"
-  )
-
-  (
-    sketchybar
-      --animate tanh 20
-      --set $name
-        label.y_offset=7
-        label.y_offset=0
   )
 }

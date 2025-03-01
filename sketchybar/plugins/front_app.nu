@@ -81,7 +81,9 @@ def current_apps (): nothing -> list<string> {
 }
 
 def show_app_list () {
+  let focused_app = sketchybar --query front_app | from json | get label.value
   let icons = current_apps
+  | filter {|app| $app != $focused_app}
   | each {|app| $app | get_icon }
   | str join " "
   (
