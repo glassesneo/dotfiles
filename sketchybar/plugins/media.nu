@@ -53,10 +53,14 @@ def label_text (): record<state: string, title: string, artist: string> -> strin
 def show_media_info (label_text: string) {
   (
     sketchybar
+      --set $name
+        scroll_texts=on
+  )
+  (
+    sketchybar
       --animate tanh 30
       --set $name
         label=$"($label_text)"
-        scroll_texts=on
   )
 }
 
@@ -67,6 +71,11 @@ def hide_media_info () {
       --set $name
         label="──"
         icon.color=$"($text)"
+        background.border_color=$"($overlay0)"
+  )
+  (
+    sketchybar
+      --set $name
         scroll_texts=off
   )
 }
@@ -75,7 +84,11 @@ def update_media (media_info: record<state: string, title: string, artist: strin
   let state = $media_info | get state
   match $state {
     "playing" => {
-      sketchybar --set $name icon.color=$"($red)"
+      (
+        sketchybar --set $name
+          icon.color=$"($red)"
+          background.border_color=$"($flamingo)"
+      )
       show_media_info ($media_info | label_text)
     }
     "paused" => {
