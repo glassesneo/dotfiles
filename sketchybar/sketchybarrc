@@ -26,8 +26,8 @@ def run () {
         icon.font=$"($font):Bold:19"
         label.font=$"($font):Regular:16"
         label.padding_left=6
-        label.padding_right=12
-        icon.padding_left=12
+        label.padding_right=10
+        icon.padding_left=10
         label.color=$"($text)"
         # icon.padding_left=6
         # icon.padding_right=6
@@ -40,6 +40,7 @@ def run () {
   use ./plugins/datetime.nu; datetime item
   use ./plugins/battery.nu; battery item
   use ./plugins/volume.nu; volume item
+  use ./plugins/cpu.nu; cpu item
   # use ./plugins/bluetooth.nu; bluetooth item
 }
 

@@ -23,6 +23,7 @@ export def item () {
         label.font.style=Bold
         label.max_chars=30
         label.scroll_duration=180
+        label.y_offset=1
         scroll_texts=off
         icon=""
         icon.color=$"($text)"
