@@ -39,8 +39,8 @@ def run () {
   use ./plugins/media.nu; media item
   use ./plugins/datetime.nu; datetime item
   use ./plugins/battery.nu; battery item
-  use ./plugins/volume.nu; volume item
   use ./plugins/cpu.nu; cpu item
+  use ./plugins/volume.nu; volume item
   # use ./plugins/bluetooth.nu; bluetooth item
 }
 
