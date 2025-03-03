@@ -7,3 +7,6 @@ $env.bar_current_media = {}
 alias bd = cd ..
 alias tree = eza --tree
 alias projectroot = git rev-parse --show-toplevel
+
+# custom completions
+use ./completions/sketchybar.nu "sketchybar extern" *;

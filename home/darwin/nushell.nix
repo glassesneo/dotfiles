@@ -7,6 +7,11 @@
   home.packages = [
     pkgs.nu_scripts
   ];
+  xdg.configFile = {
+    "nushell/completions" = {
+      source = ../../nushell/completions;
+    };
+  };
   programs.nushell = {
     enable = true;
     configFile.source = ../../nushell/config.nu;
