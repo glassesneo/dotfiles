@@ -11,10 +11,10 @@
       duf
       fastfetch
       fd
-      fzf
       jq
       nowplaying-cli
       ripgrep
+      skim
       sl
       unrar
       uv
