@@ -10,3 +10,4 @@ alias projectroot = git rev-parse --show-toplevel
 
 # custom completions
 use ./completions/sketchybar.nu "sketchybar extern" *;
+use ./completions/aerospace.nu "aerospace extern" *;
