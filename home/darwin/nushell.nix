@@ -38,5 +38,13 @@
       highlight
       gstat
     ];
+    extraEnv = let
+      plugin_dir = plugin: "${plugin}/bin/nu_plugin_gstat";
+    in ''
+      $env.PATH ++= [
+        ${plugin_dir pkgs.nushellPlugins.highlight},
+        ${plugin_dir pkgs.nushellPlugins.gstat}
+      ]
+    '';
   };
 }
