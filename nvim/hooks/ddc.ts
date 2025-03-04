@@ -5,7 +5,7 @@ import {
 
 export class Config extends BaseConfig {
   override async config(args: ConfigArguments): Promise<void> {
-    const commonSources = ["around", "rg", "file", "skkeleton"];
+    const commonSources = ["around", "rg", "buffer", "file", "skkeleton"];
     const commonLangSources = ["lsp", "denippet"].concat(commonSources);
     const headMatchers = ["matcher_head", "matcher_prefix"];
     const commonConverters = [
@@ -35,8 +35,7 @@ export class Config extends BaseConfig {
           matchers: headMatchers,
           sorters: ["sorter_rank"],
           converters: commonConverters,
-          minAutoCompleteLength: 3,
-          ignoreCase: true,
+          minAutoCompleteLength: 1,
           enabledIf: "!skkeleton#is_enabled()",
         },
         around: {
@@ -44,18 +43,15 @@ export class Config extends BaseConfig {
           matchers: fuzzyMatchers,
           sorters: fuzzySorters,
           converters: fuzzyConverters,
-          minAutoCompleteLength: 1,
         },
         buffer: {
           mark: "[buf]",
-          matchers: fuzzyMatchers,
-          sorters: fuzzySorters,
-          converters: fuzzyConverters,
         },
         cmdline: {
           mark: "[>_]",
           forceCompletionPattern: "\\S/\\S*|\\.\\w*",
           minAutoCompleteLength: 1,
+          dup: "force",
         },
         cmdline_history: {
           mark: "[>_] his",
@@ -82,10 +78,11 @@ export class Config extends BaseConfig {
         },
         lsp: {
           mark: "[LSP]",
-          matchers: fuzzyMatchers.concat(["matcher_prefix"]),
+          matchers: fuzzyMatchers,
+          minAutoCompleteLength: 1,
           sorters: ["sorter_lsp-kind"],
           converters: ["converter_kind_labels"].concat(fuzzyConverters),
-          forceCompletionPattern: "\\.\\w*|::\\w*|->\\w*",
+          // forceCompletionPattern: "\\.\\w*|::\\w*|->\\w*",
           dup: "force",
         },
         "nvim-lua": {
@@ -100,7 +97,7 @@ export class Config extends BaseConfig {
           matchers: fuzzyMatchers,
           sorters: fuzzySorters,
           converters: fuzzyConverters,
-          minAutoCompleteLength: 6,
+          // minAutoCompleteLength: 6,
         },
         shell_native: {
           mark: "[sh]",
@@ -116,7 +113,8 @@ export class Config extends BaseConfig {
           sorters: [],
           converters: [],
           isVolatile: true,
-          minAutoCompleteLength: 1,
+          minAutoCompleteLength: 2,
+          enabledIf: "",
         },
         treesitter: {
           mark: "[TS]",

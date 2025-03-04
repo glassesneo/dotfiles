@@ -39,7 +39,6 @@ hooks_file = "$HOOK_DIR/lexima.lua"
 
 [[plugins]]
 repo = 'kylechui/nvim-surround'
-rev = '*'
 frozen = true
 on_map = { n = [
   'ys',

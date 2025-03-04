@@ -91,7 +91,7 @@ export class Config extends BaseConfig {
               lazy: tomlFile.lazy,
             },
           },
-        }),
+        })
       );
       const tomls = await Promise.all(tomlPromises);
       for (const toml of tomls) {

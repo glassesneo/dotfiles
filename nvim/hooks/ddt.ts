@@ -6,13 +6,20 @@ import {
 export class Config extends BaseConfig {
   override async config(args: ConfigArguments): Promise<void> {
     args.contextBuilder.patchGlobal({
+      ui: "shell",
       uiParams: {
+        shell: {
+          // nvimServer: "~/.cache/nvim/server.pipe",
+          prompt: "%",
+          // promptPattern: "\w*=\\\> \?",
+        },
         terminal: {
-          command: ['zsh'],
-          promptPattern: '\w*% \?',
-        }
-      }
-    })
+          nvimServer: "~/.cache/nvim/server.pipe",
+          command: ["nu"],
+          promptPattern: "\w*% \?",
+        },
+      },
+    });
     await Promise.resolve();
   }
 }
