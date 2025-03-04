@@ -13,48 +13,21 @@
     withPython3 = false;
     withRuby = false;
     extraPackages = with pkgs; [
-      # lsp
-      efm-langserver
-      vim-language-server
-      # sh
-      bash-language-server
-      shfmt
-      nufmt
+      # nufmt
       #typescript
-      biome
-      typescript-language-server
-      svelte-language-server
-      tailwindcss-language-server
-      # tree-sitter
-      tree-sitter
-      # denops
-      deno
-      # tree-sitter
-      gcc
-      # nim
-      nimlangserver
-      # nix
-      nil
-      alejandra
-      nixfmt-rfc-style
+      # biome
+      # typescript-language-server
+      # svelte-language-server
+      # tailwindcss-language-server
       # scala
-      scalafmt
-      metals
-      # lua
-      lua-language-server
-      stylua
-      # toml
-      taplo
-      # markdown
-      marksman
+      # scalafmt
+      # metals
       # python
-      pylyzer
-      ruff
+      # pylyzer
+      # ruff
       # kotlin
-      kotlin-language-server
-      ktfmt
-      # zig
-      zls
+      # kotlin-language-server
+      # ktfmt
     ];
   };
 }

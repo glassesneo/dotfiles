@@ -20,6 +20,7 @@
     nixpkgs,
     home-manager,
     nix-darwin,
+    flake-utils,
     ...
     # ghostty
   }: let
@@ -46,6 +47,7 @@
     # for darwin with home-manager
     darwinConfigurations = {
       "macos-personal-laptop-01" = nix-darwin.lib.darwinSystem {
+        # system = "aarch64-darwin";
         inherit system inputs;
         specialArgs = {
           inherit inputs;
@@ -68,6 +70,23 @@
           }
         ];
       };
+    };
+    devShells.${system}.default = pkgs.mkShellNoCC {
+      name = "dotfiles";
+      packages = with pkgs; [
+        efm-langserver
+        bash-language-server
+        shfmt
+        tree-sitter
+        deno
+        gcc
+        nil
+        alejandra
+        lua-language-server
+        stylua
+        taplo
+        marksman
+      ];
     };
   };
 }
