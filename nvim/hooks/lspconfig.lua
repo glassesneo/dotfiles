@@ -263,6 +263,7 @@ local servers = {
   marksman = {},
   metals = {},
   nil_ls = {
+    -- on_attach = lspformat_on_attach,
     settings = {
       flake = {
         autoArchive = true,

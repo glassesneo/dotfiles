@@ -13,6 +13,10 @@
     withPython3 = false;
     withRuby = false;
     extraPackages = with pkgs; [
+      nil
+      alejandra
+      efm-langserver
+      deno
       # nufmt
       #typescript
       # biome

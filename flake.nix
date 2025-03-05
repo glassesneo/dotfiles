@@ -47,8 +47,8 @@
     # for darwin with home-manager
     darwinConfigurations = {
       "macos-personal-laptop-01" = nix-darwin.lib.darwinSystem {
-        # system = "aarch64-darwin";
-        inherit system inputs;
+        system = "aarch64-darwin";
+        inherit inputs;
         specialArgs = {
           inherit inputs;
           hostName = "macos-personal-laptop-01";
@@ -71,6 +71,8 @@
         ];
       };
     };
+
+    formatter.${system} = pkgs.alejandra;
     devShells.${system}.default = pkgs.mkShellNoCC {
       name = "dotfiles";
       packages = with pkgs; [
@@ -81,7 +83,7 @@
         deno
         gcc
         nil
-        alejandra
+        # alejandra
         lua-language-server
         stylua
         taplo
