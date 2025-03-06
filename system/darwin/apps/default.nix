@@ -1,6 +1,6 @@
 {pkgs, ...}: {
   environment.systemPackages = with pkgs; [
-    sketchybar-app-font
+    raycast
   ];
   imports = [
     ./services.nix

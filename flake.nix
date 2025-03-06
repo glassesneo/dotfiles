@@ -65,6 +65,7 @@
                 inherit inputs;
               };
               verbose = true;
+              sharedModules = [];
               users."${userName}" = import ./home/macos-personal-laptop-01.nix;
             };
           }

@@ -35,7 +35,7 @@
       "orbstack"
       "proton-drive"
       "proton-pass"
-      "raycast"
+      # "raycast"
       # "slack"
       "zoom"
     ];

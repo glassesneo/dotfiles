@@ -7,7 +7,6 @@
   # hostName = builtins.getEnv "HOST";
   system = builtins.currentSystem;
 in {
-  services.nix-daemon.enable = true;
   nixpkgs = {
     config.allowUnfree = true;
     hostPlatform = system;

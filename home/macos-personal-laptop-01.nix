@@ -16,6 +16,7 @@
       ripgrep
       skim
       sl
+      tart
       unrar
       uv
       vim-startuptime
