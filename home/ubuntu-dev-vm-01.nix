@@ -32,5 +32,6 @@
     ./common/neovim.nix
     ./common/oh-my-posh.nix
     ./common/starship.nix
+    ./common/zsh.nix
   ];
 }
