@@ -25,6 +25,28 @@
     forAllSystems = func:
       nixpkgs.lib.genAttrs systems (system: func nixpkgs.legacyPackages.${system});
   in {
+    # for NixOS with home-manager
+    nixosConfigurations = {
+      "neo@nixos-dev-vm-01" = inputs.nixpkgs.lib.nixosSystem {
+        system = "aarch64-linux";
+        modules = [
+          ./system/nixos/configuration.nix
+          home-manager.nixosModules.home-manager
+          {
+            home-manager = {
+              useGlobalPkgs = true;
+              useUserPackages = true;
+              extraSpecialArgs = {
+                inherit inputs;
+              };
+              verbose = true;
+              sharedModules = [];
+              users.neo = import ./home/nixos-dev-vm-01.nix;
+            };
+          }
+        ];
+      };
+    };
     # for non-NixOS with home-manager
     homeConfigurations = {
       "neo@ubuntu-dev-vm-01" = home-manager.lib.homeManagerConfiguration {
