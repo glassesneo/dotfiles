@@ -1,10 +1,8 @@
-{pkgs, ...}: let
-  userName = builtins.getEnv "USER";
-in {
-  users.users."${userName}" = {
-    name = userName;
-    home = builtins.getEnv "HOME";
-  };
+{pkgs, ...}: {
+  # users.users."${userName}" = {
+  #   name = userName;
+  #   home = builtins.getEnv "HOME";
+  # };
 
   nix = {
     optimise.automatic = true;

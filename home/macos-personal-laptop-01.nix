@@ -1,7 +1,11 @@
-{pkgs, ...}: {
+{
+  pkgs,
+  lib,
+  ...
+}: {
   home = {
-    username = builtins.getEnv "USER";
-    homeDirectory = builtins.getEnv "HOME";
+    username = "neo";
+    homeDirectory = lib.mkForce "/Users/neo";
     stateVersion = "24.11";
     packages = with pkgs; [
       bat

@@ -6,9 +6,7 @@
 #    https://daiderd.com/nix-darwin/manual/index.html#sec-options
 #
 ###################################################################################
-let
-  hostName = builtins.getEnv "HOST";
-in {
+{hostName, ...}: {
   system = {
     stateVersion = 4;
     # activationScripts are executed every time you boot the system or run `nixos-rebuild` / `darwin-rebuild`.

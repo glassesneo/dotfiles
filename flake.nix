@@ -9,10 +9,6 @@
       url = "github:LnL7/nix-darwin";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    flake-utils.url = "github:numtide/flake-utils";
-    # ghostty = {
-    #   url = "github:ghostty-org/ghostty/v1.1.0";
-    # };
   };
 
   outputs = inputs @ {
@@ -20,22 +16,19 @@
     nixpkgs,
     home-manager,
     nix-darwin,
-    flake-utils,
     ...
-    # ghostty
   }: let
-    userName = builtins.getEnv "USER";
-    # userEmail = "glassesneo@protonmail.com";
-    system = builtins.currentSystem;
-    pkgs = import nixpkgs {
-      inherit system;
-      config.allowUnfree = true;
-    };
+    systems = [
+      "aarch64-darwin"
+      "aarch64-linux"
+    ];
+    forAllSystems = func:
+      nixpkgs.lib.genAttrs systems (system: func nixpkgs.legacyPackages.${system});
   in {
     # for non-NixOS with home-manager
     homeConfigurations = {
-      ${userName} = home-manager.lib.homeManagerConfiguration {
-        inherit pkgs;
+      "neo@ubuntu-dev-vm-01" = home-manager.lib.homeManagerConfiguration {
+        pkgs = nixpkgs.legacyPackages."aarch64-linux";
         extraSpecialArgs = {
           inherit inputs;
         };
@@ -46,7 +39,7 @@
     };
     # for darwin with home-manager
     darwinConfigurations = {
-      "macos-personal-laptop-01" = nix-darwin.lib.darwinSystem {
+      "neo@macos-personal-laptop-01" = nix-darwin.lib.darwinSystem {
         system = "aarch64-darwin";
         inherit inputs;
         specialArgs = {
@@ -55,7 +48,6 @@
         };
         modules = [
           ./system/darwin
-          # (import ./system/darwin {hostName = "macos-personal-laptop-01";})
           home-manager.darwinModules.home-manager
           {
             home-manager = {
@@ -66,30 +58,32 @@
               };
               verbose = true;
               sharedModules = [];
-              users."${userName}" = import ./home/macos-personal-laptop-01.nix;
+              users.neo = import ./home/macos-personal-laptop-01.nix;
             };
           }
         ];
       };
     };
 
-    formatter.${system} = pkgs.alejandra;
-    devShells.${system}.default = pkgs.mkShellNoCC {
-      name = "dotfiles";
-      packages = with pkgs; [
-        efm-langserver
-        bash-language-server
-        shfmt
-        tree-sitter
-        deno
-        gcc
-        nil
-        # alejandra
-        lua-language-server
-        stylua
-        taplo
-        marksman
-      ];
-    };
+    formatter = forAllSystems (pkgs: pkgs.alejandra);
+    devShells = forAllSystems (pkgs: {
+      default = pkgs.mkShellNoCC {
+        name = "dotfiles";
+        packages = with pkgs; [
+          efm-langserver
+          bash-language-server
+          shfmt
+          tree-sitter
+          deno
+          gcc
+          nil
+          # alejandra
+          lua-language-server
+          stylua
+          taplo
+          marksman
+        ];
+      };
+    });
   };
 }
