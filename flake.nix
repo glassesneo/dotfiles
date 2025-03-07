@@ -29,6 +29,10 @@
     nixosConfigurations = {
       "neo@nixos-dev-vm-01" = inputs.nixpkgs.lib.nixosSystem {
         system = "aarch64-linux";
+        specialArgs = {
+          inherit inputs;
+          hostName = "nixos-dev-vm-01";
+        };
         modules = [
           ./system/nixos/configuration.nix
           home-manager.nixosModules.home-manager

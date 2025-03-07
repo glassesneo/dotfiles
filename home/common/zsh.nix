@@ -22,6 +22,7 @@ in {
     autocd = true;
     shellAliases = {
       bd = "cd ..";
+      tree = lib.mkIf config.programs.eza.enable "eza --tree";
     };
     initExtra = extraZshrc;
     history = {

@@ -39,5 +39,6 @@
     # ./common/oh-my-posh.nix
     ./common/starship.nix
     ./common/zsh.nix
+    ./nixos/gui.nix
   ];
 }
