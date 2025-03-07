@@ -1,7 +1,7 @@
 {pkgs, ...}: {
   home = {
-    username = builtins.getEnv "USER";
-    homeDirectory = builtins.getEnv "HOME";
+    username = "neo";
+    homeDirectory = "/home/neo";
     stateVersion = "25.05";
     packages = with pkgs; [
       bat
@@ -23,6 +23,12 @@
 
   xdg.enable = true;
   programs.home-manager.enable = true;
+  nixpkgs = {
+    config = {
+      allowUnfree = true;
+      allowUnfreePredicate = _: true;
+    };
+  };
 
   imports = [
     ./common/direnv.nix
