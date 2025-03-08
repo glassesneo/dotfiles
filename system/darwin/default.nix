@@ -1,12 +1,11 @@
-{
-  pkgs,
-  hostName,
-  ...
-}: {
+{hostName, ...}: {
   nixpkgs = {
     config.allowUnfree = true;
   };
   # users.users.neo.home = "/Users/neo";
+  environment.variables = {
+    LC_ALL = "en_US.UTF-8";
+  };
 
   imports = [
     ../common
@@ -28,9 +27,6 @@
         Minute = 0;
       };
       options = "--delete-older-than 7d";
-    };
-    envVars = {
-      SKETCHYBAR_APP_FONT_PATH = "${pkgs.sketchybar-app-font}/bin/icon_map.sh";
     };
   };
 }
