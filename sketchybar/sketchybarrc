@@ -8,17 +8,17 @@ def run () {
   (
     sketchybar
       --bar
-        height=45
-        blur_radius=30
+        height=40
         position=top
-        # margin=5,
-        topmost=window,
-        shadow=off,
-        sticky=on,
-        color=$"($opaque_crust)"
-        # color=0x00ffffff
-        # border_width=4
-        # border_color=$"($mantle)"
+        margin=3
+        topmost=window
+        shadow=off
+        sticky=on
+        color=$"($crust)"
+        corner_radius=6
+        y_offset=4
+        border_width=2
+        border_color=$"($red)"
 
       --default
         padding_left=5
@@ -34,6 +34,7 @@ def run () {
         icon.color=$"($text)"
   )
 
+  # use ./plugins/apple_logo.nu; apple_logo item
   use ./plugins/workspace.nu; workspace item
   use ./plugins/front_app.nu; front_app item
   use ./plugins/media.nu; media item

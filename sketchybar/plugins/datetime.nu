@@ -20,9 +20,10 @@ export def item () {
       --set $name
         padding_right=0
         label=$"($output)"
-        label.color=$"($sapphire)"
+        label.color=$"($sky)"
         label.font.style="Bold Italic"
         label.font.size=16
+        label.padding_right=0
         icon.drawing=off
         script=$"($nu.current-exe) ($current_path)"
         update_freq=1

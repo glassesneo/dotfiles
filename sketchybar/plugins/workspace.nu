@@ -21,7 +21,10 @@ def create_workspace (space_id: string, display: int) {
         label.padding_left=8
         label.padding_right=8
         label.highlight=off
-        label.highlight_color=$"($red)"
+        label.background.color="0x00000000"
+        label.highlight_color=$"($teal)"
+        label.background.corner_radius=8
+        label.background.height=28
         icon.drawing=off
         click_script=$"aerospace workspace ($space_id)"
         script=$"($nu.current-exe) ($current_path) ($space_id)"
@@ -56,7 +59,8 @@ export def item () {
     sketchybar
       --add bracket workspaces '/workspace\..*/'
       --set workspaces
-        background.color=$"($surface0)"
+        padding_left=0
+        background.color=$"($base)"
         background.corner_radius=8
         background.height=28
         script=$"($nu.current-exe) ($current_path) update-display"
@@ -71,11 +75,18 @@ export def item () {
   (
     sketchybar --set $space
       label.highlight=on
+      label.background.color=$"($surface0)"
   )
 }
 
 def toggle_highlight (space_id: string) {
   let state = $space_id == ($env.FOCUSED_WORKSPACE? | default "")
+  (
+    sketchybar
+      --animate tanh 20
+      --set $env.NAME
+        label.background.color=$"(if $state {$surface0} else {'0x00000000'})"
+  )
   (
     sketchybar
       --set $env.NAME

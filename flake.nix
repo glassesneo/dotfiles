@@ -9,6 +9,7 @@
       url = "github:LnL7/nix-darwin";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    # apple-fonts.url = "github:Lyndeno/apple-fonts.nix";
   };
 
   outputs = inputs @ {

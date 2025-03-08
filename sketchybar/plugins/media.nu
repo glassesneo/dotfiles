@@ -21,12 +21,21 @@ export def item () {
         label.font.family="HackGen Console NF"
         label.font.size=15
         label.font.style=Bold
-        label.max_chars=30
+        label.max_chars=28
         label.scroll_duration=180
         label.y_offset=1
         scroll_texts=off
         icon=""
-        icon.color=$"($text)"
+        icon.color=$"($mantle)"
+        icon.background.color=$"($mantle)"
+        icon.background.corner_radius=20
+        icon.background.height=30
+        icon.padding_left=10
+        icon.padding_right=10
+        # background.height=30
+        # background.corner_radius=20
+        # background.clip=0.5
+        # background.border_width=0
         script=$"($nu.current-exe) ($current_path)"
         update_freq=120
       --subscribe $name
@@ -44,7 +53,7 @@ export def item () {
         drawing=off
   )
 
-  utils set_item_unit $name $crust $overlay0
+  utils set_item_unit_without_border $name $base
 }
 
 def label_text (): record<state: string, title: string, artist: string> -> string {
@@ -72,7 +81,8 @@ def hide_media_info () {
       --set $name
         label="──"
         icon.color=$"($text)"
-        background.border_color=$"($overlay0)"
+        icon.background.color=$"($mantle)"
+        # background.border_color=$"($overlay0)"
   )
   (
     sketchybar
@@ -87,8 +97,9 @@ def update_media (media_info: record<state: string, title: string, artist: strin
     "playing" => {
       (
         sketchybar --set $name
-          icon.color=$"($red)"
-          background.border_color=$"($flamingo)"
+          icon.color=$"($mantle)"
+          icon.background.color=$"($sky)"
+          # background.border_color=$"($flamingo)"
       )
       show_media_info ($media_info | label_text)
     }

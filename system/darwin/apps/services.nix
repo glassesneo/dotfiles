@@ -215,8 +215,7 @@
     };
     jankyborders = {
       enable = true;
-      # active_color = "0xcffc6d0f5";
-      active_color = "0xffffffff";
+      active_color = "0xfff4dbd6";
       inactive_color = "0x00000000";
       style = "round";
       width = 5.0;

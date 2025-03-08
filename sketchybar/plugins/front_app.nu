@@ -71,7 +71,7 @@ def switch_front_app (app_name: string) {
     sketchybar
       --animate tanh 30
       --set $name
-        icon.y_offset=7
+        icon.y_offset=6
         icon.y_offset=0
   )
 }
