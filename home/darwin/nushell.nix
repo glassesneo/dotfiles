@@ -31,7 +31,7 @@
         else '''';
     in
       ''
-        ${completions ["bat" "eza" "gh" "git" "less" "man" "nix" "ssh" "tar" "typst"]}
+        ${completions ["bat" "eza" "gh" "git" "less" "man" "nix" "ssh" "tar" "typst" "zellij"]}
       ''
       + starship_config;
     plugins = with pkgs.nushellPlugins; [

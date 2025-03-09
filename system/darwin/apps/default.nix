@@ -5,6 +5,7 @@
     maccy
     raycast
     slack
+    tart
     zed-editor
   ];
   imports = [

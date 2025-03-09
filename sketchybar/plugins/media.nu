@@ -30,8 +30,8 @@ export def item () {
         icon.background.color=$"($mantle)"
         icon.background.corner_radius=20
         icon.background.height=30
-        icon.padding_left=10
-        icon.padding_right=10
+        icon.padding_left=8
+        icon.padding_right=8
         # background.height=30
         # background.corner_radius=20
         # background.clip=0.5

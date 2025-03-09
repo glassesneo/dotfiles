@@ -10,15 +10,17 @@ def run () {
       --bar
         height=40
         position=top
-        margin=3
+        margin=2
         topmost=window
         shadow=off
         sticky=on
         color=$"($crust)"
-        corner_radius=6
-        y_offset=4
-        border_width=2
-        border_color=$"($red)"
+        # color="0xd0181926"
+        corner_radius=8
+        y_offset=3
+        # border_width=2
+        # border_color=$"($red)"
+        # blur_radius=15
 
       --default
         padding_left=5

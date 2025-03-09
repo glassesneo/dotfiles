@@ -20,7 +20,7 @@
       ripgrep
       skim
       sl
-      tart
+      # tart
       unrar
       uv
       vim-startuptime
@@ -38,6 +38,8 @@
     ./common/eza.nix
     ./common/neovim.nix
     ./common/oh-my-posh.nix
+    ./common/yazi.nix
+    # ./common/zellij.nix
     # ./common/starship.nix
     ./common/zsh.nix
     ./darwin/nushell.nix

@@ -22,7 +22,7 @@ def create_workspace (space_id: string, display: int) {
         label.padding_right=8
         label.highlight=off
         label.background.color="0x00000000"
-        label.highlight_color=$"($teal)"
+        label.highlight_color=$"($red)"
         label.background.corner_radius=8
         label.background.height=28
         icon.drawing=off
@@ -83,7 +83,7 @@ def toggle_highlight (space_id: string) {
   let state = $space_id == ($env.FOCUSED_WORKSPACE? | default "")
   (
     sketchybar
-      --animate tanh 20
+      --animate tanh 10
       --set $env.NAME
         label.background.color=$"(if $state {$surface0} else {'0x00000000'})"
   )
