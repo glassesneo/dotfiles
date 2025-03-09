@@ -50,7 +50,7 @@
     '';
     shellAliases = {
       bd = "cd ..";
-      tree = lib.mkIf config.programs.eza.enable "eza --tree";
+      tree = lib.mkIf config.programs.eza.enable "^eza --tree";
       projectroot = "git rev-parse --show-toplevel";
     };
     settings = {
