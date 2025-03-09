@@ -48,5 +48,20 @@
         ${lib.strings.concatMapStrings plugin_dir ["gstat" "highlight" "skim"]}
       ]
     '';
+    shellAliases = {
+      bd = "cd ..";
+      tree = lib.mkIf config.programs.eza.enable "eza --tree";
+      projectroot = "git rev-parse --show-toplevel";
+    };
+    settings = {
+      show_banner = false;
+      buffer_editor =
+        if config.programs.neovim.enable
+        then "nvim"
+        else "vim";
+      completions = {
+        case_sensitive = true;
+      };
+    };
   };
 }

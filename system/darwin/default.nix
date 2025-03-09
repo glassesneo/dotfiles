@@ -2,14 +2,22 @@
   nixpkgs = {
     config.allowUnfree = true;
   };
-  # users.users.neo.home = "/Users/neo";
-  environment.variables = {
-    LC_ALL = "en_US.UTF-8";
+  users.users = {
+    "neo" = {
+      # shell = pkgs.zsh;
+    };
+  };
+
+  environment = {
+    variables = {
+      LC_ALL = "en_US.UTF-8";
+    };
   };
 
   imports = [
     ../common
     ./apps
+    # ./shell.nix
     ./fonts.nix
     ./systems.nix
   ];

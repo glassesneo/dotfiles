@@ -96,10 +96,11 @@ def update_media (media_info: record<state: string, title: string, artist: strin
   match $state {
     "playing" => {
       (
-        sketchybar --set $name
-          icon.color=$"($mantle)"
-          icon.background.color=$"($sky)"
-          # background.border_color=$"($flamingo)"
+        sketchybar
+          --animate tanh 30
+          --set $name
+            icon.color=$"($mantle)"
+            icon.background.color=$"($sky)"
       )
       show_media_info ($media_info | label_text)
     }
