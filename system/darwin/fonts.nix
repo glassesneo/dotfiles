@@ -1,14 +1,10 @@
-{
-  pkgs,
-  inputs,
-  ...
-}: {
+{pkgs, ...}: {
   fonts = {
     packages = with pkgs; [
       nerd-fonts.hack
+      nerd-fonts.iosevka
       hackgen-nf-font
       sketchybar-app-font
-      # inputs.apple-fonts.packages.${pkgs.system}.sf-pro-nerd
     ];
   };
 }

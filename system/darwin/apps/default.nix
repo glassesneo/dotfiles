@@ -6,7 +6,7 @@
     raycast
     slack
     tart
-    zed-editor
+    # zed-editor
   ];
   imports = [
     ./services.nix

@@ -39,6 +39,7 @@
     ./common/neovim.nix
     ./common/oh-my-posh.nix
     ./common/yazi.nix
+    ./common/zed-editor.nix
     # ./common/zellij.nix
     # ./common/starship.nix
     ./common/zsh.nix
