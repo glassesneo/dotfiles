@@ -30,7 +30,7 @@
       {
         context = "vim_mode == normal && !menu";
         bindings = {
-          shift-y = ["workspace::SendKeystrokes" "y $"];
+          "shift-y" = ["workspace::SendKeystrokes" "y $"];
         };
       }
       {
@@ -40,7 +40,7 @@
         };
       }
       {
-        context = "Editor && edit_prediction && (vim_mode == insert) && !VimWaiting";
+        context = "Editor && edit_prediction";
         bindings = {
           "ctrl-y" = "editor::AcceptEditPrediction";
         };
