@@ -9,6 +9,10 @@
       url = "github:LnL7/nix-darwin";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    nixvim = {
+      url = "github:nix-community/nixvim";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     # apple-fonts.url = "github:Lyndeno/apple-fonts.nix";
   };
 
@@ -17,6 +21,7 @@
     nixpkgs,
     home-manager,
     nix-darwin,
+    nixvim,
     ...
   }: let
     systems = [
@@ -75,6 +80,8 @@
         };
         modules = [
           ./system/darwin
+          nixvim.nixDarwinModules.nixvim
+          ./modules/nixvim
           home-manager.darwinModules.home-manager
           {
             home-manager = {

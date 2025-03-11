@@ -36,7 +36,7 @@
     ./common/git.nix
     ./common/gh.nix
     ./common/eza.nix
-    ./common/neovim.nix
+    # ./common/neovim.nix
     ./common/oh-my-posh.nix
     ./common/yazi.nix
     ./common/zed-editor.nix
