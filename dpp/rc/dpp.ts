@@ -60,7 +60,7 @@ export class Config extends BaseConfig {
       const tomlPromises = [
         //{ name: "colortheme.toml", lazy: true },
         { name: "bypass.toml", lazy: false },
-        { name: "dpp.toml", lazy: false },
+        // { name: "dpp.toml", lazy: false },
         //{ name: "depends.toml", lazy: true },
         { name: "ddc.toml", lazy: true },
         // { name: "ddt.toml", lazy: true },

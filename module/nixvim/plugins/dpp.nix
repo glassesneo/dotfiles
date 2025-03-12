@@ -1,22 +1,27 @@
 {
   pkgs,
+  lib,
   inputs,
   ...
 }: let
-  dpp = pkgs.vimUtils.buildVimPlugin {
-    name = "dpp.vim";
-    src = inputs.dpp-vim;
-    # src = pkgs.fetchFromGitHub {
-    # owner = "Shougo";
-    # repo = "dpp.vim";
-    # rev = "188f2852326d2e962f9afbf92d5bcb395ca2cb56";
-    # hash = "sha256-UsKiSu0wtC0vdb7DZfvfrbqeHVXx5OPS/L2f/iABIWw=";
-    # };
-  };
+  dpp-plugins =
+    lib.attrsets.mapAttrsToList
+    (name: src: pkgs.vimUtils.buildVimPlugin {inherit name src;}) (lib.attrsets.getAttrs
+      [
+        "dpp-vim"
+        "dpp-ext-installer"
+        "dpp-ext-lazy"
+        "dpp-ext-toml"
+        "dpp-protocol-git"
+      ]
+      inputs);
+  dpp-rtp-config =
+    lib.strings.concatMapStrings (plugin: ''
+      vim.opt.runtimepath:prepend("${plugin}")
+    '')
+    dpp-plugins;
 in {
-  extraPlugins = [
-    dpp
-  ];
+  # extraPlugins = dpp-plugins;
   extraConfigLuaPost = ''
     local configDir = vim.env.HOME .. "/.config/dpp"
     vim.env.BASE_DIR = configDir
@@ -24,24 +29,15 @@ in {
     vim.env.PLUGIN_DIR = configDir .. "/plugins"
     vim.env.HOOK_DIR = configDir .. "/hooks"
 
-    -- local dpp_src = ${dpp};
     -- local denops_src = ${pkgs.vimPlugins.denops-vim};
+
+    ${dpp-rtp-config}
 
     -- vim.opt.runtimepath:prepend(dpp_src)
     local dpp = require("dpp")
 
     local dpp_base = "$XDG_CACHE_HOME/dpp"
     local dpp_config = "$RC_DIR/dpp.ts"
-
-    local ext_toml = "$XDG_CACHE_HOME/dpp/repos/github.com/Shougo/dpp-ext-toml"
-    local ext_lazy = "$XDG_CACHE_HOME/dpp/repos/github.com/Shougo/dpp-ext-lazy"
-    local ext_installer = "$XDG_CACHE_HOME/dpp/repos/github.com/Shougo/dpp-ext-installer"
-    local ext_git = "$XDG_CACHE_HOME/dpp/repos/github.com/Shougo/dpp-protocol-git"
-
-    vim.opt.runtimepath:append(ext_toml)
-    vim.opt.runtimepath:append(ext_lazy)
-    vim.opt.runtimepath:append(ext_installer)
-    vim.opt.runtimepath:append(ext_git)
 
     -- vim.g.denops_server_addr = "127.0.0.1:32121"
 

@@ -17,6 +17,22 @@
       url = "github:Shougo/dpp.vim";
       flake = false;
     };
+    dpp-ext-installer = {
+      url = "github:Shougo/dpp-ext-installer";
+      flake = false;
+    };
+    dpp-ext-lazy = {
+      url = "github:Shougo/dpp-ext-lazy";
+      flake = false;
+    };
+    dpp-ext-toml = {
+      url = "github:Shougo/dpp-ext-toml";
+      flake = false;
+    };
+    dpp-protocol-git = {
+      url = "github:Shougo/dpp-protocol-git";
+      flake = false;
+    };
     # apple-fonts.url = "github:Lyndeno/apple-fonts.nix";
   };
 
@@ -85,7 +101,7 @@
         modules = [
           ./system/darwin
           nixvim.nixDarwinModules.nixvim
-          ./modules/nixvim
+          ./module/nixvim
           home-manager.darwinModules.home-manager
           {
             home-manager = {

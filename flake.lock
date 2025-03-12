@@ -1,5 +1,69 @@
 {
   "nodes": {
+    "dpp-ext-installer": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1740792363,
+        "narHash": "sha256-8jY5k/zEIXcIfqsMVfQXUvApRnJWavV4UmD9TCwMGv8=",
+        "owner": "Shougo",
+        "repo": "dpp-ext-installer",
+        "rev": "af4c066a9d9c8ba6938810556184fdec413063f1",
+        "type": "github"
+      },
+      "original": {
+        "owner": "Shougo",
+        "repo": "dpp-ext-installer",
+        "type": "github"
+      }
+    },
+    "dpp-ext-lazy": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1737193109,
+        "narHash": "sha256-Izgv61SLT096WaPauWFdIKgXZWomGSC9NinciAQEIx4=",
+        "owner": "Shougo",
+        "repo": "dpp-ext-lazy",
+        "rev": "839e74094865bdb2a548f1f43ab2752243182d31",
+        "type": "github"
+      },
+      "original": {
+        "owner": "Shougo",
+        "repo": "dpp-ext-lazy",
+        "type": "github"
+      }
+    },
+    "dpp-ext-toml": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1737250632,
+        "narHash": "sha256-0qtL8tY4v3Vk/7cJahhg0+tLF6EM+U8A9R8OjzWSUyY=",
+        "owner": "Shougo",
+        "repo": "dpp-ext-toml",
+        "rev": "b6e4b8dbe27fb8fab838c8898c8d329dceb7b759",
+        "type": "github"
+      },
+      "original": {
+        "owner": "Shougo",
+        "repo": "dpp-ext-toml",
+        "type": "github"
+      }
+    },
+    "dpp-protocol-git": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1736245714,
+        "narHash": "sha256-oLepjrEukwhY+sUJ1gk11OFfzula/x5qbyxWkfmLXUw=",
+        "owner": "Shougo",
+        "repo": "dpp-protocol-git",
+        "rev": "32e55e4826249ba0dea108db332d8b2db665be7a",
+        "type": "github"
+      },
+      "original": {
+        "owner": "Shougo",
+        "repo": "dpp-protocol-git",
+        "type": "github"
+      }
+    },
     "dpp-vim": {
       "flake": false,
       "locked": {
@@ -186,6 +250,10 @@
     },
     "root": {
       "inputs": {
+        "dpp-ext-installer": "dpp-ext-installer",
+        "dpp-ext-lazy": "dpp-ext-lazy",
+        "dpp-ext-toml": "dpp-ext-toml",
+        "dpp-protocol-git": "dpp-protocol-git",
         "dpp-vim": "dpp-vim",
         "home-manager": "home-manager",
         "nix-darwin": "nix-darwin",

@@ -1,5 +1,6 @@
 {
   pkgs,
+  lib,
   inputs,
   ...
 }: {
@@ -59,7 +60,7 @@
       ./plugins/statusline.nix
       ./plugins/ui.nix
       ./plugins/visibility.nix
-      (import ./plugins/dpp.nix {inherit pkgs inputs;})
+      (import ./plugins/dpp.nix {inherit pkgs lib inputs;})
     ];
   };
 }

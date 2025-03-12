@@ -10,6 +10,7 @@
       experimental-features = [
         "nix-command"
         "flakes"
+        "pipe-operators"
       ];
     };
     package = pkgs.nix;
