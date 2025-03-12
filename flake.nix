@@ -13,6 +13,10 @@
       url = "github:nix-community/nixvim";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    dpp-vim = {
+      url = "github:Shougo/dpp.vim";
+      flake = false;
+    };
     # apple-fonts.url = "github:Lyndeno/apple-fonts.nix";
   };
 

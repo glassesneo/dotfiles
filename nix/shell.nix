@@ -10,9 +10,9 @@ pkgs.mkShellNoCC {
     # gcc
     # nil
     alejandra
-    lua-language-server
+    # lua-language-server
     stylua
-    taplo
+    # taplo
     marksman
   ];
 }

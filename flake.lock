@@ -1,5 +1,21 @@
 {
   "nodes": {
+    "dpp-vim": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1740878249,
+        "narHash": "sha256-UsKiSu0wtC0vdb7DZfvfrbqeHVXx5OPS/L2f/iABIWw=",
+        "owner": "Shougo",
+        "repo": "dpp.vim",
+        "rev": "188f2852326d2e962f9afbf92d5bcb395ca2cb56",
+        "type": "github"
+      },
+      "original": {
+        "owner": "Shougo",
+        "repo": "dpp.vim",
+        "type": "github"
+      }
+    },
     "flake-parts": {
       "inputs": {
         "nixpkgs-lib": [
@@ -170,6 +186,7 @@
     },
     "root": {
       "inputs": {
+        "dpp-vim": "dpp-vim",
         "home-manager": "home-manager",
         "nix-darwin": "nix-darwin",
         "nixpkgs": "nixpkgs",

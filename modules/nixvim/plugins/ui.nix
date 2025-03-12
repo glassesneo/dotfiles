@@ -11,17 +11,17 @@
         vim.notify = require("notify")
       '';
     };
-    noice = {
-      enable = true;
-      settings = {
-        messages.enabled = false;
-        notify.enabled = false;
-        lsp = {
-          hover.enabled = false;
-          signature.enabled = false;
-        };
-      };
-    };
+    # noice = {
+    # enable = true;
+    # settings = {
+    # messages.enabled = false;
+    # notify.enabled = false;
+    # lsp = {
+    # hover.enabled = false;
+    # signature.enabled = false;
+    # };
+    # };
+    # };
     fidget = {
       enable = true;
       settings = {
