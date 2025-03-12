@@ -39,84 +39,26 @@
   outputs = inputs @ {
     self,
     nixpkgs,
-    home-manager,
-    nix-darwin,
-    nixvim,
     ...
   }: let
-    systems = [
+    allSystems = [
       "aarch64-darwin"
       "aarch64-linux"
     ];
     forAllSystems = func:
-      nixpkgs.lib.genAttrs systems (system: func nixpkgs.legacyPackages.${system});
+      nixpkgs.lib.genAttrs allSystems (system: func nixpkgs.legacyPackages.${system});
   in {
+    # for darwin with home-manager
+    darwinConfigurations = {
+      "neo@macos-personal-laptop-01" = nixpkgs.legacyPackages."aarch64-darwin".callPackage ./host/macos-personal-laptop-01.nix {inherit inputs;};
+    };
     # for NixOS with home-manager
     nixosConfigurations = {
-      "neo@nixos-dev-vm-01" = inputs.nixpkgs.lib.nixosSystem {
-        system = "aarch64-linux";
-        specialArgs = {
-          inherit inputs;
-          hostName = "nixos-dev-vm-01";
-        };
-        modules = [
-          ./system/nixos/configuration.nix
-          home-manager.nixosModules.home-manager
-          {
-            home-manager = {
-              useGlobalPkgs = true;
-              useUserPackages = true;
-              extraSpecialArgs = {
-                inherit inputs;
-              };
-              verbose = true;
-              sharedModules = [];
-              users.neo = import ./home/nixos-dev-vm-01.nix;
-            };
-          }
-        ];
-      };
+      "neo@nixos-dev-vm-01" = nixpkgs.legacyPackages."aarch64-linux".callPackage ./host/nixos-dev-vm-01.nix {inherit inputs;};
     };
     # for non-NixOS with home-manager
     homeConfigurations = {
-      "neo@ubuntu-dev-vm-01" = home-manager.lib.homeManagerConfiguration {
-        pkgs = nixpkgs.legacyPackages."aarch64-linux";
-        extraSpecialArgs = {
-          inherit inputs;
-        };
-        modules = [
-          ./home/ubuntu-dev-vm-01.nix
-        ];
-      };
-    };
-    # for darwin with home-manager
-    darwinConfigurations = {
-      "neo@macos-personal-laptop-01" = nix-darwin.lib.darwinSystem {
-        system = "aarch64-darwin";
-        inherit inputs;
-        specialArgs = {
-          inherit inputs;
-          hostName = "macos-personal-laptop-01";
-        };
-        modules = [
-          ./system/darwin
-          nixvim.nixDarwinModules.nixvim
-          ./module/nixvim
-          home-manager.darwinModules.home-manager
-          {
-            home-manager = {
-              useGlobalPkgs = true;
-              useUserPackages = true;
-              extraSpecialArgs = {
-                inherit inputs;
-              };
-              verbose = true;
-              sharedModules = [];
-              users.neo = import ./home/macos-personal-laptop-01.nix;
-            };
-          }
-        ];
-      };
+      "neo@ubuntu-dev-vm-01" = nixpkgs.legacyPackages."aarch64-linux".callPackage ./host/ubuntu-dev-vm-01.nix {inherit inputs;};
     };
 
     # formatter = forAllSystems (pkgs: pkgs.alejandra);
