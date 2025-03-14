@@ -56,7 +56,6 @@
       ./plugins/git.nix
       ./plugins/lsp.nix
       ./plugins/motion.nix
-      ./plugins/snippet.nix
       ./plugins/statusline.nix
       ./plugins/ui.nix
       ./plugins/visibility.nix

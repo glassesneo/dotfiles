@@ -29,11 +29,8 @@ in {
     vim.env.PLUGIN_DIR = configDir .. "/plugins"
     vim.env.HOOK_DIR = configDir .. "/hooks"
 
-    -- local denops_src = ${pkgs.vimPlugins.denops-vim};
-
     ${dpp-rtp-config}
 
-    -- vim.opt.runtimepath:prepend(dpp_src)
     local dpp = require("dpp")
 
     local dpp_base = "$XDG_CACHE_HOME/dpp"

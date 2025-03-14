@@ -32,8 +32,33 @@
               draw_empty = true;
             }
           ];
+          lualine_x = [];
+          lualine_z = [];
+        };
+        inactive_winbar = {
+          lualine_a = [
+            {
+              __unkeyed-1 = "diagnostics";
+
+              sources = ["nvim_diagnostic" "nvim_lsp"];
+              sections = ["error" "warn" "info" "hint"];
+              symbols = {
+                error = " ";
+                warn = " ";
+                info = " ";
+                hint = " ";
+              };
+            }
+          ];
+          lualine_b = [];
+          lualine_c = [];
+          lualine_x = [];
+          lualine_z = [];
         };
       };
+      luaConfig.post = ''
+        vim.opt.showmode = false
+      '';
     };
     navic = {
       enable = true;

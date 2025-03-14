@@ -1,0 +1,12 @@
+[[plugins]]
+repo = 'uga-rosa/denippet.vim'
+on_source = ['ddc.vim']
+lua_post_source = """
+for _, snip in ipairs(vim.fn.globpath(vim.fs.joinpath(vim.fn['dpp#get']('friendly-snippets').path, 'snippets'), '**/*.json', true, true)) do
+  vim.fn['denippet#load'](snip)
+end
+"""
+
+[[plugins]]
+repo = 'rafamadriz/friendly-snippets'
+on_source = ['denippet.vim']

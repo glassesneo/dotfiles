@@ -96,9 +96,8 @@ artemis.fn.pum.set_option({
 
 artemis.fn.pum.set_local_option("c", {
   -- follow_cursor = true,
-  -- max_height = vim.go.lines - 20,
+  max_height = vim.go.lines - 30,
   -- preview = false,
 })
 
 --- }}}
-

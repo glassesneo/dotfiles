@@ -12,7 +12,7 @@
               documentRangeFormatting = true;
             };
           };
-          filetypes = ["nix"];
+          filetypes = ["nix" "lua"];
           settings = {
             rootMarkers = [
               ".git/"
@@ -38,6 +38,7 @@
         };
         denols = {
           enable = true;
+          package = null;
           extraOptions = {
             single_file_support = true;
             init_options = {
@@ -56,19 +57,21 @@
           };
           rootDir.__raw = "require('lspconfig').util.root_pattern('deno.json', 'deno.jsonc')";
           settings = {
-            inlayHints = {
-              parameterNames = {
-                enabled = "all";
-                suppressWhenArgumentMatchesName = true;
-              };
-              parameterTypes.enabled = true;
-              variableTypes = {
-                enabled = true;
-                suppressWhenTypeMatchesName = true;
-              };
-              propertyDeclarationTypes.enabled = true;
-              functionLikeReturnTypes.enabled = true;
-              enumMemberValues.enabled = true;
+            deno = {
+              # inlayHints = {
+              # parameterNames = {
+              # enabled = "all";
+              # suppressWhenArgumentMatchesName = true;
+              # };
+              # parameterTypes.enabled = true;
+              # variableTypes = {
+              # enabled = true;
+              # suppressWhenTypeMatchesName = true;
+              # };
+              # propertyDeclarationTypes.enabled = true;
+              # functionLikeReturnTypes.enabled = true;
+              # enumMemberValues.enabled = true;
+              # };
             };
           };
         };
@@ -93,7 +96,9 @@
               checkThirdParty = false;
             };
             hint = {
-              enable = true;
+              # enable = true;
+              arrayIndex = "Enable";
+              setType = true;
             };
           };
         };

@@ -1,0 +1,104 @@
+[[plugins]]
+repo = 'Shougo/ddu.vim'
+depends = ['vim-artemis']
+on_event = 'CursorHold'
+hooks_file = '$HOOK_DIR/ddu.lua'
+
+# [[plugins]]
+# repo = 'matsui54/ddu-vim-ui-select'
+# on_source = 'ddu.vim'
+
+# # ui
+[[plugins]]
+repo = 'Shougo/ddu-ui-ff'
+on_source = 'ddu.vim'
+
+[[plugins]]
+repo = 'Shougo/ddu-ui-filer'
+on_source = 'ddu.vim'
+
+# source
+[[plugins]]
+repo = 'Shougo/ddu-source-file'
+on_source = 'ddu.vim'
+depends = ['ddu-kind-file']
+
+[[plugins]]
+repo = 'Shougo/ddu-source-file_rec'
+
+[[plugins]]
+repo = 'Shougo/ddu-source-action'
+on_source = 'ddu.vim'
+
+[[plugins]]
+repo = 'Shougo/ddu-source-file_old'
+
+[[plugins]]
+repo = 'shun/ddu-source-buffer'
+on_source = 'ddu.vim'
+
+[[plugins]]
+repo = 'kamecha/ddu-source-window'
+
+[[plugins]]
+repo = 'tennashi/ddu-source-git'
+
+[[plugins]]
+repo = '4513ECHO/ddu-source-source'
+
+[[plugins]]
+repo = 'matsui54/ddu-source-command_history'
+
+[[plugins]]
+repo = 'staticWagomU/ddu-source-patch_local'
+
+# filter
+[[plugins]]
+repo = 'Shougo/ddu-filter-matcher_substring'
+
+[[plugins]]
+repo = 'Shougo/ddu-filter-matcher_relative'
+
+[[plugins]]
+repo = 'Shougo/ddu-filter-matcher_ignore_files'
+
+[[plugins]]
+repo = 'Shougo/ddu-filter-sorter_alpha'
+on_source = 'ddu.vim'
+
+[[plugins]]
+repo = 'Shougo/ddu-filter-sorter_reversed'
+on_source = 'ddu.vim'
+
+[[plugins]]
+repo = 'nabezokodaikon/ddu-filter-converter_git_status'
+on_source = 'ddu.vim'
+
+[[plugins]]
+repo = 'uga-rosa/ddu-filter-converter_devicon'
+
+[[plugins]]
+repo = 'staticWagomU/ddu-filter-matcher_specific_items'
+
+[[plugins]]
+repo = 'kyoh86/ddu-filter-converter_hl_dir'
+
+[[plugins]]
+repo = 'Milly/ddu-filter-merge'
+
+# kind
+[[plugins]]
+repo = 'Shougo/ddu-kind-file'
+on_source = 'ddu.vim'
+
+# column
+[[plugins]]
+repo = 'Shougo/ddu-column-filename'
+on_source = 'ddu.vim'
+
+# [[plugins]]
+# repo = 'ryota2357/ddu-column-icon_filename'
+# on_source = 'ddu.vim'
+
+[[plugins]]
+repo = 'kamecha/ddu-column-custom'

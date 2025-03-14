@@ -10,4 +10,9 @@
     quick-scope
     nvim_context_vt
   ];
+  extraConfigLua = ''
+    require('nvim_context_vt').setup({
+      prefix = "",
+    })
+  '';
 }
