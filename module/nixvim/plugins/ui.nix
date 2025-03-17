@@ -1,5 +1,19 @@
 {
   plugins = {
+    dashboard = {
+      enable = true;
+      settings.theme = "doom";
+    };
+    fidget = {
+      enable = true;
+      settings = {
+        notification = {
+          poll_rate = 10;
+          filter = "info";
+          override_vim_notify = false;
+        };
+      };
+    };
     notify = {
       enable = true;
       settings = {
@@ -11,26 +25,14 @@
         vim.notify = require("notify")
       '';
     };
-    # noice = {
+    # scrollview = {
     # enable = true;
     # settings = {
-    # messages.enabled = false;
-    # notify.enabled = false;
-    # lsp = {
-    # hover.enabled = false;
-    # signature.enabled = false;
+    # execluded_filetypes = [
+    # "ddu-ff"
+    # "ddu-filer"
+    # ];
     # };
     # };
-    # };
-    fidget = {
-      enable = true;
-      settings = {
-        notification = {
-          poll_rate = 10;
-          filter = "info";
-          override_vim_notify = false;
-        };
-      };
-    };
   };
 }

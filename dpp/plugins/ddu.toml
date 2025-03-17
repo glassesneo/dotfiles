@@ -4,10 +4,6 @@ depends = ['vim-artemis']
 on_event = 'CursorHold'
 hooks_file = '$HOOK_DIR/ddu.lua'
 
-# [[plugins]]
-# repo = 'matsui54/ddu-vim-ui-select'
-# on_source = 'ddu.vim'
-
 # # ui
 [[plugins]]
 repo = 'Shougo/ddu-ui-ff'
@@ -21,10 +17,14 @@ on_source = 'ddu.vim'
 [[plugins]]
 repo = 'Shougo/ddu-source-file'
 on_source = 'ddu.vim'
-depends = ['ddu-kind-file']
 
 [[plugins]]
 repo = 'Shougo/ddu-source-file_rec'
+on_source = 'ddu.vim'
+
+[[plugins]]
+repo = 'Shougo/ddu-source-line'
+on_source = 'ddu.vim'
 
 [[plugins]]
 repo = 'Shougo/ddu-source-action'
@@ -32,6 +32,7 @@ on_source = 'ddu.vim'
 
 [[plugins]]
 repo = 'Shougo/ddu-source-file_old'
+on_source = 'ddu.vim'
 
 [[plugins]]
 repo = 'shun/ddu-source-buffer'
@@ -39,28 +40,40 @@ on_source = 'ddu.vim'
 
 [[plugins]]
 repo = 'kamecha/ddu-source-window'
+on_source = 'ddu.vim'
 
 [[plugins]]
 repo = 'tennashi/ddu-source-git'
+on_source = 'ddu.vim'
 
 [[plugins]]
 repo = '4513ECHO/ddu-source-source'
+on_source = 'ddu.vim'
 
 [[plugins]]
 repo = 'matsui54/ddu-source-command_history'
+on_source = 'ddu.vim'
 
 [[plugins]]
 repo = 'staticWagomU/ddu-source-patch_local'
+on_source = 'ddu.vim'
+
+[[plugins]]
+repo = 'tamago3keran/ddu-source-message'
+on_source = 'ddu.vim'
 
 # filter
 [[plugins]]
 repo = 'Shougo/ddu-filter-matcher_substring'
+on_source = 'ddu.vim'
 
 [[plugins]]
 repo = 'Shougo/ddu-filter-matcher_relative'
+on_source = 'ddu.vim'
 
 [[plugins]]
 repo = 'Shougo/ddu-filter-matcher_ignore_files'
+on_source = 'ddu.vim'
 
 [[plugins]]
 repo = 'Shougo/ddu-filter-sorter_alpha'
@@ -76,19 +89,32 @@ on_source = 'ddu.vim'
 
 [[plugins]]
 repo = 'uga-rosa/ddu-filter-converter_devicon'
+on_source = 'ddu.vim'
 
 [[plugins]]
 repo = 'staticWagomU/ddu-filter-matcher_specific_items'
+on_source = 'ddu.vim'
 
 [[plugins]]
 repo = 'kyoh86/ddu-filter-converter_hl_dir'
+on_source = 'ddu.vim'
+
+[[plugins]]
+repo = 'Milly/ddu-filter-kensaku'
+depends = 'kensaku.vim'
+on_source = 'ddu.vim'
 
 [[plugins]]
 repo = 'Milly/ddu-filter-merge'
+on_source = 'ddu.vim'
 
 # kind
 [[plugins]]
 repo = 'Shougo/ddu-kind-file'
+on_source = 'ddu.vim'
+
+[[plugins]]
+repo = 'Shougo/ddu-kind-word'
 on_source = 'ddu.vim'
 
 # column
@@ -96,9 +122,6 @@ on_source = 'ddu.vim'
 repo = 'Shougo/ddu-column-filename'
 on_source = 'ddu.vim'
 
-# [[plugins]]
-# repo = 'ryota2357/ddu-column-icon_filename'
-# on_source = 'ddu.vim'
-
 [[plugins]]
 repo = 'kamecha/ddu-column-custom'
+on_source = 'ddu.vim'

@@ -6,7 +6,7 @@
     signcolumn = "yes";
     list = true;
     cmdheight = 1;
-    winblend = 30;
+    winblend = 45;
     pumblend = 30;
     termguicolors = true;
     wildoptions = "pum";

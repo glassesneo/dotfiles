@@ -4,9 +4,11 @@ repo = 'lambdalisue/kensaku.vim'
 [[plugins]]
 repo = 'lambdalisue/kensaku-search.vim'
 depends = ['kensaku.vim']
-on_map = { c = ['<Plug>(kensaku-search-'] }
+on_map = { c = '<Plug>(kensaku-search-replace)' }
 lua_add = '''
-  vim.keymap.set("c", "<CR>", "<Plug>(kensaku-search-replace)<CR>")
+  vim.keymap.set("c", "<CR>", function()
+    return vim.fn.getcmdtype()  == "/" and "<Plug>(kensaku-search-replace)<CR>" or "<CR>"
+  end, { expr = true })
 '''
 
 [[plugins]]
@@ -35,4 +37,5 @@ repo = 'skanehira/jumpcursor.vim'
 on_map = '<Plug>(jumpcursor-jump)'
 lua_add = '''
   vim.keymap.set("n", "<Leader>j", "<Plug>(jumpcursor-jump)")
+
 '''

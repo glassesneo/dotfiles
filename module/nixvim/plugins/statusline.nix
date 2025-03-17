@@ -10,6 +10,20 @@
           # right = "";
           # };
         };
+        sections = {
+          lualine_c = [
+            {
+              __unkeyed-1 = "filename";
+              path = 1;
+              shorting_target = 30;
+              symbols = {
+                modified = "_";
+                readonly = " ";
+                newfile = "🆕 ";
+              };
+            }
+          ];
+        };
         winbar = {
           lualine_a = [
             {

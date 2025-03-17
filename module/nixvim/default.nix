@@ -7,49 +7,23 @@
   programs.nixvim = {
     enable = true;
     extraConfigLuaPre = builtins.readFile ./keymaps.lua;
-    extraConfigLua = ''
-      vim.cmd("filetype plugin on")
-
-      --- lsp
-      vim.diagnostic.config({ severity_sort = true })
-
-      vim.lsp.handlers["textDocument/hover"] = vim.lsp.with(vim.lsp.handlers.hover, {
-        border = "rounded",
-      })
-      vim.api.nvim_create_autocmd("LspAttach", {
-        group = vim.api.nvim_create_augroup("UserLspConfig", {}),
-        callback = function(ev)
-          local client = vim.lsp.get_client_by_id(ev.data.client_id)
-          if client == nil then
-            return
-          end
-        end,
-      })
-
-      -- vim.g["denops#debug"] = 1
-    '';
+    extraConfigLua = builtins.readFile ./config.lua;
     extraPackages = with pkgs; [
       deno
+      lua-language-server
+      stylua
+      nil
+      alejandra
     ];
     withNodeJs = false;
     withPerl = false;
     withPython3 = false;
     withRuby = false;
-    colorschemes.catppuccin = {
-      enable = true;
-      settings = {
-        flavour = "mocha";
-        transparent_background = true;
-        term_colors = true;
-        integrations = {
-          gitsigns = true;
-          treesitter = true;
-          notify = true;
-        };
-      };
-    };
+    # wrapRc = false;
     imports = [
+      (import ./plugins/dpp.nix {inherit pkgs lib inputs;})
       ./options.nix
+      ./colorscheme.nix
       ./plugins/bypass.nix
       ./plugins/depends.nix
       ./plugins/editing.nix
@@ -59,7 +33,6 @@
       ./plugins/statusline.nix
       ./plugins/ui.nix
       ./plugins/visibility.nix
-      (import ./plugins/dpp.nix {inherit pkgs lib inputs;})
     ];
   };
 }

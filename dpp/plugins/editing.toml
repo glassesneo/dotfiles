@@ -1,0 +1,35 @@
+[[plugins]]
+repo = 'Shougo/context_filetype.vim'
+lazy = false
+
+[[plugins]]
+repo = 'thinca/vim-partedit'
+depends = 'context_filetype.vim'
+on_cmd = 'Partedit'
+on_func = 'partedit#start'
+lua_add = '''
+vim.g["partedit#prefix_pattern"] = [[\s*]]
+vim.g["partedit#auto_prefix"] = 0
+
+vim.keymap.set("n", "<C-p>", function()
+  local context = vim.fn["context_filetype#get"]()
+  if context.range[1][1] == 0 and context.range[2][1] == 0 then
+    vim.api.nvim_echo({  { "Context is not found", "WarningMsg" } }, true, {})
+    return
+  end
+
+  vim.fn["partedit#start"](context.range[1][1], context.range[2][1], { filetype = context.filetype })
+
+  vim.keymap.set("n", "Q", "<Cmd>w<CR><Cmd>ParteditEnd<CR>", { buffer = true, nowait = true })
+  vim.api.nvim_create_autocmd("BufWritePre", {
+    buffer = vim.api.nvim_get_current_buf(),
+    callback = function()
+      vim.lsp.buf.format()
+    end,
+  })
+end, { silent = true })
+'''
+
+# [plugins.ftplugin]
+# toml_markdown_nix = '''
+# '''

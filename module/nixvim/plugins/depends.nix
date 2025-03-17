@@ -44,7 +44,6 @@
     };
   };
   extraPlugins = with pkgs.vimPlugins; [
-    denops-vim
     plenary-nvim
   ];
 }

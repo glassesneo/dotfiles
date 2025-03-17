@@ -51,26 +51,6 @@ local artemis = require("artemis")
 
 artemis.fn.ddc.custom.load_config(vim.env.HOOK_DIR .. "/ddc.ts")
 
--- snippet keymaps
--- vim.keymap.set({ "i", "s" }, "<C-l>", function()
---   if artemis.fn.denippet.jumpable(1) then
---     return "<Plug>(denippet-jump-next)"
---   else
---     return "<C-l>"
---   end
--- end)
---
--- vim.keymap.set({ "i", "s" }, "<C-h>", function()
---   if artemis.fn.denippet.jumpable(-1) then
---     return "<Plug>(denippet-jump-prev)"
---   else
---     return "<C-h>"
---   end
--- end)
-
-vim.keymap.set({ "i", "s" }, "<C-l>", "<Plug>(denippet-jump-next)")
-vim.keymap.set({ "i", "s" }, "<C-h>", "<Plug>(denippet-jump-prev)")
-
 artemis.fn.ddc.enable_terminal_completion()
 artemis.fn.ddc.enable()
 

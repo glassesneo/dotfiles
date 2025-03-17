@@ -2,17 +2,13 @@
 pkgs.mkShellNoCC {
   name = "dotfiles";
   packages = with pkgs; [
-    # efm-langserver
     bash-language-server
     shfmt
-    # tree-sitter
-    # deno
-    # gcc
-    # nil
+    nil
     alejandra
-    # lua-language-server
+    lua-language-server
     stylua
-    # taplo
+    taplo
     marksman
   ];
 }

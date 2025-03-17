@@ -1,7 +1,6 @@
 [[plugins]]
 repo = 'Shougo/ddc.vim'
 depends = ['vim-artemis']
-on_source = ['ddc-source-lsp-setup']
 on_event = ['InsertEnter', 'CmdlineEnter']
 hooks_file = '$HOOK_DIR/ddc.lua'
 
@@ -47,22 +46,17 @@ on_source = 'ddc.vim'
 repo = 'matsui54/ddc-source-buffer'
 on_source = 'ddc.vim'
 
-[[plugins]]
-repo = 'uga-rosa/ddc-source-nvim-lua'
-on_source = 'ddc.vim'
+# [[plugins]]
+# repo = 'uga-rosa/ddc-source-nvim-lua'
+# on_source = 'ddc.vim'
 
 # [[plugins]]
 # repo = 'delphinus/ddc-treesitter'
-# depends = 'nvim-treesitter'
 # on_source = 'ddc.vim'
 
 [[plugins]]
-repo = 'uga-rosa/ddc-source-lsp-setup'
-on_source = ['nvim-lspconfig']
-
-# [[plugins]]
-# repo = 'tani/ddc-path'
-# on_source = 'ddc.vim'
+repo = 'tani/ddc-path'
+on_source = 'ddc.vim'
 
 # filters
 [[plugins]]

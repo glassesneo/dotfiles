@@ -21,8 +21,8 @@
     '')
     dpp-plugins;
 in {
-  # extraPlugins = dpp-plugins;
-  extraConfigLuaPost = ''
+  extraPlugins = [pkgs.vimPlugins.denops-vim];
+  extraConfigLuaPre = ''
     local configDir = vim.env.HOME .. "/.config/dpp"
     vim.env.BASE_DIR = configDir
     vim.env.RC_DIR = configDir .. "/rc"
@@ -36,11 +36,7 @@ in {
     local dpp_base = "$XDG_CACHE_HOME/dpp"
     local dpp_config = "$RC_DIR/dpp.ts"
 
-    -- vim.g.denops_server_addr = "127.0.0.1:32121"
-
     if dpp.load_state(dpp_base) then
-      -- vim.opt.runtimepath:prepend(denops_src)
-
       vim.api.nvim_create_autocmd("User", {
         pattern = "DenopsReady",
         callback = function()
@@ -57,7 +53,7 @@ in {
       end,
     })
 
-    --- install
+    -- install
     vim.api.nvim_create_user_command("DppInstall", "call dpp#async_ext_action('installer', 'install')", {})
 
     -- update

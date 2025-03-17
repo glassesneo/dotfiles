@@ -39,14 +39,14 @@
   outputs = inputs @ {
     self,
     nixpkgs,
+    nixvim,
     ...
   }: let
     allSystems = [
       "aarch64-darwin"
       "aarch64-linux"
     ];
-    forAllSystems = func:
-      nixpkgs.lib.genAttrs allSystems (system: func nixpkgs.legacyPackages.${system});
+    forAllSystems = fn: nixpkgs.lib.genAttrs allSystems fn;
   in {
     # for darwin with home-manager
     darwinConfigurations = {
@@ -61,8 +61,21 @@
       "neo@ubuntu-dev-vm-01" = nixpkgs.legacyPackages."aarch64-linux".callPackage ./host/ubuntu-dev-vm-01.nix {inherit inputs;};
     };
 
+    # packages = forAllSystems (system: let
+    # nixvim' = nixvim.legacyPackages.${system};
+    # nvim = nixvim'.makeNixvimWithModule {
+    # inherit system;
+    # module = import ./module/nixvim;
+    # extraSpecialArgs = {inherit inputs;};
+    # };
+    # in {
+    # inherit nvim;
+    # });
+
     # formatter = forAllSystems (pkgs: pkgs.alejandra);
-    devShells = forAllSystems (pkgs: {
+    devShells = forAllSystems (system: let
+      pkgs = nixpkgs.legacyPackages.${system};
+    in {
       default = pkgs.callPackage ./nix/shell.nix {};
     });
   };

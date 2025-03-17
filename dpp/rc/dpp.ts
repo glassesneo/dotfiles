@@ -58,23 +58,15 @@ export class Config extends BaseConfig {
       const action = tomlExt.actions.load;
 
       const tomlPromises = [
-        { name: "bypass.toml", lazy: false },
-        //{ name: "depends.toml", lazy: true },
+        { name: "bypass.toml", lazy: true },
         { name: "ddc.toml", lazy: true },
-        // { name: "ddt.toml", lazy: true },
         { name: "ddu.toml", lazy: false },
-        //{ name: "editing.toml", lazy: true },
-        //{ name: "external.toml", lazy: true },
-        //{ name: "git.toml", lazy: true },
-        //{ name: "lang.toml", lazy: true },
-        //{ name: "lsp.toml", lazy: true },
+        { name: "editing.toml", lazy: true },
+        { name: "fall.toml", lazy: true },
         { name: "motion.toml", lazy: true },
         { name: "snippet.toml", lazy: true },
-        //{ name: "statusline.toml", lazy: true },
         { name: "skk.toml", lazy: true },
-        //{ name: "terminal.toml", lazy: true },
         { name: "ui.toml", lazy: true },
-        //{ name: "visibility.toml", lazy: true },
       ].map((tomlFile) =>
         action.callback({
           denops: args.denops,
@@ -92,6 +84,7 @@ export class Config extends BaseConfig {
         })
       );
       const tomls = await Promise.all(tomlPromises);
+      // const tomls: Toml[] = [];
       for (const toml of tomls) {
         for (const plugin of toml.plugins ?? []) {
           recordPlugins[plugin.name] = plugin;

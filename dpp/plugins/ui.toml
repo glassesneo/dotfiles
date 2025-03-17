@@ -18,6 +18,6 @@ lua_source = '''
   vim.fn["signature_help#enable"]()
   vim.g.signature_help_config = {
     contentsStyle = "labels",
-    viewStyle = "floating"
+    viewStyle = "floating",
   }
 '''

@@ -2,7 +2,7 @@
 local artemis = require("artemis")
 local doAction = artemis.fn.ddu.ui.do_action
 local asyncAction = artemis.fn.ddu.ui.async_action
--- local customAction = artemis.fn.ddu.custom.action
+local customAction = artemis.fn.ddu.custom.action
 
 ---@param mode string|string[]
 ---@param key string
@@ -44,80 +44,24 @@ end
 
 artemis.fn.ddu.custom.load_config(vim.env.HOOK_DIR .. "/ddu.ts")
 
-vim.api.nvim_create_autocmd("User", {
-  pattern = "Ddu:uiDone",
-  callback = function()
-    if vim.bo.filetype ~= "ddu-ff" then
-      return
-    end
-    asyncAction("openFilterWindow")
-  end,
-})
-
-vim.api.nvim_create_autocmd("User", {
-  pattern = "Ddu:uiOpenFilterWindow",
-  callback = function()
-    if vim.bo.filetype ~= "ddu-ff" then
-      return
-    end
-    artemis.fn.ddu.ui.save_cmaps({ "<C-c>", "<C-n>", "<C-p>", "<CR>" })
-    vim.keymap.set("c", "<CR>", function()
-      doAction("itemAction", { name = "open" })
-      vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Esc>", true, false, true), "n", false)
-    end)
-    vim.keymap.set("c", "<C-c>", "<Esc>")
-    mapAsyncAction("c", "<C-n>", "cursorNext", { loop = true })
-    mapAsyncAction("c", "<C-p>", "cursorPrevious", { loop = true })
-  end,
-})
-
-vim.api.nvim_create_autocmd("User", {
-  pattern = "Ddu:uiCloseFilterWindow",
-  callback = function()
-    if vim.bo.filetype ~= "ddu-ff" then
-      return
-    end
-    -- vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<C-c>", true, true, true), "n", false)
-    artemis.fn.ddu.ui.restore_cmaps()
-    doAction("quit")
-  end,
-})
-
 -- ui-ff
-vim.api.nvim_create_autocmd("FileType", {
-  pattern = "ddu-ff",
-  callback = function()
-    vim.opt.cursorline = true
-    vim.opt.cursorcolumn = false
-  end,
-})
-
-vim.keymap.set("n", "<Space><Space>", function()
-  artemis.fn.ddu.start({ name = "fuzzy_finder" })
-end)
-
--- ddu-filer
--- local toggleGitStatus = function()
--- local current = artemis.fn.ddu.custom.get_current(vim.b.ddu_ui_name)
--- local converters = current["sourceOptions"]["file"]["converters"]
--- if #converters == 0 then
--- return { "converter_git_status" }
--- else
--- return {}
--- end
--- end
-
--- customAction("ui", "filer", "toggleGitStatus", function()
--- doAction("updateOptions", {
--- sourceOptions = {
--- file = {
--- converters = toggleGitStatus(),
--- },
--- },
+-- vim.api.nvim_create_autocmd("FileType", {
+-- pattern = "ddu-ff",
+-- callback = function()
+-- vim.opt.cursorline = true
+-- vim.opt.cursorcolumn = false
+-- end,
 -- })
--- doAction("redraw")
+
+-- vim.keymap.set("n", "<Space><Space>", function()
+-- artemis.fn.ddu.start({ name = "fuzzy_finder" })
 -- end)
 
+-- vim.keymap.set("n", "<Space>/", function()
+-- artemis.fn.ddu.start({ name = "line_greper" })
+-- end)
+
+-- ddu-filer
 vim.api.nvim_create_autocmd("FileType", {
   pattern = "ddu-filer",
   callback = function()
@@ -145,6 +89,43 @@ vim.keymap.set("n", "<Space>f", function()
       return
     end
   end
-  artemis.fn.ddu.start({ name = "side_filer" })
+  artemis.fn.ddu.start({ name = "tree_filer" })
 end)
+
+vim.api.nvim_create_autocmd("User", {
+  pattern = "Ddu:uiDone",
+  callback = function()
+    if vim.bo.filetype ~= "ddu-ff" then
+      return
+    end
+    asyncAction("openFilterWindow")
+  end,
+})
+
+vim.api.nvim_create_autocmd("User", {
+  pattern = "Ddu:uiOpenFilterWindow",
+  callback = function()
+    if vim.bo.filetype ~= "ddu-ff" then
+      return
+    end
+    artemis.fn.ddu.ui.save_cmaps({ "<C-c>", "<C-n>", "<C-p>", "<CR>", "/" })
+    -- vim.keymap.set("c", "<C-c>", "<Esc>")
+    mapAction("c", "<C-c>", "escape")
+    mapAction("c", "<CR>", "openAndEscape")
+    mapAction("c", "<C-n>", "cursorNext", { loop = true })
+    mapAction("c", "<C-p>", "cursorPrevious", { loop = true })
+    mapAction("c", "/", "grepFile")
+  end,
+})
+
+vim.api.nvim_create_autocmd("User", {
+  pattern = "Ddu:uiCloseFilterWindow",
+  callback = function()
+    if vim.bo.filetype ~= "ddu-ff" then
+      return
+    end
+    artemis.fn.ddu.ui.restore_cmaps()
+    doAction("quit")
+  end,
+})
 --- }}}

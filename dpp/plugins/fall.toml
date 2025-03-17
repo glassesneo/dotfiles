@@ -1,0 +1,9 @@
+[[plugins]]
+repo = 'vim-fall/fall.vim'
+on_event = 'CursorHold'
+lua_add = '''
+  vim.keymap.set("n", "<Space><Space>", function()
+    vim.cmd("Fall file")
+  end)
+  vim.g.fall_custom_path = vim.env.HOOK_DIR .. "/fall.ts"
+'''
