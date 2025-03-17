@@ -40,14 +40,14 @@ inputs.home-manager.lib.homeManagerConfiguration {
       };
 
       imports = [
-        ./common/direnv.nix
-        ./common/git.nix
-        ./common/gh.nix
-        ./common/eza.nix
-        ./common/neovim.nix
+        ../home/common/direnv.nix
+        ../home/common/git.nix
+        ../home/common/gh.nix
+        ../home/common/eza.nix
+        ../home/common/neovim.nix
         # ./common/oh-my-posh.nix
-        ./common/starship.nix
-        ./common/zsh.nix
+        ../home/common/starship.nix
+        ../home/common/zsh.nix
       ];
     })
   ];
