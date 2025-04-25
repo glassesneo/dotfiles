@@ -1,15 +1,7 @@
 [[plugins]]
 repo = 'uga-rosa/denippet.vim'
 on_source = ['ddc.vim']
-lua_hook = """
-vim.keymap.set({ "i", "s" }, "<C-l>", "<Plug>(denippet-jump-next)")
-vim.keymap.set({ "i", "s" }, "<C-h>", "<Plug>(denippet-jump-prev)")
-"""
-lua_post_source = """
-for _, snip in ipairs(vim.fn.globpath(vim.fs.joinpath(vim.fn['dpp#get']('friendly-snippets').path, 'snippets'), '**/*.json', true, true)) do
-  vim.fn['denippet#load'](snip)
-end
-"""
+hooks_file = '$HOOK_DIR/denippet.lua'
 
 [[plugins]]
 repo = 'rafamadriz/friendly-snippets'

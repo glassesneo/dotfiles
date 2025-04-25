@@ -23,6 +23,7 @@
         nim
         nim_format_string
         nix
+        nu
         python
         query
         regex

@@ -4,6 +4,12 @@
       enable = true;
       defaultMappings = false;
     };
+    treesitter-context = {
+      # enable = true;
+      settings = {
+        separator = "―";
+      };
+    };
   };
   extraPlugins = with pkgs.vimPlugins; [
     hlchunk-nvim

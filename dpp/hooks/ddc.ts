@@ -6,8 +6,7 @@ import {
 export class Config extends BaseConfig {
   override async config(args: ConfigArguments): Promise<void> {
     const commonSources = ["around", "rg", "buffer", "file", "skkeleton"];
-    // const commonLangSources = ["lsp", "denippet"].concat(commonSources);
-    const commonLangSources = ["lsp"].concat(commonSources);
+    const commonLangSources = ["lsp", "denippet"].concat(commonSources);
     const headMatchers = ["matcher_head", "matcher_prefix"];
     const commonConverters = [
       "converter_truncate_abbr",
@@ -60,7 +59,7 @@ export class Config extends BaseConfig {
           minAutoCompleteLength: 1,
         },
         denippet: {
-          mark: "[snip]",
+          mark: "[denippet]",
           dup: "keep",
           matchers: headMatchers,
           sorters: ["sorter_rank"],
@@ -83,7 +82,7 @@ export class Config extends BaseConfig {
           minAutoCompleteLength: 1,
           sorters: ["sorter_lsp-kind"],
           converters: ["converter_kind_labels"].concat(fuzzyConverters),
-          // forceCompletionPattern: "\\.\\w*|::\\w*|->\\w*",
+          forceCompletionPattern: "\\.\\w*|::\\w*|->\\w*",
           dup: "force",
         },
         "nvim-lua": {

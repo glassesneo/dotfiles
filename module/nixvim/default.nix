@@ -19,7 +19,6 @@
     withPerl = false;
     withPython3 = false;
     withRuby = false;
-    # wrapRc = false;
     imports = [
       (import ./plugins/dpp.nix {inherit pkgs lib inputs;})
       ./options.nix
@@ -28,7 +27,10 @@
       ./plugins/depends.nix
       ./plugins/editing.nix
       ./plugins/git.nix
+      ./plugins/lang.nix
       ./plugins/lsp.nix
+      ./plugins/format.nix
+      ./plugins/lint.nix
       ./plugins/motion.nix
       ./plugins/statusline.nix
       ./plugins/ui.nix

@@ -5,5 +5,27 @@ lua_add = '''
   vim.keymap.set("n", "<Space><Space>", function()
     vim.cmd("Fall file")
   end)
+  vim.keymap.set("n", "<Space>g", function()
+    vim.cmd("Fall git-grep")
+  end)
+
   vim.g.fall_custom_path = vim.env.HOOK_DIR .. "/fall.ts"
+'''
+lua_source = '''
+  vim.api.nvim_create_augroup("FallAutoCmd", { clear = true })
+
+  vim.api.nvim_create_autocmd("User", {
+    group = "FallAutoCmd",
+    pattern = "FallPickerEnter:*",
+    callback = function()
+      vim.fn["ddc#custom#patch_global"]("ui", "none");
+      end
+  })
+  vim.api.nvim_create_autocmd("User", {
+    group = "FallAutoCmd",
+    pattern = "FallPickerLeave:*",
+    callback = function()
+      vim.fn["ddc#custom#patch_global"]("ui", "pum");
+    end
+  })
 '''

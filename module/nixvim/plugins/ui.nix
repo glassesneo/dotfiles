@@ -1,7 +1,7 @@
 {
   plugins = {
     dashboard = {
-      enable = true;
+      # enable = true;
       settings.theme = "doom";
     };
     fidget = {

@@ -8,9 +8,14 @@ hooks_file = '$HOOK_DIR/ddc.lua'
 repo = 'Shougo/pum.vim'
 on_source = 'ddc.vim'
 
+# ui
 [[plugins]]
 repo = 'Shougo/ddc-ui-pum'
 depends = 'pum.vim'
+on_source = 'ddc.vim'
+
+[[plugins]]
+repo = 'Shougo/ddc-ui-none'
 on_source = 'ddc.vim'
 
 # sources
@@ -33,6 +38,7 @@ on_source = 'ddc.vim'
 [[plugins]]
 repo = 'Shougo/ddc-source-lsp'
 on_source = 'ddc.vim'
+rev = '5b80eea'
 
 [[plugins]]
 repo = 'Shougo/ddc-source-rg'

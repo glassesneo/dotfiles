@@ -103,6 +103,7 @@ const myFilterDirectory = (path: string) => {
     ".hg",
     ".ssh",
     ".svn",
+    ".zig-cache", // Zig
     "__pycache__", // Python
     "build", // C/C++
     "node_modules", // Node.js

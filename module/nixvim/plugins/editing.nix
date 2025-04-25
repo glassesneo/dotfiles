@@ -10,6 +10,9 @@
   };
 in {
   plugins = {
+    ccc = {
+      enable = true;
+    };
     lexima = {
       enable = true;
     };
@@ -33,6 +36,7 @@ in {
     in-and-out
   ];
   extraConfigLua = ''
+    -- lexima.vim
     -- Nim
     vim.fn["lexima#add_rule"]({
       char = ".",
@@ -52,7 +56,28 @@ in {
       delete = 1,
       filetype = { "nim", "nims", "nimble" },
     })
+    -- Typst
+    vim.fn["lexima#add_rule"]({
+      char = '$',
+      input_after = '$',
+      filetype = { 'typst' },
+    })
+    vim.fn["lexima#add_rule"]({
+      char = '$',
+      at = '\%#\$',
+      leave = 1,
+      filetype = { "typst" },
+    })
+    vim.fn["lexima#add_rule"]({
+      char = '<BS>',
+      at = '\$\%#\$',
+      delete = 1,
+      filetype = { "typst" },
+    })
 
+    require("in-and-out").setup({
+      additional_targets = { "$" }
+    })
     vim.keymap.set("i", "<C-CR>", function()
       require("in-and-out").in_and_out()
     end)

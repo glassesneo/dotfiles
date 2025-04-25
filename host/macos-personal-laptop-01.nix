@@ -42,6 +42,7 @@ inputs.nix-darwin.lib.darwinSystem {
               ripgrep
               skim
               sl
+              tdf
               # tart
               unrar
               uv

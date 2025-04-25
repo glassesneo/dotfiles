@@ -119,12 +119,12 @@ def main () {
     "front_app_switched" => {
       switch_front_app $env.INFO
     }
-    "mouse.entered" => {
-      show_app_list
-    }
-    "mouse.exited" => {
-      hide_app_list
-    }
+    # "mouse.entered" => {
+      # show_app_list
+    # }
+    # "mouse.exited" => {
+      # hide_app_list
+    # }
     _ => {}
   }
 }

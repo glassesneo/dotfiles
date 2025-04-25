@@ -57,7 +57,7 @@ artemis.fn.ddc.enable()
 -- pum.vim config
 artemis.fn.pum.set_option({
   -- blend = 30,
-  border = "rounded",
+  border = "single",
   item_orders = { "abbr", "space", "kind", "space", "menu" },
   offset_cmdrow = 2,
   scrollbar_char = "┃",

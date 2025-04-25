@@ -115,6 +115,9 @@
     bufferline = {
       enable = true;
       settings = {
+        highlights.__raw = ''
+          require("catppuccin.groups.integrations.bufferline").get()
+        '';
         options = {
           themable = true;
           buffer_close_icon = "";

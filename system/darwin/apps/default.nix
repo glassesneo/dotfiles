@@ -6,6 +6,8 @@
     raycast
     slack
     tart
+    thunderbird
+    # warp-terminal
     # zed-editor
   ];
   imports = [
