@@ -17,15 +17,12 @@
     brews = [
       "mas"
       "emscripten"
-      # {
-      #   name = "sketchybar";
-      #   start_service = false;
-      #   restart_service = "changed";
-      # }
     ];
 
     # `brew install --cask`
     casks = [
+      "arc"
+      "discord"
       "karabiner-elements"
       "zoom"
     ];
