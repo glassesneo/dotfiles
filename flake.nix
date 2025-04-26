@@ -9,6 +9,18 @@
       url = "github:LnL7/nix-darwin";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    brew-nix = {
+      # for local testing via `nix flake check` while developing
+      #url = "path:../";
+      url = "github:BatteredBunny/brew-nix";
+      inputs.nix-darwin.follows = "nix-darwin";
+      inputs.brew-api.follows = "brew-api";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    brew-api = {
+      url = "github:BatteredBunny/brew-api";
+      flake = false;
+    };
     nixvim = {
       url = "github:nix-community/nixvim";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -39,7 +51,6 @@
   outputs = inputs @ {
     self,
     nixpkgs,
-    nixvim,
     ...
   }: let
     allSystems = [
@@ -61,18 +72,6 @@
       "neo@ubuntu-dev-vm-01" = nixpkgs.legacyPackages."aarch64-linux".callPackage ./host/ubuntu-dev-vm-01.nix {inherit inputs;};
     };
 
-    # packages = forAllSystems (system: let
-    # nixvim' = nixvim.legacyPackages.${system};
-    # nvim = nixvim'.makeNixvimWithModule {
-    # inherit system;
-    # module = import ./module/nixvim;
-    # extraSpecialArgs = {inherit inputs;};
-    # };
-    # in {
-    # inherit nvim;
-    # });
-
-    # formatter = forAllSystems (pkgs: pkgs.alejandra);
     devShells = forAllSystems (system: let
       pkgs = nixpkgs.legacyPackages.${system};
     in {

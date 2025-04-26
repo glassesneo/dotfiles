@@ -26,22 +26,12 @@
 
     # `brew install --cask`
     casks = [
-      "arc"
-      "canva"
-      "ghostty"
       "karabiner-elements"
-      "keycastr"
-      "notion"
-      "orbstack"
-      "proton-drive"
-      "proton-pass"
-      # "raycast"
-      # "slack"
       "zoom"
     ];
 
     masApps = {
-      XCode = 497799835;
+      # XCode = 497799835;
       LINE = 539883307;
     };
   };

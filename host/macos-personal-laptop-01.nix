@@ -8,6 +8,8 @@ inputs.nix-darwin.lib.darwinSystem {
   };
   modules = [
     ../system/darwin
+    inputs.brew-nix.darwinModules.default
+    ../module/brew-nix
     inputs.nixvim.nixDarwinModules.nixvim
     ../module/nixvim
     inputs.home-manager.darwinModules.home-manager

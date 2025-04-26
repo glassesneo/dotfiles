@@ -1,10 +1,10 @@
 {pkgs, ...}: {
   environment.systemPackages = with pkgs; [
+    arc-browser
     discord
     kitty
     maccy
     raycast
-    slack
     tart
     thunderbird
     # warp-terminal
