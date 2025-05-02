@@ -46,7 +46,6 @@ inputs.nix-darwin.lib.darwinSystem {
               skim
               sl
               tdf
-              # tart
               unrar
               uv
               vim-startuptime
@@ -63,7 +62,6 @@ inputs.nix-darwin.lib.darwinSystem {
             ../home/common/git.nix
             ../home/common/gh.nix
             ../home/common/eza.nix
-            # ../home/common/neovim.nix
             ../home/common/nixvim.nix
             ../home/common/oh-my-posh.nix
             ../home/common/yazi.nix
@@ -72,9 +70,9 @@ inputs.nix-darwin.lib.darwinSystem {
             # ../home/common/starship.nix
             ../home/common/zsh.nix
             ../home/darwin/nushell.nix
-            ../home/darwin/homebrew.nix
+            ../home/darwin/ghostty.nix
+            ../home/darwin/kitty.nix
             ../home/darwin/services.nix
-            ../home/darwin/gui.nix
           ];
           age.identityPaths = ["/Users/neo/.ssh/id_agenix"];
           age.secrets.gemini-api-key.file = ../secrets/gemini-api-key.age;

@@ -2,7 +2,7 @@
   brew-nix.enable = true;
   environment.systemPackages = with pkgs.brewCasks; [
     canva
-    ghostty
+    # ghostty
     keycastr
     marta
     orbstack
