@@ -16,7 +16,6 @@
     # `brew install`
     brews = [
       "mas"
-      "emscripten"
     ];
 
     # `brew install --cask`

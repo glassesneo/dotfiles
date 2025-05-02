@@ -4,6 +4,9 @@
       enable = true;
       defaultMappings = false;
     };
+    smear-cursor = {
+      enable = true;
+    };
     treesitter-context = {
       # enable = true;
       settings = {

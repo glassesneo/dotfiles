@@ -3,7 +3,6 @@
     maccy
     raycast
     tart
-    thunderbird
   ];
   imports = [
     ./services.nix
