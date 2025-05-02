@@ -1,8 +1,0 @@
-[[plugins]]
-repo = 'neovim/nvim-lspconfig'
-on_event = 'LspAttach'
-hooks_file = '$HOOK_DIR/lspconfig.lua'
-
-[[plugins]]
-repo = 'lukas-reineke/lsp-format.nvim'
-on_source = ['nvim-lspconfig']
