@@ -72,6 +72,7 @@ inputs.nix-darwin.lib.darwinSystem {
             ../home/darwin/nushell.nix
             ../home/darwin/ghostty.nix
             ../home/darwin/kitty.nix
+            ../home/darwin/aquaskk.nix
             ../home/darwin/services.nix
           ];
           age.identityPaths = ["/Users/neo/.ssh/id_agenix"];

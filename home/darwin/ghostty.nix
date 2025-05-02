@@ -2,7 +2,7 @@
   programs.ghostty = {
     enable = true;
     package = pkgs.brewCasks.ghostty;
-    clearDefaultKeybinds = true;
+    # clearDefaultKeybinds = true;
     settings = {
       theme = "catppuccin-mocha";
       font-size = 15;

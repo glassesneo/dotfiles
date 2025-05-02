@@ -22,6 +22,7 @@
     # `brew install --cask`
     casks = [
       "arc"
+      "aquaskk"
       "discord"
       "karabiner-elements"
       "zoom"
