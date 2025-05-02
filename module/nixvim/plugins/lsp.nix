@@ -13,6 +13,10 @@
         enable = true;
         package = null;
       };
+      basedpyright = {
+        enable = true;
+        package = null;
+      };
       denols = {
         enable = true;
         package = null;
@@ -124,7 +128,7 @@
         package = null;
       };
       pylyzer = {
-        enable = true;
+        # enable = true;
         package = null;
         settings.python = {
           inlayHints = true;

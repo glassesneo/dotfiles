@@ -25,6 +25,7 @@ inputs.nix-darwin.lib.darwinSystem {
         users.neo = {
           pkgs,
           lib,
+          config,
           ...
         }: {
           home = {
@@ -57,6 +58,7 @@ inputs.nix-darwin.lib.darwinSystem {
           programs.home-manager.enable = true;
 
           imports = [
+            inputs.agenix.homeManagerModules.default
             ../home/common/direnv.nix
             ../home/common/git.nix
             ../home/common/gh.nix
@@ -74,6 +76,11 @@ inputs.nix-darwin.lib.darwinSystem {
             ../home/darwin/services.nix
             ../home/darwin/gui.nix
           ];
+          age.identityPaths = ["/Users/neo/.ssh/id_agenix"];
+          age.secrets.gemini-api-key.file = ../secrets/gemini-api-key.age;
+          home.sessionVariables = {
+            GEMINI_API_KEY = ''$(${pkgs.coreutils}/bin/cat ${config.age.secrets.gemini-api-key.path})'';
+          };
         };
       };
     }

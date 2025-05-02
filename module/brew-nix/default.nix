@@ -5,7 +5,6 @@
     ghostty
     keycastr
     marta
-    notion
     orbstack
     proton-drive
     proton-pass

@@ -28,11 +28,12 @@
               formatStdin = true;
             }
           ];
-          # python = [
-          # {
-          # formatCommand
-          # }
-          # ];
+          python = [
+            {
+              formatCommand = "ruff format -";
+              formatStdin = true;
+            }
+          ];
           lua = [
             {
               formatCommand = "stylua --indent-type Spaces --indent-width 2 -";

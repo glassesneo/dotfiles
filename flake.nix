@@ -25,6 +25,10 @@
       url = "github:nix-community/nixvim";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    agenix = {
+      url = "github:ryantm/agenix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     dpp-vim = {
       url = "github:Shougo/dpp.vim";
       flake = false;

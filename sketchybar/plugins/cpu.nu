@@ -24,7 +24,7 @@ export def item () {
         popup.background.corner_radius=5
         popup.background.height=25
         script=$"($nu.current-exe) ($current_path)"
-        update_freq=15
+        update_freq=20
       --subscribe $name
         mouse.entered
         mouse.exited

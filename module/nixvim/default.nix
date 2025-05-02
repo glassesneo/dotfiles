@@ -23,6 +23,7 @@
       (import ./plugins/dpp.nix {inherit pkgs lib inputs;})
       ./options.nix
       ./colorscheme.nix
+      ./plugins/ai.nix
       ./plugins/bypass.nix
       ./plugins/depends.nix
       ./plugins/editing.nix

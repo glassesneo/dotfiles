@@ -47,5 +47,11 @@
         };
       };
     };
+    gitblame = {
+      enable = true;
+      settings = {
+        delay = 500;
+      };
+    };
   };
 }

@@ -39,7 +39,7 @@ def run () {
   # use ./plugins/apple_logo.nu; apple_logo item
   use ./plugins/workspace.nu; workspace item
   use ./plugins/front_app.nu; front_app item
-  use ./plugins/media.nu; media item
+  # use ./plugins/media.nu; media item
   use ./plugins/datetime.nu; datetime item
   use ./plugins/battery.nu; battery item
   use ./plugins/cpu.nu; cpu item
