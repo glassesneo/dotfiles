@@ -10,8 +10,6 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
     brew-nix = {
-      # for local testing via `nix flake check` while developing
-      #url = "path:../";
       url = "github:BatteredBunny/brew-nix";
       inputs.nix-darwin.follows = "nix-darwin";
       inputs.brew-api.follows = "brew-api";
@@ -49,7 +47,6 @@
       url = "github:Shougo/dpp-protocol-git";
       flake = false;
     };
-    # apple-fonts.url = "github:Lyndeno/apple-fonts.nix";
   };
 
   outputs = inputs @ {

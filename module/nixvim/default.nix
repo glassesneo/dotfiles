@@ -22,6 +22,7 @@
     imports = [
       (import ./plugins/dpp.nix {inherit pkgs lib inputs;})
       ./options.nix
+      ./diagnostic.nix
       ./colorscheme.nix
       ./plugins/ai.nix
       ./plugins/bypass.nix

@@ -36,8 +36,6 @@
       + starship_config;
     plugins = with pkgs.nushellPlugins; [
       gstat
-      highlight
-      skim
     ];
     extraEnv = let
       plugin_dir = plugin: ''
@@ -45,7 +43,7 @@
       '';
     in ''
       $env.PATH ++= [
-        ${lib.strings.concatMapStrings plugin_dir ["gstat" "highlight" "skim"]}
+        ${lib.strings.concatMapStrings plugin_dir ["gstat"]}
       ]
     '';
     shellAliases = {

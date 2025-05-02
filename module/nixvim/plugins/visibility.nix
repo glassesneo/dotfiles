@@ -6,6 +6,10 @@
     };
     smear-cursor = {
       enable = true;
+      settings = {
+        distance_stop_animating = 3;
+        smear_to_cmd = false;
+      };
     };
     treesitter-context = {
       # enable = true;

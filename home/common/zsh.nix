@@ -24,7 +24,7 @@ in {
       bd = "cd ..";
       tree = lib.mkIf config.programs.eza.enable "eza --tree";
     };
-    initExtra = extraZshrc;
+    initContent = extraZshrc;
     history = {
       extended = true;
       size = 10000;

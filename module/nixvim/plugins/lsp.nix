@@ -36,7 +36,7 @@
             };
           };
         };
-        rootDir.__raw = "require('lspconfig').util.root_pattern('deno.json', 'deno.jsonc')";
+        # rootDir.__raw = "require('lspconfig').util.root_pattern('deno.json', 'deno.jsonc')";
         settings = {
           deno = {
             inlayHints = {
@@ -66,7 +66,7 @@
       };
       elmls = {
         enable = true;
-        rootDir.__raw = "require('lspconfig').util.root_pattern('elm.json')";
+        # rootDir.__raw = "require('lspconfig').util.root_pattern('elm.json')";
       };
       hls = {
         enable = true;
