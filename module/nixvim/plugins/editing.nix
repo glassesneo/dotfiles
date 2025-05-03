@@ -12,6 +12,12 @@ in {
   plugins = {
     ccc = {
       enable = true;
+      lazyLoad.settings = {
+        cmd = [
+          "CccPick"
+          "CccConvert"
+        ];
+      };
     };
     lexima = {
       enable = true;

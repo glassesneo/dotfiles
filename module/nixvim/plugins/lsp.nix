@@ -36,8 +36,8 @@
             };
           };
         };
-        # rootDir.__raw = "require('lspconfig').util.root_pattern('deno.json', 'deno.jsonc')";
         settings = {
+          rootMarkers = ["deno.json" "deno.jsonc"];
           deno = {
             inlayHints = {
               parameterNames = {
@@ -66,7 +66,11 @@
       };
       elmls = {
         enable = true;
-        # rootDir.__raw = "require('lspconfig').util.root_pattern('elm.json')";
+        settings = {
+          rootMarkers = [
+            "elm.json"
+          ];
+        };
       };
       hls = {
         enable = true;

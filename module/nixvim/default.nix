@@ -23,6 +23,8 @@
       (import ./plugins/dpp.nix {inherit pkgs lib inputs;})
       ./options.nix
       ./diagnostic.nix
+      ./performance.nix
+      # ./lsp.nix
       ./colorscheme.nix
       ./plugins/ai.nix
       ./plugins/bypass.nix
@@ -33,6 +35,7 @@
       ./plugins/lsp.nix
       ./plugins/format.nix
       ./plugins/lint.nix
+      ./plugins/lz-n.nix
       ./plugins/motion.nix
       ./plugins/statusline.nix
       ./plugins/ui.nix

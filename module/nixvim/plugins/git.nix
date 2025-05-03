@@ -48,7 +48,7 @@
       };
     };
     gitblame = {
-      enable = true;
+      # enable = true;
       settings = {
         delay = 500;
       };
