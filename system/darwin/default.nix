@@ -1,7 +1,4 @@
 {hostName, ...}: {
-  nixpkgs = {
-    config.allowUnfree = true;
-  };
   users.users = {
     "neo" = {
       # shell = pkgs.zsh;

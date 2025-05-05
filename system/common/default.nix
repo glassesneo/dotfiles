@@ -4,6 +4,8 @@
   #   home = builtins.getEnv "HOME";
   # };
 
+  nixpkgs.config.allowUnfree = true;
+
   nix = {
     optimise.automatic = true;
     settings = {

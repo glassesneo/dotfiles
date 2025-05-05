@@ -1,4 +1,27 @@
 {
+  # home.file."Library/Application Support/AquaSKK/kana-rule.conf".text = ''
+  ##
+  ## custom.rule -- カスタム設定
+  ##
+
+  # la,ぁ,ァ,ｧ
+  # li,ぃ,ィ,ｨ
+  # lu,ぅ,ゥ,ｩ
+  # le,ぇ,ェ,ｪ
+  # lo,ぉ,ォ,ｫ
+  # lka,ヵ,ヵ,ｶ
+  # lca,ヵ,ヵ,ｶ
+  # lke,ヶ,ヶ,ｹ
+  # ltu,っ,ッ,ｯ
+  # ltsu,っ,ッ,ｯ
+  # lya,ゃ,ャ,ｬ
+  # lyi,ぃ,ィ,ｨ
+  # lyu,ゅ,ュ,ｭ
+  # lye,ぇ,ェ,ｪ
+  # lyo,ょ,ョ,ｮ
+  # lwa,ゎ,ヮ,ﾜ
+  # lwu,ぅ,ゥ,ｩ
+  # '';
   home.file."Library/Application Support/AquaSKK/keymap.conf".text = ''
     ###
     ### keymap.conf
