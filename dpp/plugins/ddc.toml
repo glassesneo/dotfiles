@@ -46,6 +46,10 @@ repo = 'Shougo/ddc-source-rg'
 on_source = 'ddc.vim'
 
 [[plugins]]
+repo = 'Shougo/ddc-source-copilot'
+on_source = 'ddc.vim'
+
+[[plugins]]
 repo = 'LumaKernel/ddc-source-file'
 on_source = 'ddc.vim'
 

@@ -1,5 +1,12 @@
 {
   plugins = {
+    copilot-lua = {
+      enable = true;
+      settings = {
+        panel.enabled = false;
+        suggestion.enabled = false;
+      };
+    };
     codecompanion = {
       enable = true;
       settings = {
@@ -8,7 +15,7 @@
             function()
               return require("codecompanion.adapters").extend("gemini", {
                 env = {
-                  api_key = "GEMINI_API_KEY"
+                  api_key = "GEMINI_API_KEY";
                 },
               })
               end
@@ -16,7 +23,7 @@
         };
         strategies = {
           chat = {
-            adapter = "gemini";
+            adapter = "copilot";
             roles = {
               llm.__raw = ''
                 function(adapter)

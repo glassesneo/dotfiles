@@ -5,7 +5,14 @@ import {
 
 export class Config extends BaseConfig {
   override async config(args: ConfigArguments): Promise<void> {
-    const commonSources = ["around", "rg", "buffer", "file", "skkeleton"];
+    const commonSources = [
+      "around",
+      "copilot",
+      "rg",
+      "buffer",
+      "file",
+      "skkeleton",
+    ];
     const commonLangSources = ["lsp", "denippet"].concat(commonSources);
     const headMatchers = ["matcher_head", "matcher_prefix"];
     const commonConverters = [
@@ -46,6 +53,11 @@ export class Config extends BaseConfig {
         },
         buffer: {
           mark: "[buf]",
+        },
+        copilot: {
+          mark: " ",
+          matchers: [],
+          minAutoCompleteLength: 0,
         },
         cmdline: {
           mark: "[>_]",
@@ -127,6 +139,9 @@ export class Config extends BaseConfig {
         buffer: {
           limitBytes: 5000000,
           forceCollect: true,
+        },
+        copilot: {
+          copilot: "lua",
         },
         lsp: {
           enableAdditionalTextEdit: true,

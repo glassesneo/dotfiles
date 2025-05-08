@@ -69,6 +69,7 @@ inputs.nix-darwin.lib.darwinSystem {
             # ../home/common/zellij.nix
             # ../home/common/starship.nix
             ../home/common/zsh.nix
+            ../home/common/zoxide.nix
             ../home/darwin/nushell.nix
             ../home/darwin/ghostty.nix
             ../home/darwin/kitty.nix

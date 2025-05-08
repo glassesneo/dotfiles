@@ -62,7 +62,6 @@ export class Config extends BaseConfig {
         { name: "ddc.toml", lazy: true },
         { name: "ddu.toml", lazy: false },
         { name: "deol.toml", lazy: true },
-        // { name: "editing.toml", lazy: true },
         { name: "fall.toml", lazy: true },
         { name: "motion.toml", lazy: true },
         { name: "snippet.toml", lazy: true },

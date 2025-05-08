@@ -4,7 +4,6 @@ pkgs.mkShellNoCC {
   packages = with pkgs; [
     bash-language-server
     shfmt
-    nil
     alejandra
     lua-language-server
     stylua

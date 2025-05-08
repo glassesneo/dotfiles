@@ -36,6 +36,7 @@
         v
         vim
         vimdoc
+        yaml
         zig
       ];
       settings = {

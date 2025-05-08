@@ -7,12 +7,10 @@
   programs.nixvim = {
     enable = true;
     extraConfigLuaPre = builtins.readFile ./keymaps.lua;
-    extraConfigLua = builtins.readFile ./config.lua;
     extraPackages = with pkgs; [
       deno
-      lua-language-server
+      efm-langserver
       stylua
-      nil
       alejandra
     ];
     withNodeJs = false;
@@ -24,7 +22,7 @@
       ./options.nix
       ./diagnostic.nix
       ./performance.nix
-      # ./lsp.nix
+      ./lsp.nix
       ./colorscheme.nix
       ./plugins/ai.nix
       ./plugins/bypass.nix
@@ -32,8 +30,8 @@
       ./plugins/editing.nix
       ./plugins/git.nix
       ./plugins/lang.nix
-      ./plugins/lsp.nix
-      ./plugins/format.nix
+      # ./plugins/lsp.nix
+      # ./plugins/format.nix
       ./plugins/lint.nix
       ./plugins/lz-n.nix
       ./plugins/motion.nix

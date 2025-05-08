@@ -52,6 +52,8 @@
     "jsr:@lambdalisue/systemopen@1": "1.0.0",
     "jsr:@lambdalisue/unnullish@^1.0.2": "1.0.2",
     "jsr:@lambdalisue/unreachable@^1.0.1": "1.0.1",
+    "jsr:@milly/ddc-unprintable@5.0": "5.0.0",
+    "jsr:@milly/denops-batch-accumulate@1": "1.0.1",
     "jsr:@nick/dispose@^1.1.0": "1.1.0",
     "jsr:@shougo/ddc-vim@7.0": "7.0.0",
     "jsr:@shougo/ddc-vim@9": "9.4.0",
@@ -348,6 +350,20 @@
     },
     "@lambdalisue/unreachable@1.0.1": {
       "integrity": "24b0743775e92ea0d076beaf0869bfbe4708054ac570742628684fb35ccda0d4"
+    },
+    "@milly/ddc-unprintable@5.0.0": {
+      "integrity": "06682863edaf5f1391f384f8217454df06e836939a506c290d2ce2e77842c4e0",
+      "dependencies": [
+        "jsr:@denops/std@7",
+        "jsr:@milly/denops-batch-accumulate",
+        "jsr:@shougo/ddc-vim@9"
+      ]
+    },
+    "@milly/denops-batch-accumulate@1.0.1": {
+      "integrity": "53c001c9b02b3c714b5d39e694ff130943eefeea3d07ec0809197e411be13d80",
+      "dependencies": [
+        "jsr:@denops/core@7"
+      ]
     },
     "@nick/dispose@1.1.0": {
       "integrity": "73a15b90cb48e1435801258ba3ac7a19382823349dedcacbb8e5b5b673ce9d17"
