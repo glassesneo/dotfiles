@@ -1,4 +1,7 @@
 {
+  extraConfigLuaPre = ''
+    vim.cmd('filetype plugin indent on')
+  '';
   opts = {
     helplang = ["en"];
     number = true;

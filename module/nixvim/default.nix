@@ -21,6 +21,7 @@
       (import ./plugins/dpp.nix {inherit pkgs lib inputs;})
       ./options.nix
       ./diagnostic.nix
+      ./filetypes.nix
       ./performance.nix
       ./lsp.nix
       ./colorscheme.nix
