@@ -7,7 +7,7 @@ export class Config extends BaseConfig {
   override async config(args: ConfigArguments): Promise<void> {
     const commonSources = [
       "around",
-      "copilot",
+      // "copilot",
       "rg",
       "buffer",
       "file",
