@@ -65,7 +65,7 @@ inputs.nix-darwin.lib.darwinSystem {
             ../home/common/nixvim.nix
             ../home/common/oh-my-posh.nix
             ../home/common/yazi.nix
-            ../home/common/zed-editor.nix
+            # ../home/common/zed-editor.nix
             # ../home/common/zellij.nix
             # ../home/common/starship.nix
             ../home/common/zsh.nix

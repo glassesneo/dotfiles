@@ -1,32 +1,32 @@
 --- lua_add {{{
 local artemis = require("artemis")
 -- completion keymaps
-local pum_forward = function()
+local pum_forward_insert = function()
   artemis.fn.pum.map.insert_relative(1, "loop")
 end
-local pum_backward = function()
+local pum_backward_insert = function()
   artemis.fn.pum.map.insert_relative(-1, "loop")
 end
-local pum_forward_term = function()
+local pum_forward_select = function()
   artemis.fn.pum.map.select_relative(1, "loop")
 end
-local pum_backward_term = function()
+local pum_backward_select = function()
   artemis.fn.pum.map.select_relative(-1, "loop")
 end
 local pum_confirm = function()
   artemis.fn.pum.map.confirm()
 end
 
-vim.keymap.set({ "i" }, "<C-n>", pum_forward)
-vim.keymap.set({ "i" }, "<C-p>", pum_backward)
+vim.keymap.set({ "i" }, "<C-n>", pum_forward_select)
+vim.keymap.set({ "i" }, "<C-p>", pum_backward_select)
 
-vim.keymap.set({ "t" }, "<C-n>", pum_forward_term)
-vim.keymap.set({ "t" }, "<C-p>", pum_backward_term)
+vim.keymap.set({ "t" }, "<C-n>", pum_forward_select)
+vim.keymap.set({ "t" }, "<C-p>", pum_backward_select)
 
 vim.keymap.set({ "i", "t" }, "<C-y>", pum_confirm)
 vim.api.nvim_create_user_command("CommandlinePre", function()
-  vim.keymap.set("c", "<C-n>", pum_forward)
-  vim.keymap.set("c", "<C-p>", pum_backward)
+  vim.keymap.set("c", "<C-n>", pum_forward_insert)
+  vim.keymap.set("c", "<C-p>", pum_backward_insert)
   vim.keymap.set("c", "<C-y>", pum_confirm)
 
   vim.api.nvim_create_autocmd({ "User" }, {

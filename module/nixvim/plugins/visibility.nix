@@ -4,6 +4,17 @@
       enable = true;
       defaultMappings = false;
     };
+    neoscroll = {
+      enable = true;
+      settings = {
+        easing_function = "quadratic";
+        hide_cursor = false;
+        stop_eof = false;
+        respect_scrolloff = true;
+        # pre_hook = "require('neoscroll-config').pre_hook";
+        # post_hook = "require('neoscroll-config').post_hook";
+      };
+    };
     smear-cursor = {
       enable = true;
       settings = {
@@ -39,6 +50,31 @@
     nvim_context_vt
   ];
   extraConfigLua = ''
+    require('hlchunk').setup({
+      chunk = {
+        -- enable = true,
+        style = {
+          "#f9e2af",
+          "#f38ba8",
+        },
+        chars = {
+          horizontal_line = "─",
+          vertical_line = "│",
+          left_top = "╭",
+          left_bottom = "╰",
+          right_arrow = ">",
+        },
+        style = "#806d9c",
+      },
+      line_num = {
+        enable = true,
+        style = "#f9e2af",
+      },
+      indent = {
+        enable = true,
+        style = "#6c7086",
+      },
+    })
     require('nvim_context_vt').setup({
       prefix = "",
     })

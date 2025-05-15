@@ -2,7 +2,7 @@
 repo = 'Shougo/ddc.vim'
 depends = ['vim-artemis']
 on_event = ['InsertEnter', 'CmdlineEnter']
-rev = '2ca5b74'
+# rev = '2ca5b74'
 hooks_file = '$HOOK_DIR/ddc.lua'
 
 [[plugins]]
@@ -39,7 +39,7 @@ on_source = 'ddc.vim'
 [[plugins]]
 repo = 'Shougo/ddc-source-lsp'
 on_source = 'ddc.vim'
-rev = '5b80eea'
+# rev = '5b80eea'
 
 [[plugins]]
 repo = 'Shougo/ddc-source-rg'

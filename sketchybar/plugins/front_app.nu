@@ -67,13 +67,13 @@ def switch_front_app (app_name: string) {
         label=$"($app_name)"
         icon.color=$"($app_name | utils icon_color)"
   )
-  (
-    sketchybar
-      --animate tanh 30
-      --set $name
-        icon.y_offset=6
-        icon.y_offset=0
-  )
+  # (
+    # sketchybar
+      # --animate tanh 30
+      # --set $name
+        # icon.y_offset=6
+        # icon.y_offset=0
+  # )
 }
 
 def current_apps (): nothing -> list<string> {

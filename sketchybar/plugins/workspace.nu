@@ -83,13 +83,8 @@ def toggle_highlight (space_id: string) {
   let state = $space_id == ($env.FOCUSED_WORKSPACE? | default "")
   (
     sketchybar
-      --animate tanh 10
       --set $env.NAME
         label.background.color=$"(if $state {$surface0} else {'0x00000000'})"
-  )
-  (
-    sketchybar
-      --set $env.NAME
         label.highlight=$"($state)"
   )
 }

@@ -10,6 +10,9 @@
   };
 in {
   plugins = {
+    bullets = {
+      enable = true;
+    };
     ccc = {
       enable = true;
       lazyLoad.settings = {

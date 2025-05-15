@@ -6,7 +6,7 @@
 }: {
   programs.nixvim = {
     enable = true;
-    extraConfigLuaPre = builtins.readFile ./keymaps.lua;
+    extraConfigLuaPre = builtins.readFile ./config.lua;
     extraPackages = with pkgs; [
       deno
       efm-langserver
@@ -17,6 +17,17 @@
     withPerl = false;
     withPython3 = false;
     withRuby = false;
+    autoCmd = [
+      {
+        event = "TextYankPost";
+        pattern = ["*"];
+        callback.__raw = ''
+          function()
+            vim.highlight.on_yank({ timeout = 300 })
+          end
+        '';
+      }
+    ];
     imports = [
       (import ./plugins/dpp.nix {inherit pkgs lib inputs;})
       ./options.nix

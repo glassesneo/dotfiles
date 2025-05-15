@@ -19,6 +19,14 @@
         };
       };
     };
+    # cyberdream = {
+    #   enable = true;
+    #   settings = {
+    #     hide_fillchars = true;
+    #     italic_comments = true;
+    #     transparent = true;
+    #   };
+    # };
     monokai-pro = {
       enable = false;
       settings = {

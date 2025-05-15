@@ -5,13 +5,20 @@
       settings = {
         options = {
           globalstatus = true;
-          # component_separators = {
-          # left = "";
-          # right = "";
-          # };
+          component_separators = {
+            left = "";
+            right = "";
+          };
+          section_separators = {
+            left = "";
+            right = "";
+          };
         };
         sections = {
-          lualine_c = [
+          lualine_a = [
+            "branch"
+          ];
+          lualine_b = [
             {
               __unkeyed-1 = "filename";
               path = 1;
@@ -23,12 +30,22 @@
               };
             }
           ];
-        };
-        winbar = {
-          lualine_a = [
+          lualine_c = [
+            {
+              __unkeyed-1 = "'%='";
+              separator = "";
+            }
+            {
+              __unkeyed-1 = "diff";
+              symbols = {
+                added = " ";
+                modified = " ";
+                removed = " ";
+              };
+              separator = " | ";
+            }
             {
               __unkeyed-1 = "diagnostics";
-
               sources = ["nvim_diagnostic" "nvim_lsp"];
               sections = ["error" "warn" "info" "hint"];
               symbols = {
@@ -37,8 +54,24 @@
                 info = " ";
                 hint = " ";
               };
+              separator = " | ";
             }
           ];
+          lualine_x = ["encoding" "fileformat"];
+          lualine_y = [
+            {
+              __unkeyed-1 = "filetype";
+              separator = "|";
+            }
+            {
+              __unkeyed-1 = "searchcount";
+              separator = "|";
+            }
+          ];
+          lualine_z = [];
+        };
+        winbar = {
+          lualine_a = [];
           lualine_b = [];
           lualine_c = [
             {
@@ -122,6 +155,7 @@
           themable = true;
           buffer_close_icon = "";
           close_icon = "";
+          separator_style = "thick";
           diagnostics = "nvim_lsp";
         };
       };
