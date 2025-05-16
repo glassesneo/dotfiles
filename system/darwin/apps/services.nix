@@ -1,7 +1,7 @@
 {pkgs, ...}: {
   services = {
     sketchybar = {
-      # enable = true;
+      enable = true;
       extraPackages = with pkgs; [nushell];
     };
     aerospace = {
