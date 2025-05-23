@@ -9,8 +9,9 @@
     signcolumn = "yes";
     list = true;
     cmdheight = 1;
-    winblend = 30;
+    winblend = 40;
     pumblend = 30;
+    winborder = "bold";
     termguicolors = true;
     wildoptions = "pum";
     laststatus = 1;

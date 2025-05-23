@@ -36,7 +36,3 @@ vim.keymap.set("i", "<Left>", "<-", { silent = true })
 vim.keymap.set("i", "<Right>", "->", { silent = true })
 vim.keymap.set("i", "<S-Left>", "<=", { silent = true })
 vim.keymap.set("i", "<S-Right>", "=>", { silent = true })
-
-vim.lsp.handlers["textDocument/hover"] = vim.lsp.with(vim.lsp.handlers.hover, {
-  border = "rounded",
-})

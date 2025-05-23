@@ -38,7 +38,7 @@ vim.fn["skkeleton#register_kanatable"]("rom", {
 })
 
 require("skkeleton_indicator").setup({
-  border = "single",
+  border = "solid",
   fadeOutMs = 1200,
   eijiText = "en",
 })

@@ -20,14 +20,59 @@
               })
             end
           '';
+          ai_mop.__raw = ''
+            function()
+              return require("codecompanion.adapters").extend("openai_compatible", {
+                name = "ai_mop",
+                formatted_name = "AI MOP",
+                roles = {
+                  llm = "assistant",
+                  user = "user",
+                },
+                opts = {
+                  stream = true,
+                  },
+                features = {
+                  text = true,
+                  tokens = true,
+                  vision = false,
+                },
+                env = {
+                  api_key = "AI_MOP_API_KEY",
+                  url = "https://api.openai.iniad.org/api",
+                },
+                schema = {
+                  model = {
+                    default = "o4-mini",
+                    choices = {
+                      "o4-mini",
+                      "gpt-4.1",
+                      "gpt-4.1-nano",
+                      "gpt-4.1-mini",
+                    },
+                    mapping = "parameters",
+                  },
+                }
+              })
+            end
+          '';
+        };
+        opts = {
+          log_level = "DEBUG";
         };
         strategies = {
           chat = {
-            adapter = "copilot";
+            adapter = "ai_mop";
             roles = {
               llm.__raw = ''
                 function(adapter)
-                  return "  CodeCompanion (" .. adapter.formatted_name .. ")"
+                  local model_name = ""
+                  if adapter.parameters == nil then
+                    model_name = adapter.schema.model.default
+                  else
+                    model_name = adapter.schema.model.default
+                  end
+                  return "  CodeCompanion (" .. adapter.formatted_name .. " - " .. model_name .. ")"
                 end
               '';
               user = "  Me";
@@ -36,7 +81,7 @@
         };
         display = {
           chat = {
-            auto_scroll = false;
+            auto_scroll = true;
             show_header_separator = true;
           };
         };

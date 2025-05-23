@@ -189,7 +189,7 @@
         documentFormatting = true,
         documentRangeFormatting = true,
       },
-      filetypes = {"elm", "nix", "nim", "python", "lua", "typst"},
+      filetypes = {"elm", "html", "nix", "nim", "python", "lua", "typst"},
       settings = {
         root_markers = {
           ".git/"

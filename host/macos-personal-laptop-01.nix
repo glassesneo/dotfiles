@@ -40,6 +40,7 @@ inputs.nix-darwin.lib.darwinSystem {
               duf
               fastfetch
               fd
+              imagemagick
               jq
               nowplaying-cli
               ripgrep
@@ -78,8 +79,11 @@ inputs.nix-darwin.lib.darwinSystem {
           ];
           age.identityPaths = ["/Users/neo/.ssh/id_agenix"];
           age.secrets.gemini-api-key.file = ../secrets/gemini-api-key.age;
+          # age.secrets.ai-mop-gpt-o4-mini-api-key.file = ../secrets/ai-mop-gpt-o4-mini-api-key.age;
+          age.secrets.ai-mop-api-key.file = ../secrets/ai-mop-api-key.age;
           home.sessionVariables = {
             GEMINI_API_KEY = ''$(${pkgs.coreutils}/bin/cat ${config.age.secrets.gemini-api-key.path})'';
+            AI_MOP_API_KEY = ''$(${pkgs.coreutils}/bin/cat ${config.age.secrets.ai-mop-api-key.path})'';
           };
         };
       };
