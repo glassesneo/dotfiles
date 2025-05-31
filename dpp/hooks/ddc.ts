@@ -215,9 +215,10 @@ export class Config extends BaseConfig {
     const enabledFiletypes = [
       "bash",
       "elm",
-      "lua",
+      "go",
       "haskell",
       "lhaskell",
+      "lua",
       "nim",
       "nix",
       "nu",

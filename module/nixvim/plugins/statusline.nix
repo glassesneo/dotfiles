@@ -112,6 +112,7 @@
       settings = {
         lsp = {
           auto_attach = true;
+          preference = ["nil"];
         };
         highlight = true;
         depth_limit = 9;

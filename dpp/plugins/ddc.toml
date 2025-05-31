@@ -39,7 +39,6 @@ on_source = 'ddc.vim'
 [[plugins]]
 repo = 'Shougo/ddc-source-lsp'
 on_source = 'ddc.vim'
-# rev = '5b80eea'
 
 [[plugins]]
 repo = 'Shougo/ddc-source-rg'

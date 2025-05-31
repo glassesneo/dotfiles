@@ -47,6 +47,7 @@
       ./plugins/lint.nix
       ./plugins/lz-n.nix
       ./plugins/motion.nix
+      # ./plugins/orgmode.nix
       ./plugins/statusline.nix
       ./plugins/ui.nix
       ./plugins/visibility.nix

@@ -2,20 +2,6 @@
   lsp = {
     inlayHints.enable = true;
     servers = {
-      "*" = {
-        settings = {
-          capabilities.__raw = ''
-            (function()
-              local status, ddc_lsp = pcall(require, "ddc_source_lsp")
-              if status then
-                return ddc_lsp.make_client_capabilities()
-              else
-                return nil
-              end
-            end)()
-          '';
-        };
-      };
       bashls = {
         enable = true;
         package = null;
@@ -26,44 +12,22 @@
       };
       elmls = {
         enable = true;
+        package = null;
         settings = {
           rootMarkers = [
             "elm.json"
           ];
         };
       };
+      gopls = {
+        enable = true;
+        package = null;
+      };
       hls = {
         enable = true;
         package = null;
         settings.haskell = {
           formattingProvider = "fourmolu";
-        };
-      };
-      lua_ls = {
-        enable = true;
-        package = null;
-        settings = {
-          runtime = {
-            version = "LuaJIT";
-            pathStrict = true;
-          };
-          workspace = {
-            library = [
-              {
-                __raw = ''vim.fn.expand "$VIMRUNTIME"'';
-              }
-              {
-                __raw = ''vim.fn.expand "$VIMRUNTIME/lua/vim/lsp"'';
-              }
-              "\${3rd}/luv/library"
-            ];
-            checkThirdParty = false;
-          };
-          hint = {
-            enable = true;
-            arrayIndex = "Enable";
-            setType = true;
-          };
         };
       };
       marksman = {
@@ -82,6 +46,17 @@
             flake = {
               autArchive = true;
             };
+          };
+        };
+      };
+      nixd = {
+        enable = true;
+        package = null;
+        settings = {
+          cmd = ["nix" "run" "nixpkgs#nixd"];
+          nixpkgs.expr = "import <nixpkgs> { }";
+          formatting = {
+            command = ["alejandra"];
           };
         };
       };
@@ -138,8 +113,67 @@
     };
   };
   extraConfigLuaPost = ''
+    vim.lsp.enable({ "lua_ls" })
     vim.lsp.enable({ "denols" })
     vim.lsp.enable({ "efm" })
+
+
+    local library_paths = {
+        vim.env.VIMRUNTIME.. "/lua",
+        vim.env.VIMRUNTIME.. "/lua/vim/_meta", -- for EmmyLua
+        vim.fn.stdpath('config').. "/lua",
+    }
+
+    -- optional: add a certain plugin's path
+    -- local plugin_paths = vim.api.nvim_get_runtime_file("lua/my_plugin_name", true)
+    -- for _, path in ipairs(plugin_paths) do table.insert(library_paths, path) end
+
+    local unique_library_paths = {}
+    local seen_paths = {}
+    for _, path in ipairs(library_paths) do
+      if path and not seen_paths[path] then
+        table.insert(unique_library_paths, path)
+        seen_paths[path] = true
+      end
+    end
+
+    local make_capabilities = function()
+      local status, ddc_lsp = pcall(require, "ddc_source_lsp")
+      if status then
+          return ddc_lsp.make_client_capabilities()
+      else
+        return nil
+        end
+    end
+
+    vim.lsp.config("*", {
+      capabilities = make_capabilities()
+    })
+
+    vim.lsp.config.lua_ls = {
+      settings = {
+        Lua = {
+          runtime = {
+            version = "LuaJIT",
+            pathStrict = true,
+          },
+          diagnostics = {
+            globals = {"vim"},
+          },
+          workspace = {
+            library = unique_library_paths,
+            checkThirdParty = false,
+          },
+          telemetry = { enable = false },
+          hint = {
+            enable = true,
+            arrayIndex = "Enable",
+            setType = true,
+          },
+
+        },
+      },
+    }
 
     vim.lsp.config.denols = {
       single_file_support = true,
@@ -189,7 +223,7 @@
         documentFormatting = true,
         documentRangeFormatting = true,
       },
-      filetypes = {"elm", "html", "nix", "nim", "python", "lua", "typst"},
+      filetypes = {"elm", "go", "html", "nim", "nix", "python", "lua", "typst"},
       settings = {
         root_markers = {
           ".git/"
@@ -200,6 +234,16 @@
               formatCommand = "elm-format --stdin",
               formatStdin = true,
             }
+          },
+          go = {
+            {
+              formatCommand = "goimports",
+              formatStdin = true,
+            },
+            {
+              formatCommand = "gofmt",
+              formatStdin = true,
+            },
           },
           nim = {
             {

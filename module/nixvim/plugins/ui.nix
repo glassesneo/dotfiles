@@ -14,6 +14,24 @@
         };
       };
     };
+    noice = {
+      # enable = true;
+      settings = {
+        cmdline = {
+          enabled = true;
+        };
+        health.checker = false;
+        lsp = {
+          hover.enabled = false;
+          message.enabled = false;
+          progress.enabled = false;
+          signature.enabled = false;
+        };
+        messages.enabled = false;
+        notify.enabled = true;
+        popupmenu.enabled = false;
+      };
+    };
     notify = {
       enable = true;
       settings = {

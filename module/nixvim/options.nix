@@ -5,6 +5,7 @@
   opts = {
     helplang = ["en"];
     number = true;
+    relativenumber = true;
     cursorcolumn = true;
     signcolumn = "yes";
     list = true;

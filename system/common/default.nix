@@ -17,6 +17,7 @@
     };
     package = pkgs.nix;
   };
+
   imports = [
     ./fonts.nix
   ];

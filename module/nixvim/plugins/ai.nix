@@ -43,12 +43,12 @@
                 },
                 schema = {
                   model = {
-                    default = "o4-mini",
+                    default = "gpt-4.1-nano",
                     choices = {
                       "o4-mini",
                       "gpt-4.1",
-                      "gpt-4.1-nano",
                       "gpt-4.1-mini",
+                      "gpt-4.1-nano",
                     },
                     mapping = "parameters",
                   },
@@ -58,11 +58,11 @@
           '';
         };
         opts = {
-          log_level = "DEBUG";
+          log_level = "TRACE";
         };
         strategies = {
           chat = {
-            adapter = "ai_mop";
+            adapter = "copilot";
             roles = {
               llm.__raw = ''
                 function(adapter)
@@ -81,6 +81,10 @@
         };
         display = {
           chat = {
+            window = {
+              position = "right";
+              width = 0.4;
+            };
             auto_scroll = true;
             show_header_separator = true;
           };

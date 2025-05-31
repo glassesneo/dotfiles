@@ -4,4 +4,7 @@
     numb-nvim
     vim-eunuch
   ];
+  extraConfigLua = ''
+    require("numb").setup()
+  '';
 }

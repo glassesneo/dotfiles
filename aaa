@@ -1,0 +1,1 @@
+nix.settings.experimantal-features = ["nix-commands" "flakes"]

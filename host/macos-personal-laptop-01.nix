@@ -44,7 +44,6 @@ inputs.nix-darwin.lib.darwinSystem {
               jq
               nowplaying-cli
               ripgrep
-              skim
               sl
               tdf
               unrar
