@@ -5,12 +5,14 @@
   opts = {
     helplang = ["en"];
     number = true;
+    # relativenumber = true;
     cursorcolumn = true;
     signcolumn = "yes";
     list = true;
     cmdheight = 1;
-    winblend = 30;
-    pumblend = 30;
+    winblend = 40;
+    pumblend = 20;
+    winborder = "bold";
     termguicolors = true;
     wildoptions = "pum";
     laststatus = 1;

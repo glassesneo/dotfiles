@@ -94,7 +94,7 @@ export class Config extends BaseConfig {
           minAutoCompleteLength: 1,
           sorters: ["sorter_lsp-kind"],
           converters: ["converter_kind_labels"].concat(fuzzyConverters),
-          forceCompletionPattern: "\\.\\w*|::\\w*|->\\w*",
+          forceCompletionPattern: "\.\w*|:\w*|->\w*",
           dup: "force",
         },
         "nvim-lua": {
@@ -215,9 +215,10 @@ export class Config extends BaseConfig {
     const enabledFiletypes = [
       "bash",
       "elm",
-      "lua",
+      "go",
       "haskell",
       "lhaskell",
+      "lua",
       "nim",
       "nix",
       "nu",

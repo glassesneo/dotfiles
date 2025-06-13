@@ -37,6 +37,7 @@
       ./lsp.nix
       ./colorscheme.nix
       ./plugins/ai.nix
+      ./plugins/blink-cmp.nix
       ./plugins/bypass.nix
       ./plugins/depends.nix
       ./plugins/editing.nix
@@ -47,6 +48,7 @@
       ./plugins/lint.nix
       ./plugins/lz-n.nix
       ./plugins/motion.nix
+      # ./plugins/orgmode.nix
       ./plugins/statusline.nix
       ./plugins/ui.nix
       ./plugins/visibility.nix

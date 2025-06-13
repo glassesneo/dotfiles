@@ -3,7 +3,14 @@
   pkgs,
   lib,
   ...
-}: {
+}: let
+  plugin_names = [
+    "gstat"
+    "net"
+    "skim"
+    "query"
+  ];
+in {
   home.packages = [
     pkgs.nu_scripts
   ];
@@ -31,19 +38,17 @@
         else '''';
     in
       ''
-        ${completions ["bat" "eza" "gh" "git" "less" "man" "nix" "rg" "ssh" "tar" "typst" "zellij"]}
+        ${completions ["aerospace" "bat" "curl" "eza" "gh" "git" "less" "make" "man" "nano" "nix" "npm" "rg" "ssh" "tar" "typst" "zellij"]}
       ''
       + starship_config;
-    plugins = with pkgs.nushellPlugins; [
-      gstat
-    ];
+    plugins = map (name: pkgs.nushellPlugins.${name}) plugin_names;
     extraEnv = let
       plugin_dir = plugin: ''
         ${pkgs.nushellPlugins.${plugin}}/bin/nu_plugin_${plugin},
       '';
     in ''
       $env.PATH ++= [
-        ${lib.strings.concatMapStrings plugin_dir ["gstat"]}
+        ${lib.strings.concatMapStrings plugin_dir plugin_names}
       ]
     '';
     shellAliases = {

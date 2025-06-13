@@ -13,6 +13,7 @@
         elm
         gitcommit
         gitignore
+        go
         haskell
         html
         json

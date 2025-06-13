@@ -49,11 +49,7 @@
     };
   };
 
-  outputs = inputs @ {
-    self,
-    nixpkgs,
-    ...
-  }: let
+  outputs = inputs @ {nixpkgs, ...}: let
     allSystems = [
       "aarch64-darwin"
       "aarch64-linux"

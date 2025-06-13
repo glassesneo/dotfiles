@@ -17,8 +17,6 @@ vim.keymap.set({ "n", "v" }, "k", function()
   return "gk"
 end, { expr = true, silent = true })
 vim.keymap.set({ "n", "v" }, "M", [[%]], { silent = true })
-vim.keymap.set({ "n", "v" }, "<C-h>", "[(", { silent = true })
-vim.keymap.set({ "n", "v" }, "<C-l>", "])", { silent = true })
 vim.keymap.set({ "n", "v", "o" }, "<Leader>h", [[^]], { silent = true })
 vim.keymap.set({ "n", "v", "o" }, "<Leader>l", [[$]], { silent = true })
 vim.keymap.set({ "n" }, "<Leader>w", vim.cmd["w"], { silent = true })
@@ -36,7 +34,4 @@ vim.keymap.set("i", "<Left>", "<-", { silent = true })
 vim.keymap.set("i", "<Right>", "->", { silent = true })
 vim.keymap.set("i", "<S-Left>", "<=", { silent = true })
 vim.keymap.set("i", "<S-Right>", "=>", { silent = true })
-
-vim.lsp.handlers["textDocument/hover"] = vim.lsp.with(vim.lsp.handlers.hover, {
-  border = "rounded",
-})
+vim.keymap.set("ca", "cc", "CodeCompanion", { silent = true })

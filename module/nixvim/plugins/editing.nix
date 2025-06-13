@@ -34,10 +34,23 @@ in {
         enable_autocmd = false;
       };
       languages = {
+        elm = "-- %s";
         nim = "# %s";
         nu = "# %s";
         toml = "# %s";
+        typst = "// %s";
         v = "// %s";
+        zig = "// %s";
+      };
+    };
+    ts-autotag = {
+      enable = true;
+      settings = {
+        opts = {
+          enable_close = true;
+          enable_close_on_slash = false;
+          enable_rename = true;
+        };
       };
     };
   };

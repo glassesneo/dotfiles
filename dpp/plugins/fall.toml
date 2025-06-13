@@ -18,14 +18,16 @@ lua_source = '''
     group = "FallAutoCmd",
     pattern = "FallPickerEnter:*",
     callback = function()
-      vim.fn["ddc#custom#patch_global"]("ui", "none");
+      -- vim.fn["ddc#custom#patch_global"]("ui", "none");
+      require("noice").disable()
       end
   })
   vim.api.nvim_create_autocmd("User", {
     group = "FallAutoCmd",
     pattern = "FallPickerLeave:*",
     callback = function()
-      vim.fn["ddc#custom#patch_global"]("ui", "pum");
+      -- vim.fn["ddc#custom#patch_global"]("ui", "pum");
+      require("noice").enable()
     end
   })
 '''
