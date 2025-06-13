@@ -15,7 +15,7 @@
       };
     };
     noice = {
-      # enable = true;
+      enable = true;
       settings = {
         cmdline = {
           enabled = true;
@@ -27,7 +27,9 @@
           progress.enabled = false;
           signature.enabled = false;
         };
-        messages.enabled = false;
+        messages = {
+          enabled = true;
+        };
         notify.enabled = true;
         popupmenu.enabled = false;
       };

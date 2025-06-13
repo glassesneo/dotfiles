@@ -94,7 +94,7 @@ export class Config extends BaseConfig {
           minAutoCompleteLength: 1,
           sorters: ["sorter_lsp-kind"],
           converters: ["converter_kind_labels"].concat(fuzzyConverters),
-          forceCompletionPattern: "\\.\\w*|::\\w*|->\\w*",
+          forceCompletionPattern: "\.\w*|:\w*|->\w*",
           dup: "force",
         },
         "nvim-lua": {

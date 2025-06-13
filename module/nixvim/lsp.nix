@@ -137,17 +137,17 @@
       end
     end
 
-    local make_capabilities = function()
-      local status, ddc_lsp = pcall(require, "ddc_source_lsp")
-      if status then
-          return ddc_lsp.make_client_capabilities()
-      else
-        return nil
-        end
-    end
+    -- local make_capabilities = function()
+      -- local status, ddc_lsp = pcall(require, "ddc_source_lsp")
+      -- if status then
+          -- return ddc_lsp.make_client_capabilities()
+      -- else
+        -- return nil
+        -- end
+    -- end
 
     vim.lsp.config("*", {
-      capabilities = make_capabilities()
+      -- capabilities = make_capabilities()
     })
 
     vim.lsp.config.lua_ls = {

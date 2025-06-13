@@ -37,6 +37,7 @@
       ./lsp.nix
       ./colorscheme.nix
       ./plugins/ai.nix
+      ./plugins/blink-cmp.nix
       ./plugins/bypass.nix
       ./plugins/depends.nix
       ./plugins/editing.nix

@@ -59,14 +59,14 @@ export class Config extends BaseConfig {
 
       const tomlPromises = [
         { name: "bypass.toml", lazy: true },
-        { name: "ddc.toml", lazy: true },
+        // { name: "ddc.toml", lazy: true },
         { name: "ddu.toml", lazy: false },
         { name: "deol.toml", lazy: true },
         { name: "fall.toml", lazy: true },
         { name: "motion.toml", lazy: true },
-        { name: "snippet.toml", lazy: true },
+        // { name: "snippet.toml", lazy: true },
         { name: "skk.toml", lazy: true },
-        { name: "ui.toml", lazy: true },
+        // { name: "ui.toml", lazy: true },
       ].map((tomlFile) =>
         action.callback({
           denops: args.denops,
