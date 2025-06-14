@@ -19,7 +19,7 @@
   programs.git = {
     enable = true;
     userName = "glassesneo";
-    userEmail = "glassesneo@protonmail.com";
+    userEmail = "s1f102500034@iniad.org";
     delta.enable = true;
     extraConfig = {
       commit = {
