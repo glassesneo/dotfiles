@@ -1,5 +1,6 @@
 {
   pkgs,
+  config,
   lib,
   inputs,
   ...
@@ -36,7 +37,8 @@
       ./performance.nix
       ./lsp.nix
       ./colorscheme.nix
-      ./plugins/ai.nix
+      (import ./plugins/ai.nix {inherit pkgs config inputs;})
+      # ./plugins/ai.nix
       ./plugins/blink-cmp.nix
       ./plugins/bypass.nix
       ./plugins/depends.nix

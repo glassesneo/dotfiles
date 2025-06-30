@@ -74,8 +74,8 @@
           inner.horizontal = 10;
           inner.vertical = 10;
           outer.left = 5;
-          outer.bottom = 5;
-          outer.top = 50;
+          outer.bottom = 45;
+          outer.top = 5;
           outer.right = 5;
         };
 

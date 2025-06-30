@@ -8,18 +8,18 @@ def run () {
   (
     sketchybar
       --bar
-        height=40
-        position=top
-        margin=2
+        height=42
+        position=bottom
+        margin=-2
         topmost=window
         shadow=off
         sticky=on
         color=$"($crust)"
         # color="0xd0181926"
-        corner_radius=8
-        y_offset=3
-        # border_width=2
-        # border_color=$"($red)"
+        # corner_radius=10
+        # y_offset=-2
+        # border_width=1
+        # border_color=$"($blue)"
         # blur_radius=15
 
       --default

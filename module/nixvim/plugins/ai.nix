@@ -1,4 +1,11 @@
 {
+  pkgs,
+  inputs,
+  ...
+}: let
+  mcp-hub = inputs.mcp-hub.packages."aarch64-darwin".default;
+  mcphub-nvim = inputs.mcphub-nvim.packages."aarch64-darwin".default;
+in {
   plugins = {
     copilot-lua = {
       enable = true;
@@ -11,6 +18,18 @@
       enable = true;
       settings = {
         adapters = {
+          copilot.__raw = ''
+            function()
+              return require("codecompanion.adapters").extend("copilot", {
+                schema = {
+                  model = {
+                    -- default = "claude-3.7-sonnet",
+                    default = "gpt-4.1",
+                  },
+                },
+              })
+            end
+          '';
           gemini.__raw = ''
             function()
               return require("codecompanion.adapters").extend("gemini", {
@@ -45,6 +64,7 @@
                   model = {
                     default = "gpt-4.1-nano",
                     choices = {
+                      "gpt-4o",
                       "o4-mini",
                       "gpt-4.1",
                       "gpt-4.1-mini",
@@ -56,6 +76,23 @@
               })
             end
           '';
+        };
+        extensions = {
+          history = {
+            enabled = true;
+            opts = {
+              auto_generate_title = true;
+            };
+          };
+          mcphub = {
+            callback = "mcphub.extensions.codecompanion";
+            opts = {
+              show_result_in_chat = true;
+              make_vars = true;
+              make_slash_commands = true;
+              requires_approval = true;
+            };
+          };
         };
         opts = {
           log_level = "TRACE";
@@ -92,6 +129,17 @@
       };
     };
   };
+  extraPlugins = [
+    pkgs.vimPlugins.codecompanion-history-nvim
+    pkgs.vimPlugins.plenary-nvim
+    mcphub-nvim
+  ];
+  extraConfigLua = ''
+    -- Set up mcphub.nvim with explicit mcp-hub path if needed
+    require("mcphub").setup({
+      cmd = "${mcp-hub}/bin/mcp-hub"
+    })
+  '';
   keymaps = [
     {
       action = "<Cmd>CodeCompanionChat Toggle<CR>";
@@ -102,9 +150,9 @@
       };
     }
     {
-      action = "<Cmd>CodeCompanionChat Add<CR>";
-      key = "<Leader>ca";
-      mode = ["v"];
+      action = "CodeCompanion";
+      key = "CC";
+      mode = ["ca"];
       options = {
         silent = true;
       };

@@ -31,6 +31,12 @@
       init = {
         defaultBranch = "main";
       };
+      mergetool."neovimdiff" = {
+        cmd = "nvim -d $LOCAL $MERGED $REMOTE -c 'wincmd l' -c 'wincmd'";
+      };
+      merge = {
+        tool = "neovimdiff";
+      };
     };
     ignores = [
       "*~"

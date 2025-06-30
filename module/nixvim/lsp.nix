@@ -38,7 +38,7 @@
         };
       };
       nil_ls = {
-        enable = true;
+        # enable = true;
         package = null;
         settings = {
           cmd = ["nix" "run" "nixpkgs#nil"];

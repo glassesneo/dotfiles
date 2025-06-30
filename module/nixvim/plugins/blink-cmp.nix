@@ -1,4 +1,27 @@
-{lib, ...}: {
+{
+  pkgs,
+  lib,
+  ...
+}: let
+  cmp-skkeleton = pkgs.vimUtils.buildVimPlugin rec {
+    name = "cmp-skkeleton";
+    src = pkgs.fetchFromGitHub {
+      owner = "uga-rosa";
+      repo = name;
+      rev = "2c268a407e9e843abd03c6fa77485541a4ddcd9a";
+      hash = "sha256-Odg0cmLML2L4YVcrMt7Lrie1BAl7aNEq6xqJN3/JhZs=";
+    };
+  };
+  cmp-cmdline-history = pkgs.vimUtils.buildVimPlugin rec {
+    name = "cmp-cmdline-history";
+    src = pkgs.fetchFromGitHub {
+      owner = "dmitmel";
+      repo = name;
+      rev = "003573b72d4635ce636234a826fa8c4ba2895ffe";
+      hash = "sha256-IcruTOCNxYKmbo0St1U+CmrDStASPLe+rTLNU6/2Xew=";
+    };
+  };
+in {
   plugins = {
     blink-cmp = {
       enable = true;
@@ -61,6 +84,14 @@
             };
             ghost_text = {enabled = true;};
           };
+          sources.__raw = ''
+            function()
+              local type = vim.fn.getcmdtype()
+              if type == '/' or type == '?' then return { 'buffer' } end
+              if type == ':' or type == '@' then return { 'cmdline', 'cmdline_history' } end
+              return {}
+            end
+          '';
         };
         sources = let
           commonSources = [
@@ -68,6 +99,8 @@
             "buffer"
             "copilot"
             "snippets"
+            "git"
+            "skkeleton"
           ];
           commonLangSources = ["lsp"] ++ commonSources;
           forJapanese = lib.lists.remove "buffer" commonLangSources;
@@ -88,6 +121,18 @@
               module = "blink-cmp-copilot";
               name = "copilot";
               score_offset = 5;
+            };
+            cmdline_history = {
+              module = "blink.compat.source";
+              name = "cmdline_history";
+            };
+            git = {
+              module = "blink-cmp-git";
+              name = "git";
+            };
+            skkeleton = {
+              module = "blink.compat.source";
+              name = "skkeleton";
             };
             lsp = {
               fallbacks = [];
@@ -153,4 +198,8 @@
       enable = true;
     };
   };
+  extraPlugins = [
+    cmp-skkeleton
+    cmp-cmdline-history
+  ];
 }

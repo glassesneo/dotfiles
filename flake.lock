@@ -170,6 +170,48 @@
     "flake-parts": {
       "inputs": {
         "nixpkgs-lib": [
+          "mcp-hub",
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1743550720,
+        "narHash": "sha256-hIshGgKZCgWh6AYJpJmRgFdR3WUbkY04o82X05xqQiY=",
+        "owner": "hercules-ci",
+        "repo": "flake-parts",
+        "rev": "c621e8422220273271f52058f618c94e405bb0f5",
+        "type": "github"
+      },
+      "original": {
+        "owner": "hercules-ci",
+        "repo": "flake-parts",
+        "type": "github"
+      }
+    },
+    "flake-parts_2": {
+      "inputs": {
+        "nixpkgs-lib": [
+          "mcphub-nvim",
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1743550720,
+        "narHash": "sha256-hIshGgKZCgWh6AYJpJmRgFdR3WUbkY04o82X05xqQiY=",
+        "owner": "hercules-ci",
+        "repo": "flake-parts",
+        "rev": "c621e8422220273271f52058f618c94e405bb0f5",
+        "type": "github"
+      },
+      "original": {
+        "owner": "hercules-ci",
+        "repo": "flake-parts",
+        "type": "github"
+      }
+    },
+    "flake-parts_3": {
+      "inputs": {
+        "nixpkgs-lib": [
           "nixvim",
           "nixpkgs"
         ]
@@ -275,6 +317,68 @@
         "type": "github"
       }
     },
+    "mcp-hub": {
+      "inputs": {
+        "flake-parts": "flake-parts",
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1750959734,
+        "narHash": "sha256-xGgSqrs2mvs82YzqLZnvZqy2Zw8WFhlRXQwr79Gc4j4=",
+        "owner": "ravitemer",
+        "repo": "mcp-hub",
+        "rev": "1925147953a4c85d9f2385c217fb6c37d0e73f42",
+        "type": "github"
+      },
+      "original": {
+        "owner": "ravitemer",
+        "repo": "mcp-hub",
+        "type": "github"
+      }
+    },
+    "mcp-servers-nix": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1749952797,
+        "narHash": "sha256-FDkzhp60rTbW0qLJ3wxoFjzHD+Com9bdBepnHmi0CXU=",
+        "owner": "natsukium",
+        "repo": "mcp-servers-nix",
+        "rev": "6c8961e93e7278f8c05aefdab4e698ccc846ee05",
+        "type": "github"
+      },
+      "original": {
+        "owner": "natsukium",
+        "repo": "mcp-servers-nix",
+        "type": "github"
+      }
+    },
+    "mcphub-nvim": {
+      "inputs": {
+        "flake-parts": "flake-parts_2",
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1751005763,
+        "narHash": "sha256-VVUC9g7ubz5sLMTunF/zeO/8U7wr4rpEO45mw3Zpt7w=",
+        "owner": "ravitemer",
+        "repo": "mcphub.nvim",
+        "rev": "5fdaa9cf3cb80210741224e0984520c6fa61c3c3",
+        "type": "github"
+      },
+      "original": {
+        "owner": "ravitemer",
+        "repo": "mcphub.nvim",
+        "type": "github"
+      }
+    },
     "nix-darwin": {
       "inputs": {
         "nixpkgs": [
@@ -311,9 +415,25 @@
         "type": "github"
       }
     },
+    "nixpkgs-master": {
+      "locked": {
+        "lastModified": 1751118335,
+        "narHash": "sha256-NwOIcGQ98J2JavW6Dyr/Lvtod9uuluq8oBw6atT7ufE=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "ee142014bc217a50848d29a2b273ffa6d7763761",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "master",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
     "nixvim": {
       "inputs": {
-        "flake-parts": "flake-parts",
+        "flake-parts": "flake-parts_3",
         "nixpkgs": [
           "nixpkgs"
         ],
@@ -368,8 +488,12 @@
         "dpp-protocol-git": "dpp-protocol-git",
         "dpp-vim": "dpp-vim",
         "home-manager": "home-manager_2",
+        "mcp-hub": "mcp-hub",
+        "mcp-servers-nix": "mcp-servers-nix",
+        "mcphub-nvim": "mcphub-nvim",
         "nix-darwin": "nix-darwin",
         "nixpkgs": "nixpkgs",
+        "nixpkgs-master": "nixpkgs-master",
         "nixvim": "nixvim"
       }
     },

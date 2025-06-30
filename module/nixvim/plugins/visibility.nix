@@ -15,6 +15,12 @@
         # post_hook = "require('neoscroll-config').post_hook";
       };
     };
+    render-markdown = {
+      enable = true;
+      settings = {
+        file_types = ["markdown" "codecompanion"];
+      };
+    };
     smear-cursor = {
       enable = true;
       settings = {

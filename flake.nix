@@ -1,6 +1,7 @@
 {
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+    nixpkgs-master.url = "github:NixOS/nixpkgs/master";
     home-manager = {
       url = "github:nix-community/home-manager";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -19,12 +20,24 @@
       url = "github:BatteredBunny/brew-api";
       flake = false;
     };
+    agenix = {
+      url = "github:ryantm/agenix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    mcp-servers-nix = {
+      url = "github:natsukium/mcp-servers-nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     nixvim = {
       url = "github:nix-community/nixvim";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    agenix = {
-      url = "github:ryantm/agenix";
+    mcp-hub = {
+      url = "github:ravitemer/mcp-hub";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    mcphub-nvim = {
+      url = "github:ravitemer/mcphub.nvim";
       inputs.nixpkgs.follows = "nixpkgs";
     };
     dpp-vim = {
@@ -49,7 +62,11 @@
     };
   };
 
-  outputs = inputs @ {nixpkgs, ...}: let
+  outputs = inputs @ {
+    nixpkgs,
+    nixpkgs-master,
+    ...
+  }: let
     allSystems = [
       "aarch64-darwin"
       "aarch64-linux"
@@ -58,7 +75,10 @@
   in {
     # for darwin with home-manager
     darwinConfigurations = {
-      "neo@macos-personal-laptop-01" = nixpkgs.legacyPackages."aarch64-darwin".callPackage ./host/macos-personal-laptop-01.nix {inherit inputs;};
+      "neo@macos-personal-laptop-01" = nixpkgs.legacyPackages."aarch64-darwin".callPackage ./host/macos-personal-laptop-01.nix {
+        inherit inputs;
+        pkgsMaster = nixpkgs-master.legacyPackages."aarch64-darwin";
+      };
     };
     # for NixOS with home-manager
     nixosConfigurations = {

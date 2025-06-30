@@ -64,8 +64,7 @@
               separator = "|";
             }
             {
-              __unkeyed-1 = "searchcount";
-              separator = "|";
+              __unkeyed-1.__raw = "require('mcphub.extensions.lualine')";
             }
           ];
           lualine_z = [];
