@@ -37,12 +37,13 @@
       ./performance.nix
       ./lsp.nix
       ./colorscheme.nix
-      (import ./plugins/ai.nix {inherit pkgs config inputs;})
+      (import ./plugins/ai.nix {inherit pkgs config inputs lib;})
       # ./plugins/ai.nix
       ./plugins/blink-cmp.nix
       ./plugins/bypass.nix
       ./plugins/depends.nix
       ./plugins/editing.nix
+      ./plugins/fzf.nix
       ./plugins/git.nix
       ./plugins/lang.nix
       # ./plugins/lsp.nix

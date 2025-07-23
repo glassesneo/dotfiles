@@ -18,7 +18,7 @@ export module "sketchybar extern" {
   def filter-item-by-type [type: string@"nu-complete components"]: list<string> -> list<string> {
     $in
     | each {|item| ^sketchybar --query $item | from json}
-    | filter {|item| ($item | get type) == $type}
+    | where {|item| ($item | get type) == $type}
     | each {|item| $item | get name}
   }
 

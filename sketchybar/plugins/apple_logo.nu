@@ -20,11 +20,11 @@ export def item () {
         icon.font="Hack Nerd Font:Regular:22"
         icon.padding_left=6
         icon.padding_right=6
-        background.color=$"($mantle)"
+        background.color=$"($colors.mantle)"
         background.corner_radius=8
         background.height=28
         background.border_width=1
-        background.border_color=$"($lavender)"
+        background.border_color=$"($colors.lavender)"
   )
 
 }

@@ -42,10 +42,10 @@ export def item () {
       --set $list_name
         label.drawing=off
         icon.font="sketchybar-app-font:Regular:18.0"
-        icon.color=$"($text)"
+        icon.color=$"($colors.text)"
         icon.padding_right=12
         icon.width=0
-        background.color=$"($surface0)"
+        background.color=$"($colors.surface0)"
         background.corner_radius=30
         background.height=32
         background.y_offset=2
@@ -83,7 +83,7 @@ def current_apps (): nothing -> list<string> {
 def show_app_list () {
   let focused_app = sketchybar --query front_app | from json | get label.value
   let icons = current_apps
-  | filter {|app| $app != $focused_app}
+  | where {|app| $app != $focused_app}
   | each {|app| $app | get_icon }
   | str join " "
   (

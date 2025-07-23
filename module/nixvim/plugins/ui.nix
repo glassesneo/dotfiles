@@ -6,6 +6,14 @@
     };
     fidget = {
       enable = true;
+      lazyLoad = {
+        enable = true;
+        settings = {
+          event = [
+            "LspAttach"
+          ];
+        };
+      };
       settings = {
         notification = {
           poll_rate = 10;
@@ -18,7 +26,7 @@
       enable = true;
       settings = {
         cmdline = {
-          enabled = true;
+          enabled = false;
         };
         health.checker = false;
         lsp = {
@@ -28,9 +36,9 @@
           signature.enabled = false;
         };
         messages = {
-          enabled = true;
+          enabled = false;
         };
-        notify.enabled = true;
+        notify.enabled = false;
         popupmenu.enabled = false;
       };
     };

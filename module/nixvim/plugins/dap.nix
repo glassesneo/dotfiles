@@ -1,0 +1,7 @@
+{
+  plugins = {
+    dap = {
+      enable = true;
+    };
+  };
+}

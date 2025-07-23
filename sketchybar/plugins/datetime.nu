@@ -20,7 +20,7 @@ export def item () {
       --set $name
         padding_right=0
         label=$"($output)"
-        label.color=$"($sky)"
+        label.color=$"($colors.sky)"
         label.font.style="Bold Italic"
         label.font.size=16
         label.padding_right=0

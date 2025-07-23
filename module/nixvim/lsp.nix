@@ -68,6 +68,13 @@
         enable = true;
         package = null;
       };
+      sourcekit = {
+        enable = true;
+        package = null;
+        settings = {
+          cmd = ["sourcekit-lsp"];
+        };
+      };
       taplo = {
         enable = true;
         package = null;
@@ -223,7 +230,7 @@
         documentFormatting = true,
         documentRangeFormatting = true,
       },
-      filetypes = {"elm", "go", "html", "nim", "nix", "python", "lua", "typst"},
+      filetypes = {"elm", "go", "html", "nim", "nix", "python", "swift", "lua", "typst"},
       settings = {
         root_markers = {
           ".git/"
@@ -260,6 +267,12 @@
           python = {
             {
               formatCommand = "ruff format -",
+              formatStdin = true,
+            }
+          },
+          swift = {
+            {
+              formatCommand = "swift-format format",
               formatStdin = true,
             }
           },

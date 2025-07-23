@@ -1,4 +1,11 @@
-{pkgs, ...}: {
+{
+  pkgs,
+  lib,
+  ...
+}: let
+  sketchybarExe = lib.getExe pkgs.sketchybar;
+  bordersExe = lib.getExe pkgs.jankyborders;
+in {
   services = {
     sketchybar = {
       enable = true;
@@ -22,14 +29,14 @@
         # 'after-startup-command' is run after 'after-login-command'
         # Available commands : https://nikitabobko.github.io/AeroSpace/commands
         after-startup-command = [
-          "exec-and-forget ${pkgs.sketchybar}/bin/sketchybar"
-          "exec-and-forget ${pkgs.jankyborders}/bin/borders"
+          "exec-and-forget ${sketchybarExe}"
+          "exec-and-forget ${bordersExe}"
         ];
 
         exec-on-workspace-change = [
           "/bin/bash"
           "-c"
-          "${pkgs.sketchybar}/bin/sketchybar --trigger aerospace_workspace_change FOCUSED_WORKSPACE=$AEROSPACE_FOCUSED_WORKSPACE"
+          "${sketchybarExe} --trigger aerospace_workspace_change FOCUSED_WORKSPACE=$AEROSPACE_FOCUSED_WORKSPACE"
         ];
 
         # Start AeroSpace at login

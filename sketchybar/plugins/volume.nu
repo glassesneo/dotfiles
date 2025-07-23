@@ -15,7 +15,7 @@ export def item () {
       --rename "Control Center,Sound" $name
       --set $name
         label.drawing=off
-        alias.color=$"($text)"
+        alias.color=$"($colors.text)"
         alias.scale=1.1
         script=$"($nu.current-exe) ($current_path)"
       --subscribe $name volume_change
@@ -29,9 +29,9 @@ def main () {
   
   let volume = $env.INFO | into int
   let color = if $volume == 0 {
-    $red
+    $colors.red
   } else {
-    $text
+    $colors.text
   }
 
   (

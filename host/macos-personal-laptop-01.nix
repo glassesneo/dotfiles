@@ -16,6 +16,7 @@ inputs.nix-darwin.lib.darwinSystem rec {
     ../module/brew-nix
     inputs.nixvim.nixDarwinModules.nixvim
     ../module/nixvim
+    # ../module/vim
     inputs.home-manager.darwinModules.home-manager
     {
       home-manager = {
@@ -67,36 +68,27 @@ inputs.nix-darwin.lib.darwinSystem rec {
           xdg.enable = true;
           programs.home-manager.enable = true;
 
-          imports =
-            [
-              inputs.agenix.homeManagerModules.default
-              ../home/common/direnv.nix
-              ../home/common/git.nix
-              ../home/common/gh.nix
-              ../home/common/eza.nix
-              ../home/common/nixvim.nix
-              ../home/common/oh-my-posh.nix
-              ../home/common/yazi.nix
-              # ../home/common/zed-editor.nix
-              # ../home/common/zellij.nix
-              # ../home/common/starship.nix
-              ../home/common/zsh.nix
-              ../home/common/zoxide.nix
-              ../home/darwin/nushell.nix
-              ../home/darwin/ghostty.nix
-              ../home/darwin/kitty.nix
-              ../home/darwin/aquaskk.nix
-              ../home/darwin/services.nix
-              ../module/mcp-servers-nix
-            ];
-          age.identityPaths = ["/Users/neo/.ssh/id_agenix"];
-          age.secrets.gemini-api-key.file = ../secrets/gemini-api-key.age;
-          # age.secrets.ai-mop-gpt-o4-mini-api-key.file = ../secrets/ai-mop-gpt-o4-mini-api-key.age;
-          age.secrets.ai-mop-api-key.file = ../secrets/ai-mop-api-key.age;
-          home.sessionVariables = {
-            GEMINI_API_KEY = ''$(${pkgs.coreutils}/bin/cat ${config.age.secrets.gemini-api-key.path})'';
-            AI_MOP_API_KEY = ''$(${pkgs.coreutils}/bin/cat ${config.age.secrets.ai-mop-api-key.path})'';
-          };
+          imports = [
+            ../module/agenix
+            ../home/common/direnv.nix
+            ../home/common/git.nix
+            ../home/common/gh.nix
+            ../home/common/eza.nix
+            ../home/common/nixvim.nix
+            ../home/common/oh-my-posh.nix
+            ../home/common/yazi.nix
+            # ../home/common/zed-editor.nix
+            # ../home/common/zellij.nix
+            # ../home/common/starship.nix
+            ../home/common/zsh.nix
+            ../home/common/zoxide.nix
+            ../home/darwin/nushell.nix
+            ../home/darwin/ghostty.nix
+            ../home/darwin/kitty.nix
+            ../home/darwin/aquaskk.nix
+            ../home/darwin/services.nix
+            ../module/mcp-servers-nix
+          ];
         };
       };
     }

@@ -45,6 +45,12 @@ in {
     };
     ts-autotag = {
       enable = true;
+      lazyLoad = {
+        enable = true;
+        settings = {
+          event = ["InsertEnter"];
+        };
+      };
       settings = {
         opts = {
           enable_close = true;

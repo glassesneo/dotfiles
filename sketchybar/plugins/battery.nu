@@ -30,9 +30,9 @@ def main () {
   let percentage = pmset -g batt
     | lines
     | find '%;'
-    | parse ' {top} (id={id}){batt}%; {rest}'
-    | get batt
+    | split words
     | get 0
+    | get 5
     | into int
 
   if (pmset -g batt | lines | find "AC Power" | length) != 0 {
@@ -40,17 +40,17 @@ def main () {
       sketchybar
         --set $name
           label=""
-          label.color=$"($peach)"
+          label.color=$"($colors.peach)"
           icon=$"($percentage)%"
     )
     return
   }
   let icon: record<kind: string, color: string> = match $percentage {
-    91..100 => {kind: "", color: $"($teal)"}
-    61..90 => {kind: "", color: $"($green)"}
-    31..60 => {kind: "", color: $"($yellow)"}
-    11..30 => {kind: "", color: $"($peach)"}
-    _ => {kind: "", color: $"($red)"}
+    91..100 => {kind: "", color: $"($colors.teal)"}
+    61..90 => {kind: "", color: $"($colors.green)"}
+    31..60 => {kind: "", color: $"($colors.yellow)"}
+    11..30 => {kind: "", color: $"($colors.peach)"}
+    _ => {kind: "", color: $"($colors.red)"}
   }
 
   (

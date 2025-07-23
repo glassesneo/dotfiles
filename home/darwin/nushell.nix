@@ -6,8 +6,8 @@
 }: let
   plugin_names = [
     "gstat"
-    "net"
-    "skim"
+    # "net"
+    # "skim"
     "query"
   ];
 in {
@@ -17,6 +17,9 @@ in {
   xdg.configFile = {
     "nushell/completions" = {
       source = ../../nushell/completions;
+    };
+    "nushell/plugins" = {
+      source = ../../nushell/plugins;
     };
   };
   programs.nushell = {
@@ -38,7 +41,7 @@ in {
         else '''';
     in
       ''
-        ${completions ["aerospace" "bat" "curl" "eza" "gh" "git" "less" "make" "man" "nano" "nix" "npm" "rg" "ssh" "tar" "typst" "zellij"]}
+        ${completions ["aerospace" "bat" "curl" "eza" "gh" "git" "less" "make" "man" "nano" "nix" "npm" "rg" "ssh" "tar" "typst" "uv" "zellij"]}
       ''
       + starship_config;
     plugins = map (name: pkgs.nushellPlugins.${name}) plugin_names;
@@ -58,10 +61,6 @@ in {
     };
     settings = {
       show_banner = false;
-      buffer_editor =
-        if config.programs.neovim.enable
-        then "nvim"
-        else "vim";
       completions = {
         case_sensitive = true;
       };

@@ -17,7 +17,7 @@ export def item () {
         label="──"
         label.padding_left=12
         label.padding_right=12
-        label.color=$"($text)"
+        label.color=$"($colors.text)"
         label.font.family="HackGen Console NF"
         label.font.size=15
         label.font.style=Bold
@@ -26,8 +26,8 @@ export def item () {
         label.y_offset=1
         scroll_texts=off
         icon=""
-        icon.color=$"($mantle)"
-        icon.background.color=$"($mantle)"
+        icon.color=$"($colors.mantle)"
+        icon.background.color=$"($colors.mantle)"
         icon.background.corner_radius=20
         icon.background.height=30
         icon.padding_left=8
@@ -53,7 +53,7 @@ export def item () {
         drawing=off
   )
 
-  utils set_item_unit_without_border $name $base
+  utils set_item_unit_without_border $name $colors.base
 }
 
 def label_text (): record<state: string, title: string, artist: string> -> string {
@@ -80,8 +80,8 @@ def hide_media_info () {
       --animate tanh 30
       --set $name
         label="──"
-        icon.color=$"($text)"
-        icon.background.color=$"($mantle)"
+        icon.color=$"($colors.text)"
+        icon.background.color=$"($colors.mantle)"
         # background.border_color=$"($overlay0)"
   )
   (
@@ -99,8 +99,8 @@ def update_media (media_info: record<state: string, title: string, artist: strin
         sketchybar
           --animate tanh 30
           --set $name
-            icon.color=$"($mantle)"
-            icon.background.color=$"($sky)"
+            icon.color=$"($colors.mantle)"
+            icon.background.color=$"($colors.sky)"
       )
       show_media_info ($media_info | label_text)
     }

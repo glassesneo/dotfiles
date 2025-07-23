@@ -19,6 +19,8 @@
     "jsr:@cross/env@1": "1.0.2",
     "jsr:@cross/runtime@1": "1.1.0",
     "jsr:@cross/utils@0.7": "0.7.1",
+    "jsr:@deno-library/compress@~0.5.6": "0.5.6",
+    "jsr:@deno-library/crc32@1.0.2": "1.0.2",
     "jsr:@denops/core@6.0.6": "6.0.6",
     "jsr:@denops/core@7": "7.0.1",
     "jsr:@denops/core@7.0": "7.0.1",
@@ -29,9 +31,10 @@
     "jsr:@denops/std@7.4": "7.4.0",
     "jsr:@denops/std@7.5": "7.5.0",
     "jsr:@denops/std@7.5.0": "7.5.0",
+    "jsr:@denops/std@7.6": "7.6.0",
     "jsr:@denops/std@^7.0.1": "7.5.0",
-    "jsr:@denops/std@^7.3.0": "7.5.0",
-    "jsr:@denops/std@^7.3.2": "7.5.0",
+    "jsr:@denops/std@^7.3.0": "7.6.0",
+    "jsr:@denops/std@^7.3.2": "7.6.0",
     "jsr:@denops/std@^7.4.0": "7.5.0",
     "jsr:@denops/std@~7.1.1": "7.1.1",
     "jsr:@denops/test@2.0.1": "2.0.1",
@@ -77,6 +80,7 @@
     "jsr:@shougo/ddu-vim@^9.0.1": "9.5.0",
     "jsr:@std/assert@0.226": "0.226.0",
     "jsr:@std/assert@0.226.0": "0.226.0",
+    "jsr:@std/assert@1": "1.0.11",
     "jsr:@std/assert@1.0": "1.0.11",
     "jsr:@std/assert@1.0.0": "1.0.0",
     "jsr:@std/assert@1.0.0-rc.2": "1.0.0-rc.2",
@@ -95,6 +99,7 @@
     "jsr:@std/async@~1.0.1": "1.0.11",
     "jsr:@std/async@~1.0.4": "1.0.11",
     "jsr:@std/bytes@0.221": "0.221.0",
+    "jsr:@std/bytes@^1.0.2": "1.0.5",
     "jsr:@std/bytes@^1.0.5": "1.0.5",
     "jsr:@std/collections@0.224.1": "0.224.1",
     "jsr:@std/collections@^1.0.0-rc.1": "1.0.10",
@@ -105,10 +110,12 @@
     "jsr:@std/fs@0.229.3": "0.229.3",
     "jsr:@std/fs@1": "1.0.14",
     "jsr:@std/fs@1.0": "1.0.14",
+    "jsr:@std/fs@1.0.5": "1.0.5",
     "jsr:@std/fs@^1.0.5": "1.0.14",
     "jsr:@std/internal@1": "1.0.5",
     "jsr:@std/internal@^1.0.1": "1.0.5",
     "jsr:@std/internal@^1.0.5": "1.0.5",
+    "jsr:@std/io@0.225.0": "0.225.0",
     "jsr:@std/msgpack@~1.0.2": "1.0.3",
     "jsr:@std/path@0.225.0": "0.225.0",
     "jsr:@std/path@0.225.2": "0.225.2",
@@ -116,12 +123,14 @@
     "jsr:@std/path@1.0": "1.0.8",
     "jsr:@std/path@1.0.0-rc.1": "1.0.0-rc.1",
     "jsr:@std/path@1.0.1": "1.0.1",
+    "jsr:@std/path@1.0.8": "1.0.8",
     "jsr:@std/path@1.1": "1.1.0",
     "jsr:@std/path@1.1.0": "1.1.0",
-    "jsr:@std/path@^1.0.1": "1.0.8",
+    "jsr:@std/path@^1.0.1": "1.1.0",
     "jsr:@std/path@^1.0.2": "1.0.8",
     "jsr:@std/path@^1.0.6": "1.0.8",
-    "jsr:@std/path@^1.0.8": "1.0.8",
+    "jsr:@std/path@^1.0.7": "1.1.0",
+    "jsr:@std/path@^1.0.8": "1.1.0",
     "jsr:@std/path@~1.0.1": "1.0.8",
     "jsr:@std/path@~1.0.2": "1.0.8",
     "jsr:@std/path@~1.0.3": "1.0.8",
@@ -130,8 +139,10 @@
     "jsr:@std/streams@0.224.0": "0.224.0",
     "jsr:@std/streams@1": "1.0.9",
     "jsr:@std/streams@1.0": "1.0.9",
+    "jsr:@std/streams@^1.0.7": "1.0.9",
     "jsr:@std/streams@^1.0.8": "1.0.9",
     "jsr:@std/streams@~1.0.3": "1.0.9",
+    "jsr:@std/tar@0.1.3": "0.1.3",
     "jsr:@std/testing@0.225.2": "0.225.2",
     "jsr:@std/testing@1.0": "1.0.9",
     "jsr:@std/toml@0.224.1": "0.224.1",
@@ -143,7 +154,9 @@
     "jsr:@vim-fall/core@~0.2.1": "0.2.1",
     "jsr:@vim-fall/custom@0.1": "0.1.0",
     "jsr:@vim-fall/std@0.10": "0.10.1",
+    "jsr:@zip-js/zip-js@2.7.53": "2.7.53",
     "npm:@geolonia/japanese-numeral@1.0.2": "1.0.2",
+    "npm:@types/node@*": "22.15.15",
     "npm:camelcase@8.0.0": "8.0.0",
     "npm:cr-numeral@1.1.3": "1.1.3",
     "npm:encoding-japanese@2.2.0": "2.2.0",
@@ -203,6 +216,20 @@
         "jsr:@cross/runtime"
       ]
     },
+    "@deno-library/compress@0.5.6": {
+      "integrity": "9d76e37e7682fc8d3d99d5641a7af454ce4689b1df3fd3062141a1deb64453cd",
+      "dependencies": [
+        "jsr:@deno-library/crc32",
+        "jsr:@std/fs@1.0.5",
+        "jsr:@std/io",
+        "jsr:@std/path@1.0.8",
+        "jsr:@std/tar",
+        "jsr:@zip-js/zip-js"
+      ]
+    },
+    "@deno-library/crc32@1.0.2": {
+      "integrity": "d2061bfee30c87c97f285dfca0fdc4458e632dc072a33ecfc73ca5177a5a39a0"
+    },
     "@denops/core@6.0.6": {
       "integrity": "3fb73c8019db930cc2fad1be793638cfdedefe37bd6c4b4aa67f048be1bdfaed"
     },
@@ -257,6 +284,18 @@
         "jsr:@lambdalisue/unreachable",
         "jsr:@std/fs@1",
         "jsr:@std/path@^1.0.2",
+        "jsr:@std/semver@1",
+        "jsr:@std/ulid"
+      ]
+    },
+    "@denops/std@7.6.0": {
+      "integrity": "468a5b4121378a845bbc4cd705fe0075dff9cd0af41fbb8a797870535af5c4c8",
+      "dependencies": [
+        "jsr:@core/unknownutil@^4.3.0",
+        "jsr:@denops/core@7",
+        "jsr:@lambdalisue/errorutil@1",
+        "jsr:@lambdalisue/itertools",
+        "jsr:@lambdalisue/unreachable",
         "jsr:@std/semver@1",
         "jsr:@std/ulid"
       ]
@@ -526,6 +565,12 @@
         "jsr:@std/path@1.0.0-rc.1"
       ]
     },
+    "@std/fs@1.0.5": {
+      "integrity": "41806ad6823d0b5f275f9849a2640d87e4ef67c51ee1b8fb02426f55e02fd44e",
+      "dependencies": [
+        "jsr:@std/path@^1.0.7"
+      ]
+    },
     "@std/fs@1.0.14": {
       "integrity": "1e84bf0b95fe08f41f1f4aea9717bbf29f45408a56ce073b0114474ce1c9fccf",
       "dependencies": [
@@ -534,6 +579,12 @@
     },
     "@std/internal@1.0.5": {
       "integrity": "54a546004f769c1ac9e025abd15a76b6671ddc9687e2313b67376125650dc7ba"
+    },
+    "@std/io@0.225.0": {
+      "integrity": "c1db7c5e5a231629b32d64b9a53139445b2ca640d828c26bf23e1c55f8c079b3",
+      "dependencies": [
+        "jsr:@std/bytes@^1.0.2"
+      ]
     },
     "@std/msgpack@1.0.3": {
       "integrity": "b384239867dfd08aba9069d433e415a8229c6f966716d6b7fd3972a6fe605848",
@@ -575,6 +626,12 @@
       "integrity": "a9d26b1988cdd7aa7b1f4b51e1c36c1557f3f252880fa6cc5b9f37078b1a5035",
       "dependencies": [
         "jsr:@std/bytes@^1.0.5"
+      ]
+    },
+    "@std/tar@0.1.3": {
+      "integrity": "531270fc707b37ab9b5f051aa4943e7b16b86905e0398a4ebe062983b0c93115",
+      "dependencies": [
+        "jsr:@std/streams@^1.0.7"
       ]
     },
     "@std/testing@0.225.2": {
@@ -651,6 +708,9 @@
         "jsr:@vim-fall/custom",
         "npm:fzf"
       ]
+    },
+    "@zip-js/zip-js@2.7.53": {
+      "integrity": "acea5bd8e01feb3fe4c242cfbde7d33dd5e006549a4eb1d15283bc0c778ed672"
     }
   },
   "npm": {
@@ -686,6 +746,12 @@
       "integrity": "sha512-x0fWaQtYp4E6sktbsdAqnehxDgEc/VwM7uLsRCYWaiGu0ykYdZPiS8zCWdnjHwyiumousxfBm4SO31eXqwEZhQ==",
       "os": ["win32"],
       "cpu": ["x64"]
+    },
+    "@types/node@22.15.15": {
+      "integrity": "sha512-R5muMcZob3/Jjchn5LcO8jdKwSCbzqmPB6ruBxMcf9kbxtniZHP327s6C37iOfuw8mbKK3cAQa7sEl7afLrQ8A==",
+      "dependencies": [
+        "undici-types"
+      ]
     },
     "camelcase@8.0.0": {
       "integrity": "sha512-8WB3Jcas3swSvjIeA2yvCJ+Miyz5l1ZmB6HFb9R1317dt9LCQoswg/BGrmAmkWVEszSrrg4RwmO46qIm2OEnSA=="
@@ -737,6 +803,9 @@
         "detect-libc"
       ],
       "bin": true
+    },
+    "undici-types@6.21.0": {
+      "integrity": "sha512-iwDZqg0QAGrg9Rav5H4n0M64c3mkR59cJ6wQp+7C4nI0gsmExaedaYLNO44eT4AtBBwjbTiGPMlt2Md0T9H9JQ=="
     },
     "vscode-jsonrpc@8.2.0": {
       "integrity": "sha512-C+r0eKJUIfiDIfwJhria30+TYWPtuHJXHtI7J0YlOmKAo7ogxP20T0zxB7HZQIFhIyvoBPwWskjxrvAtfjyZfA=="

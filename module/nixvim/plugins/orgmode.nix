@@ -4,17 +4,16 @@
       enable = true;
       settings = {
         org_agenda_files = [
-          "~/org/agenda/*"
-          "~/org/notes/*"
+          "~/Documents/org/**/*.org"
         ];
-        org_default_notes_file = "~/org/notes/refile.org";
-        org_indent_mode = "indent";
-        org_startup_folded = "content";
-        # org_todo_keywords = [
-        # "TODO"
-        # "IN-PROGRESS"
-        # "DONE"
-        # ];
+        org_default_notes_file = "~/Documents/org/refile.org";
+        # org_indent_mode = "indent";
+        org_todo_keywords = [
+          "TODO"
+          "IN-PROGRESS"
+          "CANCELLED"
+          "DONE"
+        ];
         # org_agenda_span = "day";
       };
     };

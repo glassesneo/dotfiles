@@ -15,21 +15,38 @@
         # post_hook = "require('neoscroll-config').post_hook";
       };
     };
-    render-markdown = {
+    origami = {
+      # enable = true;
+    };
+    render-markdown = let
+      ft = ["markdown"];
+    in {
       enable = true;
+      lazyLoad = {
+        enable = true;
+        settings = {
+          inherit ft;
+        };
+      };
       settings = {
-        file_types = ["markdown" "codecompanion"];
+        file_types = ft;
       };
     };
     smear-cursor = {
       enable = true;
       settings = {
-        distance_stop_animating = 3;
+        distance_stop_animating = 40;
         smear_to_cmd = false;
       };
     };
     tiny-inline-diagnostic = {
       enable = true;
+      lazyLoad = {
+        enable = true;
+        settings = {
+          event = ["LspAttach"];
+        };
+      };
       settings = {
         multilines = {
           enabled = true;

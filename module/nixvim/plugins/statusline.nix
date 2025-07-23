@@ -108,6 +108,12 @@
     };
     navic = {
       enable = true;
+      lazyLoad = {
+        enable = true;
+        settings = {
+          event = ["LspAttach"];
+        };
+      };
       settings = {
         lsp = {
           auto_attach = true;

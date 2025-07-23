@@ -16,6 +16,6 @@ export def item () {
       --set $name
   )
 
-  utils set_item_unit $name $crust $overlay0
+  utils set_item_unit $name $colors.crust $colors.overlay0
 }
 

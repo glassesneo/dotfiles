@@ -26,6 +26,19 @@ in {
     blink-cmp = {
       enable = true;
       setupLspCapabilities = true;
+      lazyLoad = {
+        enable = false;
+        settings = {
+          event = [
+            "InsertEnter"
+            "CmdlineEnter"
+          ];
+          cmd = [
+            "CodeCompanion"
+            "CodeCompanionChat"
+          ];
+        };
+      };
       settings = {
         appearance = {
           nerd_font_variant = "normal";
