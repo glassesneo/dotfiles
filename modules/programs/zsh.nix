@@ -10,10 +10,7 @@ delib.module {
     enable = boolOption true;
   };
 
-  home.ifEnabled = {
-    cfg,
-    ...
-  }: {
+  home.ifEnabled = {cfg, ...}: {
     programs.zsh = {
       enable = cfg.enable;
       enableCompletion = true;
