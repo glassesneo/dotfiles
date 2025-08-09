@@ -7,7 +7,7 @@
     ...
   } @ inputs: let
     mkConfigurations = moduleSystem:
-      denix.lib.configurations {
+      denix.lib.configurations rec {
         inherit moduleSystem;
         homeManagerUser = "neo";
 
@@ -25,8 +25,14 @@
         ];
 
         specialArgs = {
-          inherit inputs;
+          inherit inputs moduleSystem homeManagerUser;
         };
+        extraModules =
+          if moduleSystem == "darwin"
+          then [
+            inputs.brew-nix.darwinModules.default
+          ]
+          else [];
       };
   in {
     # nixosConfigurations = mkConfigurations "nixos";
@@ -63,6 +69,16 @@
     nixvim = {
       url = "github:nix-community/nixvim/main";
       inputs.nixpkgs.follows = "nixpkgs";
+    };
+    brew-nix = {
+      url = "github:BatteredBunny/brew-nix";
+      inputs.nix-darwin.follows = "nix-darwin";
+      inputs.brew-api.follows = "brew-api";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    brew-api = {
+      url = "github:BatteredBunny/brew-api";
+      flake = false;
     };
   };
 }
