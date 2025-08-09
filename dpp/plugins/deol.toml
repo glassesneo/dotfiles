@@ -1,6 +1,0 @@
-[[plugins]]
-repo = 'Shougo/deol.nvim'
-depends = ['vim-artemis']
-on_map = { n = ['<Space>t'] }
-# on_source = ['ddu.vim']
-hooks_file = '$HOOK_DIR/deol.lua'

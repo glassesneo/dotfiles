@@ -1,8 +1,0 @@
-[[plugins]]
-repo = 'uga-rosa/denippet.vim'
-on_source = ['ddc.vim']
-hooks_file = '$HOOK_DIR/denippet.lua'
-
-[[plugins]]
-repo = 'rafamadriz/friendly-snippets'
-on_source = ['denippet.vim']
