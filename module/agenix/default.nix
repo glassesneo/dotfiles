@@ -11,6 +11,8 @@
   age.secrets.gemini-api-key.file = ../../secrets/gemini-api-key.age;
   age.secrets.ai-mop-api-key.file = ../../secrets/ai-mop-api-key.age;
   age.secrets.brave-api-key.file = ../../secrets/brave-api-key.age;
+  age.secrets.tavily-api-key.file = ../../secrets/tavily-api-key.age;
+  age.secrets.hf-inference-api-key.file = ../../secrets/hf-inference-api-key.age;
   age.secrets.iniad-id.file = ../../secrets/iniad-id.age;
   age.secrets.iniad-password.file = ../../secrets/iniad-password.age;
 
@@ -19,6 +21,8 @@
   in {
     GEMINI_API_KEY = ''$(${cat} ${config.age.secrets.gemini-api-key.path})'';
     AI_MOP_API_KEY = ''$(${cat} ${config.age.secrets.ai-mop-api-key.path})'';
+    TAVILY_API_KEY = ''$(${cat} ${config.age.secrets.tavily-api-key.path})'';
+    HF_INFERENCE_API_KEY = ''$(${cat} ${config.age.secrets.hf-inference-api-key.path})'';
     INIAD_ID = ''$(${cat} ${config.age.secrets.iniad-id.path})'';
     INIAD_PASSWORD = ''$(${cat} ${config.age.secrets.iniad-password.path})'';
   };

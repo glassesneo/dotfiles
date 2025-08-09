@@ -10,7 +10,7 @@
   mcpServersConfig = inputs.mcp-servers-nix.lib.mkConfig pkgs {
     programs = {
       filesystem = {
-        enable = true;
+        # enable = true;
         args = [
           "${config.home.homeDirectory}/.dotfiles"
         ];
@@ -48,7 +48,7 @@
         enable = true;
         type = "stdio";
       };
-      # time.enable = true;
+      time.enable = true;
     };
     settings.servers = {
       brave-search = {
@@ -57,13 +57,9 @@
           "-y"
           "@modelcontextprotocol/server-brave-search"
         ];
-        passwordCommand = {
-          BRAVE_API_KEY = ["${lib.getExe' pkgs.coreutils "cat"}" "${config.age.secrets.brave-api-key.path}"];
+        env = {
+          BRAVE_API_KEY = ''''${cmd: ${lib.getExe' pkgs.coreutils "cat"} ${config.age.secrets.brave-api-key.path}}'';
         };
-      };
-      calculator = {
-        command = "${uvx}";
-        args = ["mcp-server-calculator"];
       };
       deepwiki = {
         url = "https://mcp.deepwiki.com/mcp";
@@ -76,13 +72,23 @@
           "@anaisbetts/mcp-youtube"
         ];
       };
-      arxiv = {
-        command = "${uvx}";
-        args = [
-          "arxiv-mcp-server"
-          "--storage-path"
-          "${config.xdg.dataHome}/mcp_arxiv_storage"
-        ];
+      # arxiv = {
+      # command = "${uvx}";
+      # args = [
+      # "arxiv-mcp-server"
+      # "--storage-path"
+      # "${config.xdg.dataHome}/mcp_arxiv_storage"
+      # ];
+      # };
+      # meilisearch = {
+      # command = "${uvx}";
+      # args = [
+      # "-n"
+      # "meilisearch-mcp"
+      # ];
+      # };
+      notion = {
+        url = "https://mcp.notion.com/mcp";
       };
       readability = {
         command = "${npx}";
@@ -92,6 +98,32 @@
           "--mcp"
         ];
       };
+      relative-filesystem = {
+        command = "${lib.getExe pkgs.deno}";
+        args = [
+          "run"
+          "-A"
+          "/Users/neo/dev/relative-filesystem-mcp/server.ts"
+        ];
+      };
+      tavily = {
+        command = "${npx}";
+        args = [
+          "-y"
+          "tavily-mcp@latest"
+        ];
+        env = {
+          TAVILY_API_KEY = ''''${cmd: ${lib.getExe' pkgs.coreutils "cat"} ${config.age.secrets.tavily-api-key.path}}'';
+        };
+      };
+      # serena = {
+      # command = "${uvx}";
+      # args = [
+      # "--from"
+      # "git+https://github.com/oraios/serena"
+      # "serena-mcp-server"
+      # ];
+      # };
     };
   };
   mcpServers = [

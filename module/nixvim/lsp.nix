@@ -30,11 +30,25 @@
           formattingProvider = "fourmolu";
         };
       };
+      kotlin_language_server = {
+        enable = true;
+        package = null;
+        settings = {
+          rootMarkers = [];
+        };
+      };
       marksman = {
         enable = true;
         package = null;
         settings = {
           filetypes = ["markdown"];
+        };
+      };
+      nickel_ls = {
+        enable = true;
+        package = null;
+        settings = {
+          cmd = ["nix" "run" "nixpkgs#nls"];
         };
       };
       nil_ls = {
@@ -122,6 +136,7 @@
   extraConfigLuaPost = ''
     vim.lsp.enable({ "lua_ls" })
     vim.lsp.enable({ "denols" })
+    vim.lsp.enable({ "kotlin_lsp" })
     vim.lsp.enable({ "efm" })
 
 
@@ -131,10 +146,6 @@
         vim.fn.stdpath('config').. "/lua",
     }
 
-    -- optional: add a certain plugin's path
-    -- local plugin_paths = vim.api.nvim_get_runtime_file("lua/my_plugin_name", true)
-    -- for _, path in ipairs(plugin_paths) do table.insert(library_paths, path) end
-
     local unique_library_paths = {}
     local seen_paths = {}
     for _, path in ipairs(library_paths) do
@@ -143,19 +154,6 @@
         seen_paths[path] = true
       end
     end
-
-    -- local make_capabilities = function()
-      -- local status, ddc_lsp = pcall(require, "ddc_source_lsp")
-      -- if status then
-          -- return ddc_lsp.make_client_capabilities()
-      -- else
-        -- return nil
-        -- end
-    -- end
-
-    vim.lsp.config("*", {
-      -- capabilities = make_capabilities()
-    })
 
     vim.lsp.config.lua_ls = {
       settings = {
@@ -181,6 +179,13 @@
         },
       },
     }
+
+    -- vim.lsp.config.kotlin_lsp = {
+      -- single_file_support = true,
+      -- settings = {
+        -- rootMarkers = {},
+      -- }
+    -- }
 
     vim.lsp.config.denols = {
       single_file_support = true,
@@ -252,6 +257,12 @@
               formatStdin = true,
             },
           },
+          kotlin = {
+            {
+              formatCommand = "ktlint --stdin --format",
+              formatStdin = true,
+            },
+          },
           nim = {
             {
               formatCommand = "nph -",
@@ -264,6 +275,12 @@
               formatStdin = true,
             }
           },
+          -- nu = {
+            -- {
+              -- formatCommand = "nufmt --stdin",
+              -- formatStdin = true,
+            -- }
+          -- },
           python = {
             {
               formatCommand = "ruff format -",

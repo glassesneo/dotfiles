@@ -13,6 +13,7 @@
 in {
   home.packages = [
     pkgs.nu_scripts
+    # pkgs.nufmt
   ];
   xdg.configFile = {
     "nushell/completions" = {
@@ -41,7 +42,7 @@ in {
         else '''';
     in
       ''
-        ${completions ["aerospace" "bat" "curl" "eza" "gh" "git" "less" "make" "man" "nano" "nix" "npm" "rg" "ssh" "tar" "typst" "uv" "zellij"]}
+        ${completions ["aerospace" "bat" "curl" "eza" "gh" "git" "less" "make" "man" "nano" "nix" "npm" "rg" "ssh" "tar" "typst" "zellij"]}
       ''
       + starship_config;
     plugins = map (name: pkgs.nushellPlugins.${name}) plugin_names;

@@ -70,7 +70,7 @@
   extraPlugins = with pkgs.vimPlugins; [
     hlchunk-nvim
     quick-scope
-    nvim_context_vt
+    # nvim_context_vt
   ];
   extraConfigLua = ''
     require('hlchunk').setup({
@@ -98,8 +98,8 @@
         style = "#6c7086",
       },
     })
-    require('nvim_context_vt').setup({
-      prefix = "",
-    })
+    -- require('nvim_context_vt').setup({
+      -- prefix = "",
+    -- })
   '';
 }

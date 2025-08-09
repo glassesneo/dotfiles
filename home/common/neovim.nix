@@ -17,7 +17,6 @@
       alejandra
       efm-langserver
       deno
-      # nufmt
       #typescript
       # biome
       # typescript-language-server

@@ -38,23 +38,53 @@ in {
             function()
               return require("codecompanion.adapters").extend("gemini", {
                 env = {
-                  api_key = "GEMINI_API_KEY";
+                  api_key = "GEMINI_API_KEY",
                 },
               })
             end
           '';
-          ai_mop.__raw = ''
+          ollama.__raw = ''
+            function()
+              return require("codecompanion.adapters").extend("ollama", {
+                schema = {
+                  model = {
+                    default = "deepseek-r1:1.5b",
+                  },
+                },
+              })
+            end
+          '';
+          huggingface.__raw = ''
+            function()
+              return require("codecompanion.adapters").extend("huggingface", {
+                env = {
+                  api_key = "HF_INFERENCE_API_KEY",
+                },
+                schema = {
+                  model = {
+                    default = "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B",
+                    choices = {
+                      "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B",
+                      "Qwen/Qwen3-Coder-480B-A35B-Instruct",
+                      "google/gemma-2-2b-it",
+                    },
+                  },
+                },
+              })
+            end
+          '';
+          ai_mop_openai.__raw = ''
             function()
               return require("codecompanion.adapters").extend("openai_compatible", {
-                name = "ai_mop",
-                formatted_name = "AI MOP",
+                name = "ai_mop/openai",
+                formatted_name = "AI-MOP/OpenAI",
                 roles = {
                   llm = "assistant",
                   user = "user",
                 },
                 opts = {
                   stream = true,
-                  },
+                },
                 features = {
                   text = true,
                   tokens = true,
@@ -75,6 +105,43 @@ in {
                       "gpt-4.1-nano",
                     },
                     mapping = "parameters",
+                  },
+                }
+              })
+            end
+          '';
+          ai_mop_anthropic.__raw = ''
+            function()
+              return require("codecompanion.adapters").extend("anthropic", {
+                name = "ai_mop/anthropic",
+                formatted_name = "AI-MOP/Anthropic",
+                roles = {
+                  llm = "assistant",
+                  user = "user",
+                },
+                opts = {
+                  cache_breakpoints = 4,
+                  cache_over = 300,
+                  stream = true,
+                  tools = false,
+                  vision = false,
+                },
+                features = {
+                  text = true,
+                  tokens = true,
+                },
+                url = "https://api.anthropic.iniad.org/api/v1/messages",
+                env = {
+                  api_key = "AI_MOP_API_KEY",
+                },
+                schema = {
+                  model = {
+                    default = "claude-3-7-sonnet-latest",
+                    choices = {
+                      "claude-sonnet-4-0",
+                      "claude-3-7-sonnet-latest",
+                      "claude-3-5-sonnet-latest"
+                    },
                   },
                 }
               })
@@ -156,6 +223,8 @@ in {
                     deepwiki = true,
                     ["sequential-thinking"] = true,
                     readability = true,
+                    tavily = true,
+                    time = true,
                   }
                   if allowed_servers[params.server_name] then
                     return true

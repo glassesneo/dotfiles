@@ -30,24 +30,19 @@ inputs.nix-darwin.lib.darwinSystem rec {
         users.neo = {
           pkgs,
           lib,
-          config,
           ...
         }: let
           packages = with pkgs; [
             inputs.mcp-hub.packages."${system}".default
+            nodePackages.browser-sync
             bat
             btop
             coreutils
-            devbox
             duf
             fastfetch
             fd
-            imagemagick
-            jq
-            nowplaying-cli
             ripgrep
             sl
-            tdf
             unrar
             uv
             vim-startuptime
@@ -76,6 +71,7 @@ inputs.nix-darwin.lib.darwinSystem rec {
             ../home/common/eza.nix
             ../home/common/nixvim.nix
             ../home/common/oh-my-posh.nix
+            ../home/common/ollama.nix
             ../home/common/yazi.nix
             # ../home/common/zed-editor.nix
             # ../home/common/zellij.nix

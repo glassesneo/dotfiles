@@ -4,6 +4,8 @@ in {
   "gemini-api-key.age".publicKeys = [userKey];
   "ai-mop-api-key.age".publicKeys = [userKey];
   "brave-api-key.age".publicKeys = [userKey];
+  "tavily-api-key.age".publicKeys = [userKey];
+  "hf-inference-api-key.age".publicKeys = [userKey];
   "iniad-id.age".publicKeys = [userKey];
   "iniad-password.age".publicKeys = [userKey];
 }
