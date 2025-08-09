@@ -44,7 +44,10 @@
     in rec {
       dotfiles = pkgs.mkShellNoCC {
         name = "dotfiles";
-        # packages = with pkgs; [];
+        packages = with pkgs; [
+          lua-language-server
+          stylua
+        ];
       };
       default = dotfiles;
     };

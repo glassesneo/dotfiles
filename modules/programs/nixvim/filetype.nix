@@ -1,6 +1,8 @@
 {delib, ...}:
 delib.module {
-  name = "programs.nixvim";
+  name = "programs.nixvim.filetype";
+
+  options = delib.singleEnableOption true;
 
   home.ifEnabled.programs.nixvim = {
     autoCmd = [

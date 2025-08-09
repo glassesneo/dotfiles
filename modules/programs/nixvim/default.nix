@@ -20,13 +20,6 @@ delib.module {
     programs.nixvim = {
       enable = true;
       inherit (cfg) defaultEditor;
-      # extraConfigLuaPre = builtins.readFile ./config.lua;
-      # extraPackages = with pkgs; [
-      # deno
-      # efm-langserver
-      # stylua
-      # alejandra
-      # ];
       withNodeJs = false;
       withPerl = false;
       withPython3 = false;

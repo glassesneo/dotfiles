@@ -3,6 +3,7 @@ delib.module {
   name = "programs.nixvim";
 
   home.ifEnabled.programs.nixvim = {
+    extraConfigLuaPre = builtins.readFile ./extra_config.lua;
     opts = {
       helplang = ["en"];
       number = true;

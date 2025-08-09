@@ -1,0 +1,35 @@
+vim.g.mapleader = " "
+vim.keymap.set("i", "jj", [[<ESC>]], { silent = true })
+vim.keymap.set("t", "jj", [[<C-\><C-n>]], { silent = true })
+vim.keymap.set("n", "<S-h>", vim.cmd["bprev"], { silent = true })
+vim.keymap.set("n", "<S-l>", vim.cmd["bnext"], { silent = true })
+vim.keymap.set("n", "q", [[<Nop>]])
+vim.keymap.set("n", "<S-Y>", [[y$]], { silent = true })
+vim.keymap.set("n", "x", [["_d]], { silent = true })
+vim.keymap.set("n", "X", [["_D]], { silent = true })
+vim.keymap.set("n", "<Leader>r", 'yiw:%s/<C-r><C-r>"//g<Left><Left>', { silent = true })
+vim.keymap.set("x", "<Leader>r", 'y:%s/<C-r><C-r>"//g<Left><Left>', { silent = true })
+vim.keymap.set("n", "<S-r>", vim.lsp.buf.rename)
+vim.keymap.set({ "n", "v" }, "j", function()
+  return "gj"
+end, { expr = true, silent = true })
+vim.keymap.set({ "n", "v" }, "k", function()
+  return "gk"
+end, { expr = true, silent = true })
+vim.keymap.set({ "n", "v" }, "M", [[%]], { silent = true })
+vim.keymap.set({ "n", "v", "o" }, "<Leader>h", [[^]], { silent = true })
+vim.keymap.set({ "n", "v", "o" }, "<Leader>l", [[$]], { silent = true })
+vim.keymap.set({ "n" }, "<Leader>w", vim.cmd["w"], { silent = true })
+vim.keymap.set("x", "x", [["_x]], { silent = true })
+vim.keymap.set("o", "x", [[d]], { silent = true })
+vim.keymap.set("x", "y", [[mzy`z]], { silent = true })
+-- vim.keymap.set("x", "d", [[mzd`z]], { silent = true })
+vim.keymap.set("x", "gc", "mz:normal gcc<CR>`z", { silent = true })
+for _, quote in ipairs({ [["]], [[']], [[`]] }) do
+  vim.keymap.set({ "x", "o" }, "a" .. quote, "2i" .. quote)
+end
+
+vim.keymap.set("i", "<Left>", "<-", { silent = true })
+vim.keymap.set("i", "<Right>", "->", { silent = true })
+vim.keymap.set("i", "<S-Left>", "<=", { silent = true })
+vim.keymap.set("i", "<S-Right>", "=>", { silent = true })

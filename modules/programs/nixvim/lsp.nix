@@ -1,6 +1,13 @@
-{delib, ...}:
+{
+  delib,
+  lib,
+  pkgs,
+  ...
+}:
 delib.module {
-  name = "programs.nixvim";
+  name = "programs.nixvim.lsp";
+
+  options = delib.singleEnableOption true;
 
   home.ifEnabled.programs.nixvim = {
     lsp = {
@@ -10,7 +17,7 @@ delib.module {
           enable = true;
           package = null;
           settings = {
-            cmd = ["nix" "run" "nixpkgs#bash-language-server"];
+            cmd = ["${lib.getExe pkgs.bash-language-server}"];
           };
         };
         basedpyright = {
@@ -55,14 +62,14 @@ delib.module {
           # enable = true;
           package = null;
           settings = {
-            cmd = ["nix" "run" "nixpkgs#nls"];
+            cmd = ["${lib.getExe pkgs.nls}"];
           };
         };
         nil_ls = {
           # enable = true;
           package = null;
           settings = {
-            cmd = ["nix" "run" "nixpkgs#nil"];
+            cmd = ["${lib.getExe pkgs.nil}"];
             nix = {
               flake = {
                 autArchive = true;
@@ -74,7 +81,7 @@ delib.module {
           enable = true;
           package = null;
           settings = {
-            cmd = ["nix" "run" "nixpkgs#nixd"];
+            cmd = ["${lib.getExe pkgs.nixd}"];
             nixpkgs.expr = "import <nixpkgs> { }";
             formatting = {
               command = ["alejandra"];
@@ -175,6 +182,9 @@ delib.module {
             workspace = {
               library = unique_library_paths,
               checkThirdParty = false,
+              ignoreDir = {
+                ".*",
+              },
             },
             telemetry = { enable = false },
             hint = {
@@ -278,7 +288,7 @@ delib.module {
             },
             nix = {
               {
-                formatCommand = "alejandra -",
+                formatCommand = "${lib.getExe pkgs.alejandra} -",
                 formatStdin = true,
               }
             },
@@ -316,5 +326,6 @@ delib.module {
         },
       }
     '';
+    extraPackages = [pkgs.efm-langserver];
   };
 }

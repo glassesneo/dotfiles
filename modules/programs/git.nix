@@ -1,4 +1,8 @@
-{delib, homeConfig, ...}:
+{
+  delib,
+  homeConfig,
+  ...
+}:
 delib.module {
   name = "programs.git";
 
