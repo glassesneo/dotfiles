@@ -32,6 +32,11 @@ delib.module {
             keys = [
               {
                 __unkeyed-1 = "<Space><Space>";
+                __unkeyed-3 = "<Cmd>FzfLua files<CR>";
+              }
+              {
+                __unkeyed-1 = "<Space>g";
+                __unkeyed-3 = "<Cmd>FzfLua live_grep<CR>";
               }
             ];
           };
@@ -39,20 +44,20 @@ delib.module {
       };
     };
     keymaps = [
-      {
-        action = "<Cmd>FzfLua files<CR>";
-        key = "<Space><Space>";
-        options = {
-          silent = true;
-        };
-      }
-      {
-        action = "<Cmd>FzfLua live_grep<CR>";
-        key = "<Space>g";
-        options = {
-          silent = true;
-        };
-      }
+      # {
+      # action = "<Cmd>FzfLua files<CR>";
+      # key = "<Space><Space>";
+      # options = {
+      # silent = true;
+      # };
+      # }
+      # {
+      # action = "<Cmd>FzfLua live_grep<CR>";
+      # key = "<Space>g";
+      # options = {
+      # silent = true;
+      # };
+      # }
     ];
   };
 }
