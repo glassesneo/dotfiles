@@ -73,6 +73,18 @@
       url = "github:nix-community/nixvim/main";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    mcp-hub = {
+      url = "github:ravitemer/mcp-hub";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    mcphub-nvim = {
+      url = "github:ravitemer/mcphub.nvim";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    mcp-servers-nix = {
+      url = "github:natsukium/mcp-servers-nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     brew-nix = {
       url = "github:BatteredBunny/brew-nix";
       inputs.nix-darwin.follows = "nix-darwin";

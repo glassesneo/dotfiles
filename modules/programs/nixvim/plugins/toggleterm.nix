@@ -15,8 +15,8 @@ delib.module {
             height = 30;
             width = 130;
           };
-          open_mapping = "[[<Space>\\]]";
-          insert_mappings = false;
+          open_mapping = "[[<c-\\>]]";
+          # insert_mappings = false;
         };
       };
     };

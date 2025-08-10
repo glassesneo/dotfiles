@@ -1,5 +1,6 @@
 {
   delib,
+  homeConfig,
   lib,
   pkgs,
   ...
@@ -21,7 +22,7 @@ delib.module {
               "InsertEnter"
               "CmdlineEnter"
             ];
-            cmd = [
+            cmd = lib.mkIf homeConfig.programs.nixvim.plugins.codecompanion.enable [
               "CodeCompanion"
               "CodeCompanionChat"
             ];
