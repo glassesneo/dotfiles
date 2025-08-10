@@ -3,6 +3,7 @@
   homeConfig,
   inputs,
   lib,
+  moduleSystem,
   pkgs,
   ...
 }:
