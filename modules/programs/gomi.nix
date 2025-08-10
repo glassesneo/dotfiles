@@ -9,7 +9,7 @@ delib.module {
   options = delib.singleEnableOption true;
 
   home.ifEnabled = {
-    programs.zsh.shellAliases = {
+    home.shellAliases = {
       rm = "gomi";
     };
 

@@ -46,6 +46,13 @@ delib.module {
           silent = true;
         };
       }
+      {
+        action = "<Cmd>FzfLua live_grep<CR>";
+        key = "<Space>g";
+        options = {
+          silent = true;
+        };
+      }
     ];
   };
 }
