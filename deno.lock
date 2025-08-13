@@ -1,0 +1,153 @@
+{
+  "version": "5",
+  "specifiers": {
+    "jsr:@core/unknownutil@^3.18.0": "3.18.1",
+    "jsr:@core/unknownutil@^4.3.0": "4.3.0",
+    "jsr:@denops/core@7": "7.0.1",
+    "jsr:@denops/std@7.1": "7.1.1",
+    "jsr:@denops/std@^7.6.0": "7.6.0",
+    "jsr:@lambdalisue/errorutil@1": "1.1.1",
+    "jsr:@lambdalisue/itertools@^1.1.2": "1.1.2",
+    "jsr:@lambdalisue/unreachable@^1.0.1": "1.0.1",
+    "jsr:@shougo/dpp-ext-lazy@^1.5.0": "1.5.0",
+    "jsr:@shougo/dpp-ext-toml@^1.3.0": "1.3.0",
+    "jsr:@shougo/dpp-vim@3.0": "3.0.0",
+    "jsr:@shougo/dpp-vim@^4.7.0": "4.7.0",
+    "jsr:@std/assert@~1.0.2": "1.0.13",
+    "jsr:@std/collections@^1.1.1": "1.1.2",
+    "jsr:@std/fs@1": "1.0.19",
+    "jsr:@std/fs@^1.0.19": "1.0.19",
+    "jsr:@std/internal@^1.0.6": "1.0.9",
+    "jsr:@std/internal@^1.0.9": "1.0.9",
+    "jsr:@std/path@1.1": "1.1.1",
+    "jsr:@std/path@^1.0.2": "1.1.1",
+    "jsr:@std/path@^1.1.1": "1.1.1",
+    "jsr:@std/path@~1.0.2": "1.0.9",
+    "jsr:@std/semver@1": "1.0.5",
+    "jsr:@std/toml@1.0": "1.0.8",
+    "jsr:@std/ulid@1": "1.0.0"
+  },
+  "jsr": {
+    "@core/unknownutil@3.18.1": {
+      "integrity": "6aaa108b623ff971d062dd345da7ca03b97f61ae3d29c8677bff14fec11f0d76"
+    },
+    "@core/unknownutil@4.3.0": {
+      "integrity": "538a3687ffa81028e91d148818047df219663d0da671d906cecd165581ae55cc"
+    },
+    "@denops/core@7.0.1": {
+      "integrity": "ede39eec60de6d5bf0fbc0337d3e420a9689cc48afea8c71752e6c0fb630bde0"
+    },
+    "@denops/std@7.1.1": {
+      "integrity": "9178027fc9192034842ac4d8d7219ce65ea80cb115b722e681e5c3630b503cb8",
+      "dependencies": [
+        "jsr:@core/unknownutil@^4.3.0",
+        "jsr:@std/semver",
+        "jsr:@std/ulid"
+      ]
+    },
+    "@denops/std@7.6.0": {
+      "integrity": "468a5b4121378a845bbc4cd705fe0075dff9cd0af41fbb8a797870535af5c4c8",
+      "dependencies": [
+        "jsr:@core/unknownutil@^4.3.0",
+        "jsr:@denops/core",
+        "jsr:@lambdalisue/errorutil",
+        "jsr:@lambdalisue/itertools",
+        "jsr:@lambdalisue/unreachable",
+        "jsr:@std/fs@1",
+        "jsr:@std/path@^1.0.2",
+        "jsr:@std/semver",
+        "jsr:@std/ulid"
+      ]
+    },
+    "@lambdalisue/errorutil@1.1.1": {
+      "integrity": "d0234a8a510da52f130c44698643b7f420f332ef2ffce1451415925b14f5f63f",
+      "dependencies": [
+        "jsr:@core/unknownutil@^3.18.0"
+      ]
+    },
+    "@lambdalisue/itertools@1.1.2": {
+      "integrity": "1b8c45a5ab7102a3ff1aa64c8ec0bdb12aee845bec5bf85458ed83446125587a"
+    },
+    "@lambdalisue/unreachable@1.0.1": {
+      "integrity": "24b0743775e92ea0d076beaf0869bfbe4708054ac570742628684fb35ccda0d4"
+    },
+    "@shougo/dpp-ext-lazy@1.5.0": {
+      "integrity": "ebd9741e2cecf3324a8dc2a3a8cd945b35d34f312ae3cd06a349c230b94e6ff1",
+      "dependencies": [
+        "jsr:@denops/std@7.1",
+        "jsr:@shougo/dpp-vim@3.0"
+      ]
+    },
+    "@shougo/dpp-ext-toml@1.3.0": {
+      "integrity": "25a44defbc857c50d6426c74ddabd4280041c972a55e8ee76820878015c33d47",
+      "dependencies": [
+        "jsr:@shougo/dpp-vim@3.0",
+        "jsr:@std/path@~1.0.2",
+        "jsr:@std/toml"
+      ]
+    },
+    "@shougo/dpp-vim@3.0.0": {
+      "integrity": "0c5e5ac938f8ed464e224dfa530d187fd9ca41a370d7b9b3c8b66cd0ab983ad2",
+      "dependencies": [
+        "jsr:@std/assert",
+        "jsr:@std/path@~1.0.2"
+      ]
+    },
+    "@shougo/dpp-vim@4.7.0": {
+      "integrity": "ef669cfb6d8cac434d140a0ec2acb024c82a8221accf5018addd1e2667896654",
+      "dependencies": [
+        "jsr:@std/assert",
+        "jsr:@std/path@1.1"
+      ]
+    },
+    "@std/assert@1.0.13": {
+      "integrity": "ae0d31e41919b12c656c742b22522c32fb26ed0cba32975cb0de2a273cb68b29",
+      "dependencies": [
+        "jsr:@std/internal@^1.0.6"
+      ]
+    },
+    "@std/collections@1.1.2": {
+      "integrity": "f1685dd45c3ec27c39d0e8a642ccf810f391ec8a6cb5e7355926e6dacc64c43e"
+    },
+    "@std/fs@1.0.19": {
+      "integrity": "051968c2b1eae4d2ea9f79a08a3845740ef6af10356aff43d3e2ef11ed09fb06",
+      "dependencies": [
+        "jsr:@std/internal@^1.0.9",
+        "jsr:@std/path@^1.1.1"
+      ]
+    },
+    "@std/internal@1.0.9": {
+      "integrity": "bdfb97f83e4db7a13e8faab26fb1958d1b80cc64366501af78a0aee151696eb8"
+    },
+    "@std/path@1.0.9": {
+      "integrity": "260a49f11edd3db93dd38350bf9cd1b4d1366afa98e81b86167b4e3dd750129e"
+    },
+    "@std/path@1.1.1": {
+      "integrity": "fe00026bd3a7e6a27f73709b83c607798be40e20c81dde655ce34052fd82ec76",
+      "dependencies": [
+        "jsr:@std/internal@^1.0.9"
+      ]
+    },
+    "@std/semver@1.0.5": {
+      "integrity": "529f79e83705714c105ad0ba55bec0f9da0f24d2f726b6cc1c15e505cc2c0624"
+    },
+    "@std/toml@1.0.8": {
+      "integrity": "eb8ae76b4cc1c6c13f2a91123675823adbec2380de75cd3748c628960d952164",
+      "dependencies": [
+        "jsr:@std/collections"
+      ]
+    },
+    "@std/ulid@1.0.0": {
+      "integrity": "d41c3d27a907714413649fee864b7cde8d42ee68437d22b79d5de4f81d808780"
+    }
+  },
+  "workspace": {
+    "dependencies": [
+      "jsr:@denops/std@^7.6.0",
+      "jsr:@shougo/dpp-ext-lazy@^1.5.0",
+      "jsr:@shougo/dpp-ext-toml@^1.3.0",
+      "jsr:@shougo/dpp-vim@^4.7.0",
+      "jsr:@std/fs@^1.0.19"
+    ]
+  }
+}
