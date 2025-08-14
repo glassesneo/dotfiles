@@ -43,8 +43,16 @@ delib.module {
       "dpp/plugins" = {
         source = ./plugins;
       };
+      "dpp/hooks/skk.lua" = {
+        source = pkgs.replaceVars ./hooks/skk.lua {
+          skk-dict-path = "${pkgs.skkDictionaries.l}/share/skk/SKK-JISYO.L";
+        };
+      };
     };
     programs.nixvim = {
+      env = {
+        DPP_HOOK_DIR = "${homeConfig.xdg.configHome}/dpp/hooks";
+      };
       extraPlugins = [pkgs.vimPlugins.denops-vim];
       extraConfigLuaPre = ''
         ${dpp-rtp-config}

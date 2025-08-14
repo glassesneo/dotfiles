@@ -59,6 +59,7 @@ export class Config extends BaseConfig {
 
       const tomlPromises = [
         { name: "motion.toml", lazy: true },
+        { name: "skk.toml", lazy: true },
       ].map((tomlFile) =>
         action.callback({
           denops: args.denops,
