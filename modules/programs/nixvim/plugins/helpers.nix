@@ -10,12 +10,21 @@ delib.module {
 
   home.ifEnabled.programs.nixvim = {
     extraPlugins = with pkgs.vimPlugins; [
-      mkdir-nvim
-      numb-nvim
       vim-eunuch
+      mkdir-nvim
+      {
+        plugin = numb-nvim;
+        optional = true;
+      }
     ];
     extraConfigLua = ''
-      require("numb").setup()
+      require('lz.n').load({{
+        'numb.nvim',
+        event = {"CmdlineEnter"},
+        after = function()
+          require('numb').setup()
+        end,
+      }})
     '';
   };
 }

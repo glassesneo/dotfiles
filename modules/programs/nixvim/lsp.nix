@@ -135,7 +135,9 @@ delib.module {
       };
     };
     plugins = {
-      lspconfig.enable = true;
+      lspconfig = {
+        enable = true;
+      };
       lsp-format = {
         enable = true;
         lspServersToEnable = [

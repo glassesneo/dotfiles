@@ -23,6 +23,12 @@ delib.module {
             height = 0.5;
             row = 0.9;
             width = 0.93;
+            backdrop = 100;
+          };
+          fzf_colors = {
+            __unkeyed-1 = true;
+            bg = "-1";
+            gutter = "-1";
           };
         };
         lazyLoad = {

@@ -12,8 +12,8 @@ delib.module {
       signcolumn = "yes";
       list = true;
       cmdheight = 1;
-      winblend = 0;
-      pumblend = 20;
+      winblend = 5;
+      pumblend = 0;
       winborder = "bold";
       termguicolors = true;
       wildoptions = "pum";
@@ -64,7 +64,8 @@ delib.module {
     performance = {
       byteCompileLua = {
         configs = true;
-        # initLua = true;
+        initLua = true;
+        luaLib = true;
         nvimRuntime = true;
         plugins = true;
       };

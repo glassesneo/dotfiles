@@ -22,6 +22,7 @@ delib.module {
             treesitter = true;
           };
         };
+        lazyLoad.enable = true;
       };
       # cyberdream = {
       #   enable = true;
@@ -51,11 +52,6 @@ delib.module {
             };
           };
         };
-      };
-    };
-    highlightOverride = {
-      CursorLineNr = {
-        fg = "#f5f5f5";
       };
     };
   };

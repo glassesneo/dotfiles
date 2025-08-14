@@ -24,6 +24,7 @@ delib.module {
       withPerl = false;
       withPython3 = false;
       withRuby = false;
+      wrapRc = false;
       autoCmd = [
         {
           event = "TextYankPost";

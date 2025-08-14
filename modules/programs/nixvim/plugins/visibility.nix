@@ -10,6 +10,26 @@ delib.module {
 
   home.ifEnabled.programs.nixvim = {
     plugins = {
+      hlchunk = {
+        enable = true;
+        lazyLoad = {
+          enable = true;
+          settings = {
+            event = ["BufRead" "BufNewFile"];
+          };
+        };
+        settings = {
+          chunk.enable = false;
+          line_num = {
+            enable = true;
+            style = "#f9e2af";
+          };
+          indent = {
+            enable = true;
+            style = "#6c7086";
+          };
+        };
+      };
       marks = {
         enable = true;
         defaultMappings = false;
@@ -87,39 +107,8 @@ delib.module {
       };
     };
     extraPlugins = with pkgs.vimPlugins; [
-      hlchunk-nvim
       quick-scope
       # nvim_context_vt
     ];
-    extraConfigLua = ''
-      require('hlchunk').setup({
-        chunk = {
-          -- enable = true,
-          style = {
-            "#f9e2af",
-            "#f38ba8",
-          },
-          chars = {
-            horizontal_line = "─",
-            vertical_line = "│",
-            left_top = "╭",
-            left_bottom = "╰",
-            right_arrow = ">",
-          },
-          style = "#806d9c",
-        },
-        line_num = {
-          enable = true,
-          style = "#f9e2af",
-        },
-        indent = {
-          enable = true,
-          style = "#6c7086",
-        },
-      })
-      -- require('nvim_context_vt').setup({
-        -- prefix = "",
-      -- })
-    '';
   };
 }
