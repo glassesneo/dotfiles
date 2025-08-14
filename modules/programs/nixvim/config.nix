@@ -12,7 +12,7 @@ delib.module {
       signcolumn = "yes";
       list = true;
       cmdheight = 1;
-      winblend = 40;
+      winblend = 0;
       pumblend = 20;
       winborder = "bold";
       termguicolors = true;
