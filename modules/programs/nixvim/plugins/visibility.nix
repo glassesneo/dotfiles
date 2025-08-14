@@ -21,8 +21,6 @@ delib.module {
           hide_cursor = false;
           stop_eof = false;
           respect_scrolloff = true;
-          # pre_hook = "require('neoscroll-config').pre_hook";
-          # post_hook = "require('neoscroll-config').post_hook";
         };
         lazyLoad = {
           enable = true;

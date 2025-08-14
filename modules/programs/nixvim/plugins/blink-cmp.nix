@@ -1,6 +1,5 @@
 {
   delib,
-  homeConfig,
   lib,
   pkgs,
   ...
@@ -10,23 +9,21 @@ delib.module {
 
   options = delib.singleEnableOption true;
 
-  home.ifEnabled.programs.nixvim = {
-    plugins = {
+  home.ifEnabled = let
+    lazyLoadSettings = {
+      event = [
+        "InsertEnter"
+        "CmdlineEnter"
+      ];
+    };
+  in {
+    programs.nixvim.plugins = {
       blink-cmp = {
         enable = true;
         setupLspCapabilities = true;
         lazyLoad = {
-          enable = false;
-          settings = {
-            event = [
-              "InsertEnter"
-              "CmdlineEnter"
-            ];
-            cmd = lib.mkIf homeConfig.programs.nixvim.plugins.codecompanion.enable [
-              "CodeCompanion"
-              "CodeCompanionChat"
-            ];
-          };
+          enable = true;
+          settings = lazyLoadSettings;
         };
         settings = {
           appearance = {
@@ -90,7 +87,7 @@ delib.module {
               function()
                 local type = vim.fn.getcmdtype()
                 if type == '/' or type == '?' then return { 'buffer' } end
-                if type == ':' or type == '@' then return { 'cmdline', 'cmdline_history' } end
+                if type == ':' or type == '@' then return { 'cmdline' } end
                 return {}
               end
             '';
@@ -99,6 +96,7 @@ delib.module {
             commonSources = [
               "path"
               "buffer"
+              "ripgrep"
               "copilot"
               "snippets"
               "git"
@@ -123,14 +121,13 @@ delib.module {
                 name = "copilot";
                 score_offset = 5;
               };
-              cmdline_history = {
-                module = "blink.compat.source";
-                name = "cmdline_history";
-                score_offset = -3;
-              };
               git = {
                 module = "blink-cmp-git";
                 name = "git";
+              };
+              ripgrep = {
+                module = "blink-ripgrep";
+                name = "ripgrep";
               };
               lsp = {
                 fallbacks = [];
@@ -184,30 +181,41 @@ delib.module {
           };
         };
       };
-      blink-cmp-copilot.enable = true;
-      blink-cmp-git.enable = true;
+      blink-cmp-copilot = {
+        enable = true;
+      };
+      blink-cmp-git = {
+        enable = true;
+        lazyLoad = {
+          enable = true;
+          settings = lazyLoadSettings;
+        };
+      };
+      blink-ripgrep = {
+        enable = true;
+        lazyLoad = {
+          enable = true;
+          settings = lazyLoadSettings;
+        };
+      };
       blink-compat = {
         enable = true;
+        lazyLoad = {
+          enable = true;
+          settings = lazyLoadSettings;
+        };
       };
       luasnip = {
         enable = true;
+        lazyLoad = {
+          enable = true;
+          settings = lazyLoadSettings;
+        };
       };
       friendly-snippets = {
         enable = true;
       };
     };
-    extraPlugins = let
-      cmp-cmdline-history = pkgs.vimUtils.buildVimPlugin rec {
-        name = "cmp-cmdline-history";
-        src = pkgs.fetchFromGitHub {
-          owner = "dmitmel";
-          repo = name;
-          rev = "003573b72d4635ce636234a826fa8c4ba2895ffe";
-          hash = "sha256-IcruTOCNxYKmbo0St1U+CmrDStASPLe+rTLNU6/2Xew=";
-        };
-      };
-    in [
-      cmp-cmdline-history
-    ];
+    home.packages = [pkgs.ripgrep];
   };
 }

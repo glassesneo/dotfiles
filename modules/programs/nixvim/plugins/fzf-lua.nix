@@ -19,9 +19,9 @@ delib.module {
             prompt = "Files❯ ";
           };
           winopts = {
-            col = 0.3;
+            col = 0.5;
             height = 0.5;
-            row = 0.99;
+            row = 0.9;
             width = 0.93;
           };
         };
@@ -43,21 +43,5 @@ delib.module {
         };
       };
     };
-    keymaps = [
-      # {
-      # action = "<Cmd>FzfLua files<CR>";
-      # key = "<Space><Space>";
-      # options = {
-      # silent = true;
-      # };
-      # }
-      # {
-      # action = "<Cmd>FzfLua live_grep<CR>";
-      # key = "<Space>g";
-      # options = {
-      # silent = true;
-      # };
-      # }
-    ];
   };
 }

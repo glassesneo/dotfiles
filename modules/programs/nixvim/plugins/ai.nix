@@ -1,5 +1,6 @@
 {
   delib,
+  homeConfig,
   host,
   inputs,
   lib,
@@ -22,9 +23,107 @@ in
             panel.enabled = false;
             suggestion.enabled = false;
           };
+          lazyLoad = {
+            enable = true;
+            settings.cmd = ["InsertEnter"];
+          };
         };
         codecompanion = {
           enable = true;
+          lazyLoad = let
+            load-fzf-lua = lib.optionalString homeConfig.programs.nixvim.plugins.fzf-lua.enable ''
+              require('lz.n').trigger_load('fzf-lua')
+            '';
+            load-blink-cmp-provider = lib.optionalString homeConfig.programs.nixvim.plugins.blink-cmp.enable ''
+              require('lz.n').trigger_load('blink.cmp')
+              local blink = require("blink.cmp")
+              blink.add_source_provider("codecompanion", {
+                name = "CodeCompanion",
+                module = "codecompanion.providers.completion.blink",
+                enabled = true,
+              })
+            '';
+          in {
+            enable = true;
+            settings = {
+              cmd = [
+                "CodeCompanion"
+                "CodeCompanionChat"
+              ];
+              keys = [
+                {
+                  __unkeyed-1 = "<Space>c";
+                  mode = ["n"];
+                  __unkeyed-3 = "<Cmd>CodeCompanionChat Toggle<CR>";
+                }
+              ];
+              before.__raw = ''
+                function()
+                  require("lz.n").trigger_load("codecompanion-history.nvim")
+
+                  ${load-fzf-lua}
+                  ${load-blink-cmp-provider}
+
+                  require("lz.n").trigger_load("mcphub")
+
+                  require("mcphub").setup({
+                    auto_approve = function(params)
+                      local allowed_servers = {
+                        context7 = true,
+                        ["brave-search"] = true,
+                        deepwiki = true,
+                        ["sequential-thinking"] = true,
+                        readability = true,
+                        tavily = true,
+                        time = true,
+                      }
+                      if allowed_servers[params.server_name] then
+                        return true
+                      end
+
+                      local allowed_filesystem_tools = {
+                        directory_tree = true,
+                        get_file_info = true,
+                        list_allowed_directories = true,
+                        list_directory = true,
+                        read_file = true,
+                        read_multiple_files = true,
+                        search_files = true,
+                      }
+
+                      if params.server_name == "filesystem" and allowed_filesystem_tools[params.tool_name] then
+                        return true
+                      end
+
+                      local allowed_neovim_tools = {
+                        list_directory = true,
+                        read_file = true,
+                      }
+
+                      if params.server_name == "neovim" and allowed_neovim_tools[params.tool_name] then
+                        return true
+                      end
+
+                      local allowed_memory_tools = {
+                        read_graph = true,
+                      }
+
+                      if params.server_name == "memory" and allowed_memory_tools[params.tool_name] then
+                        return true
+                      end
+
+                      if params.server_name == "mcphub" and params.tool_name == "get_current_servers" then
+                        return true
+                      end
+
+                      return false
+                    end,
+                    cmd = "${lib.getExe' mcp-hub "mcp-hub"}"
+                  })
+                end
+              '';
+            };
+          };
           settings = {
             adapters = {
               copilot.__raw = ''
@@ -212,99 +311,20 @@ in
               };
             };
           };
-          lazyLoad = {
-            enable = true;
-            settings = {
-              cmd = [
-                "CodeCompanion"
-                "CodeCompanionChat"
-              ];
-              before.__raw = ''
-                function()
-                  require("lz.n").trigger_load("mcphub")
-
-                  require("mcphub").setup({
-                    auto_approve = function(params)
-                      local allowed_servers = {
-                        context7 = true,
-                        ["brave-search"] = true,
-                        deepwiki = true,
-                        ["sequential-thinking"] = true,
-                        readability = true,
-                        tavily = true,
-                        time = true,
-                      }
-                      if allowed_servers[params.server_name] then
-                        return true
-                      end
-
-                      local allowed_filesystem_tools = {
-                        directory_tree = true,
-                        get_file_info = true,
-                        list_allowed_directories = true,
-                        list_directory = true,
-                        read_file = true,
-                        read_multiple_files = true,
-                        search_files = true,
-                      }
-
-                      if params.server_name == "filesystem" and allowed_filesystem_tools[params.tool_name] then
-                        return true
-                      end
-
-                      local allowed_neovim_tools = {
-                        list_directory = true,
-                        read_file = true,
-                      }
-
-                      if params.server_name == "neovim" and allowed_neovim_tools[params.tool_name] then
-                        return true
-                      end
-
-                      local allowed_memory_tools = {
-                        read_graph = true,
-                      }
-
-                      if params.server_name == "memory" and allowed_memory_tools[params.tool_name] then
-                        return true
-                      end
-
-                      if params.server_name == "mcphub" and params.tool_name == "get_current_servers" then
-                        return true
-                      end
-
-                      return false
-                    end,
-                    cmd = "${lib.getExe' mcp-hub "mcp-hub"}"
-                  })
-                end
-              '';
-            };
-          };
         };
       };
       extraPlugins = [
-        pkgs.vimPlugins.codecompanion-history-nvim
-        pkgs.vimPlugins.plenary-nvim
+        {
+          plugin = pkgs.vimPlugins.codecompanion-history-nvim;
+          optional = true;
+        }
         mcphub-nvim
       ];
-      keymaps = [
-        {
-          action = "<Cmd>CodeCompanionChat Toggle<CR>";
-          key = "<Space>c";
-          mode = ["n"];
-          options = {
-            silent = true;
-          };
-        }
-        {
-          action = "CodeCompanion";
-          key = "CC";
-          mode = ["ca"];
-          options = {
-            silent = true;
-          };
-        }
-      ];
+
+      extraConfigLua = ''
+        require('lz.n').load({{
+          'codecompanion-history.nvim',
+        }})
+      '';
     };
   }

@@ -1,8 +1,4 @@
-{
-  delib,
-  pkgs,
-  ...
-}:
+{delib, ...}:
 delib.module {
   name = "programs.nixvim.plugins.editing";
 
@@ -10,21 +6,30 @@ delib.module {
 
   home.ifEnabled.programs.nixvim = {
     plugins = {
-      parinfer-rust = {
-        # enable = true;
-        settings = {
-          force_balance = true;
-        };
-      };
       nvim-surround = {
         enable = true;
         lazyLoad = {
           enable = true;
           settings = {
             event = [
-              "VimEnter"
+              "BufRead"
+              "BufNewFile"
             ];
           };
+        };
+      };
+      ts-context-commentstring = {
+        enable = true;
+        extraOptions = {
+          enable_autocmd = false;
+        };
+        languages = {
+          elm = "-- %s";
+          nim = "# %s";
+          nu = "# %s";
+          typst = "// %s";
+          v = "// %s";
+          zig = "// %s";
         };
       };
       autoclose = {
@@ -43,11 +48,5 @@ delib.module {
         };
       };
     };
-    extraPlugins = [
-      pkgs.vimPlugins.tabout-nvim
-    ];
-    extraConfigLuaPre = ''
-      require("tabout").setup({})
-    '';
   };
 }

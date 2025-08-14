@@ -58,8 +58,7 @@ export class Config extends BaseConfig {
       const action = tomlExt.actions.load;
 
       const tomlPromises = [
-        { name: "motion.toml" },
-        // { name: "skk.toml" },
+        { name: "motion.toml", lazy: true },
       ].map((tomlFile) =>
         action.callback({
           denops: args.denops,
@@ -70,7 +69,7 @@ export class Config extends BaseConfig {
           extParams: tomlParams,
           actionParams: {
             path: "@plugin-dir-path@" + "/" + tomlFile.name,
-            options: { lazy: false },
+            options: { lazy: tomlFile.lazy },
           },
         })
       );

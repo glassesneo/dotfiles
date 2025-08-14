@@ -13,20 +13,21 @@ delib.module {
 
   home.ifEnabled = let
     dpp-plugins =
-      lib.attrsets.mapAttrsToList
+      inputs
+      |> lib.attrsets.getAttrs
+      [
+        "dpp-vim"
+        "dpp-ext-installer"
+        "dpp-ext-lazy"
+        "dpp-ext-toml"
+        "dpp-protocol-git"
+      ]
+      |> lib.attrsets.mapAttrsToList
       (name: src:
         pkgs.vimUtils.buildVimPlugin {
           inherit name src;
           dependencies = [pkgs.vimPlugins.denops-vim];
-        }) (lib.attrsets.getAttrs
-        [
-          "dpp-vim"
-          "dpp-ext-installer"
-          "dpp-ext-lazy"
-          "dpp-ext-toml"
-          "dpp-protocol-git"
-        ]
-        inputs);
+        });
     dpp-rtp-config =
       lib.strings.concatMapStrings (plugin: ''
         vim.opt.runtimepath:prepend("${plugin}")
