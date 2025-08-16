@@ -1,7 +1,4 @@
-{
-  delib,
-  ...
-}:
+{delib, ...}:
 delib.module {
   name = "xdg";
 

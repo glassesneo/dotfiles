@@ -17,9 +17,6 @@ delib.module {
       autosuggestion.enable = true;
       syntaxHighlighting.enable = true;
       autocd = true;
-      shellAliases = {
-        bd = "cd ..";
-      };
       history = {
         extended = true;
         size = 10000;
