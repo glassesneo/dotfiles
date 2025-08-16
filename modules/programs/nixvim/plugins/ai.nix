@@ -25,7 +25,9 @@ in
           };
           lazyLoad = {
             enable = true;
-            settings.cmd = ["InsertEnter"];
+            settings = {
+              cmd = ["InsertEnter"];
+            };
           };
         };
         codecompanion = {

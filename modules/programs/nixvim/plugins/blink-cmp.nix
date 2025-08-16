@@ -1,7 +1,6 @@
 {
   delib,
   lib,
-  pkgs,
   ...
 }:
 delib.module {
@@ -120,7 +119,7 @@ delib.module {
                   async = true;
                   module = "blink-cmp-copilot";
                   name = "copilot";
-                  score_offset = 5;
+                  score_offset = 3;
                 };
                 git = {
                   module = "blink-cmp-git";
@@ -132,6 +131,7 @@ delib.module {
                 };
                 lsp = {
                   fallbacks = [];
+                  score_offset = 3;
                 };
                 cmdline = {
                   # min_keyword_length.__raw = ''
@@ -184,6 +184,18 @@ delib.module {
         };
         blink-cmp-copilot = {
           enable = true;
+          lazyLoad = {
+            enable = true;
+            settings =
+              lazyLoadSettings
+              // {
+                before.__raw = ''
+                  function()
+                    require("lz.n").trigger_load('copilot.lua')
+                  end
+                '';
+              };
+          };
         };
         blink-cmp-git = {
           enable = true;

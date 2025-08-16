@@ -12,6 +12,7 @@ delib.module {
           columns = ["icon"];
           default_file_explorer = true;
           use_default_keymaps = false;
+          skip_confirm_for_simple_edits = true;
           keymaps = {
             "<CR>" = "actions.select";
             "<BS>" = "actions.parent";

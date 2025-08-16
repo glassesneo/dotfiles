@@ -96,13 +96,6 @@ delib.module {
           enable = true;
           package = null;
         };
-        sourcekit = {
-          enable = true;
-          package = null;
-          settings = {
-            cmd = ["sourcekit-lsp"];
-          };
-        };
         taplo = {
           enable = true;
           package = null;
@@ -151,6 +144,7 @@ delib.module {
     };
     extraConfigLuaPost = ''
       vim.lsp.enable({ "lua_ls" })
+      vim.lsp.enable({ "sourcekit" })
       vim.lsp.enable({ "denols" })
       vim.lsp.enable({ "kotlin_lsp" })
       vim.lsp.enable({ "efm" })
@@ -205,6 +199,10 @@ delib.module {
       -- rootMarkers = {},
       -- }
       -- }
+
+      vim.lsp.config.sourcekit = {
+        single_file_support = true,
+      }
 
       vim.lsp.config.denols = {
         single_file_support = true,

@@ -18,8 +18,31 @@ delib.module {
           };
         };
       };
-      ts-context-commentstring = {
+      ts-comments = {
         enable = true;
+        settings = {
+          lang = {
+            elm = "-- %s";
+            lua = "-- %s";
+            nim = "# %s";
+            nix = "# %s";
+            nu = "# %s";
+            typst = "// %s";
+            zig = "// %s";
+          };
+        };
+        lazyLoad = {
+          enable = true;
+          settings = {
+            event = [
+              "BufRead"
+              "BufNewFile"
+            ];
+          };
+        };
+      };
+      ts-context-commentstring = {
+        # enable = true;
         extraOptions = {
           enable_autocmd = false;
         };
