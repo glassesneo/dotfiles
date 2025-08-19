@@ -75,7 +75,6 @@ export class Config extends BaseConfig {
         })
       );
       const tomls = await Promise.all(tomlPromises);
-      console.log(tomls);
       // const tomls: Toml[] = [];
       for (const toml of tomls) {
         for (const plugin of toml.plugins ?? []) {
