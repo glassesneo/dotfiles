@@ -46,21 +46,44 @@ delib.module {
     diagnostic.settings = {
       severity_sort = true;
       float = {
-        border = "single";
-        title = "Diagnostics";
+        border = "none";
+        # title = "Diagnostics";
         header = {};
         suffix = {};
         format.__raw = ''
           function(diag)
             if diag.code then
-              return string.format("[%s](%s): %s", diag.source, diag.code, diag.message)
+              return string.format("[%s](%s): %s", diag.message, diag.source, diag.code)
             else
-              return string.format("[%s]: %s", diag.source, diag.message)
+              return string.format("[%s]: %s", diag.message, diag.source)
             end
           end
         '';
       };
+      virtual_text = {
+        format.__raw = ''
+          function(diag)
+            return string.format("%s (%s: %s)", diag.message, diag.source, diag.code)
+          end
+        '';
+      };
+      # virtual_lines = {
+      # current_line = true;
+      # };
+      underline = true;
     };
+    autoCmd = [
+      # {
+      #   event = "CursorHold";
+      #   callback.__raw = ''
+      #     function()
+      #       vim.diagnostic.open_float({
+      #         scope = 'cursor',
+      #       })
+      #     end
+      #   '';
+      # }
+    ];
     performance = {
       byteCompileLua = {
         configs = true;

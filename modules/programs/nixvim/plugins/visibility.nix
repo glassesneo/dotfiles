@@ -79,7 +79,7 @@ delib.module {
         };
       };
       tiny-inline-diagnostic = {
-        enable = true;
+        # enable = true;
         lazyLoad = {
           enable = true;
           settings = {
@@ -93,7 +93,7 @@ delib.module {
           options = {
             use_icons_from_diagnostic = true;
           };
-          preset = "classic";
+          preset = "powerline";
           virt_texts = {
             priority = 2048;
           };

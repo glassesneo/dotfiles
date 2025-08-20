@@ -58,6 +58,7 @@ export class Config extends BaseConfig {
       const action = tomlExt.actions.load;
 
       const tomlPromises = [
+        { name: "editing.toml", lazy: true },
         { name: "motion.toml", lazy: true },
         { name: "skk.toml", lazy: true },
       ].map((tomlFile) =>
