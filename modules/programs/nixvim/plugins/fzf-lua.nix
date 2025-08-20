@@ -24,12 +24,18 @@ delib.module {
             row = 0.9;
             width = 0.93;
             backdrop = 100;
+            border = "single";
           };
           fzf_colors = {
             __unkeyed-1 = true;
             bg = "-1";
             gutter = "-1";
           };
+        };
+        luaConfig = {
+          post = ''
+            require("fzf-lua").register_ui_select()
+          '';
         };
         lazyLoad = {
           enable = true;
@@ -44,10 +50,20 @@ delib.module {
                 __unkeyed-1 = "<Space>g";
                 __unkeyed-3 = "<Cmd>FzfLua live_grep<CR>";
               }
+              {
+                __unkeyed-1 = "<Space>o";
+                __unkeyed-3 = "<Cmd>FzfLua oldfiles cwd_only=true stat_file=true<CR>";
+              }
             ];
           };
         };
       };
     };
+    extraConfigLua = ''
+      vim.ui.select = function(items, opts, on_choice)
+        require("lz.n").trigger_load("fzf-lua")
+        return vim.ui.select(items, opts, on_choice)
+      end
+    '';
   };
 }

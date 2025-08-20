@@ -28,6 +28,11 @@ delib.module {
                 __unkeyed-3 = "<Cmd>ToggleTerm<CR>";
                 mode = ["n" "i"];
               }
+              {
+                __unkeyed-1 = "<Space>t";
+                __unkeyed-3 = "<Cmd>TermSelect<CR>";
+                mode = ["n"];
+              }
             ];
           };
         };
