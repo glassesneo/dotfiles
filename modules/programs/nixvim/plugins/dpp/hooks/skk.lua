@@ -16,14 +16,6 @@ vim.api.nvim_create_autocmd("User", {
   end,
 })
 
-vim.api.nvim_create_autocmd("User", {
-  group = skkeleton_hook_group,
-  pattern = "skkeleton-disable-pre",
-  callback = function()
-    vim.keymap.set({ "i", "s" }, "<C-l>", "<Plug>(denippet-jump-next)")
-  end,
-})
-
 vim.fn["skkeleton#register_keymap"]("input", ":", "henkanPoint")
 vim.fn["skkeleton#register_kanatable"]("rom", {
   l = false,

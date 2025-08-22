@@ -107,6 +107,10 @@ delib.module {
             formatterMode = "typstyle";
           };
         };
+        ts_ls = {
+          enable = true;
+          package = null;
+        };
         zls = {
           enable = true;
           package = null;

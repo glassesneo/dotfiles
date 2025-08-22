@@ -41,6 +41,22 @@ delib.module {
           };
         };
       };
+      ts-autotag = {
+        enable = true;
+        lazyLoad = {
+          enable = true;
+          settings = {
+            event = ["InsertEnter"];
+          };
+        };
+        settings = {
+          opts = {
+            enable_close = true;
+            enable_close_on_slash = false;
+            enable_rename = true;
+          };
+        };
+      };
       ts-context-commentstring = {
         # enable = true;
         extraOptions = {
