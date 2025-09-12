@@ -20,6 +20,11 @@ delib.module {
           };
           view_options = {
             show_hidden = true;
+            is_always_hidden.__raw = ''
+              function(name, bufnr)
+                return name == ".."
+              end
+            '';
           };
           float = {
             padding = 0;

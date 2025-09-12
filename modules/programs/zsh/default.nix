@@ -17,6 +17,7 @@ delib.module {
       autosuggestion.enable = true;
       syntaxHighlighting.enable = true;
       autocd = true;
+      profileExtra = builtins.readFile ./zellij.zsh;
       history = {
         extended = true;
         size = 10000;

@@ -24,11 +24,15 @@ delib.module {
           enable = true;
           package = null;
         };
+        biome = {
+          enable = true;
+          package = null;
+        };
         elmls = {
           enable = true;
           package = null;
           settings = {
-            rootMarkers = [
+            root_markers = [
               "elm.json"
             ];
           };
@@ -40,15 +44,17 @@ delib.module {
         hls = {
           enable = true;
           package = null;
-          settings.haskell = {
-            formattingProvider = "fourmolu";
+          settings = {
+            haskell = {
+              formattingProvider = "fourmolu";
+            };
           };
         };
         kotlin_language_server = {
           enable = true;
           package = null;
           settings = {
-            rootMarkers = [];
+            root_markers = [];
           };
         };
         marksman = {
@@ -96,6 +102,10 @@ delib.module {
           enable = true;
           package = null;
         };
+        prismals = {
+          enable = true;
+          package = null;
+        };
         taplo = {
           enable = true;
           package = null;
@@ -106,10 +116,6 @@ delib.module {
           settings = {
             formatterMode = "typstyle";
           };
-        };
-        ts_ls = {
-          enable = true;
-          package = null;
         };
         zls = {
           enable = true;
@@ -150,7 +156,8 @@ delib.module {
       vim.lsp.enable({ "lua_ls" })
       vim.lsp.enable({ "sourcekit" })
       vim.lsp.enable({ "denols" })
-      vim.lsp.enable({ "kotlin_lsp" })
+      vim.lsp.enable({ "ts_ls" })
+      -- vim.lsp.enable({ "kotlin_lsp" })
       vim.lsp.enable({ "efm" })
 
 
@@ -251,12 +258,31 @@ delib.module {
           },
         },
       }
+
+      vim.lsp.config.ts_ls = {
+        single_file_support = true,
+        settings = {
+          typescript = {
+            inlayHints = {
+              includeInlayParameterNameHints = 'all',
+              includeInlayParameterNameHintsWhenArgumentMatchesName = true,
+              includeInlayFunctionParameterTypeHints = true,
+              includeInlayVariableTypeHints = true,
+              includeInlayVariableTypeHintsWhenTypeMatchesName = true,
+              includeInlayPropertyDeclarationTypeHints = true,
+              includeInlayFunctionLikeReturnTypeHints = true,
+              includeInlayEnumMemberValueHints = true,
+            },
+          },
+        },
+      }
+
       vim.lsp.config.efm = {
         init_options = {
           documentFormatting = true,
           documentRangeFormatting = true,
         },
-        filetypes = {"elm", "go", "html", "nim", "nix", "python", "swift", "lua", "typst"},
+        filetypes = {"elm", "go", "html", "nim", "nix", "prisma", "python", "swift", "lua", "typst", "typescript", "typescriptreact", "javascript"},
         settings = {
           root_markers = {
             ".git/"
@@ -302,6 +328,12 @@ delib.module {
             -- formatStdin = true,
             -- }
             -- },
+            -- prisma = {
+              -- {
+                -- formatCommand = "prisma format --schema=''${INPUT}",
+                -- formatStdin = true,
+              -- }
+            -- },
             python = {
               {
                 formatCommand = "ruff format -",
@@ -326,6 +358,18 @@ delib.module {
                 formatStdin = true,
               }
             },
+            typescript = {
+              {
+                formatCommand = "biome check --stdin-file-path=''${INPUT} --write",
+                formatStdin = true,
+              }
+            },
+            typescriptreact = {
+              {
+                formatCommand = "biome check --stdin-file-path=''${INPUT} --write",
+                formatStdin = true,
+              }
+            }
           },
         },
       }

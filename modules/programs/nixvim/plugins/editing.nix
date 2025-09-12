@@ -75,6 +75,15 @@ delib.module {
         enable = true;
         settings.options = {
           auto_indent = true;
+          keys = {
+            "|" = {
+              close = true;
+              escape = true;
+              pair = "||";
+              enabled_filetypes = ["zig"];
+              disable_command_mode = true;
+            };
+          };
         };
         lazyLoad = {
           enable = true;

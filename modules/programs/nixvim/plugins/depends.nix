@@ -24,6 +24,7 @@
     "nim_format_string"
     "nix"
     "nu"
+    "prisma"
     "python"
     "query"
     "regex"

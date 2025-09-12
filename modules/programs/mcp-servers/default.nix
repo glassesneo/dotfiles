@@ -3,7 +3,6 @@
   homeConfig,
   inputs,
   lib,
-  moduleSystem,
   pkgs,
   ...
 }:
@@ -130,6 +129,16 @@ delib.module {
               TAVILY_API_KEY = ''''${cmd: ${cat} ${homeConfig.age.secrets.tavily-api-key.path}}'';
             };
           };
+          # cerebras = {
+            # command = "${npx}";
+            # args = [
+              # "-y"
+              # "cerebras-code-mcp@latest"
+            # ];
+            # env = {
+              # CEREBRAS_API_KEY = ''''${cmd: ${cat} ${homeConfig.age.secrets.cerebras-api-key.path}}'';
+            # };
+          # };
           # serena = {
           # command = "${uvx}";
           # args = [
