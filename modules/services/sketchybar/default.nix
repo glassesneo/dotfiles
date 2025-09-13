@@ -30,5 +30,9 @@ delib.module {
         echo "$icon_result"
       '';
     };
+    home.packages = with pkgs; [
+      sketchybar-app-font
+      nerd-fonts.hack
+    ];
   };
 }

@@ -1,6 +1,8 @@
 {
   delib,
   host,
+  lib,
+  pkgs,
   ...
 }:
 delib.module {
@@ -10,18 +12,36 @@ delib.module {
 
   darwin.ifEnabled.services.aerospace = {
     enable = true;
-    settings = {
+    settings = let
+      sketchybarExe = lib.getExe pkgs.sketchybar;
+      bordersExe = lib.getExe pkgs.jankyborders;
+    in {
       after-login-command = [];
       after-startup-command = [
-        # "exec-and-forget ${sketchybarExe}"
-        # "exec-and-forget ${bordersExe}"
+        "exec-and-forget ${sketchybarExe}"
+        "exec-and-forget ${bordersExe}"
       ];
 
       exec-on-workspace-change = [
-        # "/bin/bash"
-        # "-c"
-        # "${sketchybarExe} --trigger aerospace_workspace_change FOCUSED_WORKSPACE=$AEROSPACE_FOCUSED_WORKSPACE"
+        "/bin/bash"
+        "-c"
+        "${sketchybarExe} --trigger aerospace_workspace_change FOCUSED_WORKSPACE=$AEROSPACE_FOCUSED_WORKSPACE"
       ];
+
+      on-window-detected = let
+        enableTiling = app-id: {
+          "if".app-id = app-id;
+          run = ["layout tiling"];
+        };
+      in
+        [
+          {
+            check-further-callbacks = true;
+            run = ["layout floating"];
+          }
+        ]
+        ++ (["company.thebrowser.Browser" "com.mitchellh.ghostty"]
+          |> map enableTiling);
 
       enable-normalization-flatten-containers = true;
       enable-normalization-opposite-orientation-for-nested-containers = true;
@@ -39,10 +59,10 @@ delib.module {
       gaps = {
         inner.horizontal = 10;
         inner.vertical = 10;
-        outer.left = 5;
+        outer.left = 3;
         outer.bottom = 45;
-        outer.top = 5;
-        outer.right = 5;
+        outer.top = 3;
+        outer.right = 3;
       };
 
       workspace-to-monitor-force-assignment = {

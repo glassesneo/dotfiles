@@ -20,6 +20,9 @@ delib.module {
       noto-fonts-cjk-serif
       noto-fonts-cjk-sans
 
+      # nerd fonts
+      hackgen-nf-font
+
       # icons
       # font-awesome
       # material-design-icons

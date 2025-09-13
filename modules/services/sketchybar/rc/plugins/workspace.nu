@@ -37,7 +37,6 @@ def set_workspace_display (space_id: string, display: int) {
   let space = $"($name).($space_id)"
   (
     sketchybar
-      --animate tanh 30
       --set $space
         display=$"($display)"
   )
