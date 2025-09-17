@@ -28,6 +28,8 @@ delib.module {
         font-family = "UDEV Gothic NFLG";
         keybind = [
           # "cmd+t=new_tab"
+          "cmd+c=copy_to_clipboard"
+          "cmd+v=paste_from_clipboard"
         ];
         font-feature = "-dlig";
         background-opacity = 0.7;

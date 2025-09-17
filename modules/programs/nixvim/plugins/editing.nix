@@ -6,6 +6,17 @@ delib.module {
 
   home.ifEnabled.programs.nixvim = {
     plugins = {
+      inc-rename = {
+        enable = false;
+        lazyLoad = {
+          enable = true;
+          settings = {
+            event = [
+              "LspAttach"
+            ];
+          };
+        };
+      };
       nvim-surround = {
         enable = true;
         lazyLoad = {

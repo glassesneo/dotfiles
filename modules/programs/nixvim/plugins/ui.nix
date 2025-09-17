@@ -1,4 +1,8 @@
-{delib, ...}:
+{
+  delib,
+  homeConfig,
+  ...
+}:
 delib.module {
   name = "programs.nixvim.plugins.ui";
 
@@ -31,6 +35,9 @@ delib.module {
       noice = {
         enable = true;
         settings = {
+          presets = {
+            inc_rename = homeConfig.programs.nixvim.plugins.inc-rename.enable;
+          };
           cmdline = {
             enabled = false;
           };
@@ -44,7 +51,7 @@ delib.module {
           messages = {
             enabled = false;
           };
-          notify.enabled = false;
+          notify.enabled = true;
           popupmenu.enabled = false;
         };
       };

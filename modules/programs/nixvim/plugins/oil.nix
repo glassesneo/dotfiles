@@ -16,6 +16,7 @@ delib.module {
           keymaps = {
             "<CR>" = "actions.select";
             "<BS>" = "actions.parent";
+            "<C-p>" = "actions.preview";
             "q" = "actions.close";
           };
           view_options = {
@@ -30,6 +31,9 @@ delib.module {
             padding = 0;
             win_options.winblend = 0;
           };
+          preview_win = {
+            update_on_cursor_moved = true;
+          };
           win_options = {
             winblend = 0;
           };
@@ -38,7 +42,19 @@ delib.module {
     };
     keymaps = [
       {
-        action = "<Cmd>Oil<CR>";
+        # action = "<Cmd>Oil<CR>";
+        action.__raw = ''
+          function()
+            local oil = require("oil")
+            local util = require("oil.util")
+            oil.open()
+            util.run_after_load(0, function()
+              oil.open_preview({
+                split = "botright",
+              })
+            end)
+          end
+        '';
         key = "<Space>f";
       }
     ];

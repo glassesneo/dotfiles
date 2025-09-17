@@ -46,7 +46,8 @@
         name = "dotfiles";
         packages = with pkgs; [
           deno
-          lua-language-server
+          # lua-language-server
+          emmylua-ls
           stylua
         ];
       };

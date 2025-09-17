@@ -7,7 +7,7 @@ delib.module {
   home.ifEnabled.programs.nixvim = {
     plugins = {
       toggleterm = {
-        enable = true;
+        # enable = true;
         settings = {
           direction = "float";
           float_opts = {

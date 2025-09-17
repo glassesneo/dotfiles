@@ -153,7 +153,7 @@ delib.module {
       };
     };
     extraConfigLuaPost = ''
-      vim.lsp.enable({ "lua_ls" })
+      vim.lsp.enable({ "emmylua_ls" })
       vim.lsp.enable({ "sourcekit" })
       vim.lsp.enable({ "denols" })
       vim.lsp.enable({ "ts_ls" })
@@ -176,15 +176,17 @@ delib.module {
         end
       end
 
-      vim.lsp.config.lua_ls = {
+      vim.lsp.config.emmylua_ls = {
+        on_init = function(client)
+          client.config.settings.Lua = vim.tbl_deep_extend('force', client.config.settings.Lua, {
+            workspace = { library = vim.api.nvim_get_runtime_file("", true) },
+          })
+        end,
         settings = {
           Lua = {
             runtime = {
               version = "LuaJIT",
               pathStrict = true,
-            },
-            diagnostics = {
-              globals = {"vim"},
             },
             workspace = {
               library = unique_library_paths,
@@ -202,7 +204,36 @@ delib.module {
 
           },
         },
+        workspace_required = false,
       }
+
+      -- vim.lsp.config.lua_ls = {
+        -- settings = {
+          -- Lua = {
+            -- runtime = {
+              -- version = "LuaJIT",
+              -- pathStrict = true,
+            -- },
+            -- diagnostics = {
+              -- globals = {"vim"},
+            -- },
+            -- workspace = {
+              -- library = unique_library_paths,
+              -- checkThirdParty = false,
+              -- ignoreDir = {
+                -- ".*",
+              -- },
+            -- },
+            -- telemetry = { enable = false },
+            -- hint = {
+              -- enable = true,
+              -- arrayIndex = "Enable",
+              -- setType = true,
+            -- },
+
+          -- },
+        -- },
+      -- }
 
       -- vim.lsp.config.kotlin_lsp = {
       -- single_file_support = true,

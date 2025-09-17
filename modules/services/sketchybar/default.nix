@@ -24,11 +24,9 @@ delib.module {
       };
     };
     xdg.configFile."sketchybar_icon_map.sh" = {
-      text = ''
-        source ${pkgs.sketchybar-app-font}/bin/icon_map.sh
-        __icon_map "$1"
-        echo "$icon_result"
-      '';
+      source = pkgs.replaceVars ./sketchybar_icon_map.sh {
+        sketchybar-app-font = "${pkgs.sketchybar-app-font}/bin/icon_map.sh";
+      };
     };
     home.packages = with pkgs; [
       sketchybar-app-font
