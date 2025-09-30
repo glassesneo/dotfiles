@@ -11,7 +11,7 @@ delib.module {
   home.ifEnabled.programs.nixvim = {
     plugins = {
       hlchunk = {
-        enable = true;
+        # enable = true;
         lazyLoad = {
           enable = true;
           settings = {

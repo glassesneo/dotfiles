@@ -28,5 +28,5 @@ lua_source = '''
 repo = 'skanehira/jumpcursor.vim'
 on_map = '<Plug>(jumpcursor-jump)'
 lua_add = '''
-  vim.keymap.set("n", "<Space>j", "<Plug>(jumpcursor-jump)")
+  vim.keymap.set("n", "<S-j>", "<Plug>(jumpcursor-jump)")
 '''

@@ -51,12 +51,12 @@ delib.module {
           messages = {
             enabled = false;
           };
-          notify.enabled = true;
+          notify.enabled = false;
           popupmenu.enabled = false;
         };
       };
       notify = {
-        enable = true;
+        # enable = true;
         settings = {
           stages = "slide";
           max_width = 50;

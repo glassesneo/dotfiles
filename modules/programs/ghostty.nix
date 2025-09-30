@@ -23,7 +23,7 @@ delib.module {
         else pkgs.ghostty;
       clearDefaultKeybinds = true;
       settings = {
-        theme = "catppuccin-mocha";
+        theme = "Catppuccin Mocha";
         font-size = 16;
         font-family = "UDEV Gothic NFLG";
         keybind = [

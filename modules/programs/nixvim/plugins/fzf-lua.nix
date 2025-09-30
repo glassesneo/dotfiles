@@ -2,7 +2,7 @@
 delib.module {
   name = "programs.nixvim.plugins.fzf-lua";
 
-  options = delib.singleEnableOption true;
+  options = delib.singleEnableOption false;
 
   home.ifEnabled.programs.nixvim = {
     plugins = {

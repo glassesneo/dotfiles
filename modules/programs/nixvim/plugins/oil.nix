@@ -2,7 +2,7 @@
 delib.module {
   name = "programs.nixvim.plugins.oil";
 
-  options = delib.singleEnableOption true;
+  options = delib.singleEnableOption false;
 
   home.ifEnabled.programs.nixvim = {
     plugins = {
