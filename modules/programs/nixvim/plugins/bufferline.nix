@@ -10,7 +10,7 @@ delib.module {
         enable = true;
         settings = {
           highlights.__raw = ''
-            require("catppuccin.groups.integrations.bufferline").get_theme()
+            require("catppuccin.special.bufferline").get_theme()
           '';
           options = {
             themable = true;

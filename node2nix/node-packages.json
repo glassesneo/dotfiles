@@ -1,0 +1,7 @@
+[
+  "@zed-industries/claude-code-acp",
+  "@anthropic-ai/claude-code",
+  "@brave/brave-search-mcp-server",
+  "@mizchi/readability",
+  "@tavily-ai/tavily-mcp"
+]

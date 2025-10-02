@@ -3,13 +3,16 @@
   homeConfig,
   inputs,
   lib,
+  nodePkgs,
   pkgs,
   ...
 }:
 delib.module {
   name = "programs.mcp-servers-nix";
 
-  options = delib.singleEnableOption true;
+  options.programs.mcp-servers-nix = with delib; {
+    enable = boolOption true;
+  };
 
   home.ifEnabled = {
     home.packages = [
@@ -61,15 +64,15 @@ delib.module {
         };
         settings.servers = let
           cat = pkgs.lib.getExe' pkgs.coreutils "cat";
-          npx = pkgs.lib.getExe' pkgs.nodejs "npx";
-          uvx = pkgs.lib.getExe' pkgs.uv "uvx";
+          # npx = pkgs.lib.getExe' pkgs.nodejs "npx";
+          # uvx = pkgs.lib.getExe' pkgs.uv "uvx";
         in {
           brave-search = {
-            command = "${npx}";
-            args = [
-              "-y"
-              "@modelcontextprotocol/server-brave-search"
-            ];
+            command = "${pkgs.lib.getExe' nodePkgs."@brave/brave-search-mcp-server" "brave-search-mcp-server"}";
+            # args = [
+            # "-y"
+            # ""
+            # ];
             env = {
               BRAVE_API_KEY = ''''${cmd: ${cat} ${homeConfig.age.secrets.brave-api-key.path}}'';
             };
@@ -78,13 +81,13 @@ delib.module {
             url = "https://mcp.deepwiki.com/mcp";
             type = "sse";
           };
-          youtube = {
-            command = "${npx}";
-            args = [
-              "-y"
-              "@anaisbetts/mcp-youtube"
-            ];
-          };
+          # youtube = {
+          # command = "${npx}";
+          # args = [
+          # "-y"
+          # "@anaisbetts/mcp-youtube"
+          # ];
+          # };
           # arxiv = {
           # command = "${uvx}";
           # args = [
@@ -104,10 +107,8 @@ delib.module {
             url = "https://mcp.notion.com/mcp";
           };
           readability = {
-            command = "${npx}";
+            command = "${pkgs.lib.getExe' nodePkgs."@mizchi/readability" "readability"}";
             args = [
-              "-y"
-              "@mizchi/readability"
               "--mcp"
             ];
           };
@@ -120,7 +121,7 @@ delib.module {
             ];
           };
           tavily = {
-            command = "${npx}";
+            command = "${pkgs.lib.getExe' pkgs.nodejs "npx"}";
             args = [
               "-y"
               "tavily-mcp@latest"
@@ -130,14 +131,14 @@ delib.module {
             };
           };
           # cerebras = {
-            # command = "${npx}";
-            # args = [
-              # "-y"
-              # "cerebras-code-mcp@latest"
-            # ];
-            # env = {
-              # CEREBRAS_API_KEY = ''''${cmd: ${cat} ${homeConfig.age.secrets.cerebras-api-key.path}}'';
-            # };
+          # command = "${npx}";
+          # args = [
+          # "-y"
+          # "cerebras-code-mcp@latest"
+          # ];
+          # env = {
+          # CEREBRAS_API_KEY = ''''${cmd: ${cat} ${homeConfig.age.secrets.cerebras-api-key.path}}'';
+          # };
           # };
           # serena = {
           # command = "${uvx}";
