@@ -86,9 +86,7 @@ delib.module {
       casks = [
         "arc"
         "aquaskk"
-        "discord"
         "karabiner-elements"
-        "zoom"
       ];
 
       masApps = {

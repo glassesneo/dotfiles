@@ -1,6 +1,5 @@
 {
   delib,
-  inputs,
   pkgs,
   ...
 }:
@@ -9,20 +8,21 @@ delib.module {
 
   options = delib.singleEnableOption true;
 
-  darwin.ifEnabled = {cfg, ...}: {
+  darwin.always = {
     # nixpkgs.overlays = [
     # inputs.brew-nix.overlays.default
     # ];
 
-    brew-nix.enable = cfg.enable;
+    brew-nix.enable = true;
 
-    environment.systemPackages = with pkgs.brewCasks; [
-      keycastr
-      marta
-      orbstack
-      proton-drive
-      proton-pass
-      qlmarkdown
+    environment.systemPackages = with pkgs; [
+      brewCasks.keycastr
+      brewCasks.orbstack
+      brewCasks.proton-drive
+      brewCasks.proton-pass
+      brewCasks.qlmarkdown
     ];
   };
+
+  myconfig.always.args.shared.brewCasks = pkgs.brewCasks;
 }

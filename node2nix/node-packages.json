@@ -3,5 +3,5 @@
   "@anthropic-ai/claude-code",
   "@brave/brave-search-mcp-server",
   "@mizchi/readability",
-  "@tavily-ai/tavily-mcp"
+  "tavily-mcp"
 ]

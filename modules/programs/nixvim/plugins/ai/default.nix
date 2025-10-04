@@ -3,6 +3,7 @@
   host,
   inputs,
   lib,
+  nodePkgs,
   pkgs,
   ...
 }: let
@@ -56,42 +57,54 @@ in
             };
           };
           settings = {
-            adapters.http = {
-              copilot.__raw = ''
-                function()
-                  ${builtins.readFile ./adapters/copilot.lua}
-                end
-              '';
-              gemini.__raw = ''
-                function()
-                  ${builtins.readFile ./adapters/gemini.lua}
-                end
-              '';
-              ollama.__raw = ''
-                function()
-                  ${builtins.readFile ./adapters/ollama.lua}
-                end
-              '';
-              cerebras.__raw = ''
-                function()
-                  ${builtins.readFile ./adapters/cerebras.lua}
-                end
-              '';
-              io-intelligence.__raw = ''
-                function()
-                  ${builtins.readFile ./adapters/io-intelligence.lua}
-                end
-              '';
-              ai-mop-openai.__raw = ''
-                function()
-                  ${builtins.readFile ./adapters/ai-mop-openai.lua}
-                end
-              '';
-              ai-mop-anthropic.__raw = ''
-                function()
-                  ${builtins.readFile ./adapters/ai-mop-anthropic.lua}
-                end
-              '';
+            adapters = {
+              http = {
+                copilot.__raw = ''
+                  function()
+                    ${builtins.readFile ./adapters/copilot.lua}
+                  end
+                '';
+                gemini.__raw = ''
+                  function()
+                    ${builtins.readFile ./adapters/gemini.lua}
+                  end
+                '';
+                ollama.__raw = ''
+                  function()
+                    ${builtins.readFile ./adapters/ollama.lua}
+                  end
+                '';
+                cerebras.__raw = ''
+                  function()
+                    ${builtins.readFile ./adapters/cerebras.lua}
+                  end
+                '';
+                io-intelligence.__raw = ''
+                  function()
+                    ${builtins.readFile ./adapters/io-intelligence.lua}
+                  end
+                '';
+                ai-mop-openai.__raw = ''
+                  function()
+                    ${builtins.readFile ./adapters/ai-mop-openai.lua}
+                  end
+                '';
+                ai-mop-anthropic.__raw = ''
+                  function()
+                    ${builtins.readFile ./adapters/ai-mop-anthropic.lua}
+                  end
+                '';
+              };
+              acp = {
+                claude_code.__raw = ''
+                  function()
+                    ${builtins.readFile
+                    <| pkgs.replaceVars ./adapters/claude-code.lua {
+                      command = lib.getExe' nodePkgs."@zed-industries/claude-code-acp" "claude-code-acp";
+                    }}
+                  end
+                '';
+              };
             };
             extensions = {
               history = {
@@ -120,6 +133,9 @@ in
                   llm.__raw = ''
                     function(adapter)
                       local model_name = ""
+                      if adapter.type ~= "http" then
+                        return
+                      end
                       if adapter.parameters == nil then
                         model_name = adapter.schema.model.default
                       else

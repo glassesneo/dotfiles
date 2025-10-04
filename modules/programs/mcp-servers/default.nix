@@ -103,9 +103,9 @@ delib.module {
           url = "https://mcp.notion.com/mcp";
         };
         readability = {
-          command = "${pkgs.lib.getExe' nodePkgs."@mizchi/readability" "readability"}";
+          command = "${pkgs.lib.getExe pkgs.nodejs}";
           args = [
-            "--mcp"
+            "${nodePkgs."@mizchi/readability"}/lib/node_modules/@mizchi/readability/dist/mcp.js"
           ];
         };
         relative-filesystem = {
@@ -117,11 +117,7 @@ delib.module {
           ];
         };
         tavily = {
-          command = "${pkgs.lib.getExe' pkgs.nodejs "npx"}";
-          args = [
-            "-y"
-            "tavily-mcp@latest"
-          ];
+          command = "${pkgs.lib.getExe' nodePkgs."tavily-mcp" "tavily-mcp"}";
           env = {
             TAVILY_API_KEY = ''''${cmd: ${cat} ${homeConfig.age.secrets.tavily-api-key.path}}'';
           };
@@ -148,25 +144,7 @@ delib.module {
     };
     claude-code-servers = {
       programs = {
-        filesystem = {
-          # enable = true;
-          args = [
-            "${homeConfig.home.homeDirectory}/.dotfiles"
-          ];
-          type = "stdio";
-        };
         git.enable = true;
-        github = {
-          enable = true;
-          passwordCommand = {
-            GITHUB_PERSONAL_ACCESS_TOKEN = [
-              (lib.getExe homeConfig.programs.gh.package)
-              "auth"
-              "token"
-            ];
-          };
-          type = "stdio";
-        };
         # fetch.enable = true;
         # context7 = {
         # enable = true;
@@ -176,23 +154,47 @@ delib.module {
           enable = true;
           type = "stdio";
         };
-        memory = {
-          enable = true;
-          env = {
-            MEMORY_FILE_PATH = "${homeConfig.xdg.dataHome}/mcp_memory.json";
-          };
-          type = "stdio";
-        };
-        sequential-thinking = {
-          enable = true;
-          type = "stdio";
-        };
+        # memory = {
+        # enable = true;
+        # env = {
+        # MEMORY_FILE_PATH = "${homeConfig.xdg.dataHome}/mcp_memory.json";
+        # };
+        # type = "stdio";
+        # };
         time.enable = true;
+      };
+      settings.servers = let
+        # cat = pkgs.lib.getExe' pkgs.coreutils "cat";
+        # npx = pkgs.lib.getExe' pkgs.nodejs "npx";
+        # uvx = pkgs.lib.getExe' pkgs.uv "uvx";
+      in {
+        brave-search = {
+          command = "${pkgs.lib.getExe' nodePkgs."@brave/brave-search-mcp-server" "brave-search-mcp-server"}";
+          env = {
+            BRAVE_API_KEY = ''''${BRAVE_API_KEY}'';
+          };
+        };
+        deepwiki = {
+          url = "https://mcp.deepwiki.com/sse";
+          type = "sse";
+        };
+        readability = {
+          command = "${pkgs.lib.getExe pkgs.nodejs}";
+          args = [
+            "${nodePkgs."@mizchi/readability"}/lib/node_modules/@mizchi/readability/dist/mcp.js"
+          ];
+        };
+        tavily = {
+          command = "${pkgs.lib.getExe' nodePkgs."tavily-mcp" "tavily-mcp"}";
+          env = {
+            TAVILY_API_KEY = ''''${TAVILY_API_KEY}'';
+          };
+        };
       };
     };
   in {
     home.packages = [
-      pkgs.yt-dlp
+      # pkgs.yt-dlp
     ];
     home.file = {
       "${homeConfig.xdg.configHome}/mcphub/servers.json".source = inputs.mcp-servers-nix.lib.mkConfig pkgs mcphub-servers;

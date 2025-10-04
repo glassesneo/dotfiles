@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__brave-search__brave_web_search",
+      "mcp__tavily__tavily-search"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
