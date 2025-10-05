@@ -4,14 +4,14 @@
   ...
 }:
 delib.module {
-  name = "programs.claude-code";
+  name = "programs.gemini-cli";
 
   options = delib.singleEnableOption true;
 
   home.ifEnabled = {
-    programs.claude-code = {
+    programs.gemini-cli = {
       enable = true;
-      package = nodePkgs."@anthropic-ai/claude-code";
+      package = nodePkgs."@google/gemini-cli";
     };
   };
 }

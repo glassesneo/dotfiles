@@ -104,6 +104,11 @@ in
                     }}
                   end
                 '';
+                gemini_cli.__raw = ''
+                  function()
+                    ${builtins.readFile ./adapters/gemini-cli.lua}
+                  end
+                '';
               };
             };
             extensions = {
@@ -111,6 +116,10 @@ in
                 enabled = true;
                 opts = {
                   auto_generate_title = true;
+                  title_generation_opts = {
+                    adapter = "copilot";
+                    model = "gpt-4.1";
+                  };
                 };
               };
               mcphub = {

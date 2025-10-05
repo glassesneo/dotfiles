@@ -1,4 +1,5 @@
 {
+  brewCasks,
   delib,
   pkgs,
   ...
@@ -19,7 +20,7 @@ delib.module {
       enable = cfg.enable;
       package =
         if myconfig.brew-nix.enable
-        then pkgs.brewCasks.ghostty
+        then brewCasks.ghostty
         else pkgs.ghostty;
       clearDefaultKeybinds = true;
       settings = {

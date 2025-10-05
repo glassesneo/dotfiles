@@ -15,7 +15,12 @@ delib.module {
   };
 
   home.ifEnabled = let
-    # The syntax follows https://github.com/ravitemer/mcphub.nvim/blob/8ff40b5edc649959bb7e89d25ae18e055554859a/doc/mcp/servers_json.md
+    deno = pkgs.lib.getExe pkgs.deno;
+    nodejs = pkgs.lib.getExe pkgs.nodejs;
+    readability-mcp = "${nodePkgs."@mizchi/readability"}/lib/node_modules/@mizchi/readability/dist/mcp.js";
+    brave-search-mcp = pkgs.lib.getExe' nodePkgs."@brave/brave-search-mcp-server" "brave-search-mcp-server";
+    tavily-mcp = pkgs.lib.getExe' nodePkgs."tavily-mcp" "tavily-mcp";
+    # The syntax follows https://github.com/ravitemer/mcphub.nvim/blob/main/doc/mcp/servers_json.md
     mcphub-servers = {
       programs = {
         filesystem = {
@@ -61,11 +66,7 @@ delib.module {
       };
       settings.servers = {
         brave-search = {
-          command = "${pkgs.lib.getExe' nodePkgs."@brave/brave-search-mcp-server" "brave-search-mcp-server"}";
-          # args = [
-          # "-y"
-          # ""
-          # ];
+          command = "${brave-search-mcp}";
           env = {
             BRAVE_API_KEY = ''''${env:BRAVE_API_KEY}'';
           };
@@ -78,13 +79,13 @@ delib.module {
           url = "https://mcp.notion.com/mcp";
         };
         readability = {
-          command = "${pkgs.lib.getExe pkgs.nodejs}";
+          command = "${nodejs}";
           args = [
-            "${nodePkgs."@mizchi/readability"}/lib/node_modules/@mizchi/readability/dist/mcp.js"
+            "${readability-mcp}"
           ];
         };
         relative-filesystem = {
-          command = "${lib.getExe pkgs.deno}";
+          command = "${deno}";
           args = [
             "run"
             "-A"
@@ -92,7 +93,7 @@ delib.module {
           ];
         };
         tavily = {
-          command = "${pkgs.lib.getExe' nodePkgs."tavily-mcp" "tavily-mcp"}";
+          command = "${tavily-mcp}";
           env = {
             TAVILY_API_KEY = ''''${env:TAVILY_API_KEY}'';
           };
@@ -143,27 +144,15 @@ delib.module {
     claude-code-servers = {
       programs = {
         git.enable = true;
-        # fetch.enable = true;
-        # context7 = {
-        # enable = true;
-        # type = "stdio";
-        # };
         playwright = {
           enable = true;
           type = "stdio";
         };
-        # memory = {
-        # enable = true;
-        # env = {
-        # MEMORY_FILE_PATH = "${homeConfig.xdg.dataHome}/mcp_memory.json";
-        # };
-        # type = "stdio";
-        # };
         time.enable = true;
       };
       settings.servers = {
         brave-search = {
-          command = "${pkgs.lib.getExe' nodePkgs."@brave/brave-search-mcp-server" "brave-search-mcp-server"}";
+          command = "${brave-search-mcp}";
           env = {
             BRAVE_API_KEY = ''''${BRAVE_API_KEY}'';
           };
@@ -173,13 +162,13 @@ delib.module {
           type = "sse";
         };
         readability = {
-          command = "${pkgs.lib.getExe pkgs.nodejs}";
+          command = "${nodejs}";
           args = [
-            "${nodePkgs."@mizchi/readability"}/lib/node_modules/@mizchi/readability/dist/mcp.js"
+            "${readability-mcp}"
           ];
         };
         tavily = {
-          command = "${pkgs.lib.getExe' nodePkgs."tavily-mcp" "tavily-mcp"}";
+          command = "${tavily-mcp}";
           env = {
             TAVILY_API_KEY = ''''${TAVILY_API_KEY}'';
           };
