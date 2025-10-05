@@ -133,15 +133,17 @@ in
                   llm.__raw = ''
                     function(adapter)
                       local model_name = ""
-                      if adapter.type ~= "http" then
-                        return
+                      if adapter.type == "http" then
+                        if adapter.parameters == nil then
+                          model_name = adapter.schema.model.default
+                        else
+                          model_name = adapter.schema.model.default
+                        end
+                        return "  CodeCompanion (" .. adapter.formatted_name .. " - " .. model_name .. ")"
+                      elseif adapter.type == "acp" then
+                        return "  " .. adapter.formatted_name .. " via ACP"
                       end
-                      if adapter.parameters == nil then
-                        model_name = adapter.schema.model.default
-                      else
-                        model_name = adapter.schema.model.default
-                      end
-                      return "  CodeCompanion (" .. adapter.formatted_name .. " - " .. model_name .. ")"
+                      return "  CodeCompanion"
                     end
                   '';
                   user = "  Me";

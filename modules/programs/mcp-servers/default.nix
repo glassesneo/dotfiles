@@ -15,6 +15,7 @@ delib.module {
   };
 
   home.ifEnabled = let
+    # The syntax follows https://github.com/ravitemer/mcphub.nvim/blob/8ff40b5edc649959bb7e89d25ae18e055554859a/doc/mcp/servers_json.md
     mcphub-servers = {
       programs = {
         filesystem = {
@@ -58,11 +59,7 @@ delib.module {
         };
         time.enable = true;
       };
-      settings.servers = let
-        cat = pkgs.lib.getExe' pkgs.coreutils "cat";
-        # npx = pkgs.lib.getExe' pkgs.nodejs "npx";
-        # uvx = pkgs.lib.getExe' pkgs.uv "uvx";
-      in {
+      settings.servers = {
         brave-search = {
           command = "${pkgs.lib.getExe' nodePkgs."@brave/brave-search-mcp-server" "brave-search-mcp-server"}";
           # args = [
@@ -70,13 +67,54 @@ delib.module {
           # ""
           # ];
           env = {
-            BRAVE_API_KEY = ''''${cmd: ${cat} ${homeConfig.age.secrets.brave-api-key.path}}'';
+            BRAVE_API_KEY = ''''${env:BRAVE_API_KEY}'';
           };
         };
         deepwiki = {
           url = "https://mcp.deepwiki.com/mcp";
           type = "sse";
         };
+        notion = {
+          url = "https://mcp.notion.com/mcp";
+        };
+        readability = {
+          command = "${pkgs.lib.getExe pkgs.nodejs}";
+          args = [
+            "${nodePkgs."@mizchi/readability"}/lib/node_modules/@mizchi/readability/dist/mcp.js"
+          ];
+        };
+        relative-filesystem = {
+          command = "${lib.getExe pkgs.deno}";
+          args = [
+            "run"
+            "-A"
+            "/Users/neo/dev/relative-filesystem-mcp/server.ts"
+          ];
+        };
+        tavily = {
+          command = "${pkgs.lib.getExe' nodePkgs."tavily-mcp" "tavily-mcp"}";
+          env = {
+            TAVILY_API_KEY = ''''${env:TAVILY_API_KEY}'';
+          };
+        };
+        # cerebras = {
+        # command = "${npx}";
+        # args = [
+        # "-y"
+        # "cerebras-code-mcp@latest"
+        # ];
+        # env = {
+        # CEREBRAS_API_KEY = ''''${cmd: ${cat} ${homeConfig.age.secrets.cerebras-api-key.path}}'';
+        # };
+        # };
+        # serena = {
+        # command = "${uvx}";
+        # args = [
+        # "--from"
+        # "git+https://github.com/oraios/serena"
+        # "serena-mcp-server"
+        # ];
+        # };
         # youtube = {
         # command = "${npx}";
         # args = [
@@ -99,49 +137,9 @@ delib.module {
         # "meilisearch-mcp"
         # ];
         # };
-        notion = {
-          url = "https://mcp.notion.com/mcp";
-        };
-        readability = {
-          command = "${pkgs.lib.getExe pkgs.nodejs}";
-          args = [
-            "${nodePkgs."@mizchi/readability"}/lib/node_modules/@mizchi/readability/dist/mcp.js"
-          ];
-        };
-        relative-filesystem = {
-          command = "${lib.getExe pkgs.deno}";
-          args = [
-            "run"
-            "-A"
-            "/Users/neo/dev/relative-filesystem-mcp/server.ts"
-          ];
-        };
-        tavily = {
-          command = "${pkgs.lib.getExe' nodePkgs."tavily-mcp" "tavily-mcp"}";
-          env = {
-            TAVILY_API_KEY = ''''${cmd: ${cat} ${homeConfig.age.secrets.tavily-api-key.path}}'';
-          };
-        };
-        # cerebras = {
-        # command = "${npx}";
-        # args = [
-        # "-y"
-        # "cerebras-code-mcp@latest"
-        # ];
-        # env = {
-        # CEREBRAS_API_KEY = ''''${cmd: ${cat} ${homeConfig.age.secrets.cerebras-api-key.path}}'';
-        # };
-        # };
-        # serena = {
-        # command = "${uvx}";
-        # args = [
-        # "--from"
-        # "git+https://github.com/oraios/serena"
-        # "serena-mcp-server"
-        # ];
-        # };
       };
     };
+    # The syntax follows https://docs.claude.com/en/docs/claude-code/mcp
     claude-code-servers = {
       programs = {
         git.enable = true;
@@ -163,11 +161,7 @@ delib.module {
         # };
         time.enable = true;
       };
-      settings.servers = let
-        # cat = pkgs.lib.getExe' pkgs.coreutils "cat";
-        # npx = pkgs.lib.getExe' pkgs.nodejs "npx";
-        # uvx = pkgs.lib.getExe' pkgs.uv "uvx";
-      in {
+      settings.servers = {
         brave-search = {
           command = "${pkgs.lib.getExe' nodePkgs."@brave/brave-search-mcp-server" "brave-search-mcp-server"}";
           env = {
