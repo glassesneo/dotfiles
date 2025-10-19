@@ -1,4 +1,4 @@
-if [[ -z "$ZELLIJ_SESSION" ]]; then
-    zellij
+if [[ -z "$ZELLIJ" ]]; then
+    zellij attach -c
 fi
 

@@ -27,12 +27,6 @@
         specialArgs = {
           inherit inputs moduleSystem homeManagerUser;
         };
-        extraModules =
-          if moduleSystem == "darwin"
-          then [
-            inputs.brew-nix.darwinModules.default
-          ]
-          else [];
       };
   in {
     # nixosConfigurations = mkConfigurations "nixos";
@@ -57,6 +51,10 @@
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixpkgs-unstable";
+    nur = {
+      url = "github:nix-community/NUR";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     home-manager = {
       url = "github:nix-community/home-manager/master";
       inputs.nixpkgs.follows = "nixpkgs";

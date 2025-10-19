@@ -15,6 +15,8 @@ end
 
 lz_n.trigger_load("mcphub")
 
+-- vim.keymap.set("ca", "CC", "CodeCompanion", {})
+
 require("mcphub").setup({
   auto_approve = function(params)
     local allowed_servers = {
@@ -30,23 +32,24 @@ require("mcphub").setup({
       return true
     end
 
-    local allowed_filesystem_tools = {
-      directory_tree = true,
-      get_file_info = true,
-      list_allowed_directories = true,
-      list_directory = true,
-      read_file = true,
-      read_multiple_files = true,
-      search_files = true,
-    }
+    -- local allowed_filesystem_tools = {
+    -- directory_tree = true,
+    -- get_file_info = true,
+    -- list_allowed_directories = true,
+    -- list_directory = true,
+    -- read_file = true,
+    -- read_multiple_files = true,
+    -- search_files = true,
+    -- }
 
-    if params.server_name == "filesystem" and allowed_filesystem_tools[params.tool_name] then
-      return true
-    end
+    -- if params.server_name == "filesystem" and allowed_filesystem_tools[params.tool_name] then
+    -- return true
+    -- end
 
     local allowed_neovim_tools = {
       list_directory = true,
       read_file = true,
+      read_multiple_files = true,
     }
 
     if params.server_name == "neovim" and allowed_neovim_tools[params.tool_name] then

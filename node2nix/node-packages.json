@@ -2,7 +2,9 @@
   "@anthropic-ai/claude-code",
   "@zed-industries/claude-code-acp",
   "@google/gemini-cli",
+  "@google/jules",
   "@brave/brave-search-mcp-server",
   "@mizchi/readability",
-  "tavily-mcp"
+  "tavily-mcp",
+  "chrome-devtools-mcp"
 ]

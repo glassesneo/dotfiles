@@ -1,5 +1,6 @@
 {
   delib,
+  inputs,
   pkgs,
   ...
 }:
@@ -12,6 +13,9 @@ delib.module {
     # nixpkgs.overlays = [
     # inputs.brew-nix.overlays.default
     # ];
+    imports = [
+      inputs.brew-nix.darwinModules.default
+    ];
 
     brew-nix.enable = true;
 

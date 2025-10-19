@@ -21,7 +21,7 @@ export module anthropic {
   }
 
   export def chat [model: string = "claude-3-7-sonnet-latest"]: string -> record {
-    let body = {model: $model, max_tokens: 1024, messages: [{role: user, content: $in}], tools: [{ type: web_search_20250305, name: web_search, max_uses: 5 }]}
+    let body = {model: $model, max_tokens: 1024, messages: [{role: user, content: $in}]}
     let result = http post --allow-errors -H {x-api-key: $env.AI_MOP_API_KEY} --content-type "application/json" $"($anthropic_base_url)/messages" $body
     return $result
   }

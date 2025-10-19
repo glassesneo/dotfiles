@@ -1,5 +1,7 @@
 {
+  nixvimLib,
   delib,
+  homeConfig,
   host,
   inputs,
   lib,
@@ -9,6 +11,43 @@
 }: let
   mcp-hub = inputs.mcp-hub.packages."${host.homeManagerSystem}".default;
   mcphub-nvim = inputs.mcphub-nvim.packages."${host.homeManagerSystem}".default;
+  nodejs = pkgs.lib.getExe pkgs.nodejs;
+  readability-mcp = "${nodePkgs."@mizchi/readability"}/lib/node_modules/@mizchi/readability/dist/mcp.js";
+  brave-search-mcp = pkgs.lib.getExe' nodePkgs."@brave/brave-search-mcp-server" "brave-search-mcp-server";
+  tavily-mcp = pkgs.lib.getExe' nodePkgs."tavily-mcp" "tavily-mcp";
+
+  # Convert MCP servers to ACP format
+  # ACP expects: { name: string, command: string, args?: string[], env?: {name: string, value: string}[] }[]
+  acpMcpServers = [
+    # {
+    # name = "brave-search";
+    # command = brave-search-mcp;
+    # args = [];
+    # env = [
+    # {
+    # name = "BRAVE_API_KEY";
+    # value = "\${BRAVE_API_KEY}";
+    # }
+    # ];
+    # }
+    {
+      name = "readability";
+      command = nodejs;
+      args = [readability-mcp];
+      env = [];
+    }
+    # {
+    # name = "tavily";
+    # command = tavily-mcp;
+    # args = [];
+    # env = [
+    # {
+    # name = "TAVILY_API_KEY";
+    # value = "\${TAVILY_API_KEY}";
+    # }
+    # ];
+    # }
+  ];
 in
   delib.module {
     name = "programs.nixvim.plugins.ai";
@@ -44,6 +83,11 @@ in
                   __unkeyed-1 = "<Space>c";
                   mode = ["n"];
                   __unkeyed-3 = "<Cmd>CodeCompanionChat Toggle<CR>";
+                }
+                {
+                  __unkeyed-1 = "CC";
+                  mode = ["ca"];
+                  __unkeyed-3 = "CodeCompanion";
                 }
               ];
               before.__raw = ''
@@ -101,6 +145,7 @@ in
                     ${builtins.readFile
                     <| pkgs.replaceVars ./adapters/claude-code.lua {
                       command = lib.getExe' nodePkgs."@zed-industries/claude-code-acp" "claude-code-acp";
+                      # mcpServers = nixvimLib.nixvim.toLuaObject acpMcpServers;
                     }}
                   end
                 '';
@@ -169,10 +214,12 @@ in
               chat = {
                 window = {
                   position = "right";
-                  width = 0.4;
+                  width = 0.425;
                 };
                 auto_scroll = true;
                 show_header_separator = true;
+                fold_context = true;
+                fold_reasoning = true;
               };
             };
           };

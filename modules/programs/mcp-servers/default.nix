@@ -20,6 +20,7 @@ delib.module {
     readability-mcp = "${nodePkgs."@mizchi/readability"}/lib/node_modules/@mizchi/readability/dist/mcp.js";
     brave-search-mcp = pkgs.lib.getExe' nodePkgs."@brave/brave-search-mcp-server" "brave-search-mcp-server";
     tavily-mcp = pkgs.lib.getExe' nodePkgs."tavily-mcp" "tavily-mcp";
+    chrome-devtools-mcp = pkgs.lib.getExe' nodePkgs."chrome-devtools-mcp" "chrome-devtools-mcp";
     # The syntax follows https://github.com/ravitemer/mcphub.nvim/blob/main/doc/mcp/servers_json.md
     mcphub-servers = {
       programs = {
@@ -98,6 +99,9 @@ delib.module {
             TAVILY_API_KEY = ''''${env:TAVILY_API_KEY}'';
           };
         };
+        chrome-devtools = {
+          command = "${chrome-devtools-mcp}";
+        };
         # cerebras = {
         # command = "${npx}";
         # args = [
@@ -146,7 +150,6 @@ delib.module {
         git.enable = true;
         playwright = {
           enable = true;
-          type = "stdio";
         };
         time.enable = true;
       };
@@ -172,6 +175,9 @@ delib.module {
           env = {
             TAVILY_API_KEY = ''''${TAVILY_API_KEY}'';
           };
+        };
+        chrome-devtools = {
+          command = "${chrome-devtools-mcp}";
         };
       };
     };
