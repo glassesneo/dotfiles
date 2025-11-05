@@ -16,7 +16,7 @@ delib.module {
         bashls = {
           enable = true;
           package = null;
-          settings = {
+          config = {
             cmd = ["${lib.getExe pkgs.bash-language-server}"];
           };
         };
@@ -31,7 +31,7 @@ delib.module {
         elmls = {
           enable = true;
           package = null;
-          settings = {
+          config = {
             root_markers = [
               "elm.json"
             ];
@@ -44,7 +44,7 @@ delib.module {
         hls = {
           enable = true;
           package = null;
-          settings = {
+          config = {
             haskell = {
               formattingProvider = "fourmolu";
             };
@@ -53,28 +53,28 @@ delib.module {
         kotlin_language_server = {
           enable = true;
           package = null;
-          settings = {
+          config = {
             root_markers = [];
           };
         };
         marksman = {
           enable = true;
           package = null;
-          settings = {
+          config = {
             filetypes = ["markdown"];
           };
         };
         nickel_ls = {
           # enable = true;
           package = null;
-          settings = {
+          config = {
             cmd = ["${lib.getExe pkgs.nls}"];
           };
         };
         nil_ls = {
           # enable = true;
           package = null;
-          settings = {
+          config = {
             cmd = ["${lib.getExe pkgs.nil}"];
             nix = {
               flake = {
@@ -86,7 +86,7 @@ delib.module {
         nixd = {
           enable = true;
           package = null;
-          settings = {
+          config = {
             cmd = ["${lib.getExe pkgs.nixd}"];
             nixpkgs.expr = "import <nixpkgs> { }";
             formatting = {
@@ -113,14 +113,14 @@ delib.module {
         tinymist = {
           enable = true;
           package = null;
-          settings = {
+          config = {
             formatterMode = "typstyle";
           };
         };
         zls = {
           enable = true;
           package = null;
-          settings.zls = {
+          config.zls = {
             enable_snippets = true;
             enable_ast_check_diagnostics = true;
             enable_autofix = true;

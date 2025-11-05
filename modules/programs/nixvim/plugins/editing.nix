@@ -70,16 +70,16 @@ delib.module {
       };
       ts-context-commentstring = {
         # enable = true;
-        extraOptions = {
+        settings = {
           enable_autocmd = false;
-        };
-        languages = {
-          elm = "-- %s";
-          nim = "# %s";
-          nu = "# %s";
-          typst = "// %s";
-          v = "// %s";
-          zig = "// %s";
+          languages = {
+            elm = "-- %s";
+            nim = "# %s";
+            nu = "# %s";
+            typst = "// %s";
+            v = "// %s";
+            zig = "// %s";
+          };
         };
       };
       autoclose = {

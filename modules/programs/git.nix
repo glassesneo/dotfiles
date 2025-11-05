@@ -37,10 +37,14 @@ delib.module {
       enable = cfg.enable;
       lfs.enable = cfg.enableLFS;
 
-      userName = myconfig.constants.username;
-      userEmail = myconfig.constants.useremail;
-      delta.enable = true;
-      extraConfig = {
+      settings = {
+        user = {
+          name = myconfig.constants.username;
+          email = myconfig.constants.useremail;
+        };
+      };
+
+      settings = {
         commit = {
           template = "${homeConfig.xdg.configHome}/git/.gitmsg";
         };
@@ -64,6 +68,10 @@ delib.module {
         ".direnv"
         ".envrc"
       ];
+    };
+    programs.delta = {
+      enable = true;
+      enableGitIntegration = true;
     };
   };
 }

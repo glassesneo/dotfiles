@@ -50,6 +50,7 @@ require("mcphub").setup({
       list_directory = true,
       read_file = true,
       read_multiple_files = true,
+      find_files = true,
     }
 
     if params.server_name == "neovim" and allowed_neovim_tools[params.tool_name] then

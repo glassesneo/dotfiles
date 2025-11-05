@@ -28,5 +28,29 @@ lua_source = '''
 repo = 'skanehira/jumpcursor.vim'
 on_map = '<Plug>(jumpcursor-jump)'
 lua_add = '''
-  vim.keymap.set("n", "<CR-j>", "<Plug>(jumpcursor-jump)")
+  vim.keymap.set("n", "<CR>j", "<Plug>(jumpcursor-jump)")
 '''
+
+# [[plugins]]
+# repo = 'nekowasabi/hellshake-yano.vim'
+# # on_map = '<Plug>(hellshake-yano-vim-'
+# lazy = false
+# hook_add = '''
+#   let g:hellshake_yano = {
+#         \ 'useJapanese': v:false,
+#         \ 'useHintGroups': v:true,
+#         \ 'triggerOnHjkl': v:false,
+#         \ 'perKeyMotionCount': {
+#         \   'v': 1,
+#         \   'V': 1,
+#         \   'w': 3,
+#         \   'b': 3,
+#         \   'e': 3,
+#         \ },
+#         \ 'perKeyMinLength': {
+#         \   'w': 5,
+#         \   'b': 5,
+#         \   'e': 5,
+#         \ },
+#         \ }
+# '''

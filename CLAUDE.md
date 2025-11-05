@@ -11,29 +11,51 @@ This is a Nix-based modular dotfiles repository using **Denix** to manage both H
 
 ## Build and Deployment Commands
 
+This repository uses `nh` (nix helper) for streamlined configuration management.
+
 ### Applying Configurations
 
-**Home Manager (user environment only)**:
+**nix-darwin (macOS system + Home Manager)**:
 ```bash
-# From nix-community/home-manager
-nix run github:nix-community/home-manager -- switch --flake .#neo
+# Standard build and activation (applies both darwin and home-manager configs)
+# -L: Print build logs, -t: Show trace on errors
+nh darwin switch . --hostname kurogane -Lt
 
-# Or using local flake output
-nix run .#homeConfigurations.neo.activationPackage
+# Shorter form when in dotfiles directory
+nh darwin switch . -H kurogane -Lt
+
+# Dry run (preview changes without applying)
+nh darwin switch . -H kurogane -Lt --dry
+
+# Ask for confirmation before applying
+nh darwin switch . -H kurogane -Lt --ask
+
+# Update all flake inputs before building
+nh darwin switch . -H kurogane -Lt --update
+
+# Update specific flake input(s)
+nh darwin switch . -H kurogane -Lt --update-input nixpkgs
 ```
 
-**nix-darwin (macOS system configuration)**:
+**Home Manager only** (user environment only):
 ```bash
-# Standard rebuild
-darwin-rebuild switch --flake .#kurogane
+# Build and activate home-manager configuration
+nh home switch
 
-# Or direct flake execution
-nix run .#darwinConfigurations.kurogane.system
+# With specific configuration (when NH_FLAKE is not set)
+nh home switch .#neo
+
+# Dry run
+nh home switch --dry
 ```
 
-**Both together** (typical workflow):
+**Build without activation**:
 ```bash
-darwin-rebuild switch --flake .#kurogane  # Applies both darwin and home-manager configs
+# Build darwin configuration
+nh darwin build
+
+# Build home-manager configuration
+nh home build
 ```
 
 ### Development and Testing
@@ -53,6 +75,25 @@ nix flake update
 
 # Update specific input
 nix flake lock --update-input nixpkgs
+
+# Launch REPL with darwin configuration loaded
+nh darwin repl
+
+# Launch REPL with home-manager configuration loaded
+nh home repl
+```
+
+### Cleanup
+
+```bash
+# Clean all old generations and garbage collect
+nh clean all --keep 5  # Keep last 5 generations
+
+# Clean current user's profiles only
+nh clean user --keep 3
+
+# Clean specific profile
+nh clean profile <profile-path> --keep 5
 ```
 
 ### Node Package Management
@@ -232,7 +273,7 @@ Reference these in modules rather than hardcoding.
 1. Create `modules/programs/newtool.nix`
 2. Define module with `delib.module`
 3. Add options and configuration
-4. Test with `darwin-rebuild switch --flake .#kurogane`
+4. Test with `nh darwin switch . -H kurogane -Lt`
 
 ### Modifying Neovim Configuration
 
@@ -255,11 +296,14 @@ Uses agenix for encryption:
 ### Updating Dependencies
 
 ```bash
-# Update all inputs
-nix flake update
+# Update all inputs and apply immediately
+nh darwin switch . -H kurogane -Lt --update
 
-# Test changes
-darwin-rebuild switch --flake .#kurogane
+# Update specific input(s) and apply
+nh darwin switch . -H kurogane -Lt --update-input nixpkgs
+
+# Update without applying (just update flake.lock)
+nix flake update
 
 # Commit flake.lock if successful
 git add flake.lock
@@ -272,11 +316,14 @@ git commit -m "update"
 # Quick syntax check
 nix flake check
 
-# Test home-manager config only (faster)
-nix run github:nix-community/home-manager -- switch --flake .#neo --dry-run
+# Dry-run home-manager config only (faster)
+nh home switch --dry
 
-# Full system dry-run
-darwin-rebuild build --flake .#kurogane
+# Full darwin system dry-run (includes home-manager)
+nh darwin switch . -H kurogane -Lt --dry
+
+# Build without activation (test build success)
+nh darwin build . -H kurogane -Lt
 ```
 
 ## Important Implementation Notes

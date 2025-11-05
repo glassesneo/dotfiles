@@ -32,7 +32,7 @@ delib.module {
       };
       marks = {
         enable = true;
-        defaultMappings = false;
+        settings.defaultMappings = false;
       };
       neoscroll = {
         enable = true;

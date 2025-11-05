@@ -1,21 +1,20 @@
 {
   delib,
+  # host,
   inputs,
-  pkgs,
   ...
 }:
 delib.module {
   name = "programs.crush";
 
-  options = delib.singleEnableOption false;
+  options = delib.singleEnableOption true;
 
-  darwin.ifEnabled = {
-    # imports = [
-    # inputs.nur.modules.nixos.default
-    # inputs.nur.repos.charmbracelet.modules.crush
-    # ];
-    # programs.crush = {
-    # enable = true;
-    # };
+  home.ifEnabled = {
+    imports = [
+      inputs.charmbracelet.modules.homeManager.crush
+    ];
+    programs.crush = {
+      enable = true;
+    };
   };
 }
