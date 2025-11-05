@@ -21,6 +21,9 @@ delib.module {
     brave-search-mcp = pkgs.lib.getExe' nodePkgs."@brave/brave-search-mcp-server" "brave-search-mcp-server";
     tavily-mcp = pkgs.lib.getExe' nodePkgs."tavily-mcp" "tavily-mcp";
     chrome-devtools-mcp = pkgs.lib.getExe' nodePkgs."chrome-devtools-mcp" "chrome-devtools-mcp";
+    mcp-git = pkgs.lib.getExe inputs.mcp-servers-nix.packages.${pkgs.system}.mcp-server-git;
+    mcp-time = pkgs.lib.getExe inputs.mcp-servers-nix.packages.${pkgs.system}.mcp-server-time;
+    mcp-memory = pkgs.lib.getExe inputs.mcp-servers-nix.packages.${pkgs.system}.mcp-server-memory;
     # The syntax follows https://github.com/ravitemer/mcphub.nvim/blob/main/doc/mcp/servers_json.md
     mcphub-servers = {
       programs = {
@@ -225,9 +228,56 @@ delib.module {
         };
       };
     };
+    # The syntax follows https://opencode.ai/docs/mcp-servers
+    opencode-servers = {
+      settings.servers = {
+        git = {
+          command = ["${mcp-git}"];
+          type = "local";
+        };
+        time = {
+          command = ["${mcp-time}"];
+          type = "local";
+        };
+        memory = {
+          command = ["${mcp-memory}"];
+          type = "local";
+          environment = {
+            MEMORY_FILE_PATH = "${homeConfig.xdg.dataHome}/crush_memory.json";
+          };
+        };
+        brave-search = {
+          command = ["${brave-search-mcp}"];
+          type = "local";
+          environment = {
+            BRAVE_API_KEY = ''$BRAVE_API_KEY'';
+          };
+        };
+        deepwiki = {
+          url = "https://mcp.deepwiki.com/sse";
+          type = "remote";
+        };
+        readability = {
+          command = ["${nodejs}" "${readability-mcp}"];
+          type = "local";
+        };
+        tavily = {
+          command = ["${tavily-mcp}"];
+          type = "local";
+          environment = {
+            TAVILY_API_KEY = ''$TAVILY_API_KEY'';
+          };
+        };
+        chrome-devtools = {
+          command = ["${chrome-devtools-mcp}"];
+          type = "local";
+        };
+      };
+    };
   in {
     home.file."${homeConfig.xdg.configHome}/mcphub/servers.json".source = inputs.mcp-servers-nix.lib.mkConfig pkgs mcphub-servers;
     programs.claude-code.mcpServers = (inputs.mcp-servers-nix.lib.evalModule pkgs claude-code-servers).config.settings.servers;
     programs.crush.settings.mcp = (inputs.mcp-servers-nix.lib.evalModule pkgs crush-servers).config.settings.servers;
+    programs.opencode.settings.mcp = (inputs.mcp-servers-nix.lib.evalModule pkgs opencode-servers).config.settings.servers;
   };
 }

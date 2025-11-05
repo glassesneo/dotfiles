@@ -1,23 +1,25 @@
 {
   delib,
-  nodePkgs,
+  lib,
   ...
 }:
 delib.module {
-  name = "programs.claude-code";
+  name = "programs.opencode";
 
   options = delib.singleEnableOption true;
 
   home.ifEnabled = {
-    programs.claude-code = {
+    programs.opencode = {
       enable = true;
-      package = nodePkgs."@anthropic-ai/claude-code";
       settings = {
-        env = {
-          DISABLE_AUTOUPDATER = "1";
-        };
+        theme = "transparent-catppuccin";
+        autoshare = false;
+        autoupdate = false;
       };
-      memory.text = ''
+      themes = {
+        transparent-catppuccin = ./themes/transparent-catppuccin.json;
+      };
+      rules = ''
         # Development Environment
 
         ## Languages & Technologies
