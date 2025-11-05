@@ -48,14 +48,14 @@ delib.module {
         # enable = true;
         # type = "stdio";
         # };
-        playwright = {
-          enable = true;
-          type = "stdio";
-        };
+        # playwright = {
+        # enable = true;
+        # type = "stdio";
+        # };
         memory = {
           enable = true;
           env = {
-            MEMORY_FILE_PATH = "${homeConfig.xdg.dataHome}/mcp_memory.json";
+            MEMORY_FILE_PATH = "${homeConfig.xdg.dataHome}/codecompanion_memory.json";
           };
           type = "stdio";
         };
@@ -148,10 +148,14 @@ delib.module {
     claude-code-servers = {
       programs = {
         git.enable = true;
-        playwright = {
-          enable = true;
-        };
         time.enable = true;
+        memory = {
+          enable = true;
+          env = {
+            MEMORY_FILE_PATH = "${homeConfig.xdg.dataHome}/claudecode_memory.json";
+          };
+          type = "stdio";
+        };
       };
       settings.servers = {
         brave-search = {
@@ -181,13 +185,49 @@ delib.module {
         };
       };
     };
-  in {
-    home.packages = [
-      # pkgs.yt-dlp
-    ];
-    home.file = {
-      "${homeConfig.xdg.configHome}/mcphub/servers.json".source = inputs.mcp-servers-nix.lib.mkConfig pkgs mcphub-servers;
+    crush-servers = {
+      programs = {
+        git.enable = true;
+        time.enable = true;
+        memory = {
+          enable = true;
+          env = {
+            MEMORY_FILE_PATH = "${homeConfig.xdg.dataHome}/crush_memory.json";
+          };
+          type = "stdio";
+        };
+      };
+      settings.servers = {
+        brave-search = {
+          command = "${brave-search-mcp}";
+          env = {
+            BRAVE_API_KEY = ''$BRAVE_API_KEY'';
+          };
+        };
+        deepwiki = {
+          url = "https://mcp.deepwiki.com/sse";
+          type = "sse";
+        };
+        readability = {
+          command = "${nodejs}";
+          args = [
+            "${readability-mcp}"
+          ];
+        };
+        tavily = {
+          command = "${tavily-mcp}";
+          env = {
+            TAVILY_API_KEY = ''$TAVILY_API_KEY'';
+          };
+        };
+        chrome-devtools = {
+          command = "${chrome-devtools-mcp}";
+        };
+      };
     };
-    programs.claude-code.mcpServers = lib.mkIf homeConfig.programs.claude-code.enable (inputs.mcp-servers-nix.lib.evalModule pkgs claude-code-servers).config.settings.servers;
+  in {
+    home.file."${homeConfig.xdg.configHome}/mcphub/servers.json".source = inputs.mcp-servers-nix.lib.mkConfig pkgs mcphub-servers;
+    programs.claude-code.mcpServers = (inputs.mcp-servers-nix.lib.evalModule pkgs claude-code-servers).config.settings.servers;
+    programs.crush.settings.mcp = (inputs.mcp-servers-nix.lib.evalModule pkgs crush-servers).config.settings.servers;
   };
 }

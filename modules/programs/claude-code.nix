@@ -49,6 +49,11 @@ delib.module {
         - Package management:
           - Use Nix exclusively as package manager
           - Run commands via `nix run nixpkgs#command-name` (note: this takes some time)
+        - For documentation:
+          - **USE** memory MCP to document investigation results and modifications made after
+          - **NEVER** summarize the results in Markdown format when you completes any coding-related task — including code modifications, technical investigations, or analysis
+          - **USE** the memory MCP to store all relevant findings and changes into the preconfigured file instead
+          - For all non-coding or general research tasks, **NEVER** the memory MCP and must directly display the results to the user.
 
         ## Technical Context
         - **Interests**: System programming
