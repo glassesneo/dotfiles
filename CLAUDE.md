@@ -105,7 +105,9 @@ cd node2nix
 nix-shell -p node2nix --run "node2nix --input node-packages.json --output node-packages.nix --composition default.nix"
 ```
 
-Current node packages include MCP servers (Brave Search, Tavily, Readability, Chrome DevTools) and AI tools (Claude Code, Jules, Gemini CLI).
+**Current node packages** (defined in `node2nix/node-packages.json`):
+- AI Tools: `@anthropic-ai/claude-code`, `@zed-industries/claude-code-acp` (OpenCode), `@google/jules`, `@google/gemini-cli`
+- MCP Servers: `@brave/brave-search-mcp-server`, `@mizchi/readability`, `tavily-mcp`, `chrome-devtools-mcp`
 
 ## Architecture
 
@@ -166,11 +168,32 @@ When configuration blocks are defined as functions, they receive:
 ├── modules/
 │   ├── config/            # Core configuration (constants, user, home, node2nix)
 │   ├── programs/          # Program-specific modules (nixvim, zsh, git, etc.)
-│   ├── services/          # System services (sketchybar)
+│   ├── services/          # System services (aerospace, jankyborders, sketchybar)
 │   └── toplevel/          # System-level settings (nix-darwin, nixpkgs, xdg, fonts)
 ├── node2nix/              # Node.js package management
 └── secrets/               # Encrypted secrets (agenix)
 ```
+
+### Core Modules
+
+**config/** - Foundational configuration modules:
+- `constants.nix`: User information constants (username, email, full name)
+- `user.nix`: User account configuration
+- `home.nix`: Home directory setup
+- `node2nix.nix`: Node.js package integration (exposes `nodePkgs` to all modules)
+
+**toplevel/** - System-wide settings:
+- `nix.nix`: Nix daemon configuration, experimental features, trusted users
+- `nixpkgs.nix`: Nixpkgs configuration, allowed unfree packages, system architecture
+- `xdg.nix`: XDG base directory specification
+- `fonts.nix`: System fonts configuration
+- `shell.nix`: Default shell settings
+- `brew-nix.nix`: Homebrew integration setup
+- `nix-darwin/`: macOS-specific system configurations
+  - `default.nix`: nix-darwin base configuration
+  - `system.nix`: macOS system preferences
+  - `apps.nix`: Application settings
+  - `homebrew.nix`: Homebrew packages and casks
 
 ### Configuration Resolution
 
@@ -218,7 +241,179 @@ darwinConfigurations = mkConfigurations "darwin"; # Uses nix-darwin.lib.darwinSy
 - **agenix**: Secrets encryption
 - **brew-nix**: Homebrew/Nix integration for macOS apps
 - **dpp-vim** + extensions: Denops-based plugin manager for Neovim
-- **mcp-hub**, **mcp-servers-nix**: Model Context Protocol integrations
+- **mcp-hub**, **mcp-servers-nix**, **mcphub-nvim**: Model Context Protocol integrations
+- **charmbracelet**: Charm community NUR (for Crush AI tool)
+
+## Configured Programs and Services
+
+### AI Coding Tools
+
+This configuration includes a comprehensive AI coding toolkit with MCP server integration:
+
+**Claude Code** (`modules/programs/claude-code.nix`):
+- Anthropic's official CLI tool for Claude
+- Configured with auto-update disabled
+- Includes persistent memory configuration
+- MCP servers: Brave Search, DeepWiki, Readability, Tavily, Chrome DevTools, Git, Time, Memory
+
+**OpenCode** (`modules/programs/opencode/default.nix`):
+- Zed-based AI coding assistant
+- Custom transparent Catppuccin theme (`themes/transparent-catppuccin.json`)
+- Configured with `autoshare=false` and `autoupdate=false`
+- Full MCP server integration matching Claude Code setup
+
+**Crush** (`modules/programs/crush.nix`):
+- Charmbracelet's AI coding tool
+- Extensive LSP configuration for: Biome, Deno, Lua (emmylua_ls), Nix (nixd), Python (basedpyright), TypeScript, Zig (zls)
+- Context paths configured to read from `~/.claude/CLAUDE.md`
+- MCP servers configured for enhanced capabilities
+
+**Jules** (`modules/programs/jules.nix`):
+- Google's AI coding assistant
+- Installed as home package from node2nix
+
+**Gemini CLI** (`modules/programs/gemini-cli.nix`):
+- Google's Gemini command-line interface
+- Managed through node2nix packages
+
+### MCP Server Configuration
+
+The `modules/programs/mcp-servers/default.nix` module provides centralized MCP server configuration for all AI tools. It defines four separate server configurations:
+
+**mcphub-servers** (for Neovim's mcphub.nvim):
+- Programs: filesystem, git, github (with gh token auth), memory, sequential-thinking, time
+- Custom servers: brave-search, deepwiki, notion, readability, relative-filesystem, tavily, chrome-devtools
+
+**claude-code-servers**:
+- Programs: git, time, memory (separate memory file: `claudecode_memory.json`)
+- Servers: brave-search, deepwiki, readability, tavily, chrome-devtools
+
+**crush-servers**:
+- Programs: git, time, memory (separate memory file: `crush_memory.json`)
+- Servers: brave-search, deepwiki, readability, tavily, chrome-devtools
+
+**opencode-servers**:
+- Programs: git, time, memory (separate memory file: `opencode_memory.json`)
+- Servers: brave-search, deepwiki, readability, tavily, chrome-devtools
+
+Each AI tool maintains its own memory file to prevent conflicts, stored in `$XDG_DATA_HOME`.
+
+### Shell and Terminal
+
+**zsh** (`modules/programs/zsh/`):
+- Default shell with extensive configuration
+- Integrations: Zellij, direnv, various CLI tools
+- Pure prompt configured separately
+
+**nushell** (`modules/programs/nushell/`):
+- Alternative shell configuration
+
+**Ghostty** (`modules/programs/ghostty/`):
+- Terminal emulator
+- Custom cursor trail shader (`cursor_trail.glsl`)
+
+**Zellij** (`modules/programs/zellij.nix`):
+- Terminal multiplexer
+
+**pure-prompt** (`modules/programs/pure-prompt.nix`):
+- Minimal zsh prompt
+
+### Development Tools
+
+**Neovim/Nixvim** (`modules/programs/nixvim/`):
+- Comprehensive Neovim configuration using nixvim framework
+- LSP support in `lsp/` directory
+- Plugins organized by category:
+  - **AI**: CodeCompanion and related AI integrations (`plugins/ai/`)
+  - **Completion**: blink-cmp (`plugins/blink-cmp.nix`)
+  - **Editing**: Auto-pairs, comments, surround, etc. (`plugins/editing.nix`)
+  - **File navigation**: oil.nvim, fzf-lua (`plugins/oil.nix`, `plugins/fzf-lua.nix`)
+  - **Git**: Gitsigns, etc. (`plugins/git.nix`)
+  - **Motion**: Leap, Flash, etc. (`plugins/motion.nix`)
+  - **UI**: Which-key, indent-blankline, etc. (`plugins/ui.nix`)
+  - **Visibility**: Colorizer, todo-comments, etc. (`plugins/visibility.nix`)
+  - **Status line**: Lualine (`plugins/lualine/`)
+  - **Bufferline**: Buffer tabs (`plugins/bufferline.nix`)
+  - **Terminal**: Toggleterm (`plugins/toggleterm.nix`)
+  - **Utilities**: Snacks.nvim, img-clip, molten (Jupyter) (`plugins/snacks.nix`, `plugins/img-clip.nix`, `plugins/molten.nix`)
+  - **Plugin manager**: dpp.vim configuration (`plugins/dpp/`)
+  - **Dependencies**: Required plugins (`plugins/depends.nix`)
+  - **Helpers**: Utility plugins (`plugins/helpers.nix`)
+  - **Lazy loading**: lz.n (`plugins/lz-n.nix`)
+- Colorscheme configuration in `colorscheme.nix`
+- Filetype settings in `filetype.nix`
+- Extra Lua configuration in `extra_config.lua`
+
+**Git Tools**:
+- **git** (`modules/programs/git.nix`): Git configuration
+- **gh** (`modules/programs/gh.nix`): GitHub CLI
+
+**Nix Tools**:
+- **nh** (`modules/programs/nh.nix`): Nix helper for streamlined operations
+- **alejandra** (`modules/programs/alejandra.nix`): Nix code formatter
+- **nix-index** (`modules/programs/nix-index.nix`): File database for nix packages
+- **direnv** (`modules/programs/direnv.nix`): Directory-specific environment variables
+
+### CLI Utilities
+
+**File Operations**:
+- **fd** (`modules/programs/fd.nix`): Modern find replacement
+- **ripgrep** (`modules/programs/ripgrep.nix`): Fast grep alternative
+- **eza** (`modules/programs/eza.nix`): Modern ls replacement
+- **bat** (`modules/programs/bat.nix`): Cat with syntax highlighting
+- **tre** (`modules/programs/tre.nix`): Tree command alternative
+- **zoxide** (`modules/programs/zoxide.nix`): Smarter cd command
+
+**Other Utilities**:
+- **curl** (`modules/programs/curl.nix`): HTTP client
+- **gomi** (`modules/programs/gomi.nix`): Safe rm alternative
+- **pay-respects** (`modules/programs/pay-respects.nix`): Modern command correction tool
+
+### macOS Services
+
+**AeroSpace** (`modules/services/aerospace.nix`):
+- Tiling window manager for macOS
+- Comprehensive keybindings (Alt-based)
+- Workspace configuration: 1-5 (main monitor), A-E (secondary/main)
+- Integration with Sketchybar and JankyBorders
+- Configured layouts: tiles, accordion, floating
+- Custom gap settings for proper spacing
+- Service mode for advanced operations (Alt-Shift-;)
+
+**JankyBorders** (`modules/services/jankyborders.nix`):
+- Window border highlighting service
+- Launched automatically by AeroSpace
+
+**Sketchybar** (`modules/services/sketchybar/`):
+- Custom macOS menu bar
+- Integrates with AeroSpace for workspace display
+- Launched automatically by AeroSpace
+
+### Homebrew-Managed Applications
+
+Configured in `modules/toplevel/nix-darwin/homebrew.nix`:
+
+**Brews**:
+- `mas`: Mac App Store CLI
+
+**Casks**:
+- `arc`: Arc browser
+- `aquaskk`: Japanese input method (SKK)
+- `karabiner-elements`: Keyboard customization
+
+**Mac App Store Apps**:
+- XCode (497799835)
+- LINE (539883307)
+
+**AquaSKK Configuration**: Custom keymap configuration included in the homebrew module for Japanese input.
+
+### Fonts
+
+Configured in `modules/toplevel/fonts.nix`:
+- **udev-gothic-nf**: Main font with Nerd Font icons
+- **noto-fonts-cjk-serif**: Japanese serif font
+- **noto-fonts-cjk-sans**: Japanese sans-serif font
+- **hackgen-nf-font**: Programming font with Nerd Font support
 
 ## Code Conventions
 
@@ -242,9 +437,10 @@ When creating a new program module in `modules/programs/`:
      };
    }
    ```
-3. **Options**: Use Denix option helpers (defined in `lib/options.nix`):
+3. **Options**: Use Denix option helpers:
    - `boolOption <default>`: Boolean option with default value
    - `strOption <default>`: String option with default value
+   - `singleEnableOption <default>`: Shorthand for `{ enable = boolOption <default>; }`
    - `readOnly <option>`: Makes an option read-only (e.g., `readOnly (strOption "value")`)
 4. **Conditionals**:
    - `.ifEnabled`: Applied when module's `enable` option is `true`
@@ -277,14 +473,38 @@ Reference these in modules rather than hardcoding.
 
 ### Modifying Neovim Configuration
 
-Neovim uses nixvim framework in `modules/programs/nixvim/`:
-- **LSP**: `lsp/` directory
-- **Plugins**: `plugins/` directory (organized by category)
-- **AI integration**: `plugins/ai/` (Claude Code, CodeCompanion)
-- **Plugin manager**: `plugins/dpp/` (Denops-based, TOML configs)
-- **Extra Lua**: `extra_config.lua`
+Neovim uses nixvim framework in `modules/programs/nixvim/`. See the "Configured Programs and Services > Development Tools > Neovim/Nixvim" section for a complete list of plugin categories and their locations.
 
-After changes, rebuild applies new Neovim config automatically.
+Key directories:
+- **LSP**: `lsp/` - Language server configurations
+- **Plugins**: `plugins/` - Organized by category (ai, editing, ui, etc.)
+- **Plugin manager**: `plugins/dpp/` - Denops-based plugin manager with TOML configs
+- **Colorscheme**: `colorscheme.nix` - Theme configuration
+- **Filetype**: `filetype.nix` - Filetype-specific settings
+- **Extra config**: `extra_config.lua` - Additional Lua configuration
+
+After changes, rebuild with `nh darwin switch` to apply new Neovim config automatically.
+
+### Managing MCP Servers
+
+MCP (Model Context Protocol) servers are centrally configured in `modules/programs/mcp-servers/default.nix`. This module manages server configurations for:
+- Claude Code
+- OpenCode
+- Crush
+- Neovim (mcphub.nvim)
+
+Each AI tool has its own isolated server configuration with separate memory files to prevent conflicts. When adding or modifying MCP servers:
+
+1. Edit `modules/programs/mcp-servers/default.nix`
+2. Add server configuration to the appropriate section(s)
+3. For node-based servers, add the package to `node2nix/node-packages.json` first
+4. Rebuild to apply changes
+
+Server types:
+- **stdio**: Local command execution
+- **sse**: Server-sent events (remote servers like DeepWiki)
+- **local**: OpenCode's format for local servers
+- **remote**: OpenCode's format for remote servers
 
 ### Managing Secrets
 

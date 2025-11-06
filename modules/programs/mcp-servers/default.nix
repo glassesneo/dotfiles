@@ -1,5 +1,6 @@
 {
   delib,
+  host,
   homeConfig,
   inputs,
   lib,
@@ -21,9 +22,9 @@ delib.module {
     brave-search-mcp = pkgs.lib.getExe' nodePkgs."@brave/brave-search-mcp-server" "brave-search-mcp-server";
     tavily-mcp = pkgs.lib.getExe' nodePkgs."tavily-mcp" "tavily-mcp";
     chrome-devtools-mcp = pkgs.lib.getExe' nodePkgs."chrome-devtools-mcp" "chrome-devtools-mcp";
-    mcp-git = pkgs.lib.getExe inputs.mcp-servers-nix.packages.${pkgs.system}.mcp-server-git;
-    mcp-time = pkgs.lib.getExe inputs.mcp-servers-nix.packages.${pkgs.system}.mcp-server-time;
-    mcp-memory = pkgs.lib.getExe inputs.mcp-servers-nix.packages.${pkgs.system}.mcp-server-memory;
+    mcp-git = pkgs.lib.getExe inputs.mcp-servers-nix.packages.${host.homeManagerSystem}.mcp-server-git;
+    mcp-time = pkgs.lib.getExe inputs.mcp-servers-nix.packages.${host.homeManagerSystem}.mcp-server-time;
+    mcp-memory = pkgs.lib.getExe inputs.mcp-servers-nix.packages.${host.homeManagerSystem}.mcp-server-memory;
     # The syntax follows https://github.com/ravitemer/mcphub.nvim/blob/main/doc/mcp/servers_json.md
     mcphub-servers = {
       programs = {
@@ -243,14 +244,14 @@ delib.module {
           command = ["${mcp-memory}"];
           type = "local";
           environment = {
-            MEMORY_FILE_PATH = "${homeConfig.xdg.dataHome}/crush_memory.json";
+            MEMORY_FILE_PATH = "${homeConfig.xdg.dataHome}/opencode_memory.json";
           };
         };
         brave-search = {
           command = ["${brave-search-mcp}"];
           type = "local";
           environment = {
-            BRAVE_API_KEY = ''$BRAVE_API_KEY'';
+            BRAVE_API_KEY = ''{env:BRAVE_API_KEY}'';
           };
         };
         deepwiki = {
@@ -265,7 +266,7 @@ delib.module {
           command = ["${tavily-mcp}"];
           type = "local";
           environment = {
-            TAVILY_API_KEY = ''$TAVILY_API_KEY'';
+            TAVILY_API_KEY = ''{env:TAVILY_API_KEY}'';
           };
         };
         chrome-devtools = {

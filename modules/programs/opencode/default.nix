@@ -1,8 +1,4 @@
-{
-  delib,
-  lib,
-  ...
-}:
+{delib, ...}:
 delib.module {
   name = "programs.opencode";
 
@@ -12,7 +8,7 @@ delib.module {
     programs.opencode = {
       enable = true;
       settings = {
-        theme = "transparent-catppuccin";
+        theme = "catppuccin";
         autoshare = false;
         autoupdate = false;
       };
