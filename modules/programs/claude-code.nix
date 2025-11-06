@@ -49,6 +49,11 @@ delib.module {
         - Package management:
           - Use Nix exclusively as package manager
           - Run commands via `nix run nixpkgs#command-name` (note: this takes some time)
+        - Code exploration and editing:
+          - **MUST** use Kiri MCP (`mcp__kiri__context_bundle`) to explore unfamiliar codebases
+          - **MUST** prioritize Morph Fast Apply MCP (`mcp__morph-fast-apply__edit_file`) when editing files
+          - Kiri provides intelligent code context and dependency analysis
+          - Fast Apply enables efficient edits with minimal context markers
 
         ## Technical Context
         - **Interests**: System programming

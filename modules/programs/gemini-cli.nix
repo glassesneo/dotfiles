@@ -6,7 +6,7 @@
 delib.module {
   name = "programs.gemini-cli";
 
-  options = delib.singleEnableOption true;
+  options = delib.singleEnableOption false;
 
   home.ifEnabled = {
     programs.gemini-cli = {

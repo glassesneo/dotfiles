@@ -1,9 +1,9 @@
 [
   "@anthropic-ai/claude-code",
   "@zed-industries/claude-code-acp",
-  "@google/gemini-cli",
-  "@google/jules",
   "@brave/brave-search-mcp-server",
+  "@morph-llm/morph-fast-apply",
+  "kiri-mcp-server",
   "@mizchi/readability",
   "tavily-mcp",
   "chrome-devtools-mcp"

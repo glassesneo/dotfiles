@@ -8,6 +8,7 @@ in {
   "tavily-api-key.age".publicKeys = [userKey];
   "hf-inference-api-key.age".publicKeys = [userKey];
   "cerebras-api-key.age".publicKeys = [userKey];
+  "morph-fast-apply-api-key.age".publicKeys = [userKey];
   "io-intelligence-api-key.age".publicKeys = [userKey];
   "iniad-id.age".publicKeys = [userKey];
   "iniad-password.age".publicKeys = [userKey];

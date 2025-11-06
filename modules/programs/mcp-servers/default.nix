@@ -22,6 +22,8 @@ delib.module {
     brave-search-mcp = pkgs.lib.getExe' nodePkgs."@brave/brave-search-mcp-server" "brave-search-mcp-server";
     tavily-mcp = pkgs.lib.getExe' nodePkgs."tavily-mcp" "tavily-mcp";
     chrome-devtools-mcp = pkgs.lib.getExe' nodePkgs."chrome-devtools-mcp" "chrome-devtools-mcp";
+    fast-apply-mcp = pkgs.lib.getExe' nodePkgs."@morph-llm/morph-fast-apply" "mcp-server-filesystem";
+    kiri-mcp = pkgs.lib.getExe' nodePkgs."kiri-mcp-server" "kiri-mcp-server";
     mcp-git = pkgs.lib.getExe inputs.mcp-servers-nix.packages.${host.homeManagerSystem}.mcp-server-git;
     mcp-time = pkgs.lib.getExe inputs.mcp-servers-nix.packages.${host.homeManagerSystem}.mcp-server-time;
     mcp-memory = pkgs.lib.getExe inputs.mcp-servers-nix.packages.${host.homeManagerSystem}.mcp-server-memory;
@@ -106,6 +108,17 @@ delib.module {
         chrome-devtools = {
           command = "${chrome-devtools-mcp}";
         };
+        morph-fast-apply = {
+          command = "${fast-apply-mcp}";
+          env = {
+            ALL_TOOLS = "false";
+            MORPH_API_KEY = ''''${env:MORPH_FAST_APPLY_API_KEY}'';
+          };
+        };
+        kiri = {
+          command = "${kiri-mcp}";
+          args = ["--repo" "." "--db" ".kiri/index.duckdb" "--watch"];
+        };
         # cerebras = {
         # command = "${npx}";
         # args = [
@@ -187,6 +200,17 @@ delib.module {
         chrome-devtools = {
           command = "${chrome-devtools-mcp}";
         };
+        morph-fast-apply = {
+          command = "${fast-apply-mcp}";
+          env = {
+            ALL_TOOLS = "false";
+            MORPH_API_KEY = ''''${MORPH_FAST_APPLY_API_KEY}'';
+          };
+        };
+        kiri = {
+          command = "${kiri-mcp}";
+          args = ["--repo" "." "--db" ".kiri/index.duckdb" "--watch"];
+        };
       };
     };
     crush-servers = {
@@ -226,6 +250,17 @@ delib.module {
         };
         chrome-devtools = {
           command = "${chrome-devtools-mcp}";
+        };
+        morph-fast-apply = {
+          command = "${fast-apply-mcp}";
+          env = {
+            ALL_TOOLS = "false";
+            MORPH_API_KEY = ''$MORPH_FAST_APPLY_API_KEY'';
+          };
+        };
+        kiri = {
+          command = "${kiri-mcp}";
+          args = ["--repo" "." "--db" ".kiri/index.duckdb" "--watch"];
         };
       };
     };
@@ -271,6 +306,18 @@ delib.module {
         };
         chrome-devtools = {
           command = ["${chrome-devtools-mcp}"];
+          type = "local";
+        };
+        morph-fast-apply = {
+          command = ["${fast-apply-mcp}"];
+          type = "local";
+          environment = {
+            ALL_TOOLS = "false";
+            MORPH_API_KEY = ''{env:MORPH_FAST_APPLY_API_KEY}'';
+          };
+        };
+        kiri = {
+          command = ["${kiri-mcp}" "--repo" "." "--db" ".kiri/index.duckdb" "--watch"];
           type = "local";
         };
       };

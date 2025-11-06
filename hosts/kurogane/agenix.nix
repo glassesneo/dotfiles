@@ -21,6 +21,7 @@ delib.host {
         tavily-api-key.file = ../../secrets/tavily-api-key.age;
         hf-inference-api-key.file = ../../secrets/hf-inference-api-key.age;
         cerebras-api-key.file = ../../secrets/cerebras-api-key.age;
+        morph-fast-apply-api-key.file = ../../secrets/morph-fast-apply-api-key.age;
         io-intelligence-api-key.file = ../../secrets/io-intelligence-api-key.age;
         iniad-id.file = ../../secrets/iniad-id.age;
         iniad-password.file = ../../secrets/iniad-password.age;
@@ -36,6 +37,7 @@ delib.host {
       AI_MOP_API_KEY = ''$(${cat} ${homeConfig.age.secrets.ai-mop-api-key.path})'';
       HF_INFERENCE_API_KEY = ''$(${cat} ${homeConfig.age.secrets.hf-inference-api-key.path})'';
       CEREBRAS_API_KEY = ''$(${cat} ${homeConfig.age.secrets.cerebras-api-key.path})'';
+      MORPH_FAST_APPLY_API_KEY = ''$(${cat} ${homeConfig.age.secrets.morph-fast-apply-api-key.path})'';
       IO_INTELLIGENCE_API_KEY = ''$(${cat} ${homeConfig.age.secrets.io-intelligence-api-key.path})'';
       INIAD_ID = ''$(${cat} ${homeConfig.age.secrets.iniad-id.path})'';
       INIAD_PASSWORD = ''$(${cat} ${homeConfig.age.secrets.iniad-password.path})'';

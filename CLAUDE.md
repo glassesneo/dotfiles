@@ -106,8 +106,8 @@ nix-shell -p node2nix --run "node2nix --input node-packages.json --output node-p
 ```
 
 **Current node packages** (defined in `node2nix/node-packages.json`):
-- AI Tools: `@anthropic-ai/claude-code`, `@zed-industries/claude-code-acp` (OpenCode), `@google/jules`, `@google/gemini-cli`
-- MCP Servers: `@brave/brave-search-mcp-server`, `@mizchi/readability`, `tavily-mcp`, `chrome-devtools-mcp`
+- AI Tools: `@anthropic-ai/claude-code`, `@zed-industries/claude-code-acp` (OpenCode)
+- MCP Servers: `@brave/brave-search-mcp-server`, `@morph-llm/morph-fast-apply`, `kiri-mcp-server`, `@mizchi/readability`, `tavily-mcp`, `chrome-devtools-mcp`
 
 ## Architecture
 
@@ -254,7 +254,7 @@ This configuration includes a comprehensive AI coding toolkit with MCP server in
 - Anthropic's official CLI tool for Claude
 - Configured with auto-update disabled
 - Includes persistent memory configuration
-- MCP servers: Brave Search, DeepWiki, Readability, Tavily, Chrome DevTools, Git, Time, Memory
+- MCP servers: Brave Search, DeepWiki, Readability, Tavily, Chrome DevTools, Morph Fast Apply, Kiri, Git, Time, Memory
 
 **OpenCode** (`modules/programs/opencode/default.nix`):
 - Zed-based AI coding assistant
@@ -270,11 +270,11 @@ This configuration includes a comprehensive AI coding toolkit with MCP server in
 
 **Jules** (`modules/programs/jules.nix`):
 - Google's AI coding assistant
-- Installed as home package from node2nix
+- Disabled by default (set `programs.jules.enable = true` to enable)
 
 **Gemini CLI** (`modules/programs/gemini-cli.nix`):
 - Google's Gemini command-line interface
-- Managed through node2nix packages
+- Disabled by default (set `programs.gemini-cli.enable = true` to enable)
 
 ### MCP Server Configuration
 
@@ -286,17 +286,21 @@ The `modules/programs/mcp-servers/default.nix` module provides centralized MCP s
 
 **claude-code-servers**:
 - Programs: git, time, memory (separate memory file: `claudecode_memory.json`)
-- Servers: brave-search, deepwiki, readability, tavily, chrome-devtools
+- Servers: brave-search, deepwiki, readability, tavily, chrome-devtools, morph-fast-apply, kiri
 
 **crush-servers**:
 - Programs: git, time, memory (separate memory file: `crush_memory.json`)
-- Servers: brave-search, deepwiki, readability, tavily, chrome-devtools
+- Servers: brave-search, deepwiki, readability, tavily, chrome-devtools, morph-fast-apply, kiri
 
 **opencode-servers**:
 - Programs: git, time, memory (separate memory file: `opencode_memory.json`)
-- Servers: brave-search, deepwiki, readability, tavily, chrome-devtools
+- Servers: brave-search, deepwiki, readability, tavily, chrome-devtools, morph-fast-apply, kiri
 
 Each AI tool maintains its own memory file to prevent conflicts, stored in `$XDG_DATA_HOME`.
+
+**Server Details**:
+- **morph-fast-apply**: Advanced file editing and manipulation server (requires `MORPH_FAST_APPLY_API_KEY`)
+- **kiri**: Code context and search server with repository indexing (uses local DuckDB at `.kiri/index.duckdb`)
 
 ### Shell and Terminal
 
@@ -513,6 +517,10 @@ Uses agenix for encryption:
 2. Reference with `config.age.secrets.secretname.path` in modules
 3. Secrets are encrypted with host SSH keys
 
+**Current secrets include**:
+- API keys: `morph-fast-apply-api-key.age`, `tavily-api-key.age`, `brave-search-api-key.age`, etc.
+- The `MORPH_FAST_APPLY_API_KEY` environment variable is set from the encrypted secret for use by the Morph Fast Apply MCP server
+
 ### Updating Dependencies
 
 ```bash
@@ -566,6 +574,23 @@ Custom XDG paths are configured in `modules/toplevel/xdg.nix`. Programs should r
 - Data: `$XDG_DATA_HOME`
 - State: `$XDG_STATE_HOME`
 - Cache: `$XDG_CACHE_HOME`
+
+### Kiri MCP Server Implementation
+
+The Kiri MCP server (`kiri-mcp-server`) uses a special wrapper implementation defined in `modules/config/node2nix.nix`. This wrapper works around tree-sitter download issues by using `npx` to manage dependencies:
+
+```nix
+kiri-mcp-server-wrapper = pkgs.writeShellScriptBin "kiri-mcp-server" ''
+  export PATH="${pkgs.nodejs}/bin:${pkgs.tree-sitter}/bin:$PATH"
+  exec ${pkgs.nodejs}/bin/npx -y kiri-mcp-server@0.9.2 "$@"
+'';
+```
+
+**Key points**:
+- Kiri creates a `.kiri/` directory in the repository root for its DuckDB index
+- The server watches repository changes with the `--watch` flag
+- Database location: `.kiri/index.duckdb`
+- The wrapper allows Kiri to use cached or globally installed node_modules
 
 ### Multi-Target Architecture
 
