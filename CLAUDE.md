@@ -257,8 +257,7 @@ This configuration includes a comprehensive AI coding toolkit with MCP server in
 - MCP servers: Brave Search, DeepWiki, Readability, Tavily, Chrome DevTools, Morph Fast Apply, Kiri, Git, Time, Memory
 
 **OpenCode** (`modules/programs/opencode/default.nix`):
-- Zed-based AI coding assistant
-- Custom transparent Catppuccin theme (`themes/transparent-catppuccin.json`)
+- Fully open source AI coding assistant
 - Configured with `autoshare=false` and `autoupdate=false`
 - Full MCP server integration matching Claude Code setup
 
@@ -267,14 +266,6 @@ This configuration includes a comprehensive AI coding toolkit with MCP server in
 - Extensive LSP configuration for: Biome, Deno, Lua (emmylua_ls), Nix (nixd), Python (basedpyright), TypeScript, Zig (zls)
 - Context paths configured to read from `~/.claude/CLAUDE.md`
 - MCP servers configured for enhanced capabilities
-
-**Jules** (`modules/programs/jules.nix`):
-- Google's AI coding assistant
-- Disabled by default (set `programs.jules.enable = true` to enable)
-
-**Gemini CLI** (`modules/programs/gemini-cli.nix`):
-- Google's Gemini command-line interface
-- Disabled by default (set `programs.gemini-cli.enable = true` to enable)
 
 ### MCP Server Configuration
 

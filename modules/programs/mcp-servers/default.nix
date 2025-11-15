@@ -16,6 +16,7 @@ delib.module {
   };
 
   home.ifEnabled = let
+    codex = pkgs.lib.getExe' homeConfig.programs.codex.package "codex";
     deno = pkgs.lib.getExe pkgs.deno;
     nodejs = pkgs.lib.getExe pkgs.nodejs;
     readability-mcp = "${nodePkgs."@mizchi/readability"}/lib/node_modules/@mizchi/readability/dist/mcp.js";
@@ -24,7 +25,7 @@ delib.module {
     chrome-devtools-mcp = pkgs.lib.getExe' nodePkgs."chrome-devtools-mcp" "chrome-devtools-mcp";
     fast-apply-mcp = pkgs.lib.getExe' nodePkgs."@morph-llm/morph-fast-apply" "mcp-server-filesystem";
     kiri-mcp = pkgs.lib.getExe' nodePkgs."kiri-mcp-server" "kiri-mcp-server";
-    mcp-git = pkgs.lib.getExe inputs.mcp-servers-nix.packages.${host.homeManagerSystem}.mcp-server-git;
+    # mcp-git = pkgs.lib.getExe inputs.mcp-servers-nix.packages.${host.homeManagerSystem}.mcp-server-git;
     mcp-time = pkgs.lib.getExe inputs.mcp-servers-nix.packages.${host.homeManagerSystem}.mcp-server-time;
     mcp-memory = pkgs.lib.getExe inputs.mcp-servers-nix.packages.${host.homeManagerSystem}.mcp-server-memory;
     # The syntax follows https://github.com/ravitemer/mcphub.nvim/blob/main/doc/mcp/servers_json.md
@@ -112,7 +113,7 @@ delib.module {
           command = "${fast-apply-mcp}";
           env = {
             ALL_TOOLS = "false";
-            MORPH_API_KEY = ''''${env:MORPH_FAST_APPLY_API_KEY}'';
+            MORPH_API_KEY = ''''${env:MORPH_API_KEY}'';
           };
         };
         kiri = {
@@ -164,7 +165,7 @@ delib.module {
     # The syntax follows https://docs.claude.com/en/docs/claude-code/mcp
     claude-code-servers = {
       programs = {
-        git.enable = true;
+        # git.enable = true;
         time.enable = true;
         memory = {
           enable = true;
@@ -175,6 +176,10 @@ delib.module {
         };
       };
       settings.servers = {
+        codex = {
+          command = "${codex}";
+          args = ["mcp-server"];
+        };
         brave-search = {
           command = "${brave-search-mcp}";
           env = {
@@ -204,8 +209,54 @@ delib.module {
           command = "${fast-apply-mcp}";
           env = {
             ALL_TOOLS = "false";
-            MORPH_API_KEY = ''''${MORPH_FAST_APPLY_API_KEY}'';
+            MORPH_API_KEY = ''''${MORPH_API_KEY}'';
           };
+        };
+        kiri = {
+          command = "${kiri-mcp}";
+          args = ["--repo" "." "--db" ".kiri/index.duckdb" "--watch"];
+        };
+      };
+    };
+    codex-servers = {
+      programs = {
+        # git.enable = true;
+        time.enable = true;
+        memory = {
+          enable = true;
+          env = {
+            MEMORY_FILE_PATH = "${homeConfig.xdg.dataHome}/codex_memory.json";
+          };
+          type = "stdio";
+        };
+      };
+      settings.servers = {
+        brave-search = {
+          command = "${brave-search-mcp}";
+          env_vars = ["BRAVE_API_KEY"];
+        };
+        deepwiki = {
+          url = "https://mcp.deepwiki.com/mcp";
+        };
+        readability = {
+          command = "${nodejs}";
+          args = [
+            "${readability-mcp}"
+          ];
+        };
+        tavily = {
+          command = "${tavily-mcp}";
+          env_vars = ["TAVILY_API_KEY"];
+        };
+        chrome-devtools = {
+          command = "${chrome-devtools-mcp}";
+        };
+        morph-fast-apply = {
+          command = "${fast-apply-mcp}";
+          env = {
+            ALL_TOOLS = "false";
+          };
+          env_vars = ["MORPH_API_KEY"];
         };
         kiri = {
           command = "${kiri-mcp}";
@@ -215,7 +266,7 @@ delib.module {
     };
     crush-servers = {
       programs = {
-        git.enable = true;
+        # git.enable = true;
         time.enable = true;
         memory = {
           enable = true;
@@ -226,6 +277,10 @@ delib.module {
         };
       };
       settings.servers = {
+        codex = {
+          command = "${codex}";
+          args = ["mcp-server"];
+        };
         brave-search = {
           command = "${brave-search-mcp}";
           env = {
@@ -255,7 +310,7 @@ delib.module {
           command = "${fast-apply-mcp}";
           env = {
             ALL_TOOLS = "false";
-            MORPH_API_KEY = ''$MORPH_FAST_APPLY_API_KEY'';
+            MORPH_API_KEY = ''$MORPH_API_KEY'';
           };
         };
         kiri = {
@@ -267,10 +322,10 @@ delib.module {
     # The syntax follows https://opencode.ai/docs/mcp-servers
     opencode-servers = {
       settings.servers = {
-        git = {
-          command = ["${mcp-git}"];
-          type = "local";
-        };
+        # git = {
+        # command = ["${mcp-git}"];
+        # type = "local";
+        # };
         time = {
           command = ["${mcp-time}"];
           type = "local";
@@ -281,6 +336,10 @@ delib.module {
           environment = {
             MEMORY_FILE_PATH = "${homeConfig.xdg.dataHome}/opencode_memory.json";
           };
+        };
+        codex = {
+          command = ["${codex}" "mcp-server"];
+          type = "local";
         };
         brave-search = {
           command = ["${brave-search-mcp}"];
@@ -304,16 +363,16 @@ delib.module {
             TAVILY_API_KEY = ''{env:TAVILY_API_KEY}'';
           };
         };
-        chrome-devtools = {
-          command = ["${chrome-devtools-mcp}"];
-          type = "local";
-        };
+        # chrome-devtools = {
+        # command = ["${chrome-devtools-mcp}"];
+        # type = "local";
+        # };
         morph-fast-apply = {
           command = ["${fast-apply-mcp}"];
           type = "local";
           environment = {
             ALL_TOOLS = "false";
-            MORPH_API_KEY = ''{env:MORPH_FAST_APPLY_API_KEY}'';
+            MORPH_API_KEY = ''{env:MORPH_API_KEY}'';
           };
         };
         kiri = {
@@ -325,6 +384,7 @@ delib.module {
   in {
     home.file."${homeConfig.xdg.configHome}/mcphub/servers.json".source = inputs.mcp-servers-nix.lib.mkConfig pkgs mcphub-servers;
     programs.claude-code.mcpServers = (inputs.mcp-servers-nix.lib.evalModule pkgs claude-code-servers).config.settings.servers;
+    programs.codex.settings.mcp_servers = (inputs.mcp-servers-nix.lib.evalModule pkgs codex-servers).config.settings.servers;
     programs.crush.settings.mcp = (inputs.mcp-servers-nix.lib.evalModule pkgs crush-servers).config.settings.servers;
     programs.opencode.settings.mcp = (inputs.mcp-servers-nix.lib.evalModule pkgs opencode-servers).config.settings.servers;
   };

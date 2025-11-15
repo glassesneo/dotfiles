@@ -67,6 +67,7 @@ delib.module {
         ".DS_Store"
         ".direnv"
         ".envrc"
+        "var/"
       ];
     };
     programs.delta = {

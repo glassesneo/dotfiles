@@ -8,6 +8,9 @@
     settings = {
       experimental-features = ["nix-command" "flakes" "pipe-operators"];
       warn-dirty = false;
+      substituters = [
+        "https://cache.nixos.org"
+      ];
     };
   };
 in

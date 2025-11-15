@@ -1,5 +1,6 @@
 [
   "@anthropic-ai/claude-code",
+  "@openai/codex",
   "@zed-industries/claude-code-acp",
   "@brave/brave-search-mcp-server",
   "@morph-llm/morph-fast-apply",
