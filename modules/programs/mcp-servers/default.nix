@@ -25,6 +25,7 @@ delib.module {
     chrome-devtools-mcp = pkgs.lib.getExe' nodePkgs."chrome-devtools-mcp" "chrome-devtools-mcp";
     fast-apply-mcp = pkgs.lib.getExe' nodePkgs."@morph-llm/morph-fast-apply" "mcp-server-filesystem";
     kiri-mcp = pkgs.lib.getExe' nodePkgs."kiri-mcp-server" "kiri-mcp-server";
+    google-map-mcp = pkgs.lib.getExe' nodePkgs."@modelcontextprotocol/server-google-maps" "mcp-server-google-maps";
     # mcp-git = pkgs.lib.getExe inputs.mcp-servers-nix.packages.${host.homeManagerSystem}.mcp-server-git;
     mcp-time = pkgs.lib.getExe inputs.mcp-servers-nix.packages.${host.homeManagerSystem}.mcp-server-time;
     mcp-memory = pkgs.lib.getExe inputs.mcp-servers-nix.packages.${host.homeManagerSystem}.mcp-server-memory;
@@ -216,6 +217,43 @@ delib.module {
           command = "${kiri-mcp}";
           args = ["--repo" "." "--db" ".kiri/index.duckdb" "--watch"];
         };
+        google-map-mcp = {
+          command = "${google-map-mcp}";
+          env = {
+            GOOGLE_MAPS_API_KEY = ''''${GOOGLE_CLOUD_API_KEY}'';
+          };
+        };
+      };
+    };
+    claude-desktop-servers = {
+      settings.servers = {
+        brave-search = {
+          command = "${brave-search-mcp}";
+          env = {
+            BRAVE_API_KEY = ''''${BRAVE_API_KEY}'';
+          };
+        };
+        readability = {
+          command = "${nodejs}";
+          args = [
+            "${readability-mcp}"
+          ];
+        };
+        tavily = {
+          command = "${tavily-mcp}";
+          env = {
+            TAVILY_API_KEY = ''''${TAVILY_API_KEY}'';
+          };
+        };
+        chrome-devtools = {
+          command = "${chrome-devtools-mcp}";
+        };
+        google-map-mcp = {
+          command = "${google-map-mcp}";
+          env = {
+            GOOGLE_MAPS_API_KEY = ''''${GOOGLE_CLOUD_API_KEY}'';
+          };
+        };
       };
     };
     codex-servers = {
@@ -382,7 +420,10 @@ delib.module {
       };
     };
   in {
-    home.file."${homeConfig.xdg.configHome}/mcphub/servers.json".source = inputs.mcp-servers-nix.lib.mkConfig pkgs mcphub-servers;
+    home.file = {
+      "${homeConfig.xdg.configHome}/mcphub/servers.json".source = inputs.mcp-servers-nix.lib.mkConfig pkgs mcphub-servers;
+      "Library/Application Support/Claude/claude_desktop_config.json".source = inputs.mcp-servers-nix.lib.mkConfig pkgs claude-desktop-servers;
+    };
     programs.claude-code.mcpServers = (inputs.mcp-servers-nix.lib.evalModule pkgs claude-code-servers).config.settings.servers;
     programs.codex.settings.mcp_servers = (inputs.mcp-servers-nix.lib.evalModule pkgs codex-servers).config.settings.servers;
     programs.crush.settings.mcp = (inputs.mcp-servers-nix.lib.evalModule pkgs crush-servers).config.settings.servers;

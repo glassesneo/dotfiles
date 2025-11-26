@@ -23,6 +23,18 @@
         "type": "github"
       }
     },
+    "anthropic-skills": {
+      "flake": false,
+      "locked": {
+        "narHash": "sha256-KQQDhGD88/hYVfJcO6XdoTTELk51VUxBjxteQHXYFjA=",
+        "type": "file",
+        "url": "https://github.com/anthropics/skills"
+      },
+      "original": {
+        "type": "file",
+        "url": "https://github.com/anthropics/skills"
+      }
+    },
     "brew-api": {
       "flake": false,
       "locked": {
@@ -619,6 +631,7 @@
     "root": {
       "inputs": {
         "agenix": "agenix",
+        "anthropic-skills": "anthropic-skills",
         "brew-api": "brew-api",
         "brew-nix": "brew-nix",
         "charmbracelet": "charmbracelet",

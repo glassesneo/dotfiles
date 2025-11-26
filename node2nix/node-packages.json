@@ -6,6 +6,7 @@
   "@morph-llm/morph-fast-apply",
   "kiri-mcp-server",
   "@mizchi/readability",
+  "@modelcontextprotocol/server-google-maps",
   "tavily-mcp",
   "chrome-devtools-mcp"
 ]

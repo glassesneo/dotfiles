@@ -120,5 +120,9 @@
       url = "github:Shougo/dpp-protocol-git";
       flake = false;
     };
+    anthropic-skills = {
+      url = "https://github.com/anthropics/skills";
+      flake = false;
+    };
   };
 }

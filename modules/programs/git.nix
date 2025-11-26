@@ -60,6 +60,7 @@ delib.module {
         merge = {
           tool = "neovimdiff";
         };
+        url."git@github.com:".insteadOf = "https://github.com/";
       };
       ignores = [
         "*~"
