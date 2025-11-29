@@ -59,10 +59,10 @@ delib.module {
       gaps = {
         inner.horizontal = 10;
         inner.vertical = 10;
-        outer.left = 3;
-        outer.bottom = 45;
-        outer.top = 3;
-        outer.right = 3;
+        outer.left = 5;
+        outer.bottom = 48;
+        outer.top = 5;
+        outer.right = 5;
       };
 
       workspace-to-monitor-force-assignment = {

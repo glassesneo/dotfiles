@@ -41,6 +41,11 @@ delib.module {
             base_url = "https://openrouter.ai/api/v1";
             env_key = "OPENROUTER_API_KEY";
           };
+          cerebras = {
+            name = "Cerebras";
+            base_url = "https://api.cerebras.ai/v1";
+            env_key = "CEREBRAS_API_KEY";
+          };
         };
         profile = "full-auto";
         profiles = {

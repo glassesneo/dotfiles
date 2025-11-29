@@ -38,7 +38,8 @@ in
             - Treat Codex like a subagent for exploration and planning tasks
             - **Limitation**: Codex is NOT suitable for implementing new features (use Claude Code for implementation)
             - **NEVER** specify `reasoning-effort = "high"` when calling Codex MCP
-            - Use gpt-5.1-codex-mini as a model when you ask codex for tiny questions
+            - Use gpt-5.1-codex-max as a model when you ask codex for regular tasks
+            - Use gpt-5.1-codex-mini as a model when you ask codex for tiny tasks
           - After Codex provides a plan, implement features yourself using TDD approach
           - **Code Review**: **MUST** ask Codex MCP to review changes after implementing features or significant refactorings
             - Use Codex to analyze uncommitted changes for potential issues, bugs, and improvements
@@ -646,4 +647,3 @@ in
       };
     };
   }
-

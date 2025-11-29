@@ -60,13 +60,13 @@ delib.module {
         # enable = true;
         # type = "stdio";
         # };
-        memory = {
-          enable = true;
-          env = {
-            MEMORY_FILE_PATH = "${homeConfig.xdg.dataHome}/codecompanion_memory.json";
-          };
-          type = "stdio";
-        };
+        # memory = {
+        # enable = true;
+        # env = {
+        # MEMORY_FILE_PATH = "${homeConfig.xdg.dataHome}/codecompanion_memory.json";
+        # };
+        # type = "stdio";
+        # };
         sequential-thinking = {
           enable = true;
           type = "stdio";
@@ -84,9 +84,9 @@ delib.module {
           url = "https://mcp.deepwiki.com/mcp";
           type = "sse";
         };
-        notion = {
-          url = "https://mcp.notion.com/mcp";
-        };
+        # notion = {
+        # url = "https://mcp.notion.com/mcp";
+        # };
         readability = {
           command = "${nodejs}";
           args = [
@@ -168,13 +168,13 @@ delib.module {
       programs = {
         # git.enable = true;
         time.enable = true;
-        memory = {
-          enable = true;
-          env = {
-            MEMORY_FILE_PATH = "${homeConfig.xdg.dataHome}/claudecode_memory.json";
-          };
-          type = "stdio";
-        };
+        # memory = {
+        # enable = true;
+        # env = {
+        # MEMORY_FILE_PATH = "${homeConfig.xdg.dataHome}/claudecode_memory.json";
+        # };
+        # type = "stdio";
+        # };
       };
       settings.servers = {
         codex = {
@@ -217,12 +217,12 @@ delib.module {
           command = "${kiri-mcp}";
           args = ["--repo" "." "--db" ".kiri/index.duckdb" "--watch"];
         };
-        google-map-mcp = {
-          command = "${google-map-mcp}";
-          env = {
-            GOOGLE_MAPS_API_KEY = ''''${GOOGLE_CLOUD_API_KEY}'';
-          };
-        };
+        # google-map-mcp = {
+        # command = "${google-map-mcp}";
+        # env = {
+        # GOOGLE_MAPS_API_KEY = ''''${GOOGLE_CLOUD_API_KEY}'';
+        # };
+        # };
       };
     };
     claude-desktop-servers = {
@@ -260,13 +260,13 @@ delib.module {
       programs = {
         # git.enable = true;
         time.enable = true;
-        memory = {
-          enable = true;
-          env = {
-            MEMORY_FILE_PATH = "${homeConfig.xdg.dataHome}/codex_memory.json";
-          };
-          type = "stdio";
-        };
+        # memory = {
+        # enable = true;
+        # env = {
+        # MEMORY_FILE_PATH = "${homeConfig.xdg.dataHome}/codex_memory.json";
+        # };
+        # type = "stdio";
+        # };
       };
       settings.servers = {
         brave-search = {
@@ -306,13 +306,13 @@ delib.module {
       programs = {
         # git.enable = true;
         time.enable = true;
-        memory = {
-          enable = true;
-          env = {
-            MEMORY_FILE_PATH = "${homeConfig.xdg.dataHome}/crush_memory.json";
-          };
-          type = "stdio";
-        };
+        # memory = {
+        # enable = true;
+        # env = {
+        # MEMORY_FILE_PATH = "${homeConfig.xdg.dataHome}/crush_memory.json";
+        # };
+        # type = "stdio";
+        # };
       };
       settings.servers = {
         codex = {
@@ -368,13 +368,13 @@ delib.module {
           command = ["${mcp-time}"];
           type = "local";
         };
-        memory = {
-          command = ["${mcp-memory}"];
-          type = "local";
-          environment = {
-            MEMORY_FILE_PATH = "${homeConfig.xdg.dataHome}/opencode_memory.json";
-          };
-        };
+        # memory = {
+        # command = ["${mcp-memory}"];
+        # type = "local";
+        # environment = {
+        # MEMORY_FILE_PATH = "${homeConfig.xdg.dataHome}/opencode_memory.json";
+        # };
+        # };
         codex = {
           command = ["${codex}" "mcp-server"];
           type = "local";
