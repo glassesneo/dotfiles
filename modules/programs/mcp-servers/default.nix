@@ -27,8 +27,9 @@ delib.module {
     kiri-mcp = pkgs.lib.getExe' nodePkgs."kiri-mcp-server" "kiri-mcp-server";
     google-map-mcp = pkgs.lib.getExe' nodePkgs."@modelcontextprotocol/server-google-maps" "mcp-server-google-maps";
     # mcp-git = pkgs.lib.getExe inputs.mcp-servers-nix.packages.${host.homeManagerSystem}.mcp-server-git;
-    mcp-time = pkgs.lib.getExe inputs.mcp-servers-nix.packages.${host.homeManagerSystem}.mcp-server-time;
-    mcp-memory = pkgs.lib.getExe inputs.mcp-servers-nix.packages.${host.homeManagerSystem}.mcp-server-memory;
+    # mcp-time = pkgs.lib.getExe inputs.mcp-servers-nix.packages.${host.homeManagerSystem}.mcp-server-time;
+    # mcp-memory = pkgs.lib.getExe inputs.mcp-servers-nix.packages.${host.homeManagerSystem}.mcp-server-memory;
+    mcp-sequential-thinking = pkgs.lib.getExe inputs.mcp-servers-nix.packages.${host.homeManagerSystem}.mcp-server-sequential-thinking;
     # The syntax follows https://github.com/ravitemer/mcphub.nvim/blob/main/doc/mcp/servers_json.md
     mcphub-servers = {
       programs = {
@@ -364,10 +365,10 @@ delib.module {
         # command = ["${mcp-git}"];
         # type = "local";
         # };
-        time = {
-          command = ["${mcp-time}"];
-          type = "local";
-        };
+        # time = {
+        # command = ["${mcp-time}"];
+        # type = "local";
+        # };
         # memory = {
         # command = ["${mcp-memory}"];
         # type = "local";
@@ -375,6 +376,10 @@ delib.module {
         # MEMORY_FILE_PATH = "${homeConfig.xdg.dataHome}/opencode_memory.json";
         # };
         # };
+        sequential-thinking = {
+          command = ["${mcp-sequential-thinking}"];
+          type = "local";
+        };
         codex = {
           command = ["${codex}" "mcp-server"];
           type = "local";
@@ -401,18 +406,18 @@ delib.module {
             TAVILY_API_KEY = ''{env:TAVILY_API_KEY}'';
           };
         };
-        # chrome-devtools = {
-        # command = ["${chrome-devtools-mcp}"];
-        # type = "local";
-        # };
-        morph-fast-apply = {
-          command = ["${fast-apply-mcp}"];
+        chrome-devtools = {
+          command = ["${chrome-devtools-mcp}"];
           type = "local";
-          environment = {
-            ALL_TOOLS = "false";
-            MORPH_API_KEY = ''{env:MORPH_API_KEY}'';
-          };
         };
+        # morph-fast-apply = {
+        # command = ["${fast-apply-mcp}"];
+        # type = "local";
+        # environment = {
+        # ALL_TOOLS = "false";
+        # MORPH_API_KEY = ''{env:MORPH_API_KEY}'';
+        # };
+        # };
         kiri = {
           command = ["${kiri-mcp}" "--repo" "." "--db" ".kiri/index.duckdb" "--watch"];
           type = "local";

@@ -46,6 +46,11 @@ delib.module {
             base_url = "https://api.cerebras.ai/v1";
             env_key = "CEREBRAS_API_KEY";
           };
+          aimop = {
+            name = "AI MOP";
+            base_url = "https://api.openai.iniad.org/api/v1";
+            env_key = "AI_MOP_API_KEY";
+          };
         };
         profile = "full-auto";
         profiles = {

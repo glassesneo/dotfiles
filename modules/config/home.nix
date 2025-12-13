@@ -26,5 +26,7 @@ delib.module {
         then "/Users/${username}"
         else "/home/${username}";
     };
+
+    # home-manager.backupFileExtension = "backup";
   };
 }

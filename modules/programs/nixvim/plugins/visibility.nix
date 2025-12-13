@@ -60,7 +60,7 @@ delib.module {
       render-markdown = let
         ft = ["markdown"];
       in {
-        enable = true;
+        # enable = true;
         lazyLoad = {
           enable = true;
           settings = {

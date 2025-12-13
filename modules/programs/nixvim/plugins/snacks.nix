@@ -59,7 +59,9 @@ delib.module {
             explorer = {
               layout = {
                 layout = {
+                  # preset = "sidebar";
                   position = "left";
+                  preview = "main";
                 };
               };
             };

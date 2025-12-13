@@ -3,7 +3,7 @@ delib.module {
   name = "programs.nixvim";
 
   home.ifEnabled.programs.nixvim = {
-    extraConfigLuaPre = builtins.readFile ./extra_config.lua;
+    extraConfigLuaPost = builtins.readFile ./extra_config.lua;
     opts = {
       helplang = ["en"];
       number = true;
@@ -11,8 +11,8 @@ delib.module {
       cursorcolumn = true;
       signcolumn = "yes";
       list = true;
-      cmdheight = 1;
-      winblend = 5;
+      cmdheight = 0;
+      # winblend = 5;
       pumblend = 0;
       winborder = "bold";
       termguicolors = true;

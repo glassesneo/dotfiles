@@ -39,7 +39,7 @@ delib.module {
             inc_rename = homeConfig.programs.nixvim.plugins.inc-rename.enable;
           };
           cmdline = {
-            enabled = false;
+            enabled = true;
           };
           health.checker = false;
           lsp = {
@@ -49,9 +49,9 @@ delib.module {
             signature.enabled = false;
           };
           messages = {
-            enabled = false;
+            enabled = true;
           };
-          notify.enabled = false;
+          notify.enabled = true;
           popupmenu.enabled = false;
         };
       };

@@ -19,7 +19,13 @@ delib.module {
       themes = {
         transparent-catppuccin = ./themes/transparent-catppuccin.json;
       };
-      rules = homeConfig.programs.claude-code.memory.text;
+      rules =
+        homeConfig.programs.claude-code.memory.text
+        + ''
+          ### Note
+          - If you are unable to run commands in background, use `nohup` command
+          - Make sure terminate your nohup process
+        '';
     };
   };
 }

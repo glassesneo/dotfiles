@@ -26,13 +26,17 @@
     "anthropic-skills": {
       "flake": false,
       "locked": {
-        "narHash": "sha256-KQQDhGD88/hYVfJcO6XdoTTELk51VUxBjxteQHXYFjA=",
-        "type": "file",
-        "url": "https://github.com/anthropics/skills"
+        "lastModified": 1763415269,
+        "narHash": "sha256-/1VLJcPvhOiZOLLdhl7UyTLQjPUsP2XCloAqObex4Fk=",
+        "owner": "anthropics",
+        "repo": "skills",
+        "rev": "0f77e501e6506235956d953cd2d7a2a4aa9ba133",
+        "type": "github"
       },
       "original": {
-        "type": "file",
-        "url": "https://github.com/anthropics/skills"
+        "owner": "anthropics",
+        "repo": "skills",
+        "type": "github"
       }
     },
     "brew-api": {
@@ -647,7 +651,24 @@
         "mcphub-nvim": "mcphub-nvim",
         "nix-darwin": "nix-darwin",
         "nixpkgs": "nixpkgs_3",
-        "nixvim": "nixvim"
+        "nixvim": "nixvim",
+        "sparze": "sparze"
+      }
+    },
+    "sparze": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1765241980,
+        "narHash": "sha256-UXrwX3OZWFoe2FKktIC6bqKk6WgQb98eqVxDrRxouYs=",
+        "owner": "glassesneo",
+        "repo": "sparze",
+        "rev": "4aa88970b823f237da086f484221323e0b9fd7e2",
+        "type": "github"
+      },
+      "original": {
+        "owner": "glassesneo",
+        "repo": "sparze",
+        "type": "github"
       }
     },
     "systems": {

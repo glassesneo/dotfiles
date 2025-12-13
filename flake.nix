@@ -121,7 +121,11 @@
       flake = false;
     };
     anthropic-skills = {
-      url = "https://github.com/anthropics/skills";
+      url = "github:anthropics/skills";
+      flake = false;
+    };
+    sparze = {
+      url = "github:glassesneo/sparze";
       flake = false;
     };
   };

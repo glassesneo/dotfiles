@@ -129,7 +129,7 @@ in
                   auto_generate_title = true;
                   title_generation_opts = {
                     adapter = "copilot";
-                    model = "gpt-4.1";
+                    model = "gpt-5-mini";
                   };
                 };
               };
