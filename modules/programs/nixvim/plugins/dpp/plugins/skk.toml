@@ -1,6 +1,6 @@
 [[plugins]]
 repo = 'vim-skk/skkeleton'
-on_event = 'InsertEnter'
+on_event = ['InsertEnter', 'CmdlineEnter']
 hooks_file = '$DPP_HOOK_DIR/skk.lua'
 
 [[plugins]]

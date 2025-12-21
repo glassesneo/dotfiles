@@ -48,7 +48,7 @@ in
       home.file =
         importedSkills
         // {
-          ".claude/skills/sparze/SKILL.md".source = inputs.sparze.outPath + "/SKILL.md";
+          ".claude/skills/sparze".source = inputs.sparze.outPath;
         };
     };
   }

@@ -1,6 +1,8 @@
 {
   delib,
   homeConfig,
+  host,
+  inputs,
   ...
 }:
 delib.module {
@@ -11,6 +13,7 @@ delib.module {
   home.ifEnabled = {
     programs.opencode = {
       enable = true;
+      package = inputs.opencode.packages."${host.homeManagerSystem}".default;
       settings = {
         theme = "catppuccin";
         autoshare = false;

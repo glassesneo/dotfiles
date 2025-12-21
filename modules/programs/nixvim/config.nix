@@ -13,7 +13,7 @@ delib.module {
       list = true;
       cmdheight = 0;
       # winblend = 5;
-      pumblend = 0;
+      # pumblend = 0;
       winborder = "bold";
       termguicolors = true;
       wildoptions = "pum";

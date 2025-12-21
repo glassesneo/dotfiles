@@ -1,4 +1,8 @@
-{delib, ...}:
+{
+  delib,
+  homeConfig,
+  ...
+}:
 delib.module {
   name = "programs.nixvim.plugins.snacks";
 
@@ -21,7 +25,10 @@ delib.module {
           replace_netrw = true;
         };
         words.enabled = false;
-        input.enabled = true;
+        input = {
+          enabled = true;
+          win.b.completion = true;
+        };
         indent = {
           enabled = true;
           animate.enabled = false;
@@ -46,6 +53,10 @@ delib.module {
           };
         in {
           enabled = true;
+          win.backdrop = {
+            transparent = true;
+            # blend = 20;
+          };
           sources = {
             smart = {
               layout.layout = finderLayout;
@@ -79,8 +90,24 @@ delib.module {
         key = "<Space><Space>";
       }
       {
+        action.__raw = ''
+          function()
+            Snacks.picker.files({ cwd = "${homeConfig.home.homeDirectory}/orgfiles" })
+          end
+        '';
+        key = "<Space>o<Space>";
+      }
+      {
         action.__raw = "Snacks.picker.grep";
         key = "<Space>g";
+      }
+      {
+        action.__raw = ''
+          function()
+            Snacks.picker.grep({ cwd = "${homeConfig.home.homeDirectory}/orgfiles" })
+          end
+        '';
+        key = "<Space>og";
       }
       {
         action.__raw = "Snacks.picker.pickers";

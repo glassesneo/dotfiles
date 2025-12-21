@@ -35,6 +35,22 @@ delib.module {
       noice = {
         enable = true;
         settings = {
+          # routes = [
+          # {
+          # filter = {
+          # find = "--------------. -\n: $";
+          # };
+          # view = "popup";
+          # }
+          # ];
+          views = {
+            mini = {
+              timeout = 5000;
+            };
+            notify = {
+              timeout = 5000;
+            };
+          };
           presets = {
             inc_rename = homeConfig.programs.nixvim.plugins.inc-rename.enable;
           };
@@ -50,6 +66,8 @@ delib.module {
           };
           messages = {
             enabled = true;
+            # view = "messages";
+            view_warn = "mini";
           };
           notify.enabled = true;
           popupmenu.enabled = false;

@@ -100,6 +100,10 @@
       url = "github:ryantm/agenix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    opencode = {
+      url = "github:sst/opencode";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     dpp-vim = {
       url = "github:Shougo/dpp.vim";
       flake = false;
@@ -125,7 +129,7 @@
       flake = false;
     };
     sparze = {
-      url = "github:glassesneo/sparze";
+      url = "github:glassesneo/sparze/develop";
       flake = false;
     };
   };

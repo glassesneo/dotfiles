@@ -29,7 +29,8 @@ delib.module {
     # mcp-git = pkgs.lib.getExe inputs.mcp-servers-nix.packages.${host.homeManagerSystem}.mcp-server-git;
     # mcp-time = pkgs.lib.getExe inputs.mcp-servers-nix.packages.${host.homeManagerSystem}.mcp-server-time;
     # mcp-memory = pkgs.lib.getExe inputs.mcp-servers-nix.packages.${host.homeManagerSystem}.mcp-server-memory;
-    mcp-sequential-thinking = pkgs.lib.getExe inputs.mcp-servers-nix.packages.${host.homeManagerSystem}.mcp-server-sequential-thinking;
+    # mcp-sequential-thinking = pkgs.lib.getExe inputs.mcp-servers-nix.packages.${host.homeManagerSystem}.mcp-server-sequential-thinking;
+    mcp-context7 = pkgs.lib.getExe inputs.mcp-servers-nix.packages.${host.homeManagerSystem}.context7-mcp;
     # The syntax follows https://github.com/ravitemer/mcphub.nvim/blob/main/doc/mcp/servers_json.md
     mcphub-servers = {
       programs = {
@@ -53,10 +54,10 @@ delib.module {
           type = "stdio";
         };
         # fetch.enable = true;
-        # context7 = {
-        # enable = true;
-        # type = "stdio";
-        # };
+        context7 = {
+          enable = true;
+          type = "stdio";
+        };
         # playwright = {
         # enable = true;
         # type = "stdio";
@@ -167,8 +168,10 @@ delib.module {
     # The syntax follows https://docs.claude.com/en/docs/claude-code/mcp
     claude-code-servers = {
       programs = {
-        # git.enable = true;
-        time.enable = true;
+        context7 = {
+          enable = true;
+          type = "stdio";
+        };
         # memory = {
         # enable = true;
         # env = {
@@ -198,15 +201,15 @@ delib.module {
             "${readability-mcp}"
           ];
         };
-        tavily = {
-          command = "${tavily-mcp}";
-          env = {
-            TAVILY_API_KEY = ''''${TAVILY_API_KEY}'';
-          };
-        };
-        chrome-devtools = {
-          command = "${chrome-devtools-mcp}";
-        };
+        # tavily = {
+        # command = "${tavily-mcp}";
+        # env = {
+        # TAVILY_API_KEY = ''''${TAVILY_API_KEY}'';
+        # };
+        # };
+        # chrome-devtools = {
+        # command = "${chrome-devtools-mcp}";
+        # };
         morph-fast-apply = {
           command = "${fast-apply-mcp}";
           env = {
@@ -227,6 +230,12 @@ delib.module {
       };
     };
     claude-desktop-servers = {
+      programs = {
+        context7 = {
+          enable = true;
+          type = "stdio";
+        };
+      };
       settings.servers = {
         brave-search = {
           command = "${brave-search-mcp}";
@@ -240,12 +249,12 @@ delib.module {
             "${readability-mcp}"
           ];
         };
-        tavily = {
-          command = "${tavily-mcp}";
-          env = {
-            TAVILY_API_KEY = ''''${TAVILY_API_KEY}'';
-          };
-        };
+        # tavily = {
+        # command = "${tavily-mcp}";
+        # env = {
+        # TAVILY_API_KEY = ''''${TAVILY_API_KEY}'';
+        # };
+        # };
         chrome-devtools = {
           command = "${chrome-devtools-mcp}";
         };
@@ -261,13 +270,10 @@ delib.module {
       programs = {
         # git.enable = true;
         time.enable = true;
-        # memory = {
-        # enable = true;
-        # env = {
-        # MEMORY_FILE_PATH = "${homeConfig.xdg.dataHome}/codex_memory.json";
-        # };
-        # type = "stdio";
-        # };
+        context7 = {
+          enable = true;
+          type = "stdio";
+        };
       };
       settings.servers = {
         brave-search = {
@@ -283,10 +289,10 @@ delib.module {
             "${readability-mcp}"
           ];
         };
-        tavily = {
-          command = "${tavily-mcp}";
-          env_vars = ["TAVILY_API_KEY"];
-        };
+        # tavily = {
+        # command = "${tavily-mcp}";
+        # env_vars = ["TAVILY_API_KEY"];
+        # };
         chrome-devtools = {
           command = "${chrome-devtools-mcp}";
         };
@@ -305,15 +311,10 @@ delib.module {
     };
     crush-servers = {
       programs = {
-        # git.enable = true;
-        time.enable = true;
-        # memory = {
-        # enable = true;
-        # env = {
-        # MEMORY_FILE_PATH = "${homeConfig.xdg.dataHome}/crush_memory.json";
-        # };
-        # type = "stdio";
-        # };
+        context7 = {
+          enable = true;
+          type = "stdio";
+        };
       };
       settings.servers = {
         codex = {
@@ -336,15 +337,15 @@ delib.module {
             "${readability-mcp}"
           ];
         };
-        tavily = {
-          command = "${tavily-mcp}";
-          env = {
-            TAVILY_API_KEY = ''$TAVILY_API_KEY'';
-          };
-        };
-        chrome-devtools = {
-          command = "${chrome-devtools-mcp}";
-        };
+        # tavily = {
+        # command = "${tavily-mcp}";
+        # env = {
+        # TAVILY_API_KEY = ''$TAVILY_API_KEY'';
+        # };
+        # };
+        # chrome-devtools = {
+        # command = "${chrome-devtools-mcp}";
+        # };
         morph-fast-apply = {
           command = "${fast-apply-mcp}";
           env = {
@@ -361,23 +362,8 @@ delib.module {
     # The syntax follows https://opencode.ai/docs/mcp-servers
     opencode-servers = {
       settings.servers = {
-        # git = {
-        # command = ["${mcp-git}"];
-        # type = "local";
-        # };
-        # time = {
-        # command = ["${mcp-time}"];
-        # type = "local";
-        # };
-        # memory = {
-        # command = ["${mcp-memory}"];
-        # type = "local";
-        # environment = {
-        # MEMORY_FILE_PATH = "${homeConfig.xdg.dataHome}/opencode_memory.json";
-        # };
-        # };
-        sequential-thinking = {
-          command = ["${mcp-sequential-thinking}"];
+        context7 = {
+          command = ["${mcp-context7}"];
           type = "local";
         };
         codex = {
@@ -399,17 +385,13 @@ delib.module {
           command = ["${nodejs}" "${readability-mcp}"];
           type = "local";
         };
-        tavily = {
-          command = ["${tavily-mcp}"];
-          type = "local";
-          environment = {
-            TAVILY_API_KEY = ''{env:TAVILY_API_KEY}'';
-          };
-        };
-        chrome-devtools = {
-          command = ["${chrome-devtools-mcp}"];
-          type = "local";
-        };
+        # tavily = {
+        # command = ["${tavily-mcp}"];
+        # type = "local";
+        # environment = {
+        # TAVILY_API_KEY = ''{env:TAVILY_API_KEY}'';
+        # };
+        # };
         # morph-fast-apply = {
         # command = ["${fast-apply-mcp}"];
         # type = "local";

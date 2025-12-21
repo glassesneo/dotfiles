@@ -1,5 +1,5 @@
 --- lua_source {{{
-vim.keymap.set({ "i" }, "<C-j>", "<Plug>(skkeleton-enable)")
+vim.keymap.set({ "i", "c" }, "<C-j>", "<Plug>(skkeleton-enable)")
 
 vim.fn["skkeleton#config"]({
   globalDictionaries = { "@skk-dict-path@" },
@@ -12,7 +12,7 @@ vim.api.nvim_create_autocmd("User", {
   group = skkeleton_hook_group,
   pattern = "skkeleton-enable-pre",
   callback = function()
-    vim.keymap.set({ "i" }, "<C-l>", "<Plug>(skkeleton-disable)")
+    vim.keymap.set({ "i", "c" }, "<C-l>", "<Plug>(skkeleton-disable)")
   end,
 })
 

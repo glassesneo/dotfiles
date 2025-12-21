@@ -551,11 +551,11 @@
     },
     "nixpkgs_3": {
       "locked": {
-        "lastModified": 1764290847,
-        "narHash": "sha256-VwPgoDgnd628GdE3KyLqTyPF1WWh0VwT5UoKygoi8sg=",
+        "lastModified": 1765457389,
+        "narHash": "sha256-ddhDtNYvleZeYF7g7TRFSmuQuZh7HCgqstg5YBGwo5s=",
         "owner": "nixos",
         "repo": "nixpkgs",
-        "rev": "cd5fedfc384cb98d9fd3827b55f4522f49efda42",
+        "rev": "f997fa0f94fb1ce55bccb97f60d41412ae8fde4c",
         "type": "github"
       },
       "original": {
@@ -612,6 +612,26 @@
         "type": "github"
       }
     },
+    "opencode": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1765681782,
+        "narHash": "sha256-K2Wg6QlABVicZS2kzHgOHEyMZHeWBSjYj/4uC7Bo13E=",
+        "owner": "sst",
+        "repo": "opencode",
+        "rev": "d8ac35f6e5f6c5bf692c409ba370c3ca4c558a8a",
+        "type": "github"
+      },
+      "original": {
+        "owner": "sst",
+        "repo": "opencode",
+        "type": "github"
+      }
+    },
     "pre-commit-hooks": {
       "inputs": {
         "flake-compat": "flake-compat",
@@ -652,21 +672,23 @@
         "nix-darwin": "nix-darwin",
         "nixpkgs": "nixpkgs_3",
         "nixvim": "nixvim",
+        "opencode": "opencode",
         "sparze": "sparze"
       }
     },
     "sparze": {
       "flake": false,
       "locked": {
-        "lastModified": 1765241980,
-        "narHash": "sha256-UXrwX3OZWFoe2FKktIC6bqKk6WgQb98eqVxDrRxouYs=",
+        "lastModified": 1765683115,
+        "narHash": "sha256-yaUMlOICREgg/9VTZIaA4BHLyftdSb8YasXMbE9S9nE=",
         "owner": "glassesneo",
         "repo": "sparze",
-        "rev": "4aa88970b823f237da086f484221323e0b9fd7e2",
+        "rev": "0cbade6f2eb4a06ceb4e2eb3f2f3544c78683f2f",
         "type": "github"
       },
       "original": {
         "owner": "glassesneo",
+        "ref": "develop",
         "repo": "sparze",
         "type": "github"
       }

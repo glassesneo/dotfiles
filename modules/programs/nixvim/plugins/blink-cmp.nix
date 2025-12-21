@@ -110,6 +110,7 @@ delib.module {
                 mdx = forJapanese;
                 typst = forJapanese;
                 codecompanion = ["codecompanion"];
+                org = ["orgmode"];
               };
               providers = {
                 buffer = {
@@ -142,6 +143,11 @@ delib.module {
                   # return 0
                   # end
                   # '';
+                };
+                orgmode = {
+                  module = "orgmode.org.autocompletion.blink";
+                  name = "orgmode";
+                  fallbacks = ["buffer"];
                 };
               };
             };
