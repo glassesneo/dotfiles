@@ -41,7 +41,6 @@ delib.module {
                 bind "Shift Super ," { GoToPreviousTab; }
                 bind "Super d" { Detach; }
                 bind "Super f" { ToggleFloatingPanes; }
-                bind "Super n" { NewPane; Run "nu"; }
             }
         }
       '';

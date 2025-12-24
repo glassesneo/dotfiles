@@ -1,6 +1,6 @@
 {
   delib,
-  homeConfig,
+  # homeConfig,
   ...
 }:
 delib.module {
@@ -12,11 +12,15 @@ delib.module {
     plugins.snacks = {
       enable = true;
       settings = {
+        styles = {
+          notification = {
+            border = "rounded";
+          };
+        };
         bigfile.enabled = false;
         bufdelete.enable = true;
         notifier = {
           enabled = true;
-          style = "compact";
         };
         quickfile.enabled = false;
         statuscolumn.enabled = false;
@@ -27,7 +31,10 @@ delib.module {
         words.enabled = false;
         input = {
           enabled = true;
-          win.b.completion = true;
+          win = {
+            border = "rounded";
+            b.completion = true;
+          };
         };
         indent = {
           enabled = true;
@@ -53,16 +60,25 @@ delib.module {
           };
         in {
           enabled = true;
-          win.backdrop = {
-            transparent = true;
-            # blend = 20;
+          win = {
+            input.border = "rounded";
+            list.border = "solid";
+            preview.border = "rounded";
+            backdrop = {
+              transparent = true;
+              # blend = 20;
+            };
           };
           sources = {
             smart = {
               layout.layout = finderLayout;
+              ignored = true;
+              hidden = true;
             };
             grep = {
               layout.layout = finderLayout;
+              ignored = true;
+              hidden = true;
             };
             lsp_symbols = {
               layout.layout = finderLayout;
@@ -70,11 +86,13 @@ delib.module {
             explorer = {
               layout = {
                 layout = {
-                  # preset = "sidebar";
+                  box = "vertical";
                   position = "left";
-                  preview = "main";
                 };
               };
+              git_untracked = true;
+              ignored = true;
+              hidden = true;
             };
           };
         };
@@ -89,26 +107,28 @@ delib.module {
         action.__raw = "Snacks.picker.smart";
         key = "<Space><Space>";
       }
-      {
-        action.__raw = ''
-          function()
-            Snacks.picker.files({ cwd = "${homeConfig.home.homeDirectory}/orgfiles" })
-          end
-        '';
-        key = "<Space>o<Space>";
-      }
+      # {
+      #   action.__raw = ''
+      #     function()
+      #       require("lz.n").trigger_load('orgmode')
+      #       Snacks.picker.files({ cwd = "${homeConfig.home.homeDirectory}/orgfiles" })
+      #     end
+      #   '';
+      #   key = "<Space>o<Space>";
+      # }
       {
         action.__raw = "Snacks.picker.grep";
         key = "<Space>g";
       }
-      {
-        action.__raw = ''
-          function()
-            Snacks.picker.grep({ cwd = "${homeConfig.home.homeDirectory}/orgfiles" })
-          end
-        '';
-        key = "<Space>og";
-      }
+      # {
+      #   action.__raw = ''
+      #     function()
+      #       require("lz.n").trigger_load('orgmode')
+      #       Snacks.picker.grep({ cwd = "${homeConfig.home.homeDirectory}/orgfiles" })
+      #     end
+      #   '';
+      #   key = "<Space>og";
+      # }
       {
         action.__raw = "Snacks.picker.pickers";
         key = "<Space><C-p>";

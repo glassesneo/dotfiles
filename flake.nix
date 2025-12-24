@@ -95,7 +95,10 @@
       url = "github:BatteredBunny/brew-api";
       flake = false;
     };
-    charmbracelet.url = "github:malikwirin/charmbracelet-nur/feature/32";
+    charmbracelet = {
+      url = "github:charmbracelet/nur";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     agenix = {
       url = "github:ryantm/agenix";
       inputs.nixpkgs.follows = "nixpkgs";

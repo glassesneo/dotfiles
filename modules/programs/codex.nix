@@ -16,7 +16,7 @@ delib.module {
         ## Required Tool Usage
 
         ### Code Exploration and Editing
-        - **MUST** see CLAUDE.md in the project root
+        - **MUST** see CLAUDE.md in the project root if it exists
         - **MUST** use Kiri MCP (`mcp__kiri__context_bundle`) to explore unfamiliar codebases
           - Kiri provides intelligent code context and dependency analysis
         - **MUST** use Morph Fast Apply MCP (`mcp__morph-fast-apply__edit_file`) for large-scale edits (multiple changes, complex refactoring)

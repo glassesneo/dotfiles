@@ -53,7 +53,7 @@ in
           lazyLoad = {
             enable = true;
             settings = {
-              ft = treesitter_ft;
+              ft = treesitter_ft ++ ["org"];
             };
           };
           grammarPackages = map (grammar: pkgs.vimPlugins.nvim-treesitter.builtGrammars."${grammar}") treesitter_ft;

@@ -1,0 +1,12 @@
+* Org modeによる覚え書き
+
+** ディレクトリ構成
+.
+├── archive
+├── inbox.org
+├── journal
+├── projects
+│   └── zenithor.org
+└── zettelkasten
+    ├── fleeting.org
+    └── literature.org
