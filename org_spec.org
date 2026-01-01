@@ -1,12 +1,63 @@
-* Org modeによる覚え書き
+* Org-modeによる覚え書き
 
 ** ディレクトリ構成
 .
 ├── archive
 ├── inbox.org
 ├── journal
+│   └── 2025-01.org
 ├── projects
 │   └── zenithor.org
 └── zettelkasten
-    ├── fleeting.org
-    └── literature.org
+    ├── knowledge
+    │   └── 20250102103045.org
+    └── literature
+        └── 20250102103112.org
+
+** Zettelkasten運用
+- Fleeting: inbox.orgに見出しで書く（タグ: :fleeting:）
+- Literature: 新規ファイル（zettelkasten/literature/）に保存
+- Permanent: 新規ファイル（zettelkasten/knowledge/）に保存
+- Structure: 新規ファイル（zettelkasten/knowledge/）に保存
+- Index: 手動作成（zettelkasten/knowledge/）に保存、タグ: :index:
+
+*** キャプチャキー
+- N: Fleeting（見出し、inbox.org）
+- L: Literature（#+FILETAGS: :literature:）
+- P: Permanent（#+FILETAGS: :permanent:）
+- S: Structure（#+FILETAGS: :structure:）
+
+*** アジェンダ（カスタム）
+- Z: Zettelkasten全体（fleeting/literature/permanent/structure/index）
+- F/L/P/S/I: 各種ノートの一覧
+- いずれもタグ一致で抽出（小文字タグを使用）
+
+** 日記（Daily Journal）
+- 月単位ファイル: journal/%Y-%m.org
+- 日付ツリー（datetree）で日ごとの見出しを自動生成
+- 日内ログは箇条書きで追加
+
+*** キャプチャキー
+- l: ログ追加（- HH:MM ...）
+- n: 朝のチェックイン（- HH:MM [start] MOOD ENERGY ...）
+- d: Diary見出し（PROPERTIES付き）
+
+
+** org-modeの各要素の順番
+#+begin_src org
+# 見出し
+* TODO Sample
+# アクティブな日付
+SCHEDULED: <2025-12-20 Sat>
+# プロパティ
+:PROPERTIES:
+:EFFORT: 2:00
+:END:
+# 非アクティブな日付
+  [2025-12-20 Sat]
+# 本文
+  ここにメモ/概要
+# 子アウトライン
+** Outline
+*** 下書き
+#+end_src
