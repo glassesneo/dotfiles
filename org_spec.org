@@ -1,7 +1,7 @@
 * Org-modeによる覚え書き
 
 ** ディレクトリ構成
-```
+#+begin_example
 .
 ├── archive
 ├── inbox.org
@@ -14,7 +14,7 @@
     │   └── 20250102103045.org
     └── literature
         └── 20250102103112.org
-```
+#+end_example
 
 ** Zettelkasten運用
 - Fleeting: inbox.orgに見出しで書く（タグ: :fleeting:）
