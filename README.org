@@ -1,0 +1,210 @@
+#+TITLE: Nix Dotfiles
+#+AUTHOR: Neo Kitani
+#+EMAIL: glassesneo@protonmail.com
+
+* Overview
+
+Declarative and modular Nix dotfiles for macOS using [[https://github.com/yunfachi/denix][Denix]], nix-darwin, and Home Manager.
+
+This repository targets macOS on Apple Silicon and is organized around Denix auto-discovery and reusable modules. The primary host is =kurogane= and the user is =neo=.
+
+* System Information
+
+- *Platform*: macOS (Apple Silicon)
+- *Host*: kurogane
+- *User*: neo
+- *Module System*: Denix auto-discovery with extensions
+
+* Highlights
+
+- *System configuration* via nix-darwin
+- *User environment* via Home Manager
+- *Modular architecture* with auto-discovery from =hosts/= and =modules/=
+- *Secret management* via [[https://github.com/ryantm/agenix][agenix]] and =config.age.secrets.<key>.path=
+- *Homebrew integration* via [[https://github.com/BatteredBunny/brew-nix][brew-nix]]
+- *AI tooling* with MCP servers and SketchyBar status integrations
+- *Desktop environment* with AeroSpace, SketchyBar, and Borders
+- *Editor and CLI tooling* via nixvim, ripgrep, fd, and more
+- *Reproducible builds* through flake-based configuration
+
+* Usage
+
+** Apply Configurations
+
+Apply both nix-darwin and Home Manager configurations:
+
+#+begin_src sh
+nh darwin switch . -H kurogane -Lt
+#+end_src
+
+Flags:
+- =-L=: Print build logs
+- =-t=: Show trace on errors
+- =-H=: Specify hostname
+
+Additional options:
+
+#+begin_src sh
+# Dry run (preview changes without applying)
+nh darwin switch . -H kurogane -Lt --dry
+
+# Ask for confirmation before applying
+nh darwin switch . -H kurogane -Lt --ask
+
+# Update all flake inputs before building
+nh darwin switch . -H kurogane -Lt --update
+
+# Update specific flake input(s)
+nh darwin switch . -H kurogane -Lt --update-input nixpkgs
+#+end_src
+
+** Home Manager Only
+
+Apply user environment only (no system changes):
+
+#+begin_src sh
+nh home switch
+#+end_src
+
+** Build Without Activation
+
+#+begin_src sh
+# Build darwin configuration
+nh darwin build
+
+# Build home-manager configuration
+nh home build
+#+end_src
+
+* Development and Validation
+
+#+begin_src sh
+# Enter development shell (deno, LSP tooling, stylua)
+nix develop
+
+# Validate flake structure
+nix flake check
+
+# Show available outputs
+nix flake show
+
+# Launch REPLs with configuration loaded
+nh darwin repl
+nh home repl
+#+end_src
+
+** Updating Dependencies
+
+#+begin_src sh
+# Update all flake inputs
+nix flake update
+
+# Update a specific input
+nix flake lock --update-input nixpkgs
+#+end_src
+
+* Node Package Management
+
+Custom Node inputs used by MCP servers live in =node2nix/=. When modifying =node2nix/node-packages.json=, regenerate the Nix expressions:
+
+#+begin_src sh
+cd node2nix
+nix-shell -p node2nix --run "node2nix --input node-packages.json --output node-packages.nix --composition default.nix"
+#+end_src
+
+* Cleanup
+
+#+begin_src sh
+# Clean old generations and garbage collect
+nh clean all --keep 5
+
+# Clean current user's profiles only
+nh clean user --keep 3
+
+# Clean specific profile
+nh clean profile <profile-path> --keep 5
+#+end_src
+
+* Repository Structure
+
+#+begin_example
+.
+├── AGENTS.md              # AI agents documentation
+├── CLAUDE.md              # Claude Code project instructions
+├── deno.json              # Deno tooling configuration
+├── deno.lock              # Deno dependency lockfile
+├── flake.nix              # Flake configuration and inputs
+├── flake.lock             # Locked dependency versions
+├── hosts/                 # Host-specific configurations
+├── modules/               # Modular configuration files
+│   ├── config/            # Core configuration (constants, node2nix)
+│   ├── programs/          # Program configurations
+│   ├── services/          # Service configurations
+│   └── toplevel/          # System-wide settings
+├── node2nix/              # Node.js package definitions
+├── org_spec.org           # Org-mode spec notes
+└── secrets/               # Encrypted secrets (agenix)
+#+end_example
+
+** Key Directories
+
+- =hosts/= :: Host metadata and overrides
+- =modules/= :: Auto-discovered modules
+  - =programs/= :: User program configurations (git, fd, nixvim, etc.)
+  - =services/= :: Service configurations (aerospace, sketchybar, etc.)
+  - =config/= :: Shared configuration and constants
+  - =toplevel/= :: System-level settings and wiring
+- =secrets/= :: Age-encrypted secrets
+
+* Architecture Notes
+
+** Denix Module System
+
+Denix loads configuration via auto-discovery and extensions:
+
+#+begin_src nix
+paths = [./hosts ./modules]
+extensions = [args base.withConfig]
+#+end_src
+
+Platform blocks target the right layer:
+
+- =home.ifEnabled= :: Home Manager configuration
+- =darwin.ifEnabled= :: nix-darwin system configuration
+- Host routing uses =delib.host= with conditional config when =config.<myconfigName>.host= matches
+
+** Constants and Shared Arguments
+
+User metadata is centralized in =modules/config/constants.nix= and referenced as =constants.username=, =constants.userfullname=, and =constants.useremail=.
+
+** Secrets
+
+Secrets are defined via agenix and referenced as =config.age.secrets.<key>.path=. Environment wiring is handled in =modules/toplevel/secrets.nix=.
+
+** MCP Server Architecture
+
+Centralized MCP server definitions live in =modules/programs/mcp-servers/default.nix=. Each tool uses separate memory files under =$XDG_DATA_HOME= (for example, =claudecode_memory.json=, =opencode_memory.json=, and =crush_memory.json=).
+
+Kiri MCP is wrapped in =modules/config/node2nix.nix= to avoid tree-sitter download issues. It runs =kiri-mcp-server= via =npx=, stores its index at =.kiri/index.duckdb=, and supports watch mode via =--watch=.
+
+** SketchyBar Integrations
+
+- *Claude Code*: hooks are defined in =modules/programs/claude-code/default.nix= and send status events to SketchyBar via =modules/services/sketchybar/rc/plugins/ai.nu=.
+- *OpenCode*: the SketchyBar plugin lives in =modules/programs/opencode/plugins/sketchybar.js= and shares the same SketchyBar plugin entry point.
+
+* Documentation
+
+- =CLAUDE.md= :: Project instructions for Claude Code
+- =AGENTS.md= :: AI agent workflow instructions
+- Module examples: =modules/programs/fd.nix=, =modules/programs/git.nix=, =modules/services/aerospace.nix=
+
+* License
+
+See [[file:LICENSE][LICENSE]] for details.
+
+* Acknowledgments
+
+- [[https://github.com/yunfachi/denix][Denix]] for the modular framework
+- [[https://github.com/nix-community][Nix Community]] for Home Manager and nixvim
+- [[https://github.com/nikitabobko][nikitabobko]] for AeroSpace
+- [[https://github.com/FelixKratz][FelixKratz]] for SketchyBar
