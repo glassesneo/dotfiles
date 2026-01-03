@@ -16,6 +16,8 @@ delib.module {
       settings = {
         env = {
           DISABLE_AUTOUPDATER = "1";
+          ENABLE_TOOL_SEARCH = true;
+          ENABLE_LSP_TOOL = true;
         };
       };
       memory.text = builtins.readFile ./GLOBAL_CLAUDE.md;
@@ -27,4 +29,3 @@ delib.module {
     };
   };
 }
-

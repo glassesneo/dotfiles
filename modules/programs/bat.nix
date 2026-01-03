@@ -14,8 +14,8 @@ delib.module {
       batdiff
       prettybat
     ];
-    config = {
-      style = "plain,changes";
-    };
+    # config = {
+    # style = "plain,changes";
+    # };
   };
 }

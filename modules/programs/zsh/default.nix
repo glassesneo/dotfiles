@@ -17,6 +17,7 @@ delib.module {
       autosuggestion.enable = true;
       syntaxHighlighting.enable = true;
       autocd = true;
+      dotDir = "${homeConfig.xdg.configHome}/zsh";
       profileExtra = builtins.readFile ./zellij.zsh;
       history = {
         extended = true;

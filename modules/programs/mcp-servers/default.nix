@@ -41,7 +41,7 @@ delib.module {
           ];
           type = "stdio";
         };
-        git.enable = true;
+        # git.enable = true;
         github = {
           enable = true;
           passwordCommand = {
@@ -70,10 +70,10 @@ delib.module {
         # type = "stdio";
         # };
         sequential-thinking = {
-          enable = true;
+          # enable = true;
           type = "stdio";
         };
-        time.enable = true;
+        # time.enable = true;
       };
       settings.servers = {
         brave-search = {
@@ -269,7 +269,7 @@ delib.module {
     codex-servers = {
       programs = {
         # git.enable = true;
-        time.enable = true;
+        # time.enable = true;
         context7 = {
           enable = true;
           type = "stdio";

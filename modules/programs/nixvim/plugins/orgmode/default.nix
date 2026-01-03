@@ -12,7 +12,6 @@ delib.module {
   home.ifEnabled = let
     orgfiles = "${homeConfig.home.homeDirectory}/orgfiles";
     journalTemplate = "${orgfiles}/journal/%<%Y-%m>.org";
-    uidTemplate = "%<%Y%m%d-%H%M%S>.org";
   in {
     programs.nixvim.plugins.orgmode = {
       enable = true;
@@ -234,7 +233,7 @@ delib.module {
             types = [
               {
                 type = "tags";
-                match = "literature";
+                match = "LEVEL=1+literature";
                 org_agenda_overriding_header = "Literature Notes";
                 org_agenda_files = [
                   "${orgfiles}/zettelkasten/literature/**/*"
@@ -247,7 +246,7 @@ delib.module {
             types = [
               {
                 type = "tags";
-                match = "permanent";
+                match = "LEVEL=1+permanent";
                 org_agenda_overriding_header = "Permanent Notes";
                 org_agenda_files = [
                   "${orgfiles}/zettelkasten/knowledge/**/*"
@@ -260,7 +259,7 @@ delib.module {
             types = [
               {
                 type = "tags";
-                match = "structure";
+                match = "LEVEL=1+structure";
                 org_agenda_overriding_header = "Structure Notes";
                 org_agenda_files = [
                   "${orgfiles}/zettelkasten/knowledge/**/*"
@@ -291,35 +290,6 @@ delib.module {
 
             '';
           };
-          L = {
-            description = "Literature Note | Zettelkasten";
-            template = ''
-              #+TITLE: %<%Y%m%d-%H%M%S> %^{Title}
-              #+SOURCE: %^{Source}
-              #+FILETAGS: :literature:%?
-                %u
-
-            '';
-            target = "${orgfiles}/zettelkasten/literature/${uidTemplate}";
-          };
-          P = {
-            description = "Permanent Note | Zettelkasten";
-            template = ''
-              #+TITLE: %<%Y%m%d-%H%M%S> %^{Title}
-              #+FILETAGS: :permanent:%?
-
-            '';
-            target = "${orgfiles}/zettelkasten/knowledge/${uidTemplate}";
-          };
-          S = {
-            description = "Structure Note | Zettelkasten";
-            template = ''
-              #+TITLE: %<%Y%m%d-%H%M%S> %^{Title}
-              #+FILETAGS: :structure:%?
-
-            '';
-            target = "${orgfiles}/zettelkasten/knowledge/${uidTemplate}";
-          };
           n = {
             description = "Morning check-in | Daily journal";
             template = ''
@@ -329,7 +299,6 @@ delib.module {
             target = journalTemplate;
             datetree = {
               tree_type = "day";
-              reversed = true;
             };
           };
           l = {
@@ -425,6 +394,8 @@ delib.module {
         };
       };
     };
+
+    programs.nixvim.extraConfigLua = builtins.readFile ./orgmode.lua;
 
     home.packages = let
       org = pkgs.writeShellScriptBin "org" ''(cd ${orgfiles} && nvim .)'';
