@@ -43,7 +43,7 @@ delib.module {
         };
         # git.enable = true;
         github = {
-          enable = true;
+          # enable = true;
           passwordCommand = {
             GITHUB_PERSONAL_ACCESS_TOKEN = [
               (lib.getExe homeConfig.programs.gh.package)

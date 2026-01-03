@@ -11,10 +11,11 @@ delib.module {
 
   options = delib.singleEnableOption true;
 
+  home.always.imports = [
+    inputs.charmbracelet.homeModules.crush
+  ];
+
   home.ifEnabled = {
-    imports = [
-      inputs.charmbracelet.homeModules.crush
-    ];
     programs.crush = {
       enable = true;
       settings = {

@@ -29,5 +29,8 @@ delib.module {
     ];
   };
 
-  myconfig.always.args.shared.brewCasks = pkgs.brewCasks;
+  myconfig.always.args.shared.brewCasks =
+    if pkgs ? brewCasks
+    then pkgs.brewCasks
+    else {};
 }
