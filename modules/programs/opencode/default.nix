@@ -30,5 +30,8 @@ delib.module {
           - Make sure terminate your nohup process
         '';
     };
+
+    # Deploy SketchyBar integration plugin
+    xdg.configFile."opencode/plugin/sketchybar.ts".source = ./plugins/sketchybar.ts;
   };
 }

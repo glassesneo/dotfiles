@@ -151,6 +151,31 @@ User metadata is centralized in:
 
 Use `constants.username`, `constants.userfullname`, `constants.useremail` instead of literals.
 
+### Claude Code SketchyBar Integration
+Claude Code integrates with SketchyBar to show real-time status in the menu bar:
+- @modules/programs/claude-code/default.nix (hooks defined in settings.hooks)
+- @modules/services/sketchybar/rc/plugins/ai.nu
+
+Key behavior:
+- Hooks trigger on UserPromptSubmit (active) and Stop (inactive) events.
+- Hooks are configured in `settings.hooks` which embeds them in `~/.claude/settings.json`.
+- Handler scripts (Nix writeShellScript) send events to SketchyBar with status and project directory.
+- SketchyBar plugin displays a robot icon that changes color:
+  - Green when Claude is actively processing a prompt
+  - Gray when idle/stopped
+- Popup shows current project directory when hovering over the icon.
+
+### OpenCode SketchyBar Integration
+OpenCode integrates with SketchyBar using the plugin system:
+- @modules/programs/opencode/plugins/sketchybar.js
+- @modules/services/sketchybar/rc/plugins/ai.nu (shared with Claude Code)
+
+Key behavior:
+- Plugin subscribes to session.status, session.idle, session.deleted, and session.error events.
+- Sends `opencode_status` events to SketchyBar with status, agent name, and project directory.
+- SketchyBar shows "OpenCode [agent_name]: project" when active.
+- Plugin is deployed to `~/.config/opencode/plugin/` and loaded automatically.
+
 ## Essential Commands
 ```bash
 nh darwin switch . -H kurogane -Lt --update
