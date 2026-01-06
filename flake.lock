@@ -594,11 +594,11 @@
     "sparze": {
       "flake": false,
       "locked": {
-        "lastModified": 1765683115,
-        "narHash": "sha256-yaUMlOICREgg/9VTZIaA4BHLyftdSb8YasXMbE9S9nE=",
+        "lastModified": 1767593447,
+        "narHash": "sha256-+jj9jFz71bo+AvpOc7imKn5GmlIsJlO5Wospsi2Bhag=",
         "owner": "glassesneo",
         "repo": "sparze",
-        "rev": "0cbade6f2eb4a06ceb4e2eb3f2f3544c78683f2f",
+        "rev": "e72f8434be21bd2b2d9754974565a998bc4d22a5",
         "type": "github"
       },
       "original": {

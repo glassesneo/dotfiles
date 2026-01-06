@@ -190,7 +190,7 @@ Kiri MCP is wrapped in =modules/config/node2nix.nix= to avoid tree-sitter downlo
 ** SketchyBar Integrations
 
 - *Claude Code*: hooks are defined in =modules/programs/claude-code/default.nix= and send status events to SketchyBar via =modules/services/sketchybar/rc/plugins/ai.nu=.
-- *OpenCode*: the SketchyBar plugin lives in =modules/programs/opencode/plugins/sketchybar.js= and shares the same SketchyBar plugin entry point.
+- *OpenCode*: the SketchyBar plugin lives in =modules/programs/opencode/plugins/sketchybar.ts= and shares the same SketchyBar plugin entry point.
 
 * Documentation
 

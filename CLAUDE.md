@@ -167,7 +167,7 @@ Key behavior:
 
 ### OpenCode SketchyBar Integration
 OpenCode integrates with SketchyBar using the plugin system:
-- @modules/programs/opencode/plugins/sketchybar.js
+- @modules/programs/opencode/plugins/sketchybar.ts
 - @modules/services/sketchybar/rc/plugins/ai.nu (shared with Claude Code)
 
 Key behavior:

@@ -11,8 +11,8 @@ let
     set -euo pipefail
     # Read JSON input from stdin (required by Claude Code hook protocol)
     INPUT=$(cat)
-    # Extract project directory from JSON input
-    PROJECT_DIR=$(echo "$INPUT" | ${pkgs.lib.getExe pkgs.jq} -r '.projectDirectory // ""')
+    # Extract current working directory from JSON input
+    PROJECT_DIR=$(echo "$INPUT" | ${pkgs.lib.getExe pkgs.jq} -r '.cwd // ""')
     # Trigger SketchyBar event to show Claude as active with project directory
     ${pkgs.lib.getExe pkgs.sketchybar} --trigger claude_status STATUS=active PROJECT_DIR="$PROJECT_DIR" 2>/dev/null || true
     # Return empty JSON response (required by hook protocol)

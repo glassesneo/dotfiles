@@ -42,9 +42,9 @@ delib.module {
           name = myconfig.constants.username;
           email = myconfig.constants.useremail;
         };
-      };
-
-      settings = {
+        alias = {
+          stat = "status";
+        };
         commit = {
           template = "${homeConfig.xdg.configHome}/git/.gitmsg";
         };

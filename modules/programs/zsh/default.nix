@@ -24,6 +24,12 @@ delib.module {
         size = 10000;
         path = "${homeConfig.xdg.stateHome}/zsh/history";
       };
+      zsh-abbr = {
+        enable = true;
+        abbreviations = {
+          g = "git";
+        };
+      };
     };
   };
 }

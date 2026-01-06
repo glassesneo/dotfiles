@@ -25,7 +25,7 @@
   # Generate home.file entries for all imported skills
   claudeSkills =
     builtins.foldl'
-    (acc: skill: acc // mkSkillImport ".claude/skills/${skill}" (inputs.anthropic-skills.outPath + skill))
+    (acc: skill: acc // mkSkillImport ".claude/skills/${skill}" (inputs.anthropic-skills.outPath + "/${skill}"))
     {}
     skillsToImport;
 in
@@ -39,7 +39,7 @@ in
       home.file =
         claudeSkills
         // {
-          ".claude/skills/sparze".source = inputs.sparze.outPath;
+          ".claude/skills/sparze/SKILL.md".text = builtins.readFile (inputs.sparze.outPath + "/SKILL.md");
         };
     };
   }

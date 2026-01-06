@@ -9,7 +9,7 @@ delib.module {
   darwin.always = {
     environment.systemPackages = with pkgs; [
       maccy
-      # raycast
+      raycast
       tart
       # amazon-q-cli
     ];
