@@ -23,6 +23,27 @@
         "type": "github"
       }
     },
+    "agent-skills": {
+      "inputs": {
+        "home-manager": "home-manager_2",
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1767105052,
+        "narHash": "sha256-nzeEIvgWseoKZ2Ep8nssNYAO0kmtOfhsIvo9Dz5cb68=",
+        "owner": "Kyure-A",
+        "repo": "agent-skills-nix",
+        "rev": "318e2dd549f57ab1f506abd38f39ce4fc81b673e",
+        "type": "github"
+      },
+      "original": {
+        "owner": "Kyure-A",
+        "repo": "agent-skills-nix",
+        "type": "github"
+      }
+    },
     "anthropic-skills": {
       "flake": false,
       "locked": {
@@ -356,6 +377,27 @@
     "home-manager_2": {
       "inputs": {
         "nixpkgs": [
+          "agent-skills",
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1766387499,
+        "narHash": "sha256-AjK3/UKDzeXFeYNLVBaJ3+HLE9he1g5UrlNd4/BM3eA=",
+        "owner": "nix-community",
+        "repo": "home-manager",
+        "rev": "527ad07e6625302b648ed3b28c34b62a79bd103e",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nix-community",
+        "repo": "home-manager",
+        "type": "github"
+      }
+    },
+    "home-manager_3": {
+      "inputs": {
+        "nixpkgs": [
           "nixpkgs"
         ]
       },
@@ -570,6 +612,7 @@
     "root": {
       "inputs": {
         "agenix": "agenix",
+        "agent-skills": "agent-skills",
         "anthropic-skills": "anthropic-skills",
         "brew-api": "brew-api",
         "brew-nix": "brew-nix",
@@ -580,7 +623,7 @@
         "dpp-ext-toml": "dpp-ext-toml",
         "dpp-protocol-git": "dpp-protocol-git",
         "dpp-vim": "dpp-vim",
-        "home-manager": "home-manager_2",
+        "home-manager": "home-manager_3",
         "mcp-hub": "mcp-hub",
         "mcp-servers-nix": "mcp-servers-nix",
         "mcphub-nvim": "mcphub-nvim",
@@ -588,7 +631,8 @@
         "nixpkgs": "nixpkgs_2",
         "nixvim": "nixvim",
         "opencode": "opencode",
-        "sparze": "sparze"
+        "sparze": "sparze",
+        "ui-ux-pro-max": "ui-ux-pro-max"
       }
     },
     "sparze": {
@@ -635,6 +679,22 @@
       "original": {
         "owner": "nix-systems",
         "repo": "default",
+        "type": "github"
+      }
+    },
+    "ui-ux-pro-max": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1767773055,
+        "narHash": "sha256-VCFqmXWEIyhdZFooB+w1T3240kmOlZTn4GObMPq9fgY=",
+        "owner": "nextlevelbuilder",
+        "repo": "ui-ux-pro-max-skill",
+        "rev": "d6a4f74bd096eb9b562462df113e60a9be642e31",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nextlevelbuilder",
+        "repo": "ui-ux-pro-max-skill",
         "type": "github"
       }
     }

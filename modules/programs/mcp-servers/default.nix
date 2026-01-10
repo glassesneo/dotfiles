@@ -392,14 +392,14 @@ delib.module {
         # TAVILY_API_KEY = ''{env:TAVILY_API_KEY}'';
         # };
         # };
-        # morph-fast-apply = {
-        # command = ["${fast-apply-mcp}"];
-        # type = "local";
-        # environment = {
-        # ALL_TOOLS = "false";
-        # MORPH_API_KEY = ''{env:MORPH_API_KEY}'';
-        # };
-        # };
+        morph-fast-apply = {
+          command = ["${fast-apply-mcp}"];
+          type = "local";
+          environment = {
+            ALL_TOOLS = "false";
+            MORPH_API_KEY = ''{env:MORPH_API_KEY}'';
+          };
+        };
         kiri = {
           command = ["${kiri-mcp}" "--repo" "." "--db" ".kiri/index.duckdb" "--watch"];
           type = "local";

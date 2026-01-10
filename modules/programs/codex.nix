@@ -1,5 +1,6 @@
 {
   delib,
+  inputs,
   nodePkgs,
   ...
 }:
@@ -9,6 +10,51 @@ delib.module {
   options = delib.singleEnableOption true;
 
   home.ifEnabled = {
+    # Codex skill configuration
+    programs.agent-skills = {
+      enable = true;
+
+      # Define skill sources
+      sources = {
+        anthropic = {
+          path = inputs.anthropic-skills;
+          subdir = ".";
+        };
+        ui-ux-pro-max = {
+          path = inputs.ui-ux-pro-max;
+          subdir = ".";
+        };
+        sparze-source = {
+          path = inputs.sparze;
+          subdir = ".";
+        };
+      };
+
+      # Select skills for Codex
+      skills = {
+        enable = [
+          "skill-creator"
+        ];
+
+        explicit = {
+          # ui-ux-pro-max = {
+          # from = "ui-ux-pro-max";
+          # path = ".codex/skills/ui-ux-pro-max";
+          # };
+          sparze = {
+            from = "sparze-source";
+            path = ".";
+          };
+        };
+      };
+
+      # Deploy to Codex
+      targets.codex = {
+        dest = ".codex/skills";
+        structure = "symlink-tree";
+      };
+    };
+
     programs.codex = {
       enable = true;
       package = nodePkgs."@openai/codex";

@@ -121,13 +121,13 @@ let
         sha512 = "z0Zhn/LmQ3yz91dEfd5QgS7DpSjA4pk+3z2++zKgn5L6iDFM9QapsVoAQSbKLvlrFsZk9+ru6yHHWNq2lCYJKQ==";
       };
     };
-    "@modelcontextprotocol/sdk-1.25.1" = {
+    "@modelcontextprotocol/sdk-1.25.2" = {
       name = "_at_modelcontextprotocol_slash_sdk";
       packageName = "@modelcontextprotocol/sdk";
-      version = "1.25.1";
+      version = "1.25.2";
       src = fetchurl {
-        url = "https://registry.npmjs.org/@modelcontextprotocol/sdk/-/sdk-1.25.1.tgz";
-        sha512 = "yO28oVFFC7EBoiKdAn+VqRm+plcfv4v0xp6osG/VsCB0NlPZWi87ajbCZZ8f/RvOFLEu7//rSRmuZZ7lMoe3gQ==";
+        url = "https://registry.npmjs.org/@modelcontextprotocol/sdk/-/sdk-1.25.2.tgz";
+        sha512 = "LZFeo4F9M5qOhC/Uc1aQSrBHxMrvxett+9KLHt7OhcExtoiRN9DKgbZffMP/nxjutWDQpfMDfP3nkHI4X9ijww==";
       };
     };
     "@parcel/watcher-2.5.1" = {
@@ -265,13 +265,13 @@ let
         sha512 = "3oSeUO0TMV67hN1AmbXsK4yaqU7tjiHlbxRDZOpH0KW9+CeX4bRAaX0Anxt0tx2MrpRpWwQaPwIlISEJhYU5Pw==";
       };
     };
-    "body-parser-2.2.1" = {
+    "body-parser-2.2.2" = {
       name = "body-parser";
       packageName = "body-parser";
-      version = "2.2.1";
+      version = "2.2.2";
       src = fetchurl {
-        url = "https://registry.npmjs.org/body-parser/-/body-parser-2.2.1.tgz";
-        sha512 = "nfDwkulwiZYQIGwxdy0RUmowMhKcFVcYXUU7m4QlKYim1rUtg83xm2yjZ40QjDuc291AJjjeSc9b++AWHSgSHw==";
+        url = "https://registry.npmjs.org/body-parser/-/body-parser-2.2.2.tgz";
+        sha512 = "oP5VkATKlNwcgvxi0vM0p/D3n2C3EReYVX+DNYs5TjZFn/oQt2j+4sVJtSMr18pdRr8wjTcBl6LoV+FUwzPmNA==";
       };
     };
     "brace-expansion-2.0.2" = {
@@ -1291,13 +1291,13 @@ let
         sha512 = "lNaJgI+2Q5URQBkccEKHTQOPaXdUxnZZElQTZY0MFUAuaEqe1E+Nyvgdz/aIyNi6Z9MzO5dv1H8n58/GELp3+w==";
       };
     };
-    "p-queue-9.0.1" = {
+    "p-queue-9.1.0" = {
       name = "p-queue";
       packageName = "p-queue";
-      version = "9.0.1";
+      version = "9.1.0";
       src = fetchurl {
-        url = "https://registry.npmjs.org/p-queue/-/p-queue-9.0.1.tgz";
-        sha512 = "RhBdVhSwJb7Ocn3e8ULk4NMwBEuOxe+1zcgphUy9c2e5aR/xbEsdVXxHJ3lynw6Qiqu7OINEyHlZkiblEpaq7w==";
+        url = "https://registry.npmjs.org/p-queue/-/p-queue-9.1.0.tgz";
+        sha512 = "O/ZPaXuQV29uSLbxWBGGZO1mCQXV2BLIwUr59JUU9SoH76mnYvtms7aafH/isNSNGwuEfP6W/4xD0/TJXxrizw==";
       };
     };
     "p-timeout-7.0.1" = {
@@ -1831,13 +1831,13 @@ let
         sha512 = "gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==";
       };
     };
-    "zod-4.3.4" = {
+    "zod-4.3.5" = {
       name = "zod";
       packageName = "zod";
-      version = "4.3.4";
+      version = "4.3.5";
       src = fetchurl {
-        url = "https://registry.npmjs.org/zod/-/zod-4.3.4.tgz";
-        sha512 = "Zw/uYiiyF6pUT1qmKbZziChgNPRu+ZRneAsMUDU6IwmXdWt5JwcUfy2bvLOCUtz5UniaN/Zx5aFttZYbYc7O/A==";
+        url = "https://registry.npmjs.org/zod/-/zod-4.3.5.tgz";
+        sha512 = "k7Nwx6vuWx1IJ9Bjuf4Zt1PEllcwe7cls3VNzm4CQ1/hgtFUK2bRNG3rvnpPUhFjmqJKAKtjV576KnUkHocg/g==";
       };
     };
     "zod-to-json-schema-3.25.1" = {
@@ -1855,10 +1855,10 @@ in
   "@anthropic-ai/claude-code" = nodeEnv.buildNodePackage {
     name = "_at_anthropic-ai_slash_claude-code";
     packageName = "@anthropic-ai/claude-code";
-    version = "2.0.76";
+    version = "2.1.1";
     src = fetchurl {
-      url = "https://registry.npmjs.org/@anthropic-ai/claude-code/-/claude-code-2.0.76.tgz";
-      sha512 = "BVwPez7Pst729gxHZNb7iUdjrn4UAzO49zC+Bxlyf0fMe3SsutxEhKTT16VMs2qInE9xhEBCxajCCa888mFPBg==";
+      url = "https://registry.npmjs.org/@anthropic-ai/claude-code/-/claude-code-2.1.1.tgz";
+      sha512 = "pZReZIcb4ZFNOlZaAeQxm5O0cTrz6YJeb1kpugqbBjIQC6vVavT1nGSw/9Dk+ti+QEMXap0ibXa1T5i4NgXeqg==";
     };
     buildInputs = globalBuildInputs;
     meta = {
@@ -1873,14 +1873,14 @@ in
   "@openai/codex" = nodeEnv.buildNodePackage {
     name = "_at_openai_slash_codex";
     packageName = "@openai/codex";
-    version = "0.77.0";
+    version = "0.79.0";
     src = fetchurl {
-      url = "https://registry.npmjs.org/@openai/codex/-/codex-0.77.0.tgz";
-      sha512 = "1Z3tuJsePfQvBELmTT3Dpzm4GheQn0t4H8RtdZnYVBdj1vA2Hi6eGCrOHXxPSfXRKDrSZ4VvALcQmZpFmYsaHA==";
+      url = "https://registry.npmjs.org/@openai/codex/-/codex-0.79.0.tgz";
+      sha512 = "9qL1H9+DyNwPexchcl620rJc+sf0m1BlbSFa6tnsrfoR6n6cdxl+7Vi8ZSWmFEGWqRyQJMW8PKcpyt6hbv72mg==";
     };
     buildInputs = globalBuildInputs;
     meta = {
-      description = "<p align=\"center\"><code>npm i -g @openai/codex</code><br />or <code>brew install --cask codex</code></p>";
+      description = "<p align=\"center\"><code>npm i -g @openai/codex</code><br />or <code>brew install --cask codex</code></p> <p align=\"center\"><strong>Codex CLI</strong> is a coding agent from OpenAI that runs locally on your computer. <p align=\"center\">   <img src=\"./.githu";
       homepage = "https://github.com/openai/codex#readme";
       license = "Apache-2.0";
     };
@@ -1913,7 +1913,7 @@ in
       sources."ajv-formats-3.0.1"
       sources."async-function-1.0.0"
       sources."async-generator-function-1.0.0"
-      sources."body-parser-2.2.1"
+      sources."body-parser-2.2.2"
       sources."bytes-3.1.2"
       sources."call-bind-apply-helpers-1.0.2"
       sources."call-bound-1.0.4"
@@ -1999,7 +1999,7 @@ in
       sources."vary-1.1.2"
       sources."which-2.0.2"
       sources."wrappy-1.0.2"
-      sources."zod-4.3.4"
+      sources."zod-4.3.5"
       sources."zod-to-json-schema-3.25.1"
     ];
     buildInputs = globalBuildInputs;
@@ -2028,7 +2028,7 @@ in
       sources."ajv-formats-3.0.1"
       sources."async-function-1.0.0"
       sources."async-generator-function-1.0.0"
-      sources."body-parser-2.2.1"
+      sources."body-parser-2.2.2"
       sources."bytes-3.1.2"
       sources."call-bind-apply-helpers-1.0.2"
       sources."call-bound-1.0.4"
@@ -2139,7 +2139,7 @@ in
       sources."@isaacs/balanced-match-4.0.1"
       sources."@isaacs/brace-expansion-5.0.0"
       sources."@isaacs/cliui-8.0.2"
-      sources."@modelcontextprotocol/sdk-1.25.1"
+      sources."@modelcontextprotocol/sdk-1.25.2"
       sources."accepts-2.0.0"
       sources."ajv-8.17.1"
       sources."ajv-formats-3.0.1"
@@ -2150,7 +2150,7 @@ in
       sources."asynckit-0.4.0"
       sources."axios-1.13.2"
       sources."balanced-match-1.0.2"
-      sources."body-parser-2.2.1"
+      sources."body-parser-2.2.2"
       sources."brace-expansion-2.0.2"
       sources."bytes-3.1.2"
       sources."call-bind-apply-helpers-1.0.2"
@@ -2288,7 +2288,7 @@ in
         ];
       })
       sources."wrappy-1.0.2"
-      sources."zod-4.3.4"
+      sources."zod-4.3.5"
       sources."zod-to-json-schema-3.25.1"
     ];
     buildInputs = globalBuildInputs;
@@ -2304,10 +2304,10 @@ in
   kiri-mcp-server = nodeEnv.buildNodePackage {
     name = "kiri-mcp-server";
     packageName = "kiri-mcp-server";
-    version = "0.26.0";
+    version = "0.26.1";
     src = fetchurl {
-      url = "https://registry.npmjs.org/kiri-mcp-server/-/kiri-mcp-server-0.26.0.tgz";
-      sha512 = "ohG9tzcRQgnwUDvfz1cOir+/W365tTW5mZhxDqVLDiLtpV0EFkcRIYoCcukfybqgKl6UruqIqHcB8psb4jCONA==";
+      url = "https://registry.npmjs.org/kiri-mcp-server/-/kiri-mcp-server-0.26.1.tgz";
+      sha512 = "vuEBkkGRfZbWFO285MloMcrVSfjmwrs7UuAmK57BA2XETRMtoc4ocVbCKSKenDsnA6OMdk29Y4KR5WtY9dxNSA==";
     };
     dependencies = [
       sources."@duckdb/node-api-1.4.2-r.1"
@@ -2329,7 +2329,7 @@ in
       sources."micromatch-4.0.8"
       sources."node-addon-api-7.1.1"
       sources."node-gyp-build-4.8.4"
-      sources."p-queue-9.0.1"
+      sources."p-queue-9.1.0"
       sources."p-timeout-7.0.1"
       sources."picomatch-2.3.1"
       sources."to-regex-range-5.0.1"
@@ -2364,7 +2364,7 @@ in
       sources."typescript-5.9.3"
       sources."which-2.0.2"
       sources."yaml-2.8.2"
-      sources."zod-4.3.4"
+      sources."zod-4.3.5"
     ];
     buildInputs = globalBuildInputs;
     meta = {
@@ -2387,13 +2387,13 @@ in
     dependencies = [
       sources."@cfworker/json-schema-4.1.1"
       sources."@hono/node-server-1.19.7"
-      sources."@modelcontextprotocol/sdk-1.25.1"
+      sources."@modelcontextprotocol/sdk-1.25.2"
       sources."accepts-2.0.0"
       sources."ajv-8.17.1"
       sources."ajv-formats-3.0.1"
       sources."async-function-1.0.0"
       sources."async-generator-function-1.0.0"
-      sources."body-parser-2.2.1"
+      sources."body-parser-2.2.2"
       sources."bytes-3.1.2"
       sources."call-bind-apply-helpers-1.0.2"
       sources."call-bound-1.0.4"
@@ -2586,7 +2586,7 @@ in
       sources."async-generator-function-1.0.0"
       sources."asynckit-0.4.0"
       sources."axios-1.13.2"
-      sources."body-parser-2.2.1"
+      sources."body-parser-2.2.2"
       sources."bytes-3.1.2"
       sources."call-bind-apply-helpers-1.0.2"
       sources."call-bound-1.0.4"
@@ -2695,7 +2695,7 @@ in
       sources."y18n-5.0.8"
       sources."yargs-17.7.2"
       sources."yargs-parser-21.1.1"
-      sources."zod-4.3.4"
+      sources."zod-4.3.5"
       sources."zod-to-json-schema-3.25.1"
     ];
     buildInputs = globalBuildInputs;

@@ -11,6 +11,43 @@ delib.module {
   options = delib.singleEnableOption true;
 
   home.ifEnabled = {
+    # OpenCode skill configuration
+    programs.agent-skills = {
+      enable = true;
+
+      # Define skill sources
+      sources = {
+        anthropic = {
+          path = inputs.anthropic-skills;
+          subdir = ".";
+        };
+        sparze-source = {
+          path = inputs.sparze;
+          subdir = ".";
+        };
+      };
+
+      # Select skills for OpenCode
+      skills = {
+        enable = [
+          "skill-creator"
+        ];
+
+        explicit = {
+          sparze = {
+            from = "sparze-source";
+            path = ".";
+          };
+        };
+      };
+
+      # Deploy to OpenCode
+      targets.opencode = {
+        dest = ".opencode/skills";
+        structure = "symlink-tree";
+      };
+    };
+
     programs.opencode = {
       enable = true;
       package = inputs.opencode.packages."${host.homeManagerSystem}".default;
@@ -18,6 +55,11 @@ delib.module {
         theme = "catppuccin";
         autoshare = false;
         autoupdate = false;
+        agent = {
+          explore = {
+            model = "github-copilot/gpt-5.2";
+          };
+        };
         experimental = {
           mcp_timeout = 1200000; # 20 minutes for Codex MCP
         };
