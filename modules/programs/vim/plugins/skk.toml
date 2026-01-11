@@ -1,0 +1,9 @@
+[[plugins]]
+repo = 'vim-skk/skkeleton'
+on_map = { ic = '<Plug>(skkeleton-' }
+hooks_file = '$DPP_HOOK_DIR/skk.vim'
+hook_add = '''
+" Define keymaps early so on_map can trigger plugin loading
+imap <C-j> <Plug>(skkeleton-enable)
+cmap <C-j> <Plug>(skkeleton-enable)
+'''

@@ -14,16 +14,14 @@ delib.module {
   home.ifEnabled = let
     dpp-plugins =
       inputs
-      |> lib.attrsets.getAttrs
-      [
+      |> lib.attrsets.getAttrs [
         "dpp-vim"
         "dpp-ext-installer"
         "dpp-ext-lazy"
         "dpp-ext-toml"
         "dpp-protocol-git"
       ]
-      |> lib.attrsets.mapAttrsToList
-      (name: src:
+      |> lib.attrsets.mapAttrsToList (name: src:
         pkgs.vimUtils.buildVimPlugin {
           inherit name src;
           dependencies = [pkgs.vimPlugins.denops-vim];
