@@ -44,6 +44,22 @@
         "type": "github"
       }
     },
+    "amp-nvim": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1765795793,
+        "narHash": "sha256-f/li32jpVigbZANnnbgSArnOH4nusj0DUz7952K+Znw=",
+        "owner": "sourcegraph",
+        "repo": "amp.nvim",
+        "rev": "3b9ad5ef0328de1b35cc9bfa723a37db5daf9434",
+        "type": "github"
+      },
+      "original": {
+        "owner": "sourcegraph",
+        "repo": "amp.nvim",
+        "type": "github"
+      }
+    },
     "anthropic-skills": {
       "flake": false,
       "locked": {
@@ -613,6 +629,7 @@
       "inputs": {
         "agenix": "agenix",
         "agent-skills": "agent-skills",
+        "amp-nvim": "amp-nvim",
         "anthropic-skills": "anthropic-skills",
         "brew-api": "brew-api",
         "brew-nix": "brew-nix",

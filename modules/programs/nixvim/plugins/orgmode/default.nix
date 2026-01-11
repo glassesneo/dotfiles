@@ -137,9 +137,10 @@ delib.module {
               }
               {
                 type = "tags_todo";
-                match = ''DEADLINE=""/+TODO|+NEXT'';
+                match = "/+TODO|+NEXT";
                 org_agenda_overriding_header = "Unscheduled Actions";
                 org_agenda_todo_ignore_scheduled = "all";
+                org_agenda_todo_ignore_deadlines = "all";
                 org_agenda_files = [
                   "${orgfiles}/inbox.org"
                   "${orgfiles}/projects/**/*"
@@ -220,7 +221,7 @@ delib.module {
             types = [
               {
                 type = "tags";
-                match = "fleeting";
+                match = "LEVEL=1+fleeting";
                 org_agenda_overriding_header = "Fleeting Notes";
                 org_agenda_files = [
                   "${orgfiles}/inbox.org"
@@ -293,19 +294,13 @@ delib.module {
           n = {
             description = "Morning check-in | Daily journal";
             template = ''
-              - %[%H:%M] [start] %^{MOOD|🙂|😀|🙂|😐|🙁|😫} %^{ENERGY|⚡️⚡️|⚡️⚡️⚡️|⚡️⚡️|⚡️|🪫|🪫🪫} %?
-
-            '';
-            target = journalTemplate;
-            datetree = {
-              tree_type = "day";
-            };
-          };
-          l = {
-            description = "Append log | Daily journal";
-            template = ''
-              - %[%H:%M] %?
-
+              * Start
+              :PROPERTIES:
+              :FEELING: %^{FEELING|fresh|calm|sleepy|anxious|tired|restless}
+              :MOOD: %^{MOOD|🙂|😀|🙂|😐|🙁|😫}
+              :ENERGY: %^{ENERGY|⚡️⚡️|⚡️⚡️⚡️|⚡️⚡️|⚡️|🪫|🪫🪫}
+              :END:
+                [%<%H:%M>]
             '';
             target = journalTemplate;
             datetree = {
@@ -321,17 +316,32 @@ delib.module {
               :MOOD: %^{MOOD|🙂|😀|🙂|😐|🙁|😫}
               :ENERGY: %^{ENERGY|⚡️⚡️|⚡️⚡️⚡️|⚡️⚡️|⚡️|🪫|🪫🪫}
               :END:
-                %[%H:%M]
+                [%<%H:%M>]
 
               - 今日の一行 :: %?
               - できたこと（最大3つ） ::
+              - ひっかかったこと (できれば原因も) ::
                 -
+              - 明日の最初の一手 ::
                 -
+
+            '';
+            target = journalTemplate;
+            datetree = {
+              tree_type = "day";
+            };
+          };
+          r = {
+            description = "Reflection | Daily journal";
+            template = ''
+              * Reflection
+              :PROPERTIES:
+              :REFLECT: %^{CARD|A 事実/解釈/感情|B 前提チェック|C 可能性|D 行動変換}
+              :END:
+                [%<%H:%M>]
+              - トピック :: %^{TOPIC}
                 -
-              - ひっかかったこと / 原因 ::
-                -
-              - 明日やること（軽く） ::
-                -
+              - 明日試す一手
 
             '';
             target = journalTemplate;

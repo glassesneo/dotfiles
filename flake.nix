@@ -131,6 +131,10 @@
       url = "github:Shougo/dpp-protocol-git";
       flake = false;
     };
+    amp-nvim = {
+      url = "github:sourcegraph/amp.nvim";
+      flake = false;
+    };
     anthropic-skills = {
       url = "github:anthropics/skills";
       flake = false;

@@ -8,7 +8,7 @@ delib.module {
 
   options = delib.singleEnableOption true;
 
-  home.ifEnabled = {
+  home.always = {
     # Import the agent-skills-nix Home Manager module
     # Each agent module (claude-code, codex, opencode) configures its own:
     # - sources (skill repositories)

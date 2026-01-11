@@ -49,13 +49,13 @@ let
         sha512 = "z0pJCdEnIj0Famkip6w7JZ/A17nm5VcYc6H7isOHXfEnPhBQ9PBusUTFgIzl6+3J8HOFQOv0szJq46zldbsHfQ==";
       };
     };
-    "@hono/node-server-1.19.7" = {
+    "@hono/node-server-1.19.8" = {
       name = "_at_hono_slash_node-server";
       packageName = "@hono/node-server";
-      version = "1.19.7";
+      version = "1.19.8";
       src = fetchurl {
-        url = "https://registry.npmjs.org/@hono/node-server/-/node-server-1.19.7.tgz";
-        sha512 = "vUcD0uauS7EU2caukW8z5lJKtoGMokxNbJtBiwHgpqxEXokaHCBkQUmCHhjFB1VUTWdqj25QoMkMKzgjq+uhrw==";
+        url = "https://registry.npmjs.org/@hono/node-server/-/node-server-1.19.8.tgz";
+        sha512 = "0/g2lIOPzX8f3vzW1ggQgvG5mjtFBDBHFAzI5SFAi2DzSqS9luJwqg9T6O/gKYLi+inS7eNxBeIFkkghIPvrMA==";
       };
     };
     "@isaacs/balanced-match-4.0.1" = {
@@ -139,13 +139,13 @@ let
         sha512 = "dfUnCxiN9H4ap84DvD2ubjw+3vUNpstxa0TneY/Paat8a3R4uQZDLSvWjmznAY/DoahqTHl9V46HF/Zs3F29pg==";
       };
     };
-    "@types/node-25.0.3" = {
+    "@types/node-25.0.5" = {
       name = "_at_types_slash_node";
       packageName = "@types/node";
-      version = "25.0.3";
+      version = "25.0.5";
       src = fetchurl {
-        url = "https://registry.npmjs.org/@types/node/-/node-25.0.3.tgz";
-        sha512 = "W609buLVRVmeW693xKfzHeIV6nJGGz98uCPfeXI1ELMLXVeKYZ9m15fAMSaUPBHYLGFsVRcMmSCksQOrZV9BYA==";
+        url = "https://registry.npmjs.org/@types/node/-/node-25.0.5.tgz";
+        sha512 = "FuLxeLuSVOqHPxSN1fkcD8DLU21gAP7nCKqGRJ/FglbCUBs0NYN6TpHcdmyLeh8C0KwGIaZQJSv+OYG+KZz+Gw==";
       };
     };
     "@types/node-fetch-2.6.13" = {
@@ -958,13 +958,13 @@ let
         sha512 = "4FbRdAX+bSdmo4AUFuS0WNiPz8NgFt+r8ThgNWmlrjQjt1Q7ZR9+zTlce2859x4KSXrwIsaeTqDoKQmtP8pLmQ==";
       };
     };
-    "iconv-lite-0.7.1" = {
+    "iconv-lite-0.7.2" = {
       name = "iconv-lite";
       packageName = "iconv-lite";
-      version = "0.7.1";
+      version = "0.7.2";
       src = fetchurl {
-        url = "https://registry.npmjs.org/iconv-lite/-/iconv-lite-0.7.1.tgz";
-        sha512 = "2Tth85cXwGFHfvRgZWszZSvdo+0Xsqmw8k8ZwxScfcBneNUraK+dxRxRm24nszx80Y0TVio8kKLt5sLE7ZCLlw==";
+        url = "https://registry.npmjs.org/iconv-lite/-/iconv-lite-0.7.2.tgz";
+        sha512 = "im9DjEDQ55s9fL4EYzOAv0yMqmMBSZp6G0VvFyTMPKWxiSBHUj9NW/qqLmXUwXrrM7AvqSlTCfvqRb0cM8yYqw==";
       };
     };
     "ignore-7.0.5" = {
@@ -1855,10 +1855,10 @@ in
   "@anthropic-ai/claude-code" = nodeEnv.buildNodePackage {
     name = "_at_anthropic-ai_slash_claude-code";
     packageName = "@anthropic-ai/claude-code";
-    version = "2.1.1";
+    version = "2.1.3";
     src = fetchurl {
-      url = "https://registry.npmjs.org/@anthropic-ai/claude-code/-/claude-code-2.1.1.tgz";
-      sha512 = "pZReZIcb4ZFNOlZaAeQxm5O0cTrz6YJeb1kpugqbBjIQC6vVavT1nGSw/9Dk+ti+QEMXap0ibXa1T5i4NgXeqg==";
+      url = "https://registry.npmjs.org/@anthropic-ai/claude-code/-/claude-code-2.1.3.tgz";
+      sha512 = "HZ6krENkT+4DhxsrTPxJMnmMWjL0lY4OuVK/s86ujn3GVmhgkDctOvjEcYMjfi0ZKMrFBRkWmH97Gr0PKiIXpA==";
     };
     buildInputs = globalBuildInputs;
     meta = {
@@ -1873,10 +1873,10 @@ in
   "@openai/codex" = nodeEnv.buildNodePackage {
     name = "_at_openai_slash_codex";
     packageName = "@openai/codex";
-    version = "0.79.0";
+    version = "0.80.0";
     src = fetchurl {
-      url = "https://registry.npmjs.org/@openai/codex/-/codex-0.79.0.tgz";
-      sha512 = "9qL1H9+DyNwPexchcl620rJc+sf0m1BlbSFa6tnsrfoR6n6cdxl+7Vi8ZSWmFEGWqRyQJMW8PKcpyt6hbv72mg==";
+      url = "https://registry.npmjs.org/@openai/codex/-/codex-0.80.0.tgz";
+      sha512 = "U1DWDy7eTjx+SF32Wx9oO6cyX1dd9WiRvIW4XCP3FVcv7Xq7CSCvDrFAdzpFxPNPg6CLz9a4qtO42yntpcJpDw==";
     };
     buildInputs = globalBuildInputs;
     meta = {
@@ -1904,7 +1904,7 @@ in
         ];
       })
       sources."@cfworker/json-schema-4.1.1"
-      sources."@hono/node-server-1.19.7"
+      sources."@hono/node-server-1.19.8"
       sources."@isaacs/balanced-match-4.0.1"
       sources."@isaacs/brace-expansion-5.0.0"
       sources."@modelcontextprotocol/sdk-1.25.0"
@@ -1952,7 +1952,7 @@ in
       sources."hasown-2.0.2"
       sources."hono-4.11.3"
       sources."http-errors-2.0.1"
-      sources."iconv-lite-0.7.1"
+      sources."iconv-lite-0.7.2"
       sources."inherits-2.0.4"
       sources."ipaddr.js-1.9.1"
       sources."is-promise-4.0.0"
@@ -2067,7 +2067,7 @@ in
       sources."has-symbols-1.1.0"
       sources."hasown-2.0.2"
       sources."http-errors-2.0.1"
-      sources."iconv-lite-0.7.1"
+      sources."iconv-lite-0.7.2"
       sources."inherits-2.0.4"
       sources."ipaddr.js-1.9.1"
       sources."is-promise-4.0.0"
@@ -2135,7 +2135,7 @@ in
     };
     dependencies = [
       sources."@cfworker/json-schema-4.1.1"
-      sources."@hono/node-server-1.19.7"
+      sources."@hono/node-server-1.19.8"
       sources."@isaacs/balanced-match-4.0.1"
       sources."@isaacs/brace-expansion-5.0.0"
       sources."@isaacs/cliui-8.0.2"
@@ -2211,7 +2211,7 @@ in
       sources."hasown-2.0.2"
       sources."hono-4.11.3"
       sources."http-errors-2.0.1"
-      sources."iconv-lite-0.7.1"
+      sources."iconv-lite-0.7.2"
       sources."inherits-2.0.4"
       sources."ipaddr.js-1.9.1"
       sources."is-fullwidth-code-point-3.0.0"
@@ -2386,7 +2386,7 @@ in
     };
     dependencies = [
       sources."@cfworker/json-schema-4.1.1"
-      sources."@hono/node-server-1.19.7"
+      sources."@hono/node-server-1.19.8"
       sources."@modelcontextprotocol/sdk-1.25.2"
       sources."accepts-2.0.0"
       sources."ajv-8.17.1"
@@ -2441,7 +2441,7 @@ in
       sources."hono-4.11.3"
       sources."htmlparser2-10.0.0"
       sources."http-errors-2.0.1"
-      sources."iconv-lite-0.7.1"
+      sources."iconv-lite-0.7.2"
       sources."inherits-2.0.4"
       sources."ipaddr.js-1.9.1"
       sources."is-promise-4.0.0"
@@ -2510,7 +2510,7 @@ in
     };
     dependencies = [
       sources."@modelcontextprotocol/sdk-1.0.1"
-      sources."@types/node-25.0.3"
+      sources."@types/node-25.0.5"
       sources."@types/node-fetch-2.6.13"
       sources."async-function-1.0.0"
       sources."async-generator-function-1.0.0"
@@ -2539,7 +2539,7 @@ in
       sources."has-tostringtag-1.0.2"
       sources."hasown-2.0.2"
       sources."http-errors-2.0.1"
-      sources."iconv-lite-0.7.1"
+      sources."iconv-lite-0.7.2"
       sources."inherits-2.0.4"
       sources."math-intrinsics-1.1.0"
       sources."mime-db-1.52.0"
@@ -2641,7 +2641,7 @@ in
       sources."has-tostringtag-1.0.2"
       sources."hasown-2.0.2"
       sources."http-errors-2.0.1"
-      sources."iconv-lite-0.7.1"
+      sources."iconv-lite-0.7.2"
       sources."inherits-2.0.4"
       sources."ipaddr.js-1.9.1"
       sources."is-fullwidth-code-point-3.0.0"
