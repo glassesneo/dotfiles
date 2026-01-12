@@ -1,6 +1,6 @@
 " Skkeleton configuration for Vim
 " Translated from skk.lua hooks
-" Note: <C-j> keymaps are defined in hook_add in skk.toml
+" Note: <C-j> and <C-l> keymaps are defined in hook_add in skk.toml
 
 " Configuration
 call skkeleton#config({
@@ -8,13 +8,6 @@ call skkeleton#config({
   \ 'eggLikeNewline': v:true,
   \ 'userDictionary': '~/.config/.skkeleton',
   \ })
-
-" Pre-enable hook for disable keymap
-autocmd User skkeleton-enable-pre call s:skkeleton_pre_enable()
-function! s:skkeleton_pre_enable()
-  imap <C-l> <Plug>(skkeleton-disable)
-  cmap <C-l> <Plug>(skkeleton-disable)
-endfunction
 
 " Custom key mappings
 call skkeleton#register_keymap('input', ':', 'henkanPoint')

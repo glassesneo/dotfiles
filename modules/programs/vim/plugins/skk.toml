@@ -6,4 +6,6 @@ hook_add = '''
 " Define keymaps early so on_map can trigger plugin loading
 imap <C-j> <Plug>(skkeleton-enable)
 cmap <C-j> <Plug>(skkeleton-enable)
+imap <C-l> <Plug>(skkeleton-disable)
+cmap <C-l> <Plug>(skkeleton-disable)
 '''
