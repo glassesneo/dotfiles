@@ -12,6 +12,16 @@ This repository uses `nh` (nix helper) for streamlined configuration management.
 
 ### Applying Configurations
 
+**Home Manager only (user environment - FASTEST for userland changes)**:
+```bash
+# Build and activate home-manager configuration only
+nh home switch
+
+# Dry run
+nh home switch --dry
+```
+**USE THIS** for changes to programs, dotfiles, and user-level configs.
+
 **nix-darwin (macOS system + Home Manager)**:
 ```bash
 # Standard build and activation (applies both darwin and home-manager configs)
@@ -101,6 +111,8 @@ nix-shell -p node2nix --run "node2nix --input node-packages.json --output node-p
 
 ## Denix Architecture (Non-Obvious Patterns Only)
 - Module discovery: `paths = [./hosts ./modules]` auto-imports everything.
+- **CRITICAL**: Denix auto-loads ALL .nix files in `paths` - NO imports/exports allowed between modules.
+- **CRITICAL**: Nix flakes only read git-tracked files - ALWAYS `git add` new files before building.
 - Extension system: `extensions = [args base.withConfig]` wires shared args + base config.
 - Platform blocks: `home.ifEnabled` targets `config` for `moduleSystem = "home"` and `config.home-manager.users.neo` for `"darwin"` when HM is enabled.
 - Shared arguments: `myconfig.always.args.shared.<key>` pattern for global args.
