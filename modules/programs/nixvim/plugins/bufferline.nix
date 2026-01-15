@@ -9,9 +9,6 @@ delib.module {
       bufferline = {
         enable = true;
         settings = {
-          highlights.__raw = ''
-            require("catppuccin.special.bufferline").get_theme()
-          '';
           options = {
             themable = true;
             buffer_close_icon = "";

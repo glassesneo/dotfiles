@@ -4,26 +4,6 @@ delib.module {
 
   home.ifEnabled.programs.nixvim = {
     colorschemes = {
-      catppuccin = {
-        enable = true;
-        settings = {
-          flavour = "mocha";
-          transparent_background = true;
-          term_colors = true;
-          integrations = {
-            dashboard = true;
-            fidget = true;
-            gitsigns = true;
-            navic = {
-              enabled = true;
-              custom_bg = "NONE";
-            };
-            notify = true;
-            treesitter = true;
-          };
-        };
-        lazyLoad.enable = true;
-      };
       # cyberdream = {
       #   enable = true;
       #   settings = {

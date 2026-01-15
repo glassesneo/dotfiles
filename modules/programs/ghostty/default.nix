@@ -23,7 +23,6 @@ delib.module {
         else null;
       clearDefaultKeybinds = true;
       settings = {
-        theme = "Catppuccin Mocha";
         font-size = 16;
         font-family = "UDEV Gothic NFLG";
         keybind = [
@@ -32,8 +31,8 @@ delib.module {
         ];
         auto-update = "off";
         font-feature = "-dlig";
-        background-opacity = 0.7;
-        background-blur = 5;
+        # background-opacity = 0.7;
+        # background-blur = 5;
         window-inherit-working-directory = false;
         macos-titlebar-style = "hidden";
         # cursor-style = "block";

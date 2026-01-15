@@ -14,13 +14,14 @@
         paths = [
           ./hosts
           ./modules
+          ./rices
         ];
 
         extensions = with denix.lib.extensions; [
           args
           (base.withConfig {
             args.enable = true;
-            rices.enable = false;
+            rices.enable = true;
           })
         ];
 

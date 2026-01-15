@@ -52,7 +52,6 @@ delib.module {
       enable = true;
       package = inputs.opencode.packages."${host.homeManagerSystem}".default;
       settings = {
-        theme = "catppuccin";
         autoshare = false;
         autoupdate = false;
         agent = {
@@ -63,9 +62,6 @@ delib.module {
         experimental = {
           mcp_timeout = 1200000; # 20 minutes for Codex MCP
         };
-      };
-      themes = {
-        transparent-catppuccin = ./themes/transparent-catppuccin.json;
       };
       rules =
         homeConfig.programs.claude-code.memory.text

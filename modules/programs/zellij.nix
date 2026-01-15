@@ -13,7 +13,6 @@ delib.module {
   home.ifEnabled = {cfg, ...}: {
     programs.zellij = {
       enable = cfg.enable;
-      settings.theme = "catppuccin-macchiato";
     };
     xdg.configFile = {
       "zellij/config.kdl".text = ''
