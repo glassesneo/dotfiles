@@ -14,6 +14,14 @@ delib.module {
         "InsertEnter"
         "CmdlineEnter"
       ];
+      before.__raw = ''
+        function()
+          -- Load orgmode if we're in an org file to ensure completion provider is available
+          if vim.bo.filetype == "org" then
+            require("lz.n").trigger_load('orgmode.nvim')
+          end
+        end
+      '';
     };
   in {
     programs.nixvim = {

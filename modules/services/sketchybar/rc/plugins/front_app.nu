@@ -59,7 +59,10 @@ def get_icon (): string -> string {
 }
 
 def switch_front_app (app_name: string) {
-  let icon = $app_name | get_icon
+  let icon = match $app_name { 
+    "kitty-quick-access" => {"kitty" | get_icon},
+    _ => {$app_name | get_icon}
+  }
   (
     sketchybar
       --set $name
