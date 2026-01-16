@@ -4,6 +4,7 @@
   homeConfig,
   inputs,
   lib,
+  nickelLib,
   nodePkgs,
   pkgs,
   ...
@@ -16,34 +17,190 @@ delib.module {
   };
 
   home.ifEnabled = let
+    # Import server data from Nickel (single source of truth)
+    serverData = nickelLib.importNickel "mcp-servers/main.ncl";
+
+    # Command resolution map: command_id -> executable path
+    # Nix handles all path resolution
     codex = pkgs.lib.getExe' homeConfig.programs.codex.package "codex";
     deno = pkgs.lib.getExe pkgs.deno;
     nodejs = pkgs.lib.getExe pkgs.nodejs;
-    readability-mcp = "${nodePkgs."@mizchi/readability"}/lib/node_modules/@mizchi/readability/dist/mcp.js";
-    brave-search-mcp = pkgs.lib.getExe' nodePkgs."@brave/brave-search-mcp-server" "brave-search-mcp-server";
-    tavily-mcp = pkgs.lib.getExe' nodePkgs."tavily-mcp" "tavily-mcp";
-    chrome-devtools-mcp = pkgs.lib.getExe' nodePkgs."chrome-devtools-mcp" "chrome-devtools-mcp";
-    fast-apply-mcp = pkgs.lib.getExe' nodePkgs."@morph-llm/morph-fast-apply" "mcp-server-filesystem";
-    kiri-mcp = pkgs.lib.getExe' nodePkgs."kiri-mcp-server" "kiri-mcp-server";
-    google-map-mcp = pkgs.lib.getExe' nodePkgs."@modelcontextprotocol/server-google-maps" "mcp-server-google-maps";
-    # mcp-git = pkgs.lib.getExe inputs.mcp-servers-nix.packages.${host.homeManagerSystem}.mcp-server-git;
-    # mcp-time = pkgs.lib.getExe inputs.mcp-servers-nix.packages.${host.homeManagerSystem}.mcp-server-time;
-    # mcp-memory = pkgs.lib.getExe inputs.mcp-servers-nix.packages.${host.homeManagerSystem}.mcp-server-memory;
-    # mcp-sequential-thinking = pkgs.lib.getExe inputs.mcp-servers-nix.packages.${host.homeManagerSystem}.mcp-server-sequential-thinking;
-    mcp-context7 = pkgs.lib.getExe inputs.mcp-servers-nix.packages.${host.homeManagerSystem}.context7-mcp;
+
+    commands = {
+      "brave-search-mcp" = pkgs.lib.getExe' nodePkgs."@brave/brave-search-mcp-server" "brave-search-mcp-server";
+      "readability-mcp" = "${nodePkgs."@mizchi/readability"}/lib/node_modules/@mizchi/readability/dist/mcp.js";
+      "tavily-mcp" = pkgs.lib.getExe' nodePkgs."tavily-mcp" "tavily-mcp";
+      "chrome-devtools-mcp" = pkgs.lib.getExe' nodePkgs."chrome-devtools-mcp" "chrome-devtools-mcp";
+      "morph-fast-apply-mcp" = pkgs.lib.getExe' nodePkgs."@morph-llm/morph-fast-apply" "mcp-server-filesystem";
+      "kiri-mcp" = pkgs.lib.getExe' nodePkgs."kiri-mcp-server" "kiri-mcp-server";
+      "google-maps-mcp" = pkgs.lib.getExe' nodePkgs."@modelcontextprotocol/server-google-maps" "mcp-server-google-maps";
+      "context7-mcp" = pkgs.lib.getExe inputs.mcp-servers-nix.packages.${host.homeManagerSystem}.context7-mcp;
+      "codex-mcp" = codex;
+      "relative-filesystem-mcp" = "${deno} run -A /Users/neo/dev/relative-filesystem-mcp/server.ts";
+    };
+
+    # Helper to get command for a server
+    getCommand = server:
+      if server.needs_node
+      then nodejs
+      else commands.${server.command_id} or server.command_id;
+
+    # Helper to get args for a server (prepend script path for node servers)
+    getArgs = server:
+      if server.needs_node
+      then [commands.${server.command_id}] ++ server.args
+      else server.args;
+
+    # Environment variable syntax formatters for each target
+    # mcphub uses: ${env:KEY}
+    mcphubEnv = key: "\${env:" + key + "}";
+    # claude-code uses: ${KEY}
+    claudeCodeEnv = key: "\${" + key + "}";
+    # crush uses: $KEY
+    crushEnv = key: "$" + key;
+    # opencode uses: {env:KEY}
+    opencodeEnv = key: "{env:" + key + "}";
+
+    # Build server config for mcphub
+    mkMcphubServer = name: server:
+      if server ? url
+      then {
+        url = server.url;
+        type = "sse";
+      }
+      else
+        {
+          command = getCommand server;
+        }
+        // (
+          if (getArgs server) != []
+          then {args = getArgs server;}
+          else {}
+        )
+        // (
+          if server.env_keys != {} || server.env_static != {}
+          then {
+            env =
+              (lib.mapAttrs (_: key: mcphubEnv key) server.env_keys)
+              // server.env_static;
+          }
+          else {}
+        );
+
+    # Build server config for claude-code
+    mkClaudeCodeServer = name: server:
+      if server ? url
+      then {
+        url = server.url;
+        type = "sse";
+      }
+      else
+        {
+          command = getCommand server;
+        }
+        // (
+          if (getArgs server) != []
+          then {args = getArgs server;}
+          else {}
+        )
+        // (
+          if server.env_keys != {} || server.env_static != {}
+          then {
+            env =
+              (lib.mapAttrs (_: key: claudeCodeEnv key) server.env_keys)
+              // server.env_static;
+          }
+          else {}
+        );
+
+    # Build server config for claude-desktop (same syntax as claude-code)
+    mkClaudeDesktopServer = mkClaudeCodeServer;
+
+    # Build server config for codex (uses env_vars array)
+    mkCodexServer = name: server:
+      if server ? url
+      then {url = server.url;}
+      else
+        {
+          command = getCommand server;
+        }
+        // (
+          if (getArgs server) != []
+          then {args = getArgs server;}
+          else {}
+        )
+        // (
+          if server.env_static != {}
+          then {env = server.env_static;}
+          else {}
+        )
+        // (
+          if server.env_keys != {}
+          then {env_vars = lib.attrValues server.env_keys;}
+          else {}
+        );
+
+    # Build server config for crush
+    mkCrushServer = name: server:
+      if server ? url
+      then {
+        url = server.url;
+        type = "sse";
+      }
+      else
+        {
+          command = getCommand server;
+        }
+        // (
+          if (getArgs server) != []
+          then {args = getArgs server;}
+          else {}
+        )
+        // (
+          if server.env_keys != {} || server.env_static != {}
+          then {
+            env =
+              (lib.mapAttrs (_: key: crushEnv key) server.env_keys)
+              // server.env_static;
+          }
+          else {}
+        );
+
+    # Build server config for opencode (command is array, type is local/remote)
+    mkOpencodeServer = name: server:
+      if server ? url
+      then {
+        url = server.url;
+        type = "remote";
+      }
+      else
+        {
+          command = [(getCommand server)] ++ (getArgs server);
+          type = "local";
+        }
+        // (
+          if server.env_keys != {} || server.env_static != {}
+          then {
+            environment =
+              (lib.mapAttrs (_: key: opencodeEnv key) server.env_keys)
+              // server.env_static;
+          }
+          else {}
+        );
+
+    # Filter servers by enabled list and build with the appropriate formatter
+    mkServersForTarget = target: mkServerFn:
+      lib.filterAttrs (name: _: builtins.elem name serverData.enabled.${target})
+      (lib.mapAttrs mkServerFn serverData.servers);
+
     # The syntax follows https://github.com/ravitemer/mcphub.nvim/blob/main/doc/mcp/servers_json.md
     mcphub-servers = {
       programs = {
         filesystem = {
-          # enable = true;
-          args = [
-            "${homeConfig.home.homeDirectory}/.dotfiles"
-          ];
+          args = ["${homeConfig.home.homeDirectory}/.dotfiles"];
           type = "stdio";
         };
-        # git.enable = true;
         github = {
-          # enable = true;
           passwordCommand = {
             GITHUB_PERSONAL_ACCESS_TOKEN = [
               (lib.getExe homeConfig.programs.gh.package)
@@ -53,358 +210,51 @@ delib.module {
           };
           type = "stdio";
         };
-        # fetch.enable = true;
         context7 = {
           enable = true;
           type = "stdio";
         };
-        # playwright = {
-        # enable = true;
-        # type = "stdio";
-        # };
-        # memory = {
-        # enable = true;
-        # env = {
-        # MEMORY_FILE_PATH = "${homeConfig.xdg.dataHome}/codecompanion_memory.json";
-        # };
-        # type = "stdio";
-        # };
-        sequential-thinking = {
-          # enable = true;
-          type = "stdio";
-        };
-        # time.enable = true;
+        sequential-thinking.type = "stdio";
       };
-      settings.servers = {
-        brave-search = {
-          command = "${brave-search-mcp}";
-          env = {
-            BRAVE_API_KEY = ''''${env:BRAVE_API_KEY}'';
-          };
-        };
-        deepwiki = {
-          url = "https://mcp.deepwiki.com/mcp";
-          type = "sse";
-        };
-        # notion = {
-        # url = "https://mcp.notion.com/mcp";
-        # };
-        readability = {
-          command = "${nodejs}";
-          args = [
-            "${readability-mcp}"
-          ];
-        };
-        relative-filesystem = {
-          command = "${deno}";
-          args = [
-            "run"
-            "-A"
-            "/Users/neo/dev/relative-filesystem-mcp/server.ts"
-          ];
-        };
-        tavily = {
-          command = "${tavily-mcp}";
-          env = {
-            TAVILY_API_KEY = ''''${env:TAVILY_API_KEY}'';
-          };
-        };
-        chrome-devtools = {
-          command = "${chrome-devtools-mcp}";
-        };
-        morph-fast-apply = {
-          command = "${fast-apply-mcp}";
-          env = {
-            ALL_TOOLS = "false";
-            MORPH_API_KEY = ''''${env:MORPH_API_KEY}'';
-          };
-        };
-        kiri = {
-          command = "${kiri-mcp}";
-          args = ["--repo" "." "--db" ".kiri/index.duckdb" "--watch"];
-        };
-        # cerebras = {
-        # command = "${npx}";
-        # args = [
-        # "-y"
-        # "cerebras-code-mcp@latest"
-        # ];
-        # env = {
-        # CEREBRAS_API_KEY = ''''${cmd: ${cat} ${homeConfig.age.secrets.cerebras-api-key.path}}'';
-        # };
-        # };
-        # serena = {
-        # command = "${uvx}";
-        # args = [
-        # "--from"
-        # "git+https://github.com/oraios/serena"
-        # "serena-mcp-server"
-        # ];
-        # };
-        # youtube = {
-        # command = "${npx}";
-        # args = [
-        # "-y"
-        # "@anaisbetts/mcp-youtube"
-        # ];
-        # };
-        # arxiv = {
-        # command = "${uvx}";
-        # args = [
-        # "arxiv-mcp-server"
-        # "--storage-path"
-        # "${homeConfig.xdg.dataHome}/mcp_arxiv_storage"
-        # ];
-        # };
-        # meilisearch = {
-        # command = "${uvx}";
-        # args = [
-        # "-n"
-        # "meilisearch-mcp"
-        # ];
-        # };
-      };
+      settings.servers = mkServersForTarget "mcphub" mkMcphubServer;
     };
+
     # The syntax follows https://docs.claude.com/en/docs/claude-code/mcp
     claude-code-servers = {
-      programs = {
-        context7 = {
-          enable = true;
-          type = "stdio";
-        };
-        # memory = {
-        # enable = true;
-        # env = {
-        # MEMORY_FILE_PATH = "${homeConfig.xdg.dataHome}/claudecode_memory.json";
-        # };
-        # type = "stdio";
-        # };
+      programs.context7 = {
+        enable = true;
+        type = "stdio";
       };
-      settings.servers = {
-        codex = {
-          command = "${codex}";
-          args = ["mcp-server"];
-        };
-        brave-search = {
-          command = "${brave-search-mcp}";
-          env = {
-            BRAVE_API_KEY = ''''${BRAVE_API_KEY}'';
-          };
-        };
-        deepwiki = {
-          url = "https://mcp.deepwiki.com/sse";
-          type = "sse";
-        };
-        readability = {
-          command = "${nodejs}";
-          args = [
-            "${readability-mcp}"
-          ];
-        };
-        # tavily = {
-        # command = "${tavily-mcp}";
-        # env = {
-        # TAVILY_API_KEY = ''''${TAVILY_API_KEY}'';
-        # };
-        # };
-        # chrome-devtools = {
-        # command = "${chrome-devtools-mcp}";
-        # };
-        morph-fast-apply = {
-          command = "${fast-apply-mcp}";
-          env = {
-            ALL_TOOLS = "false";
-            MORPH_API_KEY = ''''${MORPH_API_KEY}'';
-          };
-        };
-        kiri = {
-          command = "${kiri-mcp}";
-          args = ["--repo" "." "--db" ".kiri/index.duckdb" "--watch"];
-        };
-        # google-map-mcp = {
-        # command = "${google-map-mcp}";
-        # env = {
-        # GOOGLE_MAPS_API_KEY = ''''${GOOGLE_CLOUD_API_KEY}'';
-        # };
-        # };
-      };
+      settings.servers = mkServersForTarget "claude_code" mkClaudeCodeServer;
     };
+
     claude-desktop-servers = {
-      programs = {
-        context7 = {
-          enable = true;
-          type = "stdio";
-        };
+      programs.context7 = {
+        enable = true;
+        type = "stdio";
       };
-      settings.servers = {
-        brave-search = {
-          command = "${brave-search-mcp}";
-          env = {
-            BRAVE_API_KEY = ''''${BRAVE_API_KEY}'';
-          };
-        };
-        readability = {
-          command = "${nodejs}";
-          args = [
-            "${readability-mcp}"
-          ];
-        };
-        # tavily = {
-        # command = "${tavily-mcp}";
-        # env = {
-        # TAVILY_API_KEY = ''''${TAVILY_API_KEY}'';
-        # };
-        # };
-        chrome-devtools = {
-          command = "${chrome-devtools-mcp}";
-        };
-        google-map-mcp = {
-          command = "${google-map-mcp}";
-          env = {
-            GOOGLE_MAPS_API_KEY = ''''${GOOGLE_CLOUD_API_KEY}'';
-          };
-        };
-      };
+      settings.servers = mkServersForTarget "claude_desktop" mkClaudeDesktopServer;
     };
+
     codex-servers = {
-      programs = {
-        # git.enable = true;
-        # time.enable = true;
-        context7 = {
-          enable = true;
-          type = "stdio";
-        };
+      programs.context7 = {
+        enable = true;
+        type = "stdio";
       };
-      settings.servers = {
-        brave-search = {
-          command = "${brave-search-mcp}";
-          env_vars = ["BRAVE_API_KEY"];
-        };
-        deepwiki = {
-          url = "https://mcp.deepwiki.com/mcp";
-        };
-        readability = {
-          command = "${nodejs}";
-          args = [
-            "${readability-mcp}"
-          ];
-        };
-        # tavily = {
-        # command = "${tavily-mcp}";
-        # env_vars = ["TAVILY_API_KEY"];
-        # };
-        chrome-devtools = {
-          command = "${chrome-devtools-mcp}";
-        };
-        morph-fast-apply = {
-          command = "${fast-apply-mcp}";
-          env = {
-            ALL_TOOLS = "false";
-          };
-          env_vars = ["MORPH_API_KEY"];
-        };
-        kiri = {
-          command = "${kiri-mcp}";
-          args = ["--repo" "." "--db" ".kiri/index.duckdb" "--watch"];
-        };
-      };
+      settings.servers = mkServersForTarget "codex" mkCodexServer;
     };
+
     crush-servers = {
-      programs = {
-        context7 = {
-          enable = true;
-          type = "stdio";
-        };
+      programs.context7 = {
+        enable = true;
+        type = "stdio";
       };
-      settings.servers = {
-        codex = {
-          command = "${codex}";
-          args = ["mcp-server"];
-        };
-        brave-search = {
-          command = "${brave-search-mcp}";
-          env = {
-            BRAVE_API_KEY = ''$BRAVE_API_KEY'';
-          };
-        };
-        deepwiki = {
-          url = "https://mcp.deepwiki.com/sse";
-          type = "sse";
-        };
-        readability = {
-          command = "${nodejs}";
-          args = [
-            "${readability-mcp}"
-          ];
-        };
-        # tavily = {
-        # command = "${tavily-mcp}";
-        # env = {
-        # TAVILY_API_KEY = ''$TAVILY_API_KEY'';
-        # };
-        # };
-        # chrome-devtools = {
-        # command = "${chrome-devtools-mcp}";
-        # };
-        morph-fast-apply = {
-          command = "${fast-apply-mcp}";
-          env = {
-            ALL_TOOLS = "false";
-            MORPH_API_KEY = ''$MORPH_API_KEY'';
-          };
-        };
-        kiri = {
-          command = "${kiri-mcp}";
-          args = ["--repo" "." "--db" ".kiri/index.duckdb" "--watch"];
-        };
-      };
+      settings.servers = mkServersForTarget "crush" mkCrushServer;
     };
+
     # The syntax follows https://opencode.ai/docs/mcp-servers
     opencode-servers = {
-      settings.servers = {
-        context7 = {
-          command = ["${mcp-context7}"];
-          type = "local";
-        };
-        codex = {
-          command = ["${codex}" "mcp-server"];
-          type = "local";
-        };
-        brave-search = {
-          command = ["${brave-search-mcp}"];
-          type = "local";
-          environment = {
-            BRAVE_API_KEY = ''{env:BRAVE_API_KEY}'';
-          };
-        };
-        deepwiki = {
-          url = "https://mcp.deepwiki.com/sse";
-          type = "remote";
-        };
-        readability = {
-          command = ["${nodejs}" "${readability-mcp}"];
-          type = "local";
-        };
-        # tavily = {
-        # command = ["${tavily-mcp}"];
-        # type = "local";
-        # environment = {
-        # TAVILY_API_KEY = ''{env:TAVILY_API_KEY}'';
-        # };
-        # };
-        morph-fast-apply = {
-          command = ["${fast-apply-mcp}"];
-          type = "local";
-          environment = {
-            ALL_TOOLS = "false";
-            MORPH_API_KEY = ''{env:MORPH_API_KEY}'';
-          };
-        };
-        kiri = {
-          command = ["${kiri-mcp}" "--repo" "." "--db" ".kiri/index.duckdb" "--watch"];
-          type = "local";
-        };
-      };
+      settings.servers = mkServersForTarget "opencode" mkOpencodeServer;
     };
   in {
     home.file = {
