@@ -269,24 +269,7 @@ in
                             return _G.codecompanion_current_tool ~= nil
                           end
                         '';
-                        repeat_until.__raw = ''
-                          function(chat)
-                            -- Check if tests were written by looking for the confirmation
-                            if chat.messages and #chat.messages > 0 then
-                              local last_msg = chat.messages[#chat.messages]
-                              if last_msg and last_msg.content then
-                                local content = last_msg.content:lower()
-                                if content:match("tests written and failing") or
-                                   content:match("tests.*written.*failing") or
-                                   vim.g.codecompanion_tests_written == true then
-                                  vim.g.codecompanion_tests_written = true
-                                  return true
-                                end
-                              end
-                            end
-                            return false
-                          end
-                        '';
+                        repeat_until.__raw = builtins.readFile ./callbacks/tests_written_check.lua;
                       };
                     }
                   ]
@@ -318,25 +301,7 @@ in
                             return vim.g.codecompanion_tests_written == true
                           end
                         '';
-                        repeat_until.__raw = ''
-                          function(chat)
-                            -- Check if implementation is done and tests pass
-                            if chat.messages and #chat.messages > 0 then
-                              local last_msg = chat.messages[#chat.messages]
-                              if last_msg and last_msg.content then
-                                local content = last_msg.content:lower()
-                                if content:match("implementation complete") or
-                                   content:match("tests.*pass") or
-                                   content:match("all tests.*pass") or
-                                   vim.g.codecompanion_implementation_done == true then
-                                  vim.g.codecompanion_implementation_done = true
-                                  return true
-                                end
-                              end
-                            end
-                            return false
-                          end
-                        '';
+                        repeat_until.__raw = builtins.readFile ./callbacks/implementation_done_check.lua;
                       };
                     }
                   ]
@@ -461,38 +426,7 @@ in
                             return _G.codecompanion_current_tool == "cmd_runner"
                           end
                         '';
-                        repeat_until.__raw = ''
-                          function(chat)
-                            -- Check if tests passed by looking for success indicators in chat
-                            -- or if we've hit max iterations
-                            local max_iterations = 5
-                            local current_iteration = vim.g.codecompanion_test_iterations or 0
-
-                            -- Check the last message for success indicators
-                            if chat.messages and #chat.messages > 0 then
-                              local last_msg = chat.messages[#chat.messages]
-                              if last_msg and last_msg.content then
-                                local content = last_msg.content:lower()
-                                -- Look for success indicators
-                                if content:match("tests passed") or
-                                   content:match("all tests pass") or
-                                   content:match("test.*success") or
-                                   vim.g.codecompanion_tests_passed == true then
-                                  vim.g.codecompanion_tests_passed = true
-                                  return true -- Stop repeating
-                                end
-                              end
-                            end
-
-                            -- Stop if we've hit max iterations
-                            if current_iteration >= max_iterations then
-                              vim.notify("Refactor-Test workflow: Max iterations reached", vim.log.levels.WARN)
-                              return true -- Stop repeating
-                            end
-
-                            return false -- Keep repeating
-                          end
-                        '';
+                        repeat_until.__raw = builtins.readFile ./callbacks/tests_passed_check.lua;
                       };
                     }
                   ]
@@ -934,31 +868,7 @@ in
                       '';
                       opts = {
                         auto_submit = true;
-                        repeat_until.__raw = ''
-                          function(chat)
-                            local max_tasks = 20
-                            local completed = vim.g.codecompanion_tasks_completed or 0
-
-                            if completed >= max_tasks then
-                              vim.notify("Implementation: Max tasks reached", vim.log.levels.WARN)
-                              return true
-                            end
-
-                            if chat.messages and #chat.messages > 0 then
-                              local last_msg = chat.messages[#chat.messages]
-                              if last_msg and last_msg.content then
-                                local content = last_msg.content:lower()
-                                if content:match("all tasks complete") or
-                                   content:match("all tasks.*complete") or
-                                   content:match("implementation.*complete") then
-                                  return true
-                                end
-                              end
-                            end
-
-                            return false
-                          end
-                        '';
+                        repeat_until.__raw = builtins.readFile ./callbacks/all_tasks_complete_check.lua;
                       };
                     }
                   ]

@@ -4,115 +4,106 @@
   nodePkgs,
   pkgs,
   ...
-}: let
-  # SketchyBar integration hook scripts
-  sketchybarActiveScript = pkgs.writeShellScript "sketchybar-claude-active" ''
-    set -euo pipefail
-    # Read JSON input from stdin (required by Claude Code hook protocol)
-    INPUT=$(cat)
-    # Extract current working directory from JSON input
-    PROJECT_DIR=$(echo "$INPUT" | ${pkgs.lib.getExe pkgs.jq} -r '.cwd // ""')
-    # Trigger SketchyBar event to show Claude as active with project directory
-    ${pkgs.lib.getExe pkgs.sketchybar} --trigger claude_status STATUS=active PROJECT_DIR="$PROJECT_DIR" 2>/dev/null || true
-    # Return empty JSON response (required by hook protocol)
-    echo '{}'
-  '';
+}:
+delib.module {
+  name = "programs.claude-code";
 
-  sketchybarInactiveScript = pkgs.writeShellScript "sketchybar-claude-inactive" ''
-    set -euo pipefail
-    # Read JSON input from stdin (required by Claude Code hook protocol)
-    INPUT=$(cat)
-    # Trigger SketchyBar event to show Claude as inactive
-    ${pkgs.lib.getExe pkgs.sketchybar} --trigger claude_status STATUS=inactive 2>/dev/null || true
-    # Return empty JSON response (required by hook protocol)
-    echo '{}'
-  '';
-in
-  delib.module {
-    name = "programs.claude-code";
+  options = delib.singleEnableOption true;
 
-    options = delib.singleEnableOption true;
+  home.ifEnabled = let
+    # SketchyBar integration hook scripts
+    sketchybarActiveScript = pkgs.writeShellScript "sketchybar-claude-active"
+      (builtins.readFile
+        (pkgs.replaceVars ./sketchybar-active.sh {
+          jq = pkgs.lib.getExe pkgs.jq;
+          sketchybar = pkgs.lib.getExe pkgs.sketchybar;
+        }));
 
-    home.ifEnabled = {
-      # Claude Code skill configuration
-      programs.agent-skills = {
-        enable = true;
+    sketchybarInactiveScript = pkgs.writeShellScript "sketchybar-claude-inactive"
+      (builtins.readFile
+        (pkgs.replaceVars ./sketchybar-inactive.sh {
+          sketchybar = pkgs.lib.getExe pkgs.sketchybar;
+        }));
+  in {
+    # Claude Code skill configuration
+    programs.agent-skills = {
+      enable = true;
 
-        # Define skill sources
-        sources = {
-          anthropic = {
-            path = inputs.anthropic-skills;
-            subdir = ".";
-          };
-          ui-ux-pro-max = {
-            path = inputs.ui-ux-pro-max;
-            subdir = ".";
-          };
-          sparze-source = {
-            path = inputs.sparze;
-            subdir = ".";
-          };
+      # Define skill sources
+      sources = {
+        anthropic = {
+          path = inputs.anthropic-skills;
+          subdir = ".";
         };
-
-        # Select skills for Claude Code
-        skills = {
-          enable = [
-            "skill-creator"
-          ];
-
-          explicit = {
-            ui-ux-pro-max = {
-              from = "ui-ux-pro-max";
-              path = ".claude/skills/ui-ux-pro-max";
-            };
-            sparze = {
-              from = "sparze-source";
-              path = ".";
-            };
-          };
+        ui-ux-pro-max = {
+          path = inputs.ui-ux-pro-max;
+          subdir = ".";
         };
-
-        # Deploy to Claude Code
-        targets.claude = {
-          dest = ".claude/skills";
-          structure = "symlink-tree";
+        sparze-source = {
+          path = inputs.sparze;
+          subdir = ".";
         };
       };
 
-      programs.claude-code = {
-        enable = true;
-        package = nodePkgs."@anthropic-ai/claude-code";
-        settings = {
-          env = {
-            DISABLE_AUTOUPDATER = "1";
-            ENABLE_TOOL_SEARCH = true;
-            ENABLE_LSP_TOOL = true;
+      # Select skills for Claude Code
+      skills = {
+        enable = [
+          "skill-creator"
+        ];
+
+        explicit = {
+          ui-ux-pro-max = {
+            from = "ui-ux-pro-max";
+            path = ".claude/skills/ui-ux-pro-max";
           };
-          # SketchyBar integration hooks - triggers status updates on prompt submit and stop
-          hooks = {
-            UserPromptSubmit = [
-              {
-                hooks = [
-                  {
-                    type = "command";
-                    command = toString sketchybarActiveScript;
-                  }
-                ];
-              }
-            ];
-            Stop = [
-              {
-                hooks = [
-                  {
-                    type = "command";
-                    command = toString sketchybarInactiveScript;
-                  }
-                ];
-              }
-            ];
+          sparze = {
+            from = "sparze-source";
+            path = ".";
           };
         };
-        memory.text = builtins.readFile ./GLOBAL_CLAUDE.md;
+      };
+
+      # Deploy to Claude Code
+      targets.claude = {
+        dest = ".claude/skills";
+        structure = "symlink-tree";
       };
     };
-  }
+
+    programs.claude-code = {
+      enable = true;
+      package = nodePkgs."@anthropic-ai/claude-code";
+      settings = {
+        env = {
+          DISABLE_AUTOUPDATER = "1";
+          ENABLE_TOOL_SEARCH = true;
+          ENABLE_LSP_TOOL = true;
+        };
+        # SketchyBar integration hooks - triggers status updates on prompt submit and stop
+        hooks = {
+          UserPromptSubmit = [
+            {
+              hooks = [
+                {
+                  type = "command";
+                  command = toString sketchybarActiveScript;
+                }
+              ];
+            }
+          ];
+          Stop = [
+            {
+              hooks = [
+                {
+                  type = "command";
+                  command = toString sketchybarInactiveScript;
+                }
+              ];
+            }
+          ];
+        };
+      };
+      memory.text = builtins.readFile ./GLOBAL_CLAUDE.md;
+    };
+  };
+}
