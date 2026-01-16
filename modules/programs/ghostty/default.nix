@@ -23,12 +23,17 @@ delib.module {
         else null;
       clearDefaultKeybinds = true;
       settings = {
-        font-size = 16;
-        font-family = "UDEV Gothic NFLG";
         keybind = [
+          "cmd+shift+,=reload_config"
+          "cmd+z=undo"
+          "cmd+shift+z=redo"
           "cmd+c=copy_to_clipboard"
+          "cmd+shift+c=copy_url_to_clipboard"
           "cmd+v=paste_from_clipboard"
+          "global:cmd+backquote=toggle_quick_terminal"
         ];
+        quick-terminal-position = "right";
+        quick-terminal-size = "25%";
         auto-update = "off";
         font-feature = "-dlig";
         # background-opacity = 0.7;

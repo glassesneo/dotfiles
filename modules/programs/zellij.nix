@@ -7,12 +7,12 @@ delib.module {
   name = "programs.zellij";
 
   options.programs.zellij = with delib; {
-    enable = boolOption true;
+    enable = boolOption false;
   };
 
-  home.ifEnabled = {cfg, ...}: {
+  home.ifEnabled = {
     programs.zellij = {
-      enable = cfg.enable;
+      enable = true;
     };
     xdg.configFile = {
       "zellij/config.kdl".text = ''

@@ -1,6 +1,8 @@
 {
   delib,
+  homeConfig,
   pkgs,
+  lib,
   ...
 }:
 delib.module {
@@ -16,6 +18,6 @@ delib.module {
       '';
     };
 
-    home.packages = [pkgs.pure-prompt];
+    home.packages = lib.mkIf homeConfig.programs.zsh.enable [pkgs.pure-prompt];
   };
 }
