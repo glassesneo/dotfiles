@@ -34,6 +34,7 @@ delib.module {
         ];
         quick-terminal-position = "right";
         quick-terminal-size = "25%";
+        quick-terminal-autohide = false;
         auto-update = "off";
         font-feature = "-dlig";
         # background-opacity = 0.7;
