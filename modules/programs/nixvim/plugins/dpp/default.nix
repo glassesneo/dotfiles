@@ -34,9 +34,9 @@ delib.module {
     nickel = lib.getExe pkgs.nickel;
     pluginTomls = pkgs.runCommand "dpp-plugins" {buildInputs = [pkgs.nickel];} ''
       mkdir -p $out
-      ${nickel} export --format toml ${./plugins/editing.ncl} > $out/editing.toml
-      ${nickel} export --format toml ${./plugins/motion.ncl} > $out/motion.toml
-      ${nickel} export --format toml ${./plugins/skk.ncl} > $out/skk.toml
+      ${nickel} export --format toml ${./plugins/editing.ncl} --apply-contract ${./plugins/plugins_contract.ncl} > $out/editing.toml
+      ${nickel} export --format toml ${./plugins/motion.ncl} --apply-contract ${./plugins/plugins_contract.ncl} > $out/motion.toml
+      ${nickel} export --format toml ${./plugins/skk.ncl} --apply-contract ${./plugins/plugins_contract.ncl} > $out/skk.toml
     '';
   in {
     xdg.configFile = {

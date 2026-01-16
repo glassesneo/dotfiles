@@ -13,6 +13,7 @@ delib.module {
       enable = true;
       prefix = "F12";
       extraConfig = ''
+        mouse = on
         bind h select-pane -L
         bind j select-pane -D
         bind k select-pane -U
