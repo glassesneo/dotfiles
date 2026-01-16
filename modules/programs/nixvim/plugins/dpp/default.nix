@@ -31,6 +31,13 @@ delib.module {
         vim.opt.runtimepath:prepend("${plugin}")
       '')
       dpp-plugins;
+    nickel = lib.getExe pkgs.nickel;
+    pluginTomls = pkgs.runCommand "dpp-plugins" {buildInputs = [pkgs.nickel];} ''
+      mkdir -p $out
+      ${nickel} export --format toml ${./plugins/editing.ncl} > $out/editing.toml
+      ${nickel} export --format toml ${./plugins/motion.ncl} > $out/motion.toml
+      ${nickel} export --format toml ${./plugins/skk.ncl} > $out/skk.toml
+    '';
   in {
     xdg.configFile = {
       "dpp/dpp.ts" = {
@@ -39,7 +46,7 @@ delib.module {
         };
       };
       "dpp/plugins" = {
-        source = ./plugins;
+        source = pluginTomls;
       };
       "dpp/hooks/skk.lua" = {
         source = pkgs.replaceVars ./hooks/skk.lua {

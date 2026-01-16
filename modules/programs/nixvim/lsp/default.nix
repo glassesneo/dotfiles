@@ -65,11 +65,8 @@ delib.module {
           };
         };
         nickel_ls = {
-          # enable = true;
+          enable = true;
           package = null;
-          config = {
-            cmd = ["${lib.getExe pkgs.nls}"];
-          };
         };
         nil_ls = {
           # enable = true;

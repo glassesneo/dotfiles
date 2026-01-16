@@ -23,6 +23,7 @@
     "kotlin"
     "lua"
     "markdown"
+    "nickel"
     "nim"
     "nim_format_string"
     "nix"
@@ -105,8 +106,10 @@ in
           };
         };
       };
-      extraPlugins = with pkgs.vimPlugins; [
-        plenary-nvim
-      ] ++ treesitter_queries;
+      extraPlugins = with pkgs.vimPlugins;
+        [
+          plenary-nvim
+        ]
+        ++ treesitter_queries;
     };
   }

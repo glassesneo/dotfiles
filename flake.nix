@@ -43,6 +43,8 @@
           deno
           # lua-language-server
           emmylua-ls
+          nickel
+          nls
           stylua
         ];
       };
