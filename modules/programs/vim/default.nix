@@ -64,39 +64,10 @@ delib.module {
     programs.vim = {
       enable = true;
 
-      # Basic vim settings
-      settings = {
-        number = true;
-        relativenumber = true;
-        expandtab = true;
-        tabstop = 2;
-        shiftwidth = 2;
-        ignorecase = true;
-        smartcase = true;
-        hidden = true;
-        background = "dark";
-      };
-
-      # Extra configuration
+      # Load main vim configuration
       extraConfig = ''
-        " Enable syntax and filetype detection
-        syntax enable
-        filetype plugin indent on
-
-        " Basic settings
-        set encoding=utf-8
-        set noswapfile
-        set nobackup
-        set undofile
-        set undodir=~/.vim/undo
-
-        " Create undo directory if it doesn't exist
-        if !isdirectory(expand('~/.vim/undo'))
-          call mkdir(expand('~/.vim/undo'), 'p')
-        endif
-
-        " Key mappings
-        inoremap jj <Esc>
+        " Load base vimrc configuration
+        ${builtins.readFile ./.vimrc}
 
         " DPP environment
         let $DPP_HOOK_DIR = '${homeConfig.xdg.configHome}/vim-dpp/hooks'
