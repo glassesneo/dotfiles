@@ -3,6 +3,7 @@
   host,
   inputs,
   lib,
+  llm-agents,
   nodePkgs,
   pkgs,
   ...
@@ -110,7 +111,7 @@ in
                   function()
                     ${builtins.readFile
                     <| pkgs.replaceVars ./adapters/claude-code.lua {
-                      command = lib.getExe' nodePkgs."@zed-industries/claude-code-acp" "claude-code-acp";
+                      command = lib.getExe llm-agents.claude-code-acp;
                       # mcpServers = nixvimLib.nixvim.toLuaObject acpMcpServers;
                     }}
                   end

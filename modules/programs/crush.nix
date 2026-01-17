@@ -3,6 +3,7 @@
   homeConfig,
   inputs,
   lib,
+  llm-agents,
   pkgs,
   ...
 }:
@@ -18,6 +19,7 @@ delib.module {
   home.ifEnabled = {
     programs.crush = {
       enable = true;
+      package = llm-agents.crush;
       settings = {
         lsp = {
           biome = {

@@ -76,6 +76,28 @@
         "type": "github"
       }
     },
+    "blueprint": {
+      "inputs": {
+        "nixpkgs": [
+          "llm-agents",
+          "nixpkgs"
+        ],
+        "systems": "systems_2"
+      },
+      "locked": {
+        "lastModified": 1767386128,
+        "narHash": "sha256-BJDu7dIMauO2nYRSL4aI8wDNtEm2KOb7lDKP3hxdrpo=",
+        "owner": "numtide",
+        "repo": "blueprint",
+        "rev": "0ed984d51a3031065925ab08812a5434f40b93d4",
+        "type": "github"
+      },
+      "original": {
+        "owner": "numtide",
+        "repo": "blueprint",
+        "type": "github"
+      }
+    },
     "brew-api": {
       "flake": false,
       "locked": {
@@ -432,6 +454,26 @@
         "type": "github"
       }
     },
+    "llm-agents": {
+      "inputs": {
+        "blueprint": "blueprint",
+        "nixpkgs": "nixpkgs_2",
+        "treefmt-nix": "treefmt-nix"
+      },
+      "locked": {
+        "lastModified": 1768620317,
+        "narHash": "sha256-KMk3ftg4zCSvVQMipbdH2r4Pmr6gEgG0+o+UjAejtu4=",
+        "owner": "numtide",
+        "repo": "llm-agents.nix",
+        "rev": "f779abc9c9ff63a2fb2b82037857f8878eb5b116",
+        "type": "github"
+      },
+      "original": {
+        "owner": "numtide",
+        "repo": "llm-agents.nix",
+        "type": "github"
+      }
+    },
     "mcp-hub": {
       "inputs": {
         "flake-parts": "flake-parts",
@@ -548,6 +590,22 @@
     },
     "nixpkgs_2": {
       "locked": {
+        "lastModified": 1768456270,
+        "narHash": "sha256-NgaL2CCiUR6nsqUIY4yxkzz07iQUlUCany44CFv+OxY=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "f4606b01b39e09065df37905a2133905246db9ed",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "nixpkgs-unstable",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "nixpkgs_3": {
+      "locked": {
         "lastModified": 1767273430,
         "narHash": "sha256-kDpoFwQ8GLrPiS3KL+sAwreXrph2KhdXuJzo5+vSLoo=",
         "owner": "nixos",
@@ -568,7 +626,7 @@
         "nixpkgs": [
           "nixpkgs"
         ],
-        "systems": "systems_2"
+        "systems": "systems_3"
       },
       "locked": {
         "lastModified": 1767361654,
@@ -582,26 +640,6 @@
         "owner": "nix-community",
         "ref": "main",
         "repo": "nixvim",
-        "type": "github"
-      }
-    },
-    "opencode": {
-      "inputs": {
-        "nixpkgs": [
-          "nixpkgs"
-        ]
-      },
-      "locked": {
-        "lastModified": 1767399015,
-        "narHash": "sha256-iWDp/2+yQmdMjr3ePlomGLemLTFEB+3IUB5tvz7A5gA=",
-        "owner": "sst",
-        "repo": "opencode",
-        "rev": "f6fe709f6ee75427ba64829af25b64d9a3111569",
-        "type": "github"
-      },
-      "original": {
-        "owner": "sst",
-        "repo": "opencode",
         "type": "github"
       }
     },
@@ -641,13 +679,13 @@
         "dpp-protocol-git": "dpp-protocol-git",
         "dpp-vim": "dpp-vim",
         "home-manager": "home-manager_3",
+        "llm-agents": "llm-agents",
         "mcp-hub": "mcp-hub",
         "mcp-servers-nix": "mcp-servers-nix",
         "mcphub-nvim": "mcphub-nvim",
         "nix-darwin": "nix-darwin",
-        "nixpkgs": "nixpkgs_2",
+        "nixpkgs": "nixpkgs_3",
         "nixvim": "nixvim",
-        "opencode": "opencode",
         "sparze": "sparze",
         "ui-ux-pro-max": "ui-ux-pro-max"
       }
@@ -696,6 +734,42 @@
       "original": {
         "owner": "nix-systems",
         "repo": "default",
+        "type": "github"
+      }
+    },
+    "systems_3": {
+      "locked": {
+        "lastModified": 1681028828,
+        "narHash": "sha256-Vy1rq5AaRuLzOxct8nz4T6wlgyUR7zLU309k9mBC768=",
+        "owner": "nix-systems",
+        "repo": "default",
+        "rev": "da67096a3b9bf56a91d16901293e51ba5b49a27e",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nix-systems",
+        "repo": "default",
+        "type": "github"
+      }
+    },
+    "treefmt-nix": {
+      "inputs": {
+        "nixpkgs": [
+          "llm-agents",
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1768158989,
+        "narHash": "sha256-67vyT1+xClLldnumAzCTBvU0jLZ1YBcf4vANRWP3+Ak=",
+        "owner": "numtide",
+        "repo": "treefmt-nix",
+        "rev": "e96d59dff5c0d7fddb9d113ba108f03c3ef99eca",
+        "type": "github"
+      },
+      "original": {
+        "owner": "numtide",
+        "repo": "treefmt-nix",
         "type": "github"
       }
     },

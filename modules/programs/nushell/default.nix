@@ -35,7 +35,7 @@ delib.module {
         '';
         completions = names: (lib.strings.concatMapStrings completion names);
       in ''
-        ${completions ["aerospace" "bat" "curl" "eza" "gh" "git" "less" "make" "man" "nano" "nix" "npm" "rg" "ssh" "tar" "typst" "zellij"]}
+        ${completions ["aerospace" "bat" "curl" "eza" "gh" "git" "less" "make" "man" "nano" "nix" "npm" "pnpm" "rg" "ssh" "tar" "typst" "uv" "zoxide"]}
       '';
       plugins = map (name: pkgs.nushellPlugins.${name}) plugin_names;
       extraEnv = let

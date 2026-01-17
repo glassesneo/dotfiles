@@ -1,8 +1,8 @@
 {
   delib,
   homeConfig,
-  host,
   inputs,
+  llm-agents,
   ...
 }:
 delib.module {
@@ -50,7 +50,7 @@ delib.module {
 
     programs.opencode = {
       enable = true;
-      package = inputs.opencode.packages."${host.homeManagerSystem}".default;
+      package = llm-agents.opencode;
       settings = {
         autoshare = false;
         autoupdate = false;

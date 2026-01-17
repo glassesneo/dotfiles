@@ -1,4 +1,9 @@
-{delib, ...}:
+{
+  delib,
+  lib,
+  pkgs,
+  ...
+}:
 delib.module {
   name = "programs.tmux";
 
@@ -12,7 +17,12 @@ delib.module {
     programs.tmux = {
       enable = true;
       prefix = "F12";
-      extraConfig = builtins.readFile ./tmux.conf;
+      extraConfig = ''
+        set -g mouse on
+        set -g default-terminal "tmux-256color"
+        set -as terminal-features ',xterm-ghostty:RGB'
+        run-shell -b '${lib.getExe pkgs.nushell} ${./config.nu}'
+      '';
     };
     programs.ghostty.settings.keybind = keybinds_for_ghostty;
   };

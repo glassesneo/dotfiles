@@ -33,7 +33,7 @@ delib.module {
           "global:cmd+backquote=toggle_quick_terminal"
         ];
         quick-terminal-position = "right";
-        quick-terminal-size = "25%";
+        quick-terminal-size = "35%";
         quick-terminal-autohide = false;
         auto-update = "off";
         font-feature = "-dlig";

@@ -90,9 +90,7 @@ in
                   vim.schedule(function()
                     if vim.bo.filetype ~= "" then
                       local buf = vim.api.nvim_get_current_buf()
-                      if pcall(vim.treesitter.start, buf) then
-                        vim.cmd('edit') -- Refresh the buffer to apply highlighting
-                      end
+                      pcall(vim.treesitter.start, buf)
                     end
                   end)
                 end

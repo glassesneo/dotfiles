@@ -3,6 +3,16 @@ delib.module {
   name = "programs.nixvim";
 
   home.ifEnabled.programs.nixvim = {
+    # Add filetype detection for languages not built into Neovim
+    extraConfigLua = ''
+      vim.filetype.add({
+        extension = {
+          ncl = "nickel",
+          prisma = "prisma",
+        },
+      })
+    '';
+
     autoCmd = [
       {
         event = "FileType";

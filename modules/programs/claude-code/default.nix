@@ -1,7 +1,7 @@
 {
   delib,
   inputs,
-  nodePkgs,
+  llm-agents,
   pkgs,
   ...
 }:
@@ -12,14 +12,16 @@ delib.module {
 
   home.ifEnabled = let
     # SketchyBar integration hook scripts
-    sketchybarActiveScript = pkgs.writeShellScript "sketchybar-claude-active"
+    sketchybarActiveScript =
+      pkgs.writeShellScript "sketchybar-claude-active"
       (builtins.readFile
         (pkgs.replaceVars ./sketchybar-active.sh {
           jq = pkgs.lib.getExe pkgs.jq;
           sketchybar = pkgs.lib.getExe pkgs.sketchybar;
         }));
 
-    sketchybarInactiveScript = pkgs.writeShellScript "sketchybar-claude-inactive"
+    sketchybarInactiveScript =
+      pkgs.writeShellScript "sketchybar-claude-inactive"
       (builtins.readFile
         (pkgs.replaceVars ./sketchybar-inactive.sh {
           sketchybar = pkgs.lib.getExe pkgs.sketchybar;
@@ -72,7 +74,7 @@ delib.module {
 
     programs.claude-code = {
       enable = true;
-      package = nodePkgs."@anthropic-ai/claude-code";
+      package = llm-agents.claude-code;
       settings = {
         env = {
           DISABLE_AUTOUPDATER = "1";

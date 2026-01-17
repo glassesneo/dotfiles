@@ -1,7 +1,7 @@
 {
   delib,
   inputs,
-  nodePkgs,
+  llm-agents,
   ...
 }:
 delib.module {
@@ -57,7 +57,7 @@ delib.module {
 
     programs.codex = {
       enable = true;
-      package = nodePkgs."@openai/codex";
+      package = llm-agents.codex;
       custom-instructions = builtins.readFile ./INSTRUCTIONS.md;
       settings = {
         model_providers = {
