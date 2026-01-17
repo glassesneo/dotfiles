@@ -114,6 +114,7 @@ nix-shell -p node2nix --run "node2nix --input node-packages.json --output node-p
 - **CRITICAL**: Denix auto-loads ALL .nix files in `paths` - NO imports/exports allowed between modules.
 - **CRITICAL**: Nix flakes only read git-tracked files - ALWAYS `git add` new files before building.
 - Extension system: `extensions = [args base.withConfig]` wires shared args + base config.
+- Rices: Theme variants via `delib.rice`. Each rice sets `myconfig.*`, `home`, `darwin`, or `nixos` attrs. Rices can inherit from others (e.g., `inherits = ["laptop"]`). Switch rice per-host in `hosts/<name>/default.nix` with `rice = "<name>"`. Switch rices: `nh home switch -c kurogane-catppuccin` or `nh darwin switch . -H kurogane-catppuccin -Lt`.
 - Platform blocks: `home.ifEnabled` targets `config` for `moduleSystem = "home"` and `config.home-manager.users.neo` for `"darwin"` when HM is enabled.
 - Shared arguments: `myconfig.always.args.shared.<key>` pattern for global args.
 - Host routing: `delib.host` + conditional config when `config.${myconfigName}.host` matches.
