@@ -30,7 +30,7 @@ export def item () {
         mouse.exited
       --add graph $graph_name $"popup.($name)" 64
       --set $graph_name
-        graph.color=$"($colors.green)"
+        graph.color=$"($colors.cpu_low)"
         width=100
         background.height=25
   )
@@ -55,10 +55,10 @@ def main () {
     _ => {
       let cpu_usage = (sys cpu -l | get cpu_usage | math sum) / 8 | math round --precision 1
       let graph_color = match $cpu_usage {
-        1..25 => { $colors.green }
-        26..50 => { $colors.yellow }
-        51..75 => { $colors.peach }
-        _ => { $colors.red }
+        1..25 => { $colors.cpu_low }
+        26..50 => { $colors.cpu_medium }
+        51..75 => { $colors.cpu_high }
+        _ => { $colors.cpu_critical }
       }
       (
         sketchybar

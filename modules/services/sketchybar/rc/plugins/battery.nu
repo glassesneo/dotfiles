@@ -40,17 +40,17 @@ def main () {
       sketchybar
         --set $name
           label=""
-          label.color=$"($colors.peach)"
+          label.color=$"($colors.electricity)"
           icon=$"($percentage)%"
     )
     return
   }
   let icon: record<kind: string, color: string> = match $percentage {
-    91..100 => {kind: "", color: $"($colors.teal)"}
-    61..90 => {kind: "", color: $"($colors.green)"}
-    31..60 => {kind: "", color: $"($colors.yellow)"}
-    11..30 => {kind: "", color: $"($colors.peach)"}
-    _ => {kind: "", color: $"($colors.red)"}
+    91..100 => {kind: $"\u{f240}", color: $"($colors.teal)"}
+    61..90 => {kind: $"\u{f241}", color: $"($colors.green)"}
+    31..60 => {kind: $"\u{f242}", color: $"($colors.yellow)"}
+    11..30 => {kind: $"\u{f243}", color: $"($colors.peach)"}
+    _ => {kind: $"\u{f244}", color: $"($colors.red)"}
   }
 
   (

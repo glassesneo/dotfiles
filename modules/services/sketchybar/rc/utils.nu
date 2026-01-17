@@ -33,10 +33,10 @@ export def set_item_unit_without_border [name: string, bg: string] {
 
 export def icon_color (): string -> string {
   match $in {
-    "Arc" => $colors.pink
-    "Ghostty" => $colors.blue
-    "Obsidian" => $colors.mauve
-    "Kitty" => $colors.flamingo
+    "Arc" => $colors.app_arc
+    "Ghostty" => $colors.app_ghostty
+    "Obsidian" => $colors.app_obsidian
+    "Kitty" => $colors.app_kitty
     _ => $colors.text
   }
 }
