@@ -94,6 +94,56 @@ in
       };
     };
 
+    # Use rice-aware options for vim and tmux
+    myconfig.programs.myvimeditor.colorscheme = {
+      plugin = "base16-vim";
+      config = ''
+        " Monochrome base16 colorscheme
+        let base16colorspace=256
+        colorscheme base16-default-dark
+
+        " Override with monochrome palette
+        hi Normal guifg=${colors.base05} guibg=NONE
+        hi Comment guifg=${colors.base03}
+        hi Constant guifg=${colors.base09}
+        hi String guifg=${colors.base0B}
+        hi Identifier guifg=${colors.base08}
+        hi Statement guifg=${colors.base0E}
+        hi PreProc guifg=${colors.base0A}
+        hi Type guifg=${colors.base0A}
+        hi Special guifg=${colors.base0C}
+        hi Underlined guifg=${colors.base0D}
+        hi Error guifg=${colors.base08} guibg=NONE
+        hi Todo guifg=${colors.base0A} guibg=NONE
+        hi LineNr guifg=${colors.base03} guibg=NONE
+        hi CursorLineNr guifg=${colors.base07} guibg=NONE
+        hi Visual guibg=${colors.base02}
+        hi StatusLine guifg=${colors.base05} guibg=${colors.base01}
+        hi StatusLineNC guifg=${colors.base04} guibg=${colors.base01}
+        hi VertSplit guifg=${colors.base02} guibg=NONE
+        hi Pmenu guifg=${colors.base05} guibg=${colors.base01}
+        hi PmenuSel guifg=${colors.base07} guibg=${colors.base02}
+      '';
+    };
+
+    myconfig.programs.tmux.theme = {
+      plugin = ""; # No plugin, use extraConfig for monochrome styling
+      pluginConfig = "";
+      extraConfig = ''
+        # Monochrome tmux status bar
+        set -g status-style 'bg=${colors.base01},fg=${colors.base05}'
+        set -g status-left '#[fg=${colors.base08},bold][#S] '
+        set -g status-left-length 20
+        set -g status-right ""
+        set -g window-status-format '#[fg=${colors.base04}] #I:#W '
+        set -g window-status-current-format '#[fg=${colors.base07},bold,underscore] #I:#W '
+        set -g window-status-separator ""
+        set -g pane-border-style 'fg=${colors.base02}'
+        set -g pane-active-border-style 'fg=${colors.base08}'
+        set -g message-style 'fg=${colors.base05},bg=${colors.base01}'
+      '';
+    };
+
     home = {
       programs = {
         nixvim = {
@@ -121,6 +171,69 @@ in
                 ;
             };
             settings.telescope = true;
+          };
+          plugins.bufferline.settings = {
+            options = {
+              indicator = {
+                style = "underline";
+              };
+              show_tab_indicators = true;
+            };
+            highlights = {
+              # Selected buffer - bright and underlined
+              buffer_selected = {
+                fg = "${colors.base07}";
+                bold = true;
+                italic = false;
+                underline = true;
+                sp = "${colors.base08}";
+              };
+              # Visible but not selected
+              buffer_visible = {
+                fg = "${colors.base05}";
+              };
+              # Background/inactive buffers
+              background = {
+                fg = "${colors.base04}";
+              };
+              # Indicator underline color
+              indicator_selected = {
+                fg = "${colors.base08}";
+                sp = "${colors.base08}";
+                underline = true;
+              };
+              indicator_visible = {
+                fg = "${colors.base04}";
+              };
+              # Separator styling
+              separator = {
+                fg = "${colors.base02}";
+              };
+              separator_selected = {
+                fg = "${colors.base02}";
+              };
+              separator_visible = {
+                fg = "${colors.base02}";
+              };
+              # Modified indicators
+              modified_selected = {
+                fg = "${colors.base08}";
+              };
+              modified_visible = {
+                fg = "${colors.base05}";
+              };
+              modified = {
+                fg = "${colors.base04}";
+              };
+              # Tab styling
+              tab_selected = {
+                fg = "${colors.base07}";
+                bold = true;
+              };
+              tab = {
+                fg = "${colors.base04}";
+              };
+            };
           };
           opts.termguicolors = true;
           highlight = {
