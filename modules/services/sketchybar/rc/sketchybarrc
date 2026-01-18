@@ -8,6 +8,8 @@ def run () {
   (
     sketchybar
       --bar
+        padding_left=8
+        padding_right=8
         height=42
         position=bottom
         margin=-2
@@ -45,6 +47,7 @@ def run () {
   use ./plugins/ai.nu; ai item
   # use ./plugins/bluetooth.nu; bluetooth item
 
+  @left_bracket_code@
   @right_bracket_code@
 }
 

@@ -23,8 +23,9 @@ def create_workspace (space_id: string, display: int) {
         label.highlight=off
         label.background.color="0x00000000"
         label.highlight_color=$"($colors.red)"
-        label.background.corner_radius=8
-        label.background.height=28
+        label.background.corner_radius=6
+        label.background.height=24
+        label.background.y_offset=0
         icon.drawing=off
         click_script=$"aerospace workspace ($space_id)"
         script=$"($nu.current-exe) ($current_path) ($space_id)"
@@ -74,7 +75,7 @@ export def item () {
   (
     sketchybar --set $space
       label.highlight=on
-      label.background.color=$"($colors.surface0)"
+      # label.background.color=$"($colors.surface0)
   )
 }
 
@@ -83,7 +84,7 @@ def toggle_highlight (space_id: string) {
   (
     sketchybar
       --set $env.NAME
-        label.background.color=$"(if $state {$colors.surface0} else {'0x00000000'})"
+        # label.background.color=$"(if $state {$colors.surface0} else {'0x00000000'})
         label.highlight=$"($state)"
   )
 }

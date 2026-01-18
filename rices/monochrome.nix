@@ -84,11 +84,22 @@ in
       # Red-bordered right bracket grouping (solid border with good spacing)
       rightBracket = {
         enable = true;
-        backgroundColor = "0x00000000";
+        backgroundColor = "0x33000000";
+        blurRadius = "16";
         borderWidth = "1.5";
-        borderColor = toSketchybar colors.base08; # Red accent
+        borderColor = toSketchybar colors.base05; # Light gray
         cornerRadius = "4";
         height = "36";
+        paddingLeft = "16";
+        paddingRight = "16";
+      };
+      leftBracket = {
+        enable = true;
+        backgroundColor = "0x00000000";
+        borderWidth = "1.5";
+        borderColor = toSketchybar colors.base05; # Light gray
+        cornerRadius = "4";
+        height = "32";
         paddingLeft = "12";
         paddingRight = "12";
       };

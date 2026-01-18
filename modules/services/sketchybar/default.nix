@@ -65,6 +65,18 @@ delib.module {
     rightBracket = {
       enable = boolOption false;
       backgroundColor = strOption "";
+      blurRadius = strOption "0";
+      borderWidth = strOption "0";
+      borderColor = strOption "";
+      cornerRadius = strOption "8";
+      height = strOption "28";
+      paddingLeft = strOption "0";
+      paddingRight = strOption "0";
+    };
+    # Left item grouping/bracket
+    leftBracket = {
+      enable = boolOption false;
+      backgroundColor = strOption "";
       borderWidth = strOption "0";
       borderColor = strOption "";
       cornerRadius = strOption "8";
@@ -132,6 +144,7 @@ delib.module {
           sketchybar --add bracket right_bracket datetime battery cpu volume ai
             --set right_bracket
               background.color="${cfg.rightBracket.backgroundColor}"
+              background.blur_radius=${cfg.rightBracket.blurRadius}
               background.border_width=${cfg.rightBracket.borderWidth}
               background.border_color="${cfg.rightBracket.borderColor}"
               background.corner_radius=${cfg.rightBracket.cornerRadius}
@@ -141,6 +154,23 @@ delib.module {
         )
       ''
       else "# Right bracket disabled";
+
+    leftBracketCode =
+      if cfg.leftBracket.enable
+      then ''
+        (
+          sketchybar --add bracket left_bracket workspaces front_app front_app.app_list
+            --set left_bracket
+              background.color="${cfg.leftBracket.backgroundColor}"
+              background.border_width=${cfg.leftBracket.borderWidth}
+              background.border_color="${cfg.leftBracket.borderColor}"
+              background.corner_radius=${cfg.leftBracket.cornerRadius}
+              background.height=${cfg.leftBracket.height}
+              background.padding_left=${cfg.leftBracket.paddingLeft}
+              background.padding_right=${cfg.leftBracket.paddingRight}
+        )
+      ''
+      else "# Left bracket disabled";
 
     sketchybarrc = pkgs.replaceVars ./rc/sketchybarrc {
       bar_color =
@@ -154,6 +184,7 @@ delib.module {
         if cfg.bar.borderColor != ""
         then cfg.bar.borderColor
         else "0x00000000";
+      left_bracket_code = leftBracketCode;
       right_bracket_code = rightBracketCode;
     };
 

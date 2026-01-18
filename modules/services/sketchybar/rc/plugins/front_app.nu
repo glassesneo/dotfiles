@@ -25,8 +25,6 @@ export def item () {
         script=$"($nu.current-exe) ($current_path)"
       --subscribe $name
         front_app_switched
-        mouse.entered
-        mouse.exited
       # --add item $"($popup_name).1" $"popup.($name)"
       # --add item $"($popup_name).2" $"popup.($name)"
       # --set $"($popup_name).1"
