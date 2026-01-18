@@ -23,7 +23,7 @@ export def item () {
         label.color=$"($colors.sky)"
         label.font.style="Bold Italic"
         label.font.size=16
-        label.padding_right=0
+        label.padding_right=8
         icon.drawing=off
         script=$"($nu.current-exe) ($current_path)"
         update_freq=1

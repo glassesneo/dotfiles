@@ -53,6 +53,25 @@ delib.module {
       high = strOption ""; # 51-75%
       critical = strOption ""; # 76-100%
     };
+    # Bar appearance
+    bar = {
+      color = strOption ""; # 0xAARRGGBB format
+      cornerRadius = strOption "0";
+      blurRadius = strOption "0";
+      borderWidth = strOption "0";
+      borderColor = strOption "";
+    };
+    # Right item grouping/bracket
+    rightBracket = {
+      enable = boolOption false;
+      backgroundColor = strOption "";
+      borderWidth = strOption "0";
+      borderColor = strOption "";
+      cornerRadius = strOption "8";
+      height = strOption "28";
+      paddingLeft = strOption "0";
+      paddingRight = strOption "0";
+    };
   };
 
   darwin.ifEnabled.services = {
@@ -104,11 +123,46 @@ delib.module {
       cpu_high = cfg.cpuColors.high;
       cpu_critical = cfg.cpuColors.critical;
     };
+
+    # Generate right bracket code if enabled
+    rightBracketCode =
+      if cfg.rightBracket.enable
+      then ''
+        (
+          sketchybar --add bracket right_bracket datetime battery cpu volume ai
+            --set right_bracket
+              background.color="${cfg.rightBracket.backgroundColor}"
+              background.border_width=${cfg.rightBracket.borderWidth}
+              background.border_color="${cfg.rightBracket.borderColor}"
+              background.corner_radius=${cfg.rightBracket.cornerRadius}
+              background.height=${cfg.rightBracket.height}
+              background.padding_left=${cfg.rightBracket.paddingLeft}
+              background.padding_right=${cfg.rightBracket.paddingRight}
+        )
+      ''
+      else "# Right bracket disabled";
+
+    sketchybarrc = pkgs.replaceVars ./rc/sketchybarrc {
+      bar_color =
+        if cfg.bar.color != ""
+        then cfg.bar.color
+        else "$\"($colors.crust)\"";
+      bar_corner_radius = cfg.bar.cornerRadius;
+      bar_blur_radius = cfg.bar.blurRadius;
+      bar_border_width = cfg.bar.borderWidth;
+      bar_border_color =
+        if cfg.bar.borderColor != ""
+        then cfg.bar.borderColor
+        else "0x00000000";
+      right_bracket_code = rightBracketCode;
+    };
+
     sketchybarConfig = pkgs.runCommand "sketchybar-config" {} ''
       mkdir -p $out
       cp -r ${./rc}/* $out/
       chmod -R +w $out
       cp ${colorsNu} $out/colors.nu
+      cp ${sketchybarrc} $out/sketchybarrc
     '';
   in {
     home.file = {

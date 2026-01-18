@@ -47,10 +47,10 @@ in
         sapphire = toSketchybar colors.base05;
         blue = toSketchybar colors.base05;
         lavender = toSketchybar colors.base05;
-        # Text hierarchy
-        text = toSketchybar colors.base07;
-        subtext1 = toSketchybar colors.base06;
-        subtext0 = toSketchybar colors.base05;
+        # Text hierarchy - muted for monochrome aesthetic
+        text = toSketchybar colors.base05; # Reduced from base07 for less vividness
+        subtext1 = toSketchybar colors.base04;
+        subtext0 = toSketchybar colors.base03;
         # Overlay/muted elements
         overlay2 = toSketchybar colors.base04;
         overlay1 = toSketchybar colors.base03;
@@ -78,6 +78,19 @@ in
         medium = "0xff808080"; # Medium gray
         high = "0xffa0a0a0"; # Light gray
         critical = "0xffe06c75"; # Pink accent for critical
+      };
+      # Transparent outer bar background
+      bar.color = "0x00000000"; # Fully transparent
+      # Red-bordered right bracket grouping (solid border with good spacing)
+      rightBracket = {
+        enable = true;
+        backgroundColor = "0x00000000";
+        borderWidth = "1.5";
+        borderColor = toSketchybar colors.base08; # Red accent
+        cornerRadius = "4";
+        height = "36";
+        paddingLeft = "12";
+        paddingRight = "12";
       };
     };
 

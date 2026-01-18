@@ -45,6 +45,10 @@ delib.rice {
       high = "0xfff5a97f"; # peach
       critical = "0xffed8796"; # red
     };
+    # Bar appearance - uses default crust color
+    bar.color = "";
+    # No right bracket grouping
+    rightBracket.enable = false;
   };
 
   home = {

@@ -14,13 +14,11 @@ def run () {
         topmost=window
         shadow=off
         sticky=on
-        color=$"($colors.crust)"
-        # color="0xd0181926"
-        # corner_radius=10
-        # y_offset=-2
-        # border_width=1
-        # border_color=$"($blue)"
-        # blur_radius=15
+        color=@bar_color@
+        corner_radius=@bar_corner_radius@
+        blur_radius=@bar_blur_radius@
+        border_width=@bar_border_width@
+        border_color=@bar_border_color@
 
       --default
         padding_left=5
@@ -46,6 +44,8 @@ def run () {
   use ./plugins/volume.nu; volume item
   use ./plugins/ai.nu; ai item
   # use ./plugins/bluetooth.nu; bluetooth item
+
+  @right_bracket_code@
 }
 
 def main () {
