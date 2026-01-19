@@ -149,5 +149,9 @@
     llm-agents = {
       url = "github:numtide/llm-agents.nix";
     };
+    various-wallpapers = {
+      url = "github:andrewzn69/wallpapers";
+      flake = false;
+    };
   };
 }

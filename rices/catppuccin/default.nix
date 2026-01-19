@@ -82,7 +82,7 @@ delib.rice {
       ghostty = {
         settings = {
           theme = "Catppuccin Macchiato";
-          background-opacity = 0.7;
+          background-opacity = 0.5;
           background-blur = 5;
         };
       };

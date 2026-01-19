@@ -1,4 +1,8 @@
-{delib, ...}: let
+{
+  delib,
+  inputs,
+  ...
+}: let
   # Monochrome palette with pink accent (based on image)
   colors = {
     # Base backgrounds
@@ -105,6 +109,15 @@ in
       };
     };
 
+    # myconfig.services.jankyborders = {
+    # enable = true;
+    # active_color = colors.base05;
+    # inactive_color = colors.base03;
+    # style = "round";
+    # width = 4.0;
+    # hidpi = true;
+    # };
+
     # Use rice-aware options for vim and tmux
     myconfig.programs.myvimeditor.colorscheme = {
       plugin = "base16-vim";
@@ -115,7 +128,7 @@ in
 
         " Override with monochrome palette
         hi Normal guifg=${colors.base05} guibg=NONE
-        hi Comment guifg=${colors.base03}
+        hi Comment guifg=${colors.base04}
         hi Constant guifg=${colors.base09}
         hi String guifg=${colors.base0B}
         hi Identifier guifg=${colors.base08}
@@ -157,6 +170,11 @@ in
 
     home = {
       programs = {
+        desktoppr = {
+          settings = {
+            picture = "${inputs.various-wallpapers}/onedark/J0FZ3V.jpg";
+          };
+        };
         nixvim = {
           colorschemes.base16 = {
             enable = true;
@@ -248,6 +266,8 @@ in
           };
           opts.termguicolors = true;
           highlight = {
+            # Comment color override - lighter than base03
+            Comment.fg = "${colors.base04}";
             # Transparent background
             Normal.bg = "none";
             NormalNC.bg = "none";
@@ -297,8 +317,8 @@ in
         };
         ghostty = {
           settings = {
-            background-opacity = 0.7;
-            background-blur = 5;
+            background-opacity = 0.5;
+            # background-blur = 20;
             # Align with base16 colors
             background = colors.base00;
             foreground = colors.base05;
