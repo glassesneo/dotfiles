@@ -1,5 +1,7 @@
 * Org-modeによる覚え書き
 
+This is a lightweight reference for the Org-mode layout and capture flow used in the notes repository.
+
 ** ディレクトリ構成
 #+begin_example
 .

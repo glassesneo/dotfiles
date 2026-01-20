@@ -6,20 +6,17 @@
 
 Declarative and modular Nix dotfiles for macOS using [[https://github.com/yunfachi/denix][Denix]], nix-darwin, and Home Manager.
 
-This repository targets macOS on Apple Silicon and is organized around Denix auto-discovery and reusable modules. The primary host is =kurogane= and the user is =neo=.
+Denix auto-discovers all =.nix= files under =hosts/= and =modules/=, so new files must be git-tracked before builds. Avoid cross-module imports; instead, rely on Denix discovery and extensions.
 
 * System Information
 
 - *Platform*: macOS (Apple Silicon)
-- *Host*: kurogane
-- *User*: neo
 - *Module System*: Denix auto-discovery with extensions
 
 * Highlights
 
-- *System configuration* via nix-darwin
-- *User environment* via Home Manager
-- *Modular architecture* with auto-discovery from =hosts/= and =modules/=
+- *System configuration* via nix-darwin and Home Manager
+- *Modular architecture* with Denix auto-discovery from =hosts/= and =modules/=
 - *Secret management* via [[https://github.com/ryantm/agenix][agenix]] and =config.age.secrets.<key>.path=
 - *Homebrew integration* via [[https://github.com/BatteredBunny/brew-nix][brew-nix]]
 - *AI tooling* with MCP servers and SketchyBar status integrations
@@ -27,22 +24,27 @@ This repository targets macOS on Apple Silicon and is organized around Denix aut
 - *Editor and CLI tooling* via nixvim, ripgrep, fd, and more
 - *Reproducible builds* through flake-based configuration
 
-* Usage
+* Quickstart
 
-** Apply Configurations
+Apply user environment only (fastest):
 
-Apply both nix-darwin and Home Manager configurations:
+#+begin_src sh
+nh home switch
+#+end_src
+
+Apply system + Home Manager configuration:
 
 #+begin_src sh
 nh darwin switch . -H kurogane -Lt
 #+end_src
 
-Flags:
+Common flags:
+
 - =-L=: Print build logs
 - =-t=: Show trace on errors
 - =-H=: Specify hostname
 
-Additional options:
+Common variations:
 
 #+begin_src sh
 # Dry run (preview changes without applying)
@@ -56,23 +58,9 @@ nh darwin switch . -H kurogane -Lt --update
 
 # Update specific flake input(s)
 nh darwin switch . -H kurogane -Lt --update-input nixpkgs
-#+end_src
 
-** Home Manager Only
-
-Apply user environment only (no system changes):
-
-#+begin_src sh
-nh home switch
-#+end_src
-
-** Build Without Activation
-
-#+begin_src sh
-# Build darwin configuration
+# Build without activation
 nh darwin build
-
-# Build home-manager configuration
 nh home build
 #+end_src
 
@@ -172,6 +160,7 @@ Platform blocks target the right layer:
 - =home.ifEnabled= :: Home Manager configuration
 - =darwin.ifEnabled= :: nix-darwin system configuration
 - Host routing uses =delib.host= with conditional config when =config.<myconfigName>.host= matches
+- New files must be git-tracked before builds (flake reads tracked files only)
 
 ** Constants and Shared Arguments
 
@@ -186,6 +175,10 @@ Secrets are defined via agenix and referenced as =config.age.secrets.<key>.path=
 Centralized MCP server definitions live in =modules/programs/mcp-servers/default.nix=. Each tool uses separate memory files under =$XDG_DATA_HOME= (for example, =claudecode_memory.json=, =opencode_memory.json=, and =crush_memory.json=).
 
 Kiri MCP is wrapped in =modules/config/node2nix.nix= to avoid tree-sitter download issues. It runs =kiri-mcp-server= via =npx=, stores its index at =.kiri/index.duckdb=, and supports watch mode via =--watch=.
+
+** Rices (Theme Variants)
+
+Rices define theme variants under =rices/= and should only set pure data (no =pkgs= references). Modules resolve packages using their own =pkgs= to avoid cross-compilation issues. Select a rice per host in =hosts/<name>/default.nix=.
 
 ** SketchyBar Integrations
 
