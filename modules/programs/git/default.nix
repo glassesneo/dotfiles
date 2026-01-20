@@ -9,6 +9,16 @@ delib.module {
   options.programs.git = with delib; {
     enable = boolOption true;
     enableLFS = boolOption true;
+    ignore_names = readOnly (listOfOption str [
+      ".DS_Store"
+      ".direnv"
+      ".envrc"
+      "var/"
+    ]);
+    ignore_patterns = readOnly (listOfOption str [
+      "*~"
+      "*.swp"
+    ]);
   };
 
   home.ifEnabled = {
@@ -21,7 +31,7 @@ delib.module {
       source = ./gitmsg;
     };
     programs.git = {
-      enable = cfg.enable;
+      enable = true;
       lfs.enable = cfg.enableLFS;
 
       settings = {
@@ -49,14 +59,7 @@ delib.module {
         };
         url."git@github.com:".insteadOf = "https://github.com/";
       };
-      ignores = [
-        "*~"
-        "*.swp"
-        ".DS_Store"
-        ".direnv"
-        ".envrc"
-        "var/"
-      ];
+      ignores = cfg.ignore_names ++ cfg.ignore_patterns;
     };
     programs.delta = {
       enable = true;

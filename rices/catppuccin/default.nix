@@ -79,10 +79,15 @@ delib.rice {
 
   home = {
     programs = {
+      desktoppr = {
+        settings = {
+          picture = ./catppuccin.png;
+        };
+      };
       ghostty = {
         settings = {
           theme = "Catppuccin Macchiato";
-          background-opacity = 0.5;
+          background-opacity = 0.4;
           background-blur = 5;
         };
       };
