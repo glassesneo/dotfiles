@@ -18,9 +18,19 @@ delib.module {
       enable = true;
       enableZshIntegration = true;
       defaultCommand = "${base-command} ${exclude-dir}";
+      defaultOptions = [
+        "--color=bg:-1,list-bg:-1,preview-bg:-1,input-bg:-1,header-bg:-1,footer-bg:-1"
+        "--color=gutter:-1,border:-1"
+        "--border=sharp"
+        "--no-separator"
+        "--no-scrollbar"
+      ];
       fileWidgetCommand = "${base-command} ${exclude-dir}";
       tmux = {
         enableShellIntegration = true;
+        shellIntegrationOptions = [
+          "-p 80%,50%"
+        ];
       };
     };
   };

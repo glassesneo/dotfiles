@@ -72,7 +72,7 @@ in
         };
       };
     };
-    myconfig = {myconfig, ...}: {
+    myconfig = {
       services.sketchybar = {
         colors = {
           rosewater = "0xfff4dbd6";
@@ -144,6 +144,8 @@ in
           set -g status-left-length 100
           set -g status-left ""
           set -g status-right "#{E:@catppuccin_status_session}"
+          set -g popup-style "bg=default,fg=#cad3f5"
+          set -g popup-border-style "fg=#c6a0f6"
         '';
       };
     };
