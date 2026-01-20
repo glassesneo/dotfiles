@@ -140,6 +140,26 @@
         "type": "github"
       }
     },
+    "catppuccin": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1768575137,
+        "narHash": "sha256-e0SsKnkSnq+UwZNS9ZyPJjTjabzq9TRc1hqeDnvOF1Q=",
+        "owner": "catppuccin",
+        "repo": "nix",
+        "rev": "48e67b4ad22072f1ae30b0ed8e1cb020cf06c611",
+        "type": "github"
+      },
+      "original": {
+        "owner": "catppuccin",
+        "repo": "nix",
+        "type": "github"
+      }
+    },
     "charmbracelet": {
       "inputs": {
         "nixpkgs": [
@@ -671,6 +691,7 @@
         "anthropic-skills": "anthropic-skills",
         "brew-api": "brew-api",
         "brew-nix": "brew-nix",
+        "catppuccin": "catppuccin",
         "charmbracelet": "charmbracelet",
         "denix": "denix",
         "dpp-ext-installer": "dpp-ext-installer",

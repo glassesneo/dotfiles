@@ -153,5 +153,9 @@
       url = "github:andrewzn69/wallpapers";
       flake = false;
     };
+    catppuccin = {
+      url = "github:catppuccin/nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 }
