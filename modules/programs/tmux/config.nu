@@ -12,4 +12,4 @@ tmux bind n new-window
 tmux bind f next-window
 tmux bind b previous-window
 tmux bind w choose-tree
-tmux bind p display-popup -E
+tmux bind p display-popup -E -d "#{pane_current_path}"
