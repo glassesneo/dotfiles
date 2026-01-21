@@ -261,3 +261,15 @@ vim.lsp.config.efm = {
     },
   },
 }
+
+vim.lsp.config["moonbit-lsp"] = {
+  cmd = { "moonbit-lsp" },
+  filetypes = { "moonbit" },
+  single_file_support = true,
+  settings = {
+    rootMarkers = { "moon.mod.json", ".git" },
+  },
+}
+
+vim.lsp.enable({ "moonbit-lsp" })
+

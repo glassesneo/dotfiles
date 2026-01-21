@@ -1,5 +1,6 @@
 {
   delib,
+  inputs,
   pkgs,
   lib,
   ...
@@ -67,6 +68,14 @@
   treesitter_queries = [
     pkgs.vimPlugins.nvim-treesitter.passthru.queries.html_tags
   ];
+
+  # Custom tree-sitter grammars built from flake inputs
+  treesitter-moonbit-grammar = pkgs.tree-sitter.buildGrammar {
+    language = "moonbit";
+    version = "0.0.0+rev=a5a7e0b";
+    src = inputs.tree-sitter-moonbit;
+    meta.homepage = "https://github.com/moonbitlang/tree-sitter-moonbit";
+  };
 in
   delib.module {
     name = "programs.nixvim.plugins.depends";
@@ -83,7 +92,7 @@ in
           lazyLoad = {
             enable = true;
             settings = {
-              ft = treesitter_ft ++ ["org"];
+              ft = treesitter_ft ++ ["org" "moonbit"];
               after.__raw = ''
                 function()
                   -- Force highlight to attach to current buffer
@@ -97,7 +106,9 @@ in
               '';
             };
           };
-          grammarPackages = map (grammar: pkgs.vimPlugins.nvim-treesitter.builtGrammars."${grammar}") treesitter_grammars;
+          grammarPackages =
+            (map (grammar: pkgs.vimPlugins.nvim-treesitter.builtGrammars."${grammar}") treesitter_grammars)
+            ++ [treesitter-moonbit-grammar];
           settings = {
             highlight.enable = true;
             indent.enable = true;

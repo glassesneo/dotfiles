@@ -708,6 +708,7 @@
         "nixpkgs": "nixpkgs_3",
         "nixvim": "nixvim",
         "sparze": "sparze",
+        "tree-sitter-moonbit": "tree-sitter-moonbit",
         "ui-ux-pro-max": "ui-ux-pro-max",
         "various-wallpapers": "various-wallpapers"
       }
@@ -771,6 +772,23 @@
       "original": {
         "owner": "nix-systems",
         "repo": "default",
+        "type": "github"
+      }
+    },
+    "tree-sitter-moonbit": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1758949595,
+        "narHash": "sha256-CMI+qSZ/91e/YpFJYtczOGdaRAOfhZiZRFgdPiq1jJ8=",
+        "owner": "moonbitlang",
+        "repo": "tree-sitter-moonbit",
+        "rev": "a5a7e0b9cb2db740cfcc4232b2f16493b42a0c82",
+        "type": "github"
+      },
+      "original": {
+        "owner": "moonbitlang",
+        "repo": "tree-sitter-moonbit",
+        "rev": "a5a7e0b9cb2db740cfcc4232b2f16493b42a0c82",
         "type": "github"
       }
     },

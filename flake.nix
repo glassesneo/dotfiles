@@ -146,6 +146,10 @@
       url = "github:glassesneo/sparze/develop";
       flake = false;
     };
+    tree-sitter-moonbit = {
+      url = "github:moonbitlang/tree-sitter-moonbit/a5a7e0b9cb2db740cfcc4232b2f16493b42a0c82";
+      flake = false;
+    };
     llm-agents = {
       url = "github:numtide/llm-agents.nix";
     };

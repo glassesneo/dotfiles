@@ -9,6 +9,9 @@ delib.module {
         extension = {
           ncl = "nickel",
           prisma = "prisma",
+          mbt = "moonbit",
+          mbti = "moonbit",
+          mbi = "moonbit",
         },
       })
     '';
