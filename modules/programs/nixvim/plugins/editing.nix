@@ -85,7 +85,7 @@ delib.module {
       autoclose = {
         enable = true;
         settings.options = {
-          auto_indent = true;
+          auto_indent = false;
           keys = {
             "|" = {
               close = true;
