@@ -74,6 +74,7 @@ delib.module {
           enable_autocmd = false;
           languages = {
             elm = "-- %s";
+            moonbit = "// %s";
             nim = "# %s";
             nu = "# %s";
             typst = "// %s";

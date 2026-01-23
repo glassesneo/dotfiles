@@ -176,7 +176,7 @@ delib.module {
             types = [
               {
                 type = "tags";
-                match = "fleeting";
+                match = "/-TODO|-NEXT|-WAIT";
                 org_agenda_overriding_header = "Fleeting Notes";
                 org_agenda_files = [
                   "${orgfiles}/inbox.org"
@@ -221,7 +221,7 @@ delib.module {
             types = [
               {
                 type = "tags";
-                match = "LEVEL=1+fleeting";
+                match = "/-TODO|-NEXT|-WAIT";
                 org_agenda_overriding_header = "Fleeting Notes";
                 org_agenda_files = [
                   "${orgfiles}/inbox.org"

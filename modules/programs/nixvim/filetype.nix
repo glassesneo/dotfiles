@@ -18,6 +18,15 @@ delib.module {
 
     autoCmd = [
       {
+        event = ["BufRead" "BufNewFile"];
+        pattern = ["*.mbt" "*.mbti" "*.mbi"];
+        callback.__raw = ''
+          function()
+            vim.bo.filetype = "moonbit"
+          end
+        '';
+      }
+      {
         event = "FileType";
         pattern = ["python" "zig"];
         callback.__raw = ''
@@ -36,6 +45,18 @@ delib.module {
             vim.bo.expandtab = false
             vim.bo.tabstop = 4
             vim.bo.shiftwidth = 4
+          end
+        '';
+      }
+      {
+        event = "BufWritePost";
+        pattern = ["*.mbt" "*.mbti" "*.mbi"];
+        callback.__raw = ''
+          function()
+            local view = vim.fn.winsaveview()
+            vim.fn.system("moon fmt " .. vim.fn.shellescape(vim.fn.expand("%:p")))
+            vim.cmd("silent! checktime")
+            vim.fn.winrestview(view)
           end
         '';
       }

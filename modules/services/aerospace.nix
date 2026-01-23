@@ -87,7 +87,7 @@ delib.module {
         alt-k = "focus up";
         alt-l = "focus right";
 
-        alt-t = "layout tiling floating";
+        alt-f = "layout tiling floating";
         alt-q = "close";
 
         alt-shift-h = "move left";
