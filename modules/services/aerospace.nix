@@ -8,9 +8,21 @@
 delib.module {
   name = "services.aerospace";
 
-  options = delib.singleEnableOption host.isDesktop;
+  options.services.aerospace = with delib; {
+    enable = boolOption host.isDesktop;
+    # Apps that should default to tiling layout (most apps float by default)
+    tilingApps = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [
+        "company.thebrowser.Browser" # Arc Browser
+        "com.mitchellh.ghostty" # Ghostty terminal
+      ];
+      description = "App bundle IDs that should use tiling layout by default";
+    };
+  };
 
-  darwin.ifEnabled.services.aerospace = {
+  darwin.ifEnabled = {cfg, ...}: {
+    services.aerospace = {
     enable = true;
     settings = let
       sketchybarExe = lib.getExe pkgs.sketchybar;
@@ -40,8 +52,7 @@ delib.module {
             run = ["layout floating"];
           }
         ]
-        ++ (["company.thebrowser.Browser" "com.mitchellh.ghostty"]
-          |> map enableTiling);
+        ++ (cfg.tilingApps |> map enableTiling);
 
       enable-normalization-flatten-containers = true;
       enable-normalization-opposite-orientation-for-nested-containers = true;
@@ -162,5 +173,6 @@ delib.module {
         ];
       };
     };
+  };
   };
 }

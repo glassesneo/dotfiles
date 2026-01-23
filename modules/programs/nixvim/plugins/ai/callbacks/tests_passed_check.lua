@@ -1,7 +1,8 @@
 -- Check if tests passed by looking for success indicators in chat
 function(chat)
+  local state = _G.CCWorkflowState
   local max_iterations = 5
-  local current_iteration = vim.g.codecompanion_test_iterations or 0
+  local current_iteration = state.get("test_iterations") or 0
 
   if chat.messages and #chat.messages > 0 then
     local last_msg = chat.messages[#chat.messages]
@@ -10,8 +11,8 @@ function(chat)
       if content:match("tests passed") or
          content:match("all tests pass") or
          content:match("test.*success") or
-         vim.g.codecompanion_tests_passed == true then
-        vim.g.codecompanion_tests_passed = true
+         state.get("tests_passed") == true then
+        state.set("tests_passed", true)
         return true
       end
     end

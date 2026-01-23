@@ -61,132 +61,63 @@ delib.module {
     # opencode uses: {env:KEY}
     opencodeEnv = key: "{env:" + key + "}";
 
-    # Build server config for mcphub
-    mkMcphubServer = name: server:
+    # Unified server config builder
+    # Parameters:
+    #   envFormat: function to format env var references (null = no formatting)
+    #   urlType: type field value for URL servers (null = omit type)
+    #   localType: type field value for local servers (null = omit type)
+    #   commandAsList: whether command+args should be merged into single array
+    #   envField: name of environment field ("env" or "environment")
+    #   envKeysAsArray: special codex mode - env_keys become env_vars array
+    mkServer = {
+      envFormat ? null,
+      urlType ? "sse",
+      localType ? null,
+      commandAsList ? false,
+      envField ? "env",
+      envKeysAsArray ? false,
+    }: _name: server:
       if server ? url
-      then {
-        url = server.url;
-        type = "sse";
-      }
+      then
+        {url = server.url;}
+        // lib.optionalAttrs (urlType != null) {type = urlType;}
       else
-        {
-          command = getCommand server;
-        }
-        // (
-          if (getArgs server) != []
-          then {args = getArgs server;}
-          else {}
+        (
+          if commandAsList
+          then {command = [(getCommand server)] ++ (getArgs server);}
+          else
+            {command = getCommand server;}
+            // lib.optionalAttrs ((getArgs server) != []) {args = getArgs server;}
         )
+        // lib.optionalAttrs (localType != null) {type = localType;}
         // (
-          if server.env_keys != {} || server.env_static != {}
-          then {
-            env =
-              (lib.mapAttrs (_: key: mcphubEnv key) server.env_keys)
-              // server.env_static;
-          }
-          else {}
+          if envKeysAsArray
+          then
+            # Codex special handling: static env + env_keys as array
+            lib.optionalAttrs (server.env_static != {}) {env = server.env_static;}
+            // lib.optionalAttrs (server.env_keys != {}) {env_vars = lib.attrValues server.env_keys;}
+          else
+            # Standard handling: merge formatted env_keys with static env
+            lib.optionalAttrs (server.env_keys != {} || server.env_static != {}) {
+              ${envField} =
+                (lib.mapAttrs (_: key: envFormat key) server.env_keys)
+                // server.env_static;
+            }
         );
 
-    # Build server config for claude-code
-    mkClaudeCodeServer = name: server:
-      if server ? url
-      then {
-        url = server.url;
-        type = "sse";
-      }
-      else
-        {
-          command = getCommand server;
-        }
-        // (
-          if (getArgs server) != []
-          then {args = getArgs server;}
-          else {}
-        )
-        // (
-          if server.env_keys != {} || server.env_static != {}
-          then {
-            env =
-              (lib.mapAttrs (_: key: claudeCodeEnv key) server.env_keys)
-              // server.env_static;
-          }
-          else {}
-        );
-
-    # Build server config for claude-desktop (same syntax as claude-code)
+    # Target-specific builders using the unified mkServer
+    mkMcphubServer = mkServer {envFormat = mcphubEnv;};
+    mkClaudeCodeServer = mkServer {envFormat = claudeCodeEnv;};
     mkClaudeDesktopServer = mkClaudeCodeServer;
-
-    # Build server config for codex (uses env_vars array)
-    mkCodexServer = name: server:
-      if server ? url
-      then {url = server.url;}
-      else
-        {
-          command = getCommand server;
-        }
-        // (
-          if (getArgs server) != []
-          then {args = getArgs server;}
-          else {}
-        )
-        // (
-          if server.env_static != {}
-          then {env = server.env_static;}
-          else {}
-        )
-        // (
-          if server.env_keys != {}
-          then {env_vars = lib.attrValues server.env_keys;}
-          else {}
-        );
-
-    # Build server config for crush
-    mkCrushServer = name: server:
-      if server ? url
-      then {
-        url = server.url;
-        type = "sse";
-      }
-      else
-        {
-          command = getCommand server;
-        }
-        // (
-          if (getArgs server) != []
-          then {args = getArgs server;}
-          else {}
-        )
-        // (
-          if server.env_keys != {} || server.env_static != {}
-          then {
-            env =
-              (lib.mapAttrs (_: key: crushEnv key) server.env_keys)
-              // server.env_static;
-          }
-          else {}
-        );
-
-    # Build server config for opencode (command is array, type is local/remote)
-    mkOpencodeServer = name: server:
-      if server ? url
-      then {
-        url = server.url;
-        type = "remote";
-      }
-      else
-        {
-          command = [(getCommand server)] ++ (getArgs server);
-          type = "local";
-        }
-        // (
-          if server.env_keys != {} || server.env_static != {}
-          then {
-            environment =
-              (lib.mapAttrs (_: key: opencodeEnv key) server.env_keys)
-              // server.env_static;
-          }
-          else {}
-        );
+    mkCodexServer = mkServer {urlType = null; envKeysAsArray = true;};
+    mkCrushServer = mkServer {envFormat = crushEnv;};
+    mkOpencodeServer = mkServer {
+      envFormat = opencodeEnv;
+      urlType = "remote";
+      localType = "local";
+      commandAsList = true;
+      envField = "environment";
+    };
 
     # Filter servers by enabled list and build with the appropriate formatter
     mkServersForTarget = target: mkServerFn:

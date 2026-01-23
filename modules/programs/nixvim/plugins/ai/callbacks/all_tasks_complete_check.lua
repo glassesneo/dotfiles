@@ -1,7 +1,8 @@
 -- Check if all implementation tasks are complete
 function(chat)
+  local state = _G.CCWorkflowState
   local max_tasks = 20
-  local completed = vim.g.codecompanion_tasks_completed or 0
+  local completed = state.get("tasks_completed") or 0
 
   if completed >= max_tasks then
     vim.notify("Implementation: Max tasks reached", vim.log.levels.WARN)

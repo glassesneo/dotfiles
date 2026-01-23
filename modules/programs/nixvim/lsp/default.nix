@@ -68,18 +68,6 @@ delib.module {
           enable = true;
           package = null;
         };
-        nil_ls = {
-          # enable = true;
-          package = null;
-          config = {
-            cmd = ["${lib.getExe pkgs.nil}"];
-            nix = {
-              flake = {
-                autArchive = true;
-              };
-            };
-          };
-        };
         nixd = {
           enable = true;
           package = null;

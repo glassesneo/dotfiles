@@ -35,6 +35,7 @@ delib.module {
           lang = {
             elm = "-- %s";
             lua = "-- %s";
+            moonbit = "// %s";
             nim = "# %s";
             nix = "# %s";
             nu = "# %s";
@@ -65,21 +66,6 @@ delib.module {
             enable_close = true;
             enable_close_on_slash = false;
             enable_rename = true;
-          };
-        };
-      };
-      ts-context-commentstring = {
-        # enable = true;
-        settings = {
-          enable_autocmd = false;
-          languages = {
-            elm = "-- %s";
-            moonbit = "// %s";
-            nim = "# %s";
-            nu = "# %s";
-            typst = "// %s";
-            v = "// %s";
-            zig = "// %s";
           };
         };
       };

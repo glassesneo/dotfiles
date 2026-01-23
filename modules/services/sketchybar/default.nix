@@ -1,6 +1,7 @@
 {
   delib,
   host,
+  lib,
   pkgs,
   ...
 }:
@@ -9,49 +10,25 @@ delib.module {
 
   options.services.sketchybar = with delib; {
     enable = boolOption host.isDesktop;
-    colors = {
-      rosewater = strOption "";
-      flamingo = strOption "";
-      pink = strOption "";
-      mauve = strOption "";
-      red = strOption "";
-      maroon = strOption "";
-      peach = strOption "";
-      yellow = strOption "";
-      green = strOption "";
-      teal = strOption "";
-      sky = strOption "";
-      sapphire = strOption "";
-      blue = strOption "";
-      lavender = strOption "";
-      text = strOption "";
-      subtext1 = strOption "";
-      subtext0 = strOption "";
-      overlay2 = strOption "";
-      overlay1 = strOption "";
-      overlay0 = strOption "";
-      surface2 = strOption "";
-      surface1 = strOption "";
-      surface0 = strOption "";
-      base = strOption "";
-      mantle = strOption "";
-      crust = strOption "";
+    # Theme colors (Catppuccin naming) - all values use 0xAARRGGBB format
+    colors = lib.mkOption {
+      type = lib.types.attrsOf lib.types.str;
+      default = {};
+      description = "Theme color palette (rosewater, flamingo, pink, mauve, red, maroon, peach, yellow, green, teal, sky, sapphire, blue, lavender, text, subtext1, subtext0, overlay2, overlay1, overlay0, surface2, surface1, surface0, base, mantle, crust)";
     };
     # App-specific icon colors (separate from theme colors)
-    appColors = {
-      arc = strOption "";
-      ghostty = strOption "";
-      obsidian = strOption "";
-      kitty = strOption "";
+    appColors = lib.mkOption {
+      type = lib.types.attrsOf lib.types.str;
+      default = {};
+      description = "App-specific icon colors (arc, ghostty, obsidian, kitty)";
     };
     # Semantic colors for specific UI elements
     electricity = strOption ""; # AC power indicator
     # CPU graph colors by usage level
-    cpuColors = {
-      low = strOption ""; # 1-25%
-      medium = strOption ""; # 26-50%
-      high = strOption ""; # 51-75%
-      critical = strOption ""; # 76-100%
+    cpuColors = lib.mkOption {
+      type = lib.types.attrsOf lib.types.str;
+      default = {};
+      description = "CPU graph colors by usage level (low, medium, high, critical)";
     };
     # Bar appearance
     bar = {
@@ -94,47 +71,16 @@ delib.module {
   };
 
   home.ifEnabled = {cfg, ...}: let
-    colorsNu = pkgs.replaceVars ./rc/colors.nu {
-      # Theme colors
-      rosewater = cfg.colors.rosewater;
-      flamingo = cfg.colors.flamingo;
-      pink = cfg.colors.pink;
-      mauve = cfg.colors.mauve;
-      red = cfg.colors.red;
-      maroon = cfg.colors.maroon;
-      peach = cfg.colors.peach;
-      yellow = cfg.colors.yellow;
-      green = cfg.colors.green;
-      teal = cfg.colors.teal;
-      sky = cfg.colors.sky;
-      sapphire = cfg.colors.sapphire;
-      blue = cfg.colors.blue;
-      lavender = cfg.colors.lavender;
-      text = cfg.colors.text;
-      subtext1 = cfg.colors.subtext1;
-      subtext0 = cfg.colors.subtext0;
-      overlay2 = cfg.colors.overlay2;
-      overlay1 = cfg.colors.overlay1;
-      overlay0 = cfg.colors.overlay0;
-      surface2 = cfg.colors.surface2;
-      surface1 = cfg.colors.surface1;
-      surface0 = cfg.colors.surface0;
-      base = cfg.colors.base;
-      mantle = cfg.colors.mantle;
-      crust = cfg.colors.crust;
-      # App-specific icon colors
-      app_arc = cfg.appColors.arc;
-      app_ghostty = cfg.appColors.ghostty;
-      app_obsidian = cfg.appColors.obsidian;
-      app_kitty = cfg.appColors.kitty;
-      # Semantic colors
-      electricity = cfg.electricity;
-      # CPU graph colors
-      cpu_low = cfg.cpuColors.low;
-      cpu_medium = cfg.cpuColors.medium;
-      cpu_high = cfg.cpuColors.high;
-      cpu_critical = cfg.cpuColors.critical;
-    };
+    # Build replaceVars arguments from attrsets
+    # Theme colors use their names directly (e.g., rosewater -> @rosewater@)
+    # App colors get prefixed with "app_" (e.g., arc -> @app_arc@)
+    # CPU colors get prefixed with "cpu_" (e.g., low -> @cpu_low@)
+    colorsNu = pkgs.replaceVars ./rc/colors.nu (
+      cfg.colors
+      // lib.mapAttrs' (name: value: lib.nameValuePair "app_${name}" value) cfg.appColors
+      // lib.mapAttrs' (name: value: lib.nameValuePair "cpu_${name}" value) cfg.cpuColors
+      // {electricity = cfg.electricity;}
+    );
 
     # Generate right bracket code if enabled
     rightBracketCode =

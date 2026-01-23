@@ -72,18 +72,6 @@ delib.module {
       # };
       underline = true;
     };
-    autoCmd = [
-      # {
-      #   event = "CursorHold";
-      #   callback.__raw = ''
-      #     function()
-      #       vim.diagnostic.open_float({
-      #         scope = 'cursor',
-      #       })
-      #     end
-      #   '';
-      # }
-    ];
     performance = {
       byteCompileLua = {
         configs = true;
