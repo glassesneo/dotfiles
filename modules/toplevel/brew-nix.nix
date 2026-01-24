@@ -26,7 +26,6 @@ delib.module {
       brewCasks.proton-drive
       brewCasks.proton-pass
       brewCasks.qlmarkdown
-      brewCasks.claude
     ];
   };
 
