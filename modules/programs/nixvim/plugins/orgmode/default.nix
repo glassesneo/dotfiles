@@ -36,7 +36,7 @@ delib.module {
             types = [
               {
                 type = "tags";
-                match = "LEVEL=1-DONE-CANCELLED";
+                match = "LEVEL=1";
                 todo_only = false;
                 org_agenda_overriding_header = "Inbox";
                 org_agenda_files = ["${orgfiles}/inbox.org"];
@@ -48,7 +48,7 @@ delib.module {
             types = [
               {
                 type = "tags_todo";
-                match = "/+TODO|+NEXT|+WAIT";
+                match = "LEVEL=1";
                 org_agenda_overriding_header = "Todo";
                 org_agenda_files = ["${orgfiles}/inbox.org"];
               }
@@ -59,7 +59,7 @@ delib.module {
             types = [
               {
                 type = "tags_todo";
-                match = "/+TODO|+NEXT|+WAIT";
+                match = "LEVEL=1";
                 org_agenda_overriding_header = "Projects";
                 org_agenda_files = [
                   "${orgfiles}/inbox.org"
@@ -73,7 +73,7 @@ delib.module {
             types = [
               {
                 type = "tags_todo";
-                match = "/+NEXT";
+                match = "LEVEL=1";
                 org_agenda_overriding_header = "Next Actions";
                 org_agenda_files = [
                   "${orgfiles}/inbox.org"
@@ -87,7 +87,7 @@ delib.module {
             types = [
               {
                 type = "tags_todo";
-                match = "/+WAIT";
+                match = "LEVEL=1";
                 org_agenda_overriding_header = "Waiting";
                 org_agenda_files = [
                   "${orgfiles}/inbox.org"
@@ -128,7 +128,7 @@ delib.module {
             types = [
               {
                 type = "tags";
-                match = "checkin-TODO-NEXT-WAIT";
+                match = "checkin";
                 todo_only = false;
                 org_agenda_overriding_header = "Daily Check-in";
                 org_agenda_files = [
@@ -142,7 +142,7 @@ delib.module {
             types = [
               {
                 type = "tags";
-                match = "diary-TODO-NEXT-WAIT";
+                match = "diary";
                 todo_only = false;
                 org_agenda_overriding_header = "Diary Entries";
                 org_agenda_files = [
@@ -165,7 +165,7 @@ delib.module {
               }
               {
                 type = "tags_todo";
-                match = "/+TODO|+NEXT";
+                match = "LEVEL=1";
                 org_agenda_overriding_header = "Unscheduled Actions";
                 org_agenda_todo_ignore_scheduled = "all";
                 org_agenda_todo_ignore_deadlines = "all";
@@ -176,7 +176,7 @@ delib.module {
               }
               {
                 type = "tags_todo";
-                match = "/+DONE";
+                match = "LEVEL=1";
                 org_agenda_overriding_header = "Recently Completed";
                 org_agenda_files = [
                   "${orgfiles}/inbox.org"
@@ -204,7 +204,7 @@ delib.module {
             types = [
               {
                 type = "tags";
-                match = "/-TODO|-NEXT|-WAIT";
+                match = "LEVEL=1";
                 org_agenda_overriding_header = "Fleeting Notes";
                 org_agenda_files = [
                   "${orgfiles}/inbox.org"
@@ -212,7 +212,7 @@ delib.module {
               }
               {
                 type = "tags";
-                match = "literature";
+                match = "LEVEL=1+literature";
                 org_agenda_overriding_header = "Literature Notes";
                 org_agenda_files = [
                   "${orgfiles}/zettelkasten/literature/**/*"
@@ -220,7 +220,7 @@ delib.module {
               }
               {
                 type = "tags";
-                match = "permanent";
+                match = "LEVEL=1+permanent";
                 org_agenda_overriding_header = "Permanent Notes";
                 org_agenda_files = [
                   "${orgfiles}/zettelkasten/knowledge/**/*"
@@ -228,7 +228,7 @@ delib.module {
               }
               {
                 type = "tags";
-                match = "structure";
+                match = "LEVEL=1+structure";
                 org_agenda_overriding_header = "Structure Notes";
                 org_agenda_files = [
                   "${orgfiles}/zettelkasten/knowledge/**/*"
@@ -236,7 +236,7 @@ delib.module {
               }
               {
                 type = "tags";
-                match = "index";
+                match = "LEVEL=1+index";
                 org_agenda_overriding_header = "Index Notes";
                 org_agenda_files = [
                   "${orgfiles}/zettelkasten/knowledge/**/*"
@@ -249,7 +249,7 @@ delib.module {
             types = [
               {
                 type = "tags";
-                match = "/-TODO|-NEXT|-WAIT";
+                match = "LEVEL=1";
                 org_agenda_overriding_header = "Fleeting Notes";
                 org_agenda_files = [
                   "${orgfiles}/inbox.org"
@@ -301,7 +301,7 @@ delib.module {
             types = [
               {
                 type = "tags";
-                match = "index";
+                match = "LEVEL=1+index";
                 org_agenda_overriding_header = "Index Notes";
                 org_agenda_files = [
                   "${orgfiles}/zettelkasten/knowledge/**/*"
