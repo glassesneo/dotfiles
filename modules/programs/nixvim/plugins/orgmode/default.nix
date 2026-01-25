@@ -123,6 +123,34 @@ delib.module {
               }
             ];
           };
+          C = {
+            description = "Daily Check-in";
+            types = [
+              {
+                type = "tags";
+                match = "checkin-TODO-NEXT-WAIT";
+                todo_only = false;
+                org_agenda_overriding_header = "Daily Check-in";
+                org_agenda_files = [
+                  "${orgfiles}/journal/**/*.org"
+                ];
+              }
+            ];
+          };
+          D = {
+            description = "Diary Entries";
+            types = [
+              {
+                type = "tags";
+                match = "diary-TODO-NEXT-WAIT";
+                todo_only = false;
+                org_agenda_overriding_header = "Diary Entries";
+                org_agenda_files = [
+                  "${orgfiles}/journal/**/*.org"
+                ];
+              }
+            ];
+          };
           W = {
             description = "Weekly Overview";
             types = [
@@ -294,7 +322,7 @@ delib.module {
           n = {
             description = "Morning check-in | Daily journal";
             template = ''
-              * Start
+              * Start :checkin:
               :PROPERTIES:
               :FEELING: %^{FEELING|fresh|calm|sleepy|anxious|tired|restless}
               :MOOD: %^{MOOD|🙂|😀|🙂|😐|🙁|😫}
@@ -315,7 +343,7 @@ delib.module {
           d = {
             description = "Diary | Daily journal";
             template = ''
-              * Diary
+              * Diary :diary:
               :PROPERTIES:
               :FEELING: %^{FEELING|fresh|calm|sleepy|anxious|tired|restless}
               :MOOD: %^{MOOD|🙂|😀|🙂|😐|🙁|😫}
@@ -335,6 +363,26 @@ delib.module {
             datetree = {
               tree_type = "day";
             };
+          };
+          w = {
+            description = "Weekly report | Reflection";
+            template = ''
+              * Weekly Review :weekly:
+              :PROPERTIES:
+              :WEEK: %<%Y-W%V>
+              :END:
+                [%<%Y-%m-%d>]
+
+              - 今週のハイライト ::
+              - いちばんの成果 ::
+              - 困ったこと / 障害 ::
+              - 学び ::
+              - 来週のフォーカス ::
+              - 感謝 ::
+                %?
+
+            '';
+            target = "${orgfiles}/weekly.org";
           };
           r = {
             description = "Reflection | Daily journal";
