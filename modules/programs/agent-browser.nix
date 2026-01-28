@@ -1,6 +1,7 @@
 {
   delib,
   llm-agents,
+  pkgs,
   ...
 }:
 delib.module {
@@ -8,9 +9,24 @@ delib.module {
 
   options = delib.singleEnableOption true;
 
-  home.ifEnabled = {
+  home.ifEnabled = let
+    agentBrowserWrapped = pkgs.symlinkJoin {
+      name = "agent-browser";
+      paths = [llm-agents.agent-browser];
+      buildInputs = [pkgs.makeWrapper];
+      postBuild = ''
+        wrapProgram $out/bin/agent-browser \
+          --set PLAYWRIGHT_BROWSERS_PATH ${pkgs.playwright-driver.browsers}
+      '';
+    };
+  in {
     home.packages = [
-      llm-agents.agent-browser
+      agentBrowserWrapped
+      pkgs.playwright-driver
     ];
+
+    home.sessionVariables = {
+      PLAYWRIGHT_BROWSERS_PATH = "${pkgs.playwright-driver.browsers}";
+    };
   };
 }

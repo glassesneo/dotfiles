@@ -7,6 +7,7 @@ tmux bind H split-window -h -b -c "#{pane_current_path}"
 tmux bind L split-window -h -c "#{pane_current_path}"
 tmux bind K split-window -v -b -c "#{pane_current_path}"
 tmux bind J split-window -v -c "#{pane_current_path}"
+tmux bind S split-window -v -l 10 -c "#{pane_current_path}"
 
 tmux bind n new-window
 tmux bind f next-window

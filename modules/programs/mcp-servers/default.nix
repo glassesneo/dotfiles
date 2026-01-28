@@ -33,7 +33,6 @@ delib.module {
       "chrome-devtools-mcp" = pkgs.lib.getExe' nodePkgs."chrome-devtools-mcp" "chrome-devtools-mcp";
       "morph-fast-apply-mcp" = pkgs.lib.getExe' nodePkgs."@morph-llm/morph-fast-apply" "mcp-server-filesystem";
       "kiri-mcp" = pkgs.lib.getExe' nodePkgs."kiri-mcp-server" "kiri-mcp-server";
-      "google-maps-mcp" = pkgs.lib.getExe' nodePkgs."@modelcontextprotocol/server-google-maps" "mcp-server-google-maps";
       "context7-mcp" = pkgs.lib.getExe inputs.mcp-servers-nix.packages.${host.homeManagerSystem}.context7-mcp;
       "codex-mcp" = codex;
       "relative-filesystem-mcp" = "${deno} run -A /Users/neo/dev/relative-filesystem-mcp/server.ts";

@@ -53,10 +53,6 @@ let { Server, .. } = import "./schema.ncl" in
     },
 
     # Maps
-    google-maps = {
-      command_id = "google-maps-mcp",
-      env_keys = { GOOGLE_MAPS_API_KEY = "GOOGLE_CLOUD_API_KEY" },
-    },
 
     # Custom/local servers
     relative-filesystem = {
@@ -92,7 +88,6 @@ let { Server, .. } = import "./schema.ncl" in
       "brave-search",
       "readability",
       "chrome-devtools",
-      "google-maps",
       "context7",
     ],
 

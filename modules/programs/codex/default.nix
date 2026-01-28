@@ -2,6 +2,7 @@
   delib,
   inputs,
   llm-agents,
+  pkgs,
   ...
 }:
 delib.module {
@@ -20,6 +21,10 @@ delib.module {
           path = inputs.anthropic-skills;
           subdir = ".";
         };
+        agent-browser = {
+          path = "${llm-agents.agent-browser}/etc/agent-browser/skills";
+          subdir = ".";
+        };
         ui-ux-pro-max = {
           path = inputs.ui-ux-pro-max;
           subdir = ".";
@@ -34,6 +39,7 @@ delib.module {
       skills = {
         enable = [
           "skill-creator"
+          "agent-browser"
         ];
 
         explicit = {
@@ -81,7 +87,7 @@ delib.module {
         profiles = {
           "planning" = {
             model = "gpt-5.2-codex";
-            approval_policy = "untrusted";
+            approval_policy = "on-request";
             sandbox_mode = "read-only";
             model_reasoning_effort = "medium";
             model_reasoning_summary = "detailed";
@@ -90,10 +96,45 @@ delib.module {
             model = "gpt-5.2-codex";
             approval_policy = "never";
             sandbox_mode = "workspace-write";
+            sandbox_workspace_write.network_access = true;
+            sandbox_workspace_write.writable_roots = [
+              "/tmp/agent-browser"
+              "/tmp/agent-browser-run"
+            ];
             network_access = true;
+            shell_environment_policy.experimental_use_profile = true;
+            shell_environment_policy.set = {
+              AGENT_BROWSER_HOME = "/tmp/agent-browser";
+              PLAYWRIGHT_BROWSERS_PATH = "${pkgs.playwright-driver.browsers}";
+              XDG_RUNTIME_DIR = "/tmp/agent-browser-run";
+              XDG_CACHE_HOME = "/tmp/agent-browser/cache";
+              XDG_DATA_HOME = "/tmp/agent-browser/data";
+              XDG_STATE_HOME = "/tmp/agent-browser/state";
+            };
             model_reasoning_effort = "medium";
             # model_provider = "openrouter";
             # model = "kwaipilot/kat-coder-pro:free";
+          };
+          "agent-browser" = {
+            model = "gpt-5.2-codex";
+            approval_policy = "on-request";
+            sandbox_mode = "workspace-write";
+            sandbox_workspace_write.network_access = true;
+            sandbox_workspace_write.writable_roots = [
+              "/tmp/agent-browser"
+              "/tmp/agent-browser-run"
+            ];
+            network_access = true;
+            shell_environment_policy.experimental_use_profile = true;
+            shell_environment_policy.set = {
+              AGENT_BROWSER_HOME = "/tmp/agent-browser";
+              PLAYWRIGHT_BROWSERS_PATH = "${pkgs.playwright-driver.browsers}";
+              XDG_RUNTIME_DIR = "/tmp/agent-browser-run";
+              XDG_CACHE_HOME = "/tmp/agent-browser/cache";
+              XDG_DATA_HOME = "/tmp/agent-browser/data";
+              XDG_STATE_HOME = "/tmp/agent-browser/state";
+            };
+            model_reasoning_effort = "medium";
           };
         };
       };

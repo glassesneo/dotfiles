@@ -6,7 +6,6 @@ let mcp_servers | Array prelude.NpmPackage = [
   "@brave/brave-search-mcp-server",
   "@morph-llm/morph-fast-apply",
   "@mizchi/readability",
-  "@modelcontextprotocol/server-google-maps",
   "tavily-mcp",
   "chrome-devtools-mcp",
   "kiri-mcp-server",

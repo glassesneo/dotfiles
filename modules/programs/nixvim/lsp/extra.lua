@@ -21,11 +21,6 @@ for _, path in ipairs(library_paths) do
 end
 
 vim.lsp.config.emmylua_ls = {
-  on_init = function(client)
-    client.config.settings.Lua = vim.tbl_deep_extend("force", client.config.settings.Lua, {
-      workspace = { library = vim.api.nvim_get_runtime_file("", true) },
-    })
-  end,
   settings = {
     Lua = {
       runtime = {
