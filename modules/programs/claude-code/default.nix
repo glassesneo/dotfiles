@@ -1,6 +1,5 @@
 {
   delib,
-  inputs,
   llm-agents,
   pkgs,
   ...
@@ -9,6 +8,13 @@ delib.module {
   name = "programs.claude-code";
 
   options = delib.singleEnableOption true;
+
+  myconfig.ifEnabled = {
+    agentSkills.agents.claude-code = {
+      skills = ["skill-creator" "ui-ux-pro-max"];
+      targetDir = ".claude/skills";
+    };
+  };
 
   home.ifEnabled = let
     # SketchyBar integration hook scripts

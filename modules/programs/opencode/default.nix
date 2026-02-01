@@ -1,7 +1,6 @@
 {
   delib,
   homeConfig,
-  inputs,
   llm-agents,
   ...
 }:
@@ -9,6 +8,13 @@ delib.module {
   name = "programs.opencode";
 
   options = delib.singleEnableOption true;
+
+  myconfig.ifEnabled = {
+    agentSkills.agents.opencode = {
+      skills = ["skill-creator" "ui-ux-pro-max"];
+      targetDir = ".opencode/skills";
+    };
+  };
 
   home.ifEnabled = {
     programs.opencode = {

@@ -8,7 +8,7 @@
 delib.module {
   name = "agentSkills";
 
-  options.agentSkills = with delib; {
+  options.agentSkills = {
     sources = lib.mkOption {
       type = lib.types.attrsOf (lib.types.submodule {
         options = {
@@ -74,7 +74,7 @@ delib.module {
     };
   };
 
-  myconfig.always = {cfg, ...}: {
+  myconfig.always = {
     # All sources defined once
     agentSkills.sources = {
       anthropic = {
@@ -116,23 +116,6 @@ delib.module {
         discoverable = true;
       };
     };
-
-    # Per-agent skill assignment (single source of truth)
-    agentSkills.agents = {
-      claude-code = {
-        skills = ["skill-creator" "ui-ux-pro-max" "sparze"];
-        targetDir = ".claude/skills";
-      };
-      opencode = {
-        skills = ["skill-creator" "sparze"];
-        targetDir = ".opencode/skills";
-      };
-      codex = {
-        skills = ["skill-creator" "agent-browser" "sparze"];
-        targetDir = ".codex/skills";
-      };
-    };
-
   };
 
   home.always = {myconfig, ...}: let
@@ -144,29 +127,32 @@ delib.module {
 
       # Create symlink for each skill
       skillLinks = lib.listToAttrs (map (skillName: let
-        skill = myconfig.agentSkills.skills.${skillName};
-        source = myconfig.agentSkills.sources.${skill.source};
+          skill = myconfig.agentSkills.skills.${skillName};
+          source = myconfig.agentSkills.sources.${skill.source};
 
-        # Determine the link path
-        linkPath =
-          if skill.discoverable
-          then "${source.path}/${source.subdir}/${skillName}"
-          else "${source.path}/${source.subdir}/${skill.explicitPath}";
+          # Determine the link path
+          linkPath =
+            if skill.discoverable
+            then "${source.path}/${source.subdir}/${skillName}"
+            else "${source.path}/${source.subdir}/${skill.explicitPath}";
 
-        # Create unique attribute name for home.file
-        attrName = "${targetDir}/${skillName}";
-      in {
-        name = attrName;
-        value = {
-          source = linkPath;
-          recursive = true;
-        };
-      }) skillsList);
-    in skillLinks;
+          # Create unique attribute name for home.file
+          attrName = "${targetDir}/${skillName}";
+        in {
+          name = attrName;
+          value = {
+            source = linkPath;
+            recursive = true;
+          };
+        })
+        skillsList);
+    in
+      skillLinks;
 
     # Generate all skill links for all agents
-    allSkillLinks = lib.foldl' (acc: agentName:
-      acc // (mkSkillLinks agentName myconfig.agentSkills.agents.${agentName})
+    allSkillLinks = lib.foldl' (
+      acc: agentName:
+        acc // (mkSkillLinks agentName myconfig.agentSkills.agents.${agentName})
     ) {} (lib.attrNames myconfig.agentSkills.agents);
   in {
     home.file = allSkillLinks;

@@ -1,6 +1,5 @@
 {
   delib,
-  inputs,
   llm-agents,
   pkgs,
   ...
@@ -9,6 +8,13 @@ delib.module {
   name = "programs.codex";
 
   options = delib.singleEnableOption true;
+
+  myconfig.ifEnabled = {
+    agentSkills.agents.codex = {
+      skills = ["skill-creator" "agent-browser"];
+      targetDir = ".codex/skills";
+    };
+  };
 
   home.ifEnabled = {
     programs.codex = {
