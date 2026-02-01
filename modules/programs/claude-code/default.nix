@@ -27,51 +27,6 @@ delib.module {
           sketchybar = pkgs.lib.getExe pkgs.sketchybar;
         }));
   in {
-    # Claude Code skill configuration
-    programs.agent-skills = {
-      enable = true;
-
-      # Define skill sources
-      sources = {
-        anthropic = {
-          path = inputs.anthropic-skills;
-          subdir = ".";
-        };
-        ui-ux-pro-max = {
-          path = inputs.ui-ux-pro-max;
-          subdir = ".";
-        };
-        sparze-source = {
-          path = inputs.sparze;
-          subdir = ".";
-        };
-      };
-
-      # Select skills for Claude Code
-      skills = {
-        enable = [
-          "skill-creator"
-        ];
-
-        explicit = {
-          ui-ux-pro-max = {
-            from = "ui-ux-pro-max";
-            path = ".claude/skills/ui-ux-pro-max";
-          };
-          sparze = {
-            from = "sparze-source";
-            path = ".";
-          };
-        };
-      };
-
-      # Deploy to Claude Code
-      targets.claude = {
-        dest = ".claude/skills";
-        structure = "symlink-tree";
-      };
-    };
-
     programs.claude-code = {
       enable = true;
       package = llm-agents.claude-code;

@@ -11,43 +11,6 @@ delib.module {
   options = delib.singleEnableOption true;
 
   home.ifEnabled = {
-    # OpenCode skill configuration
-    programs.agent-skills = {
-      enable = true;
-
-      # Define skill sources
-      sources = {
-        anthropic = {
-          path = inputs.anthropic-skills;
-          subdir = ".";
-        };
-        sparze-source = {
-          path = inputs.sparze;
-          subdir = ".";
-        };
-      };
-
-      # Select skills for OpenCode
-      skills = {
-        enable = [
-          "skill-creator"
-        ];
-
-        explicit = {
-          sparze = {
-            from = "sparze-source";
-            path = ".";
-          };
-        };
-      };
-
-      # Deploy to OpenCode
-      targets.opencode = {
-        dest = ".opencode/skills";
-        structure = "symlink-tree";
-      };
-    };
-
     programs.opencode = {
       enable = true;
       package = llm-agents.opencode;

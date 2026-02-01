@@ -6,16 +6,12 @@
 delib.module {
   name = "programs.agent-skills";
 
-  options = delib.singleEnableOption true;
+  options = delib.singleEnableOption false; # Disabled - skills managed centrally in agentSkills
 
-  home.always = {
-    # Import the agent-skills-nix Home Manager module
-    # Each agent module (claude-code, codex, opencode) configures its own:
-    # - sources (skill repositories)
-    # - skills (which skills to enable)
-    # - targets (where to deploy)
-    imports = [
-      inputs.agent-skills.homeManagerModules.default
-    ];
-  };
+  # Don't import the upstream module at all - we manage skills directly now
+  # home.always = {
+  #   imports = [
+  #     inputs.agent-skills.homeManagerModules.default
+  #   ];
+  # };
 }
