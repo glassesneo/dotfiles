@@ -97,6 +97,13 @@ delib.module {
         explicitPath = ".";
       };
 
+      codex-exec = {
+        path = ./codex-exec;
+        subdir = ".";
+        discoverable = false;
+        explicitPath = ".";
+      };
+
       sparze = {
         path = inputs.sparze;
         subdir = ".";
