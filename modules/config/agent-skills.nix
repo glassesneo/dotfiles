@@ -9,45 +9,39 @@ delib.module {
   name = "agentSkills";
 
   options.agentSkills = {
-    sources = lib.mkOption {
+    skills = lib.mkOption {
       type = lib.types.attrsOf (lib.types.submodule {
         options = {
           path = lib.mkOption {
             type = lib.types.path;
-            description = "Path to the skill source";
+            description = "Path to the skill source (flake input or derivation)";
           };
+
           subdir = lib.mkOption {
             type = lib.types.str;
             default = ".";
-            description = "Subdirectory within the source";
+            description = "Subdirectory within the source path";
           };
-        };
-      });
-      default = {};
-      description = "All available skill sources";
-    };
 
-    skills = lib.mkOption {
-      type = lib.types.attrsOf (lib.types.submodule {
-        options = {
-          source = lib.mkOption {
-            type = lib.types.str;
-            description = "Source name from agentSkills.sources";
-          };
           discoverable = lib.mkOption {
             type = lib.types.bool;
             default = true;
-            description = "Whether skill is auto-discoverable or needs explicit path";
+            description = ''
+              Whether skill is auto-discoverable by name.
+              - true: {path}/{subdir}/{skillName}
+              - false: {path}/{subdir}/{explicitPath}
+            '';
           };
+
           explicitPath = lib.mkOption {
             type = lib.types.nullOr lib.types.str;
             default = null;
-            description = "Explicit deployment path for non-discoverable skills";
+            description = "Explicit path for non-discoverable skills. Required when discoverable = false.";
           };
         };
       });
       default = {};
-      description = "All available skills with metadata";
+      description = "All available skills with source paths and metadata";
     };
 
     agents = lib.mkOption {
@@ -75,44 +69,30 @@ delib.module {
   };
 
   myconfig.always = {
-    # All sources defined once
-    agentSkills.sources = {
-      anthropic = {
+    agentSkills.skills = {
+      skill-creator = {
         path = inputs.anthropic-skills;
         subdir = ".";
+        discoverable = true;
       };
+
       ui-ux-pro-max = {
         path = inputs.ui-ux-pro-max;
         subdir = ".";
-      };
-      sparze-source = {
-        path = inputs.sparze;
-        subdir = ".";
-      };
-      agent-browser = {
-        path = "${llm-agents.agent-browser}/etc/agent-browser/skills";
-        subdir = ".";
-      };
-    };
-
-    # All skills with metadata
-    agentSkills.skills = {
-      skill-creator = {
-        source = "anthropic";
-        discoverable = true;
-      };
-      ui-ux-pro-max = {
-        source = "ui-ux-pro-max";
         discoverable = false;
         explicitPath = ".claude/skills/ui-ux-pro-max";
       };
+
       sparze = {
-        source = "sparze-source";
+        path = inputs.sparze;
+        subdir = ".";
         discoverable = false;
         explicitPath = ".";
       };
+
       agent-browser = {
-        source = "agent-browser";
+        path = "${llm-agents.agent-browser}/etc/agent-browser/skills";
+        subdir = ".";
         discoverable = true;
       };
     };
@@ -128,13 +108,12 @@ delib.module {
       # Create symlink for each skill
       skillLinks = lib.listToAttrs (map (skillName: let
           skill = myconfig.agentSkills.skills.${skillName};
-          source = myconfig.agentSkills.sources.${skill.source};
 
-          # Determine the link path
+          # Determine link path based on discoverable flag
           linkPath =
             if skill.discoverable
-            then "${source.path}/${source.subdir}/${skillName}"
-            else "${source.path}/${source.subdir}/${skill.explicitPath}";
+            then "${skill.path}/${skill.subdir}/${skillName}"
+            else "${skill.path}/${skill.subdir}/${skill.explicitPath}";
 
           # Create unique attribute name for home.file
           attrName = "${targetDir}/${skillName}";
