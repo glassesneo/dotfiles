@@ -12,19 +12,13 @@ codex                                   # Interactive TUI mode
 codex -C /project                       # Interactive with working directory
 ```
 
-**Key Profiles**: `-p planning` (read-only), `-p full-auto` (can make changes), `-p agent-browser` (Playwright)
+**Profiles**: `-p planning` (read-only), `-p full-auto` (default, can edit), `-p agent-browser` (Playwright)
 
-## When to Use codex-subagent
+## When to Use
 
-Use **codex-subagent** for complex tasks requiring iteration:
+**Use codex-subagent** for multi-step work: complex refactoring, exploratory debugging, building codebase context, iterative analysis.
 
-- **Multi-step refactoring**: Changes that need careful planning and incremental work
-- **Exploratory debugging**: Root cause analysis needing multiple rounds of investigation
-- **Building context**: Tasks where Codex needs to learn about the codebase through conversation
-- **Complex analysis**: Understanding large modules or unfamiliar architectures
-- **Back-and-forth work**: Anything requiring clarification, follow-ups, or iterative refinement
-
-**Don't use codex-subagent** for quick, one-off queries—use the **codex-exec** skill instead.
+**Use codex-exec** for single questions: quick explanations, reviews, edge case checks.
 
 ## Two Approaches to Interactive Mode
 
@@ -147,39 +141,6 @@ codex -C /project -p planning
 > "Show me edge cases in the discount calculation"
 > "What boundary conditions are missing from tests?"
 ```
-
-## Profiles for Interactive Work
-
-**`planning`** - Read-only analysis
-- Safe for exploration without side effects
-- Good for understanding code before making changes
-
-**`full-auto`** - Autonomous execution (DEFAULT)
-- Can make changes automatically
-- Use when you trust Codex to implement directly
-
-**`agent-browser`** - Browser automation
-- Uses Playwright for web interaction
-- Requires approval for sensitive operations
-
-## Best Practices
-
-1. **Start with planning profile**: Begin with `-p planning` to explore before making changes
-2. **Use tmux for long sessions**: Launch in a tmux pane to monitor progress
-3. **Build context gradually**: Let Codex learn about your codebase through conversation
-4. **Follow up iteratively**: Ask clarifying questions based on responses
-5. **Switch to exec for simple tasks**: If you just need one answer, use **codex-exec** skill
-
-## When to Switch to codex-exec
-
-Use the **codex-exec** skill (one-shot mode) instead when:
-- You have a single, focused question
-- Task doesn't require back-and-forth
-- Quick code review or edge case check
-- Documentation lookup
-- Image-based debugging with immediate fix
-
-See the **codex-exec** skill documentation for one-shot query patterns.
 
 ## Examples
 
