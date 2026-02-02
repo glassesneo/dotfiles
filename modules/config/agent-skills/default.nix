@@ -83,6 +83,20 @@ delib.module {
         explicitPath = ".claude/skills/ui-ux-pro-max";
       };
 
+      tmux-runner = {
+        path = ./tmux-runner;
+        subdir = ".";
+        discoverable = false;
+        explicitPath = ".";
+      };
+
+      codex-subagent = {
+        path = ./codex-subagent;
+        subdir = ".";
+        discoverable = false;
+        explicitPath = ".";
+      };
+
       sparze = {
         path = inputs.sparze;
         subdir = ".";

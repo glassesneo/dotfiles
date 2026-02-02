@@ -11,7 +11,7 @@ delib.module {
 
   myconfig.ifEnabled = {
     agentSkills.agents.codex = {
-      skills = ["skill-creator" "agent-browser"];
+      skills = ["skill-creator" "agent-browser" "tmux-runner"];
       targetDir = ".codex/skills";
     };
   };

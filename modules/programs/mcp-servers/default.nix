@@ -22,7 +22,6 @@ delib.module {
 
     # Command resolution map: command_id -> executable path
     # Nix handles all path resolution
-    codex = pkgs.lib.getExe' homeConfig.programs.codex.package "codex";
     deno = pkgs.lib.getExe pkgs.deno;
     nodejs = pkgs.lib.getExe pkgs.nodejs;
 
@@ -34,7 +33,6 @@ delib.module {
       "morph-fast-apply-mcp" = pkgs.lib.getExe' nodePkgs."@morph-llm/morph-fast-apply" "mcp-server-filesystem";
       "kiri-mcp" = pkgs.lib.getExe' nodePkgs."kiri-mcp-server" "kiri-mcp-server";
       "context7-mcp" = pkgs.lib.getExe inputs.mcp-servers-nix.packages.${host.homeManagerSystem}.context7-mcp;
-      "codex-mcp" = codex;
       "relative-filesystem-mcp" = "${deno} run -A /Users/neo/dev/relative-filesystem-mcp/server.ts";
     };
 
@@ -108,7 +106,10 @@ delib.module {
     mkMcphubServer = mkServer {envFormat = mcphubEnv;};
     mkClaudeCodeServer = mkServer {envFormat = claudeCodeEnv;};
     mkClaudeDesktopServer = mkClaudeCodeServer;
-    mkCodexServer = mkServer {urlType = null; envKeysAsArray = true;};
+    mkCodexServer = mkServer {
+      urlType = null;
+      envKeysAsArray = true;
+    };
     mkCrushServer = mkServer {envFormat = crushEnv;};
     mkOpencodeServer = mkServer {
       envFormat = opencodeEnv;

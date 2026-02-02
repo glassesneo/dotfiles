@@ -11,7 +11,7 @@ delib.module {
 
   myconfig.ifEnabled = {
     agentSkills.agents.claude-code = {
-      skills = ["skill-creator" "ui-ux-pro-max"];
+      skills = ["skill-creator" "ui-ux-pro-max" "tmux-runner" "codex-subagent"];
       targetDir = ".claude/skills";
     };
   };
@@ -37,6 +37,13 @@ delib.module {
       enable = true;
       package = llm-agents.claude-code;
       settings = {
+        permissions = {
+          allow = [
+            "Skill(tmux-runner)"
+            "Skill(codex-subagent)"
+          ];
+        };
+
         env = {
           DISABLE_AUTOUPDATER = "1";
           ENABLE_TOOL_SEARCH = true;
