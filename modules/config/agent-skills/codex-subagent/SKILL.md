@@ -14,12 +14,6 @@ codex -C /project                       # Interactive with working directory
 
 **Profiles**: `-p planning` (read-only), `-p full-auto` (default, can edit), `-p agent-browser` (Playwright)
 
-## When to Use
-
-**Use codex-subagent** for multi-step work: complex refactoring, exploratory debugging, building codebase context, iterative analysis.
-
-**Use codex-exec** for single questions: quick explanations, reviews, edge case checks.
-
 ## Two Approaches to Interactive Mode
 
 ### 1. Direct TUI Mode (Simple)

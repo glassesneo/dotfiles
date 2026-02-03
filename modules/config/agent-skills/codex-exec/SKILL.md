@@ -15,12 +15,6 @@ codex review --base main                # Review against branch
 
 **Key Flags**: `-C <dir>`, `-i <file>` (image), `--search` (web), `-m <model>`
 
-## When to Use
-
-**Use codex-exec** for single-answer questions: code explanations, edge cases, reviews, documentation lookups, quick fixes.
-
-**Use codex-subagent** for multi-step work requiring iteration and context building.
-
 ## Examples
 
 ```bash
