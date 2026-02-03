@@ -1,8 +1,10 @@
 {
   delib,
+  homeConfig,
   inputs,
   lib,
   llm-agents,
+  pkgs,
   ...
 }:
 delib.module {
@@ -57,9 +59,13 @@ delib.module {
             description = "Target directory for skill deployment";
           };
           structure = lib.mkOption {
-            type = lib.types.str;
+            type = lib.types.enum ["symlink-tree" "copy"];
             default = "symlink-tree";
-            description = "Deployment structure (symlink-tree or flat)";
+            description = ''
+              Deployment structure:
+              - symlink-tree: Creates symlinks (default, works for Claude Code)
+              - copy: Copies files (required for Codex which doesn't follow symlinks)
+            '';
           };
         };
       });
@@ -72,7 +78,7 @@ delib.module {
     agentSkills.skills = {
       skill-creator = {
         path = inputs.anthropic-skills;
-        subdir = ".";
+        subdir = "skills";
         discoverable = true;
       };
 
@@ -81,6 +87,20 @@ delib.module {
         subdir = ".";
         discoverable = false;
         explicitPath = ".claude/skills/ui-ux-pro-max";
+      };
+
+      hierarchical-claude-md = {
+        path = ./hierarchical-claude-md;
+        subdir = ".";
+        discoverable = false;
+        explicitPath = ".";
+      };
+
+      ai-first-doccomments = {
+        path = ./ai-first-doccomments;
+        subdir = ".";
+        discoverable = false;
+        explicitPath = ".";
       };
 
       tmux-runner = {
@@ -120,41 +140,63 @@ delib.module {
   };
 
   home.always = {myconfig, ...}: let
-    # Generate symlinks for each agent's skills directly via home.file
-    # This replaces the agent-skills module which doesn't support per-target filtering
-    mkSkillLinks = agentName: agentConfig: let
-      skillsList = agentConfig.skills;
-      targetDir = agentConfig.targetDir;
-
-      # Create symlink for each skill
-      skillLinks = lib.listToAttrs (map (skillName: let
-          skill = myconfig.agentSkills.skills.${skillName};
-
-          # Determine link path based on discoverable flag
-          linkPath =
-            if skill.discoverable
-            then "${skill.path}/${skill.subdir}/${skillName}"
-            else "${skill.path}/${skill.subdir}/${skill.explicitPath}";
-
-          # Create unique attribute name for home.file
-          attrName = "${targetDir}/${skillName}";
-        in {
-          name = attrName;
-          value = {
-            source = linkPath;
-            recursive = true;
-          };
-        })
-        skillsList);
+    # Helper to get skill source path
+    getSkillPath = skillName: let
+      skill = myconfig.agentSkills.skills.${skillName};
     in
-      skillLinks;
+      if skill.discoverable
+      then "${skill.path}/${skill.subdir}/${skillName}"
+      else "${skill.path}/${skill.subdir}/${skill.explicitPath}";
 
-    # Generate all skill links for all agents
+    # Generate symlinks for agents using symlink-tree structure
+    mkSkillLinks = agentName: agentConfig:
+      if agentConfig.structure == "symlink-tree"
+      then
+        lib.listToAttrs (map (skillName: {
+            name = "${agentConfig.targetDir}/${skillName}";
+            value = {
+              source = getSkillPath skillName;
+              recursive = true;
+            };
+          })
+          agentConfig.skills)
+      else {};
+
+    # Generate all skill links for symlink-tree agents
     allSkillLinks = lib.foldl' (
       acc: agentName:
         acc // (mkSkillLinks agentName myconfig.agentSkills.agents.${agentName})
     ) {} (lib.attrNames myconfig.agentSkills.agents);
+
+    # Generate activation script for copy-mode agents
+    copyAgents = lib.filterAttrs (_: cfg: cfg.structure == "copy") myconfig.agentSkills.agents;
+    copyScript = lib.concatStringsSep "\n" (lib.mapAttrsToList (agentName: agentConfig: let
+        targetDir = "${homeConfig.home.homeDirectory}/${agentConfig.targetDir}";
+        copyCommands = lib.concatStringsSep "\n" (map (skillName: let
+            src = getSkillPath skillName;
+            dest = "${targetDir}/${skillName}";
+          in ''
+            # Copy ${skillName} for ${agentName}
+            rm -rf "${dest}"
+            mkdir -p "${dest}"
+            cp -rL "${src}/." "${dest}/"
+            chmod -R u+w "${dest}"
+          '')
+          agentConfig.skills);
+      in ''
+        # Setup skills for ${agentName} (copy mode)
+        mkdir -p "${targetDir}"
+        ${copyCommands}
+      '')
+      copyAgents);
   in {
     home.file = allSkillLinks;
+
+    # Activation script for copy-mode agents (e.g., Codex)
+    home.activation.copyAgentSkills = lib.mkIf (copyAgents != {}) (
+      lib.hm.dag.entryAfter ["writeBoundary"] ''
+        run ${pkgs.writeShellScript "copy-agent-skills" copyScript}
+      ''
+    );
   };
 }

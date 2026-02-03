@@ -11,7 +11,7 @@ delib.module {
 
   myconfig.ifEnabled = {
     agentSkills.agents.claude-code = {
-      skills = ["skill-creator" "ui-ux-pro-max" "tmux-runner" "codex-subagent" "codex-exec"];
+      skills = ["skill-creator" "ui-ux-pro-max" "hierarchical-claude-md" "ai-first-doccomments" "tmux-runner" "codex-subagent" "codex-exec"];
       targetDir = ".claude/skills";
     };
   };
