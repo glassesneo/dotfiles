@@ -49,6 +49,7 @@ delib.module {
           DISABLE_AUTOUPDATER = "1";
           ENABLE_TOOL_SEARCH = true;
           ENABLE_LSP_TOOL = true;
+          CLAUDE_CODE_ENABLE_TASKS = true;
         };
         # SketchyBar integration hooks - triggers status updates on prompt submit and stop
         hooks = {
