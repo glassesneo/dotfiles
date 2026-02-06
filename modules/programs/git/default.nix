@@ -13,6 +13,7 @@ delib.module {
       ".DS_Store"
       ".direnv"
       ".envrc"
+      ".kiri"
       "var/"
     ]);
     ignore_patterns = readOnly (listOfOption str [
