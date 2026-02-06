@@ -194,7 +194,7 @@ delib.module {
 
     # Activation script for copy-mode agents (e.g., Codex)
     home.activation.copyAgentSkills = lib.mkIf (copyAgents != {}) (
-      lib.hm.dag.entryAfter ["writeBoundary"] ''
+      homeConfig.lib.dag.entryAfter ["writeBoundary"] ''
         run ${pkgs.writeShellScript "copy-agent-skills" copyScript}
       ''
     );
