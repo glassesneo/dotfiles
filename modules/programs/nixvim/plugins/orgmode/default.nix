@@ -12,6 +12,7 @@ delib.module {
   home.ifEnabled = let
     orgfiles = "${homeConfig.home.homeDirectory}/orgfiles";
     journalTemplate = "${orgfiles}/journal/%<%Y-%m>.org";
+    readLaterFile = "${orgfiles}/inbox.org";
   in {
     programs.nixvim.plugins.orgmode = {
       enable = true;
@@ -309,6 +310,17 @@ delib.module {
               }
             ];
           };
+          R = {
+            description = "Read later";
+            types = [
+              {
+                type = "tags_todo";
+                match = "readlater";
+                org_agenda_overriding_header = "Read later";
+                org_agenda_files = [readLaterFile];
+              }
+            ];
+          };
         };
         org_capture_templates = {
           N = {
@@ -401,6 +413,18 @@ delib.module {
             datetree = {
               tree_type = "day";
             };
+          };
+          R = {
+            description = "Read later";
+            template = ''
+              * TODO %^{Title} :readlater:
+                %u
+
+              - URL :: %^{URL}
+              - Notes :: %?
+
+            '';
+            target = readLaterFile;
           };
         };
         mappings = {
