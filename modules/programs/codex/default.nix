@@ -45,14 +45,14 @@ delib.module {
         profile = "full-auto";
         profiles = {
           "planning" = {
-            model = "gpt-5.2-codex";
+            model = "gpt-5.3-codex";
             approval_policy = "on-request";
             sandbox_mode = "read-only";
             model_reasoning_effort = "medium";
             model_reasoning_summary = "detailed";
           };
           "full-auto" = {
-            model = "gpt-5.2-codex";
+            model = "gpt-5.3-codex";
             approval_policy = "never";
             sandbox_mode = "workspace-write";
             sandbox_workspace_write.network_access = true;
@@ -75,7 +75,7 @@ delib.module {
             # model = "kwaipilot/kat-coder-pro:free";
           };
           "agent-browser" = {
-            model = "gpt-5.2-codex";
+            model = "gpt-5.3-codex";
             approval_policy = "on-request";
             sandbox_mode = "workspace-write";
             sandbox_workspace_write.network_access = true;
