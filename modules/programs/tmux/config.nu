@@ -14,3 +14,4 @@ tmux bind f next-window
 tmux bind b previous-window
 tmux bind w choose-tree
 tmux bind p display-popup -E -d "#{pane_current_path}"
+tmux bind -n S-Enter send-keys Escape "[13;2u"
