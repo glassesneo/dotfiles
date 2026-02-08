@@ -132,6 +132,7 @@ delib.module {
           "efm"
           "denols"
           "hls"
+          "moonbit-lsp"
           "taplo"
           "zls"
         ];

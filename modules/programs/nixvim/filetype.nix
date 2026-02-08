@@ -48,18 +48,6 @@ delib.module {
           end
         '';
       }
-      {
-        event = "BufWritePost";
-        pattern = ["*.mbt" "*.mbti" "*.mbi"];
-        callback.__raw = ''
-          function()
-            local view = vim.fn.winsaveview()
-            vim.fn.system("moon fmt " .. vim.fn.shellescape(vim.fn.expand("%:p")))
-            vim.cmd("silent! checktime")
-            vim.fn.winrestview(view)
-          end
-        '';
-      }
     ];
   };
 }
