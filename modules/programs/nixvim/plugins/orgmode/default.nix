@@ -331,7 +331,7 @@ delib.module {
 
             '';
           };
-          n = {
+          m = {
             description = "Morning check-in | Daily journal";
             template = ''
               * Start :checkin:
@@ -487,6 +487,14 @@ delib.module {
 
     home.packages = let
       org = pkgs.writeShellScriptBin "org" ''(cd ${orgfiles} && nvim .)'';
-    in [org];
+      checkin = pkgs.writeShellScriptBin "checkin" "nvim -c 'Org capture m'";
+      diary = pkgs.writeShellScriptBin "diary" "nvim -c 'Org capture d'";
+      today = pkgs.writeShellScriptBin "today" "nvim -c 'Today'";
+    in [
+      org
+      checkin
+      diary
+      today
+    ];
   };
 }
