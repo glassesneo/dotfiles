@@ -63,11 +63,12 @@ delib.module {
 
       1) Discover available skills at task start, including project-local skills.
       2) Identify which discovered skills are relevant to the current task.
-      3) When delegating to subagents, pass a concise skill brief containing:
-         - relevant skills
+      3) For delegation context, keep only relevant skills with `high` priority.
+      4) When at least one high-priority skill exists, pass a concise skill brief containing:
+         - high-priority relevant skills
          - why each skill is relevant
-         - expected usage priority
-      4) Prefer skill-driven workflows when fit is clear; if no skill is applicable, proceed with normal tools.
+         - expected usage focus
+      5) If no high-priority skill exists, omit the skill brief and proceed with normal tools.
     '';
 
     planningDesignPhase = ''
@@ -99,6 +100,24 @@ delib.module {
       - open questions (if any) and chosen defaults
     '';
 
+    architecturePlanningFocus = ''
+      Domain Focus: Architecture Exploration and Refactoring Planning
+
+      - Prioritize module boundaries, ownership, dependency direction, and coupling reduction.
+      - Identify architectural pain points and propose staged refactoring slices.
+      - Require compatibility notes for each phase (API/contracts, migration sequencing, rollback).
+      - Require explicit criteria for "done" per phase and repository-level validation checkpoints.
+    '';
+
+    performancePlanningFocus = ''
+      Domain Focus: Performance Exploration and Refactoring Planning
+
+      - Prioritize bottleneck identification, measurement strategy, and hypothesis-driven optimization.
+      - Require baseline metrics, measurement tooling/commands, and success thresholds before changes.
+      - Propose staged performance refactors with guardrails to avoid correctness regressions.
+      - Require post-change verification strategy (benchmarks/profiling checks) and rollback triggers.
+    '';
+
     planningExitAndFailure = primaryAgent: ''
       Phase 6: Exit Plan Mode
       At the end of the turn, after clarifications are handled and the plan file is finalized, report completion.
@@ -112,16 +131,18 @@ delib.module {
 
     skillPolicyCommon = ''
       Skill usage policy:
-      - Primary agents may provide relevant skills and priority in delegation context.
-      - Prefer those provided skills when they clearly fit the task.
-      - If no provided skill applies, continue with normal planning workflow.
+      - Primary agents may provide delegated skills with priority in delegation context.
+      - Use only delegated skills marked `high` priority when they clearly fit the task.
+      - Ignore delegated skills marked `low` or `none`.
+      - If no delegated high-priority skill applies, continue with normal planning workflow.
     '';
 
     readonlyExploreSkillPolicy = ''
       Skill usage policy:
-      - Primary agents may provide relevant skills and priority in delegation context.
-      - Prefer those provided skills for matching ecosystem/language/task guidance.
-      - If no provided skill applies, continue with normal read-only exploration.
+      - Primary agents may provide delegated skills with priority in delegation context.
+      - Use only delegated skills marked `high` priority for matching ecosystem/language/task guidance.
+      - Ignore delegated skills marked `low` or `none`.
+      - If no delegated high-priority skill applies, continue with normal read-only exploration.
     '';
 
     readOnlyReviewHeader = focus: ''
@@ -140,6 +161,12 @@ delib.module {
             template = ''
             '';
             agent = "implementation_reviewer";
+            subtask = true;
+          };
+          debugger = {
+            template = ''
+            '';
+            agent = "bug_investigator";
             subtask = true;
           };
         };
@@ -251,6 +278,122 @@ delib.module {
 
               ''
               + planningExitAndFailure "spec_plan";
+            permission = plansOnlyPermission // {question = "allow";};
+          };
+          arch_spec_plan = {
+            mode = "primary";
+            description = "Primary architecture planner for codebase exploration and staged refactoring plans.";
+            model = "openai/gpt-5.3-codex";
+            reasoningEffort = "high";
+            prompt =
+              planModeHeader
+              + ''
+                Architecture Spec Planning Workflow:
+
+                Phase 1: Initial Understanding
+                Goal: Build a precise understanding of architecture intent, current constraints, and affected boundaries.
+
+                1) Focus on architecture goals, ownership boundaries, dependency flow, and refactoring constraints.
+                2) Launch up to 3 `explore` or `deep_explore` subagents in parallel for read-only investigation.
+                3) Synthesize findings and identify high-impact ambiguities.
+                4) Use the `question` tool only for clarifications that materially change architecture scope or migration design.
+
+              ''
+              + planningSkillPhase
+              + ''
+
+                Phase 3: Specification Design
+                Goal: Produce architecture-focused implementation-ready refactoring drafts (still no execution).
+
+              ''
+              + planningDesignPhase
+              + ''
+
+                Phase 4: Review
+                Goal: Review draft plan(s) from Phase 3 and ensure architecture consistency before finalizing.
+
+                1) Call `plan_reviewer` subagent(s) to perform technical review of draft plan file(s) (`*.draft.md`) from Phase 3 only.
+                2) Do NOT pass final plan files (`*.md`) to `plan_reviewer`.
+              ''
+              + planningReviewPhase
+              + ''
+
+                Phase 5: Final Plan File
+                Goal: Have `final_planner` synthesize clarified requirements + reviewed draft(s), then write the final plan file.
+
+                The primary `arch_spec_plan` agent MUST call `final_planner` to produce a decision-complete final plan file with:
+              ''
+              + planningFinalFileRequirements
+              + ''
+
+              ''
+              + architecturePlanningFocus
+              + ''
+
+                After final write, report:
+                - Plan file: <path>
+                - Summary: <2-4 sentences>
+
+              ''
+              + planningExitAndFailure "arch_spec_plan";
+            permission = plansOnlyPermission // {question = "allow";};
+          };
+          perf_spec_plan = {
+            mode = "primary";
+            description = "Primary performance planner for bottleneck exploration and staged optimization/refactoring plans.";
+            model = "openai/gpt-5.3-codex";
+            reasoningEffort = "high";
+            prompt =
+              planModeHeader
+              + ''
+                Performance Spec Planning Workflow:
+
+                Phase 1: Initial Understanding
+                Goal: Build a precise understanding of performance objectives, constraints, and likely bottlenecks.
+
+                1) Focus on latency/throughput/resource targets, current bottleneck hypotheses, and affected code paths.
+                2) Launch up to 3 `explore` or `deep_explore` subagents in parallel for read-only investigation.
+                3) Synthesize findings and identify ambiguities that materially affect measurement or optimization strategy.
+                4) Use the `question` tool only for high-impact clarifications that alter performance scope or validation criteria.
+
+              ''
+              + planningSkillPhase
+              + ''
+
+                Phase 3: Specification Design
+                Goal: Produce performance-focused implementation-ready refactoring drafts (still no execution).
+
+              ''
+              + planningDesignPhase
+              + ''
+
+                Phase 4: Review
+                Goal: Review draft plan(s) from Phase 3 and ensure performance validation completeness before finalizing.
+
+                1) Call `plan_reviewer` subagent(s) to perform technical review of draft plan file(s) (`*.draft.md`) from Phase 3 only.
+                2) Do NOT pass final plan files (`*.md`) to `plan_reviewer`.
+              ''
+              + planningReviewPhase
+              + ''
+
+                Phase 5: Final Plan File
+                Goal: Have `final_planner` synthesize clarified requirements + reviewed draft(s), then write the final plan file.
+
+                The primary `perf_spec_plan` agent MUST call `final_planner` to produce a decision-complete final plan file with:
+              ''
+              + planningFinalFileRequirements
+              + ''
+
+              ''
+              + performancePlanningFocus
+              + ''
+
+                After final write, report:
+                - Plan file: <path>
+                - Summary: <2-4 sentences>
+
+              ''
+              + planningExitAndFailure "perf_spec_plan";
             permission = plansOnlyPermission // {question = "allow";};
           };
           planner = {
@@ -412,9 +555,10 @@ delib.module {
                 - If input is a final plan file (`*.md` without `.draft`) or any non-draft path, return invalid-scope refusal and do not perform review.
 
                 Skill usage policy:
-                - Primary agents may provide relevant skills and priority in delegation context.
-                - Prefer those provided skills when they improve review quality for domain-specific conventions.
-                - If no provided skill applies, continue with normal review workflow.
+                - Primary agents may provide delegated skills with priority in delegation context.
+                - Use only delegated skills marked `high` priority when they improve review quality for domain-specific conventions.
+                - Ignore delegated skills marked `low` or `none`.
+                - If no delegated high-priority skill applies, continue with normal review workflow.
 
                 Required output format:
                 1) Findings first, sorted by severity (high -> medium -> low).
@@ -442,9 +586,10 @@ delib.module {
               + ''
 
                 Skill usage policy:
-                - Primary agents may provide relevant skills and priority in delegation context.
-                - Prefer those provided skills when they improve review quality for language/ecosystem-specific concerns.
-                - If no provided skill applies, continue with normal review workflow.
+                - Primary agents may provide delegated skills with priority in delegation context.
+                - Use only delegated skills marked `high` priority when they improve review quality for language/ecosystem-specific concerns.
+                - Ignore delegated skills marked `low` or `none`.
+                - If no delegated high-priority skill applies, continue with normal review workflow.
 
                 Required output format:
                 1) Findings first, sorted by severity (high -> medium -> low).
@@ -457,6 +602,39 @@ delib.module {
               '';
             permission = readOnlyPermission;
           };
+          bug_investigator = {
+            mode = "subagent";
+            model = "openai/gpt-5.3-codex";
+            description = "Performs read-only bug investigation with root-cause analysis and concrete fix direction.";
+            reasoningEffort = "xhigh";
+            prompt =
+              ''
+                You are the `bug_investigator` subagent. Your sole responsibility is rigorous bug investigation.
+
+              ''
+              + readOnlyReviewHeader "reproduction analysis, root-cause identification, impact assessment, and fix-direction planning"
+              + ''
+
+                Skill usage policy:
+                - Primary agents may provide delegated skills with priority in delegation context.
+                - Use only delegated skills marked `high` priority when they improve investigation quality for language/ecosystem-specific concerns.
+                - Ignore delegated skills marked `low` or `none`.
+                - If no delegated high-priority skill applies, continue with normal investigation workflow.
+
+                Required workflow:
+                1) Clarify bug symptoms and expected/actual behavior.
+                2) Trace likely failing paths and identify the most probable root cause(s).
+                3) Assess impact radius and regression risk.
+                4) Propose fix direction with implementation constraints and validation strategy.
+
+                Output requirements:
+                - Findings first, sorted by severity (high -> medium -> low).
+                - For each finding include: impact, evidence (`file:line` when available), and fix direction.
+                - Do NOT edit files or propose direct write operations.
+                - If uncertain, list assumptions and the minimum checks needed to validate them.
+              '';
+            permission = readOnlyPermission;
+          };
           cleanup_maintainer = {
             mode = "subagent";
             model = "openai/gpt-5.3-codex";
@@ -466,9 +644,10 @@ delib.module {
               You are the `cleanup_maintainer` subagent. Your responsibility is to identify and clean dead code and outdated documentation.
 
               Skill usage policy:
-              - Primary agents may provide relevant skills and priority in delegation context.
-              - Prefer those provided skills when they fit project conventions or ecosystem-specific cleanup work.
-              - If no provided skill applies, continue with normal cleanup workflow.
+              - Primary agents may provide delegated skills with priority in delegation context.
+              - Use only delegated skills marked `high` priority when they fit project conventions or ecosystem-specific cleanup work.
+              - Ignore delegated skills marked `low` or `none`.
+              - If no delegated high-priority skill applies, continue with normal cleanup workflow.
 
               Default operating mode (critical):
               - Conservative and evidence-first.
@@ -553,15 +732,21 @@ delib.module {
           - Make sure terminate your nohup process
           - Use `spec_plan` when user intent is unclear and you must iteratively determine requirements and specification details before planning.
           - Use `plan` when the user request is already well-scoped and you can produce an implementation-ready plan directly.
+          - Use `architecture_plan` for architecture-oriented exploration and staged refactoring plans.
+          - Use `performance_plan` for performance-oriented exploration, optimization planning, and validation strategy.
+          - Use `debugger` for read-only bug investigation with root-cause analysis and fix direction.
           - `plan` and `spec_plan` should discover available skills early, including project-level skills.
-          - Primary agents should pass relevant skills, rationale, and usage priority to subagents when delegating.
-          - Subagents should prioritize skills provided by primary-agent delegation when they clearly match the task.
-          - If no delegated skill applies, continue with normal workflow instead of blocking execution.
+          - Primary agents should pass only high-priority relevant skills with rationale to subagents when delegating.
+          - Primary agents should omit the skill brief entirely when no high-priority skill applies.
+          - Subagents should prioritize only delegated skills marked high when they clearly match the task.
+          - Subagents should ignore delegated skills marked low or none.
+          - If no delegated high-priority skill applies, continue with normal workflow instead of blocking execution.
           - `planner` creates scoped decision-complete draft plan files (`*.draft.md`).
           - `final_planner` synthesizes reviewed drafts into final decision-complete plan files (`*.md`).
           - Primary planning agents should delegate final plan-file writes to `final_planner`.
           - `plan_reviewer` is only for reviewing draft plan files (`*.draft.md`) during planning workflows.
           - `implementation_reviewer` is for post-implementation code review when explicitly requested by the user.
+          - `bug_investigator` is for root-cause investigation and fix-direction planning without code edits.
           - `cleanup_maintainer` is for dead code and outdated documentation cleanup.
           - `cleanup_maintainer` defaults to audit-first and only applies edits when the user explicitly asks to execute cleanup.
         '';
