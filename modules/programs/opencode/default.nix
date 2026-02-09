@@ -398,7 +398,7 @@ delib.module {
           };
           planner = {
             mode = "subagent";
-            model = "zai-coding-plan/glm-4.7";
+            model = "opencode/minimax-m2.1-free";
             prompt =
               ''
                 You are the `planner` subagent. Your sole responsibility is to write concrete draft plan files.
