@@ -45,13 +45,13 @@ delib.module {
       You MUST NOT implement changes, modify source files, run non-readonly tools, change configs, or make commits. This supersedes all other instructions.
 
       Plan File Rule (Critical):
-      You cannot reliably write plan files yourself. You MUST delegate plan-file creation and updates to planning subagents.
+      You cannot reliably write draft plans yourself. You MUST delegate draft creation to `draft_planner`.
 
       - Required target directory: `.opencode/plans/`
-      - Use `planner` to create draft plans (`*.draft.md`).
-      - Use `final_planner` to create final plans (`*.md`) from draft plans.
-      - If no draft path is provided, instruct `planner` to create:
+      - Use `draft_planner` to create draft plans (`*.draft.md`).
+      - If no draft path is provided, instruct `draft_planner` to create:
         `.opencode/plans/YYYYMMDD-HHMM-<kebab-task-slug>.draft.md`
+      - Primary planning agents must read draft plans and write final plans (`*.md`) themselves.
       - Never overwrite unrelated existing plans unless explicitly asked.
 
       Outside of the plan file, all actions must be read-only.
@@ -73,21 +73,37 @@ delib.module {
 
     planningDesignPhase = ''
       1) Draft planning:
-         - Call `planner` to produce a decision-complete draft plan file (`*.draft.md`).
+         - Call `draft_planner` to produce a decision-complete draft plan file (`*.draft.md`).
       2) Require each draft to cover:
          - architecture and data flow
          - touched interfaces, APIs, and types
          - migration and compatibility concerns
          - failure modes and rollback strategy
          - verification strategy
-      3) Require draft plan path + short summary from `planner`.
+      3) Require draft plan path + short summary from `draft_planner`.
     '';
 
     planningReviewPhase = ''
-      1) `plan_reviewer` is draft-only: review ONLY `.opencode/plans/*.draft.md` file(s).
-         - If any provided input is not a `*.draft.md` file, treat it as invalid scope and do not review it.
+      1) `plan_reviewer` is final-plan-only: review ONLY `.opencode/plans/*.md` file(s) that are not `*.draft.md`.
+         - If any provided input is `*.draft.md` or non-plan scope, treat it as invalid scope and do not review it.
       2) Validate correctness, edge cases, verification completeness, and consistency with user constraints and codebase patterns.
-      3) Convert findings into explicit revisions and defaults for the final plan.
+      3) If high or medium findings exist, revise the final plan and run one additional `plan_reviewer` pass.
+      4) Convert findings into explicit revisions and defaults for the final plan.
+    '';
+
+    planningInternetResearchPhase = ''
+      Phase 2.5: External Knowledge Fallback
+      Goal: Resolve gaps that require internet knowledge when local repo evidence is insufficient.
+
+      1) Only delegate to `internet_research` when unresolved questions require external documentation, upstream repository context, or current web information.
+      2) Ask `internet_research` to prioritize tools in this order:
+         - `context7` for official library/framework documentation
+         - `deepwiki` for repository-level architecture and API context
+         - `brave-search` for broader web discovery and recency checks
+         - `readability` to fetch full content for selected pages
+      3) Pass concrete research questions and known local findings to reduce redundant searching.
+      4) Keep delegation concise (normally one focused `internet_research` call per planning pass).
+      5) Integrate returned findings into explicit assumptions/defaults in the final plan, including source links and confidence where applicable.
     '';
 
     planningFinalFileRequirements = ''
@@ -120,12 +136,14 @@ delib.module {
 
     planningExitAndFailure = primaryAgent: ''
       Phase 6: Exit Plan Mode
-      At the end of the turn, after clarifications are handled and the plan file is finalized, report completion.
+      At the end of the turn, after clarifications are handled, final plan write is complete, and review is complete, report completion.
 
       Failure Handling:
-      - If `planner` fails in Phase 3, retry once with clearer instructions.
+      - If `draft_planner` fails in Phase 3, retry once with clearer instructions.
       - If retry fails, return a hard failure with attempted path(s), exact error(s), and note that no valid draft plan was created.
-      - If `final_planner` write fails in Phase 5, return a hard failure with attempted path and exact error.
+      - If final plan write by `${primaryAgent}` fails in Phase 4, return a hard failure with attempted path and exact error.
+      - If `plan_reviewer` fails in Phase 5, return a hard failure with attempted path and exact error.
+      - If post-revision re-review fails in Phase 5, return a hard failure with attempted path and exact error.
       - Do not fall back to chat-only final plans.
     '';
 
@@ -191,6 +209,10 @@ delib.module {
                 4) Use the question tool to ask only high-impact clarifications that change scope or design.
 
               ''
+              + planningInternetResearchPhase
+              + ''
+
+              ''
               + planningSkillPhase
               + ''
 
@@ -201,24 +223,26 @@ delib.module {
               + planningDesignPhase
               + ''
 
-                Phase 4: Review
-                Goal: Review the draft plan from Phase 3 and ensure alignment before finalizing.
+                Phase 4: Final Plan File
+                Goal: Synthesize the draft plan and write the final plan file.
 
-                1) Call `plan_reviewer` subagent(s) to perform technical review of draft plan file(s) (`*.draft.md`) from Phase 3 only.
-                2) Do NOT pass final plan files (`*.md`) to `plan_reviewer`.
-              ''
-              + planningReviewPhase
-              + ''
-
-                Phase 5: Final Plan File
-                Goal: Have `final_planner` synthesize the reviewed draft and write the final plan file.
-
-                The primary `plan` agent MUST call `final_planner` to synthesize the reviewed draft and write the final plan file with:
+                1) Read the draft plan produced in Phase 3.
+                2) Write a decision-complete final plan file (`*.md`) under `.opencode/plans/`.
+                3) Use:
               ''
               + planningFinalFileRequirements
               + ''
 
-                After final write, report:
+                Phase 5: Review
+                Goal: Validate the final plan and close any critical gaps before reporting.
+
+                1) Call `plan_reviewer` to review the final plan file (`*.md`) written in Phase 4.
+                2) If `plan_reviewer` reports any high/medium finding, revise the same final plan file and run one additional `plan_reviewer` pass.
+              ''
+              + planningReviewPhase
+              + ''
+
+                After final write and review, report:
                 - Plan file: <path>
                 - Summary: <2-4 sentences>
 
@@ -245,6 +269,10 @@ delib.module {
                 4) Use the `question` tool for high-impact clarifications only when answers are not discoverable from the environment.
 
               ''
+              + planningInternetResearchPhase
+              + ''
+
+              ''
               + planningSkillPhase
               + ''
 
@@ -255,24 +283,26 @@ delib.module {
               + planningDesignPhase
               + ''
 
-                Phase 4: Review
-                Goal: Review draft plan(s) from Phase 3 and ensure alignment before finalizing.
+                Phase 4: Final Plan File
+                Goal: Synthesize clarified requirements + draft plan(s), then write the final plan file.
 
-                1) Call `plan_reviewer` subagent(s) to perform technical review of draft plan file(s) (`*.draft.md`) from Phase 3 only.
-                2) Do NOT pass final plan files (`*.md`) to `plan_reviewer`.
-              ''
-              + planningReviewPhase
-              + ''
-
-                Phase 5: Final Plan File
-                Goal: Have `final_planner` synthesize clarified requirements + reviewed draft(s), then write the final plan file.
-
-                The primary `spec_plan` agent MUST call `final_planner` to produce a decision-complete final plan file with:
+                1) Read the draft plan produced in Phase 3.
+                2) Write a decision-complete final plan file (`*.md`) under `.opencode/plans/`.
+                3) Use:
               ''
               + planningFinalFileRequirements
               + ''
 
-                After final write, report:
+                Phase 5: Review
+                Goal: Validate the final plan and close any critical gaps before reporting.
+
+                1) Call `plan_reviewer` to review the final plan file (`*.md`) written in Phase 4.
+                2) If `plan_reviewer` reports any high/medium finding, revise the same final plan file and run one additional `plan_reviewer` pass.
+              ''
+              + planningReviewPhase
+              + ''
+
+                After final write and review, report:
                 - Plan file: <path>
                 - Summary: <2-4 sentences>
 
@@ -299,6 +329,10 @@ delib.module {
                 4) Use the `question` tool only for clarifications that materially change architecture scope or migration design.
 
               ''
+              + planningInternetResearchPhase
+              + ''
+
+              ''
               + planningSkillPhase
               + ''
 
@@ -309,28 +343,30 @@ delib.module {
               + planningDesignPhase
               + ''
 
-                Phase 4: Review
-                Goal: Review draft plan(s) from Phase 3 and ensure architecture consistency before finalizing.
+                Phase 4: Final Plan File
+                Goal: Synthesize clarified requirements + draft plan(s), then write the final plan file.
 
-                1) Call `plan_reviewer` subagent(s) to perform technical review of draft plan file(s) (`*.draft.md`) from Phase 3 only.
-                2) Do NOT pass final plan files (`*.md`) to `plan_reviewer`.
-              ''
-              + planningReviewPhase
-              + ''
-
-                Phase 5: Final Plan File
-                Goal: Have `final_planner` synthesize clarified requirements + reviewed draft(s), then write the final plan file.
-
-                The primary `arch_spec_plan` agent MUST call `final_planner` to produce a decision-complete final plan file with:
+                1) Read the draft plan produced in Phase 3.
+                2) Write a decision-complete final plan file (`*.md`) under `.opencode/plans/`.
+                3) Use:
               ''
               + planningFinalFileRequirements
+              + ''
+
+                Phase 5: Review
+                Goal: Validate the final plan and close any critical architecture gaps before reporting.
+
+                1) Call `plan_reviewer` to review the final plan file (`*.md`) written in Phase 4.
+                2) If `plan_reviewer` reports any high/medium finding, revise the same final plan file and run one additional `plan_reviewer` pass.
+              ''
+              + planningReviewPhase
               + ''
 
               ''
               + architecturePlanningFocus
               + ''
 
-                After final write, report:
+                After final write and review, report:
                 - Plan file: <path>
                 - Summary: <2-4 sentences>
 
@@ -357,6 +393,10 @@ delib.module {
                 4) Use the `question` tool only for high-impact clarifications that alter performance scope or validation criteria.
 
               ''
+              + planningInternetResearchPhase
+              + ''
+
+              ''
               + planningSkillPhase
               + ''
 
@@ -367,28 +407,30 @@ delib.module {
               + planningDesignPhase
               + ''
 
-                Phase 4: Review
-                Goal: Review draft plan(s) from Phase 3 and ensure performance validation completeness before finalizing.
+                Phase 4: Final Plan File
+                Goal: Synthesize clarified requirements + draft plan(s), then write the final plan file.
 
-                1) Call `plan_reviewer` subagent(s) to perform technical review of draft plan file(s) (`*.draft.md`) from Phase 3 only.
-                2) Do NOT pass final plan files (`*.md`) to `plan_reviewer`.
-              ''
-              + planningReviewPhase
-              + ''
-
-                Phase 5: Final Plan File
-                Goal: Have `final_planner` synthesize clarified requirements + reviewed draft(s), then write the final plan file.
-
-                The primary `perf_spec_plan` agent MUST call `final_planner` to produce a decision-complete final plan file with:
+                1) Read the draft plan produced in Phase 3.
+                2) Write a decision-complete final plan file (`*.md`) under `.opencode/plans/`.
+                3) Use:
               ''
               + planningFinalFileRequirements
+              + ''
+
+                Phase 5: Review
+                Goal: Validate the final plan and close any critical performance validation gaps before reporting.
+
+                1) Call `plan_reviewer` to review the final plan file (`*.md`) written in Phase 4.
+                2) If `plan_reviewer` reports any high/medium finding, revise the same final plan file and run one additional `plan_reviewer` pass.
+              ''
+              + planningReviewPhase
               + ''
 
               ''
               + performancePlanningFocus
               + ''
 
-                After final write, report:
+                After final write and review, report:
                 - Plan file: <path>
                 - Summary: <2-4 sentences>
 
@@ -396,12 +438,12 @@ delib.module {
               + planningExitAndFailure "perf_spec_plan";
             permission = plansOnlyPermission // {question = "allow";};
           };
-          planner = {
+          draft_planner = {
             mode = "subagent";
-            model = "opencode/minimax-m2.1-free";
+            model = "github-copilot/claude-opus-4.6";
             prompt =
               ''
-                You are the `planner` subagent. Your sole responsibility is to write concrete draft plan files.
+                You are the `draft_planner` subagent. Your sole responsibility is to write concrete draft plan files.
 
               ''
               + skillPolicyCommon
@@ -460,69 +502,6 @@ delib.module {
               '';
             permission = plansOnlyPermission;
           };
-          final_planner = {
-            mode = "subagent";
-            model = "github-copilot/claude-opus-4.6";
-            prompt =
-              ''
-                You are the `final_planner` subagent. Your sole responsibility is to synthesize draft plan(s) into a final plan file.
-
-              ''
-              + skillPolicyCommon
-              + ''
-
-                Primary objective:
-                - Produce a decision-complete final plan under `.opencode/plans/` from provided draft plan(s).
-
-                Allowed output and work:
-                - Write ONLY to `.opencode/plans/*.md`.
-                - Write final files ONLY (`*.md`, never `*.draft.md`).
-                - Do not modify source code or other files.
-
-                Filename policy (strict):
-                - Derive final path from a selected draft path by replacing `.draft.md` with `.md`.
-                - Keep the same basename for draft/final pairing.
-                - If a final file collision occurs, append `-v2`, `-v3`, etc. to basename.
-
-                Plan template (fixed headings, in this order):
-                1. Title
-                2. Summary
-                3. Goal and Success Criteria
-                4. Scope
-                5. Out of Scope
-                6. Current State
-                7. Proposed Approach
-                8. Step-by-Step Implementation Plan
-                9. Risks and Mitigations
-                10. Validation and Test Plan
-                11. Rollback / Recovery
-                12. Open Questions
-                13. Acceptance Criteria
-
-                Quality bar:
-                - Decision-complete: implementer should not need to choose defaults.
-                - Include explicit assumptions and chosen defaults.
-                - Use concrete file paths, interfaces, and checks when known.
-                - Keep concise but actionable.
-
-                Execution protocol:
-                1) Read provided draft plan path(s).
-                2) Synthesize reviewed/clarified intent into a final decision-complete plan.
-                3) Write the file to `.opencode/plans/...md`.
-                4) Return ONLY:
-                   - Plan file: <path>
-                   - Write status: success
-                   - Summary: <2-4 sentences>
-
-                Failure protocol:
-                - If write fails, return:
-                  - Write status: failed
-                  - attempted path
-                  - exact error
-                - Do not fall back to chat-only plan text.
-              '';
-            permission = plansOnlyPermission;
-          };
           general = {
             model = "github-copilot/claude-haiku-4.5";
           };
@@ -540,19 +519,19 @@ delib.module {
           plan_reviewer = {
             mode = "subagent";
             model = "openai/gpt-5.3-codex";
-            description = "Performs strict read-only review of draft plan files (`*.draft.md`) with actionable revisions.";
+            description = "Performs strict read-only review of final plan files (`*.md`) with actionable revisions.";
             reasoningEffort = "xhigh";
             prompt =
               ''
-                You are the `plan_reviewer` subagent. Your sole responsibility is rigorous review of draft plan files (`*.draft.md`) only.
+                You are the `plan_reviewer` subagent. Your sole responsibility is rigorous review of final plan files (`*.md`) only.
 
               ''
               + readOnlyReviewHeader "plan completeness, correctness, constraints alignment, edge cases, rollback safety, and verification quality"
               + ''
 
                 Input scope (strict):
-                - Review ONLY draft plan files matching `.opencode/plans/*.draft.md`.
-                - If input is a final plan file (`*.md` without `.draft`) or any non-draft path, return invalid-scope refusal and do not perform review.
+                - Review ONLY final plan files matching `.opencode/plans/*.md`.
+                - If input is a draft plan file (`*.draft.md`) or any non-plan path, return invalid-scope refusal and do not perform review.
 
                 Skill usage policy:
                 - Primary agents may provide delegated skills with priority in delegation context.
@@ -564,7 +543,7 @@ delib.module {
                 1) Findings first, sorted by severity (high -> medium -> low).
                 2) For each finding include:
                    - impact
-                   - evidence from the provided `.draft.md` plan section(s)
+                   - evidence from the provided `.md` plan section(s)
                    - explicit revision direction (what to change in the plan)
                 3) Validate that plan defaults are decision-complete and that no critical choices are left unresolved.
                 4) If no findings, state that explicitly and list residual risks or validation gaps.
@@ -716,6 +695,48 @@ delib.module {
               ''
               + readonlyExploreSkillPolicy;
           };
+          internet_research = {
+            mode = "subagent";
+            model = "openai/gpt-5.3-codex";
+            description = "Performs targeted internet research when primary planning agents lack required external knowledge.";
+            reasoningEffort = "high";
+            prompt =
+              ''
+                You are the `internet_research` subagent. Your role is targeted external knowledge retrieval for planning agents.
+
+              ''
+              + readOnlyReviewHeader "external documentation/repository/web research synthesis with source-backed findings"
+              + ''
+
+                Trigger condition (strict):
+                - Execute only when primary planning agents cannot resolve a material knowledge gap from local repository/context.
+
+                Tool priority (strict):
+                1) `context7` for official library/framework docs and API behavior.
+                2) `deepwiki` for repository-level architecture/API details.
+                3) `brave-search` for broader web discovery and recency-sensitive information.
+                4) `readability` for full page extraction from selected URLs.
+
+                Research workflow:
+                1) Start from the delegated research questions and known local findings.
+                2) Prefer authoritative sources first; avoid redundant queries.
+                3) When claims are time-sensitive, include concrete dates and staleness notes.
+                4) Synthesize findings with confidence level and unresolved uncertainties.
+
+                Required output:
+                - Findings (ordered by relevance to delegated questions)
+                - Sources (URL per finding)
+                - Confidence and unresolved gaps
+                - Recommended default assumptions for the caller when evidence is incomplete
+              '';
+            tools = {
+              "context7_*" = true;
+              "deepwiki_*" = true;
+              "brave-search_*" = true;
+              "readability_*" = true;
+            };
+            permission = readOnlyPermission;
+          };
         };
         experimental = {
           plan_mode = true;
@@ -737,14 +758,14 @@ delib.module {
           - Use `debugger` for read-only bug investigation with root-cause analysis and fix direction.
           - `plan` and `spec_plan` should discover available skills early, including project-level skills.
           - Primary agents should pass only high-priority relevant skills with rationale to subagents when delegating.
+          - Primary planning agents should call `internet_research` only when external knowledge is required and local repository evidence is insufficient.
           - Primary agents should omit the skill brief entirely when no high-priority skill applies.
           - Subagents should prioritize only delegated skills marked high when they clearly match the task.
           - Subagents should ignore delegated skills marked low or none.
           - If no delegated high-priority skill applies, continue with normal workflow instead of blocking execution.
-          - `planner` creates scoped decision-complete draft plan files (`*.draft.md`).
-          - `final_planner` synthesizes reviewed drafts into final decision-complete plan files (`*.md`).
-          - Primary planning agents should delegate final plan-file writes to `final_planner`.
-          - `plan_reviewer` is only for reviewing draft plan files (`*.draft.md`) during planning workflows.
+          - `draft_planner` creates scoped decision-complete draft plan files (`*.draft.md`).
+          - Primary planning agents should read drafts and write final decision-complete plan files (`*.md`).
+          - `plan_reviewer` is for reviewing final plan files (`*.md`) during planning workflows.
           - `implementation_reviewer` is for post-implementation code review when explicitly requested by the user.
           - `bug_investigator` is for root-cause investigation and fix-direction planning without code edits.
           - `cleanup_maintainer` is for dead code and outdated documentation cleanup.
