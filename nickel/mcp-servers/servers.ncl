@@ -11,8 +11,7 @@ let { Server, .. } = import "./schema.ncl" in
     },
 
     deepwiki = {
-      url = "https://mcp.deepwiki.com/sse",
-      type = 'sse,
+      url = "https://mcp.deepwiki.com/mcp",
     },
 
     readability = {
@@ -65,7 +64,6 @@ let { Server, .. } = import "./schema.ncl" in
   enabled = {
     mcphub = [
       "brave-search",
-      "deepwiki",
       "readability",
       "tavily",
       "chrome-devtools",
@@ -76,7 +74,6 @@ let { Server, .. } = import "./schema.ncl" in
 
     claude_code = [
       "brave-search",
-      "deepwiki",
       "readability",
       "morph-fast-apply",
       "kiri",
@@ -103,7 +100,6 @@ let { Server, .. } = import "./schema.ncl" in
 
     crush = [
       "brave-search",
-      "deepwiki",
       "readability",
       "morph-fast-apply",
       "kiri",

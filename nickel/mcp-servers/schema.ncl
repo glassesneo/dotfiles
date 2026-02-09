@@ -4,7 +4,7 @@
   Server = {
     # Command identifier (resolved to path in Nix)
     command_id | String | optional,
-    # URL for SSE-based servers
+    # URL for remote MCP servers
     url | String | optional,
     # Additional arguments for the command
     args | Array String | default = [],
