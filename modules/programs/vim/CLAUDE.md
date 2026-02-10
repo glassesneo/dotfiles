@@ -21,12 +21,19 @@ options.programs.myvimeditor.colorscheme = {
 
 ## DPP Plugin Manager
 
-- Config: `dpp.ts` (TypeScript/Denops) + `setup-dpp.vim` (loader)
-- Plugin defs: `plugins/skk.toml` (SKKeleton Japanese input)
-- Hooks: `hooks/skk.vim` (dict path injected via `replaceVars`)
-- State cached in `~/.cache/vim-dpp/`. Commands: `DppInstall`, `DppUpdate`, `DppClearState`.
-- Files deployed to `~/.config/vim-dpp/`.
+- DPP ownership follows the shared core + editor bootstrap split used in `modules/programs/nixvim/plugins/dpp/README.md`.
+- **Shared core layer**: `modules/config/dpp-shared.nix`
+  - Builds shared plugin packages (`dppShared.dppPluginPkgs`)
+  - Compiles generated TOMLs (`dppShared.pluginTomls`)
+  - Exposes shared hook sources (`dppShared.sharedHookSources.skkVim`)
+- Plugin definitions come from shared Nickel specs in `modules/programs/nixvim/plugins/dpp/plugins/`, with editor/host guards (for example `if = "has('nvim')"`) so one spec set can serve Vim and Neovim.
+- **Vim-specific bootstrap**: `modules/programs/vim/default.nix`
+  - Owns Vim loader setup (`setup-dpp.vim`)
+  - Owns Vim environment wiring (`$DPP_HOOK_DIR`) and runtimepath wiring
+  - Deploys Vim-facing config under `~/.config/vim-dpp/`
+- SKK hook source is shared from `dppShared.sharedHookSources.skkVim` and dictionary path is injected in Vim module wiring.
+- Cache/state path remains `~/.cache/vim-dpp` (separate from Neovim `~/.cache/dpp`).
 
 ## Key Detail
 
-`home.sessionVariables.EDITOR = lib.mkForce "vim"` — overrides nixvim's default editor setting.
+`programs.myvimeditor` remains a dedicated module name to avoid collision with nixvim's `programs.vim`.

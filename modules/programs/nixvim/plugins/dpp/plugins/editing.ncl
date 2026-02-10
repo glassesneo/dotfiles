@@ -3,6 +3,7 @@
     [
         {
           repo = "ysmb-wtsg/in-and-out.nvim",
+          "if" = "has('nvim')",
           on_map = { i = "<C-CR>" },
           lua_add = "",
           lua_source =

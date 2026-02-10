@@ -22,13 +22,13 @@ Full Neovim configuration via nixvim. Module name: `programs.nixvim`.
 ## Plugin Organization
 
 - **Lazy loading**: Most plugins use `lz.n` with event/cmd/ft triggers.
-- **DPP (Denops plugin manager)**: Manages editing/motion/SKK plugins via TOML configs generated from Nickel.
-  - Source of truth: `.ncl` files. TOML is generated from Nickel and loaded from the config plugin dir.
+- **DPP (Denops plugin manager)**: keeps plugin declaration, compile, and runtime loading concerns intentionally separated.
+  - Shared core layer: `modules/config/dpp-shared.nix` provides shared plugin packages (`dppShared.dppPluginPkgs`), generated TOMLs (`dppShared.pluginTomls`), and shared hook sources (`dppShared.sharedHookSources.skkVim`).
+  - Neovim bootstrap ownership: `modules/programs/nixvim/plugins/dpp/default.nix` owns Neovim setup (`setup-dpp.lua`), environment wiring, and Neovim cache/state paths.
+  - Plugin definitions come from shared Nickel specs in `modules/programs/nixvim/plugins/dpp/plugins/` (`{editing,motion,skk}.ncl`) with contract validation in `plugins_contract.ncl`.
   - Regenerate helper (optional/manual): `nix develop -c bash plugins/dpp/regenerate-toml.sh`
-  - Plugin definitions live in Nickel: `plugins/dpp/plugins/{editing,motion,skk}.ncl`
-  - Generated TOML artifacts may be local/untracked and are not required git snapshots.
-  - Nickel contract validation: `plugins/dpp/plugins/plugins_contract.ncl`
-  - State cached in `$XDG_CACHE_HOME/dpp/`. Commands: `:DppInstall`, `:DppUpdate`, `:DppClearState`.
+  - SKK hook source is shared from `dppShared.sharedHookSources.skkVim`; Neovim-specific Lua behavior stays in Neovim-owned hooks or inline Lua blocks.
+  - Cache/state path remains `~/.cache/dpp` (separate from Vim `~/.cache/vim-dpp`). Commands: `:DppInstall`, `:DppUpdate`, `:DppClearState`.
 - **Completion**: blink-cmp with LSP, path, buffer, ripgrep, copilot, snippets, git sources.
 - **AI** (`plugins/ai/`): codecompanion split into four `delib.module` files:
   - `default.nix` — composition root (copilot, strategies, display, lazy keys)

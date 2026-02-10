@@ -4,6 +4,7 @@
         { repo = "lambdalisue/kensaku.vim" },
         {
           repo = "lambdalisue/kensaku-search.vim",
+          "if" = "has('nvim')",
           depends = [ "kensaku.vim" ],
           on_map = { c = "<Plug>(kensaku-search-replace)" },
           lua_add =
@@ -11,6 +12,7 @@
         },
         {
           repo = "yuki-yano/fuzzy-motion.vim",
+          "if" = "has('nvim')",
           depends = [ "kensaku.vim" ],
           on_cmd = "FuzzyMotion",
           lua_add =
@@ -20,6 +22,7 @@
         },
         {
           repo = "skanehira/jumpcursor.vim",
+          "if" = "has('nvim')",
           on_map = "<Plug>(jumpcursor-jump)",
           lua_add =
             "  vim.keymap.set(\"n\", \"<CR>j\", \"<Plug>(jumpcursor-jump)\")\n"
