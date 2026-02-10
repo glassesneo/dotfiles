@@ -192,21 +192,11 @@ local function today_command()
     return
   end
 
-  -- Extract Top3 from yesterday (precedence: daily file first, then monthly)
+  -- Extract Top3 from yesterday (precedence: monthly diary first, daily file fallback)
   local top3 = {}
 
-  -- Try daily file first
-  if vim.fn.filereadable(daily_yesterday) == 1 then
-    local ok_read, daily_content = pcall(vim.fn.readfile, daily_yesterday)
-    if ok_read and daily_content then
-      top3 = extract_top3_from_daily(daily_content)
-    else
-      vim.notify("Today: failed to read " .. daily_yesterday .. ": " .. tostring(daily_content), vim.log.levels.WARN)
-    end
-  end
-
-  -- Fallback to monthly file if no Top3 from daily
-  if #top3 == 0 and vim.fn.filereadable(monthly_yesterday) == 1 then
+  -- Try monthly diary file first (primary source - contains user's explicit 明日のTop3)
+  if vim.fn.filereadable(monthly_yesterday) == 1 then
     local ok_read, monthly_content = pcall(vim.fn.readfile, monthly_yesterday)
     if ok_read and monthly_content then
       top3 = extract_top3_from_monthly(monthly_content, yesterday_date)
@@ -215,6 +205,16 @@ local function today_command()
         "Today: failed to read " .. monthly_yesterday .. ": " .. tostring(monthly_content),
         vim.log.levels.WARN
       )
+    end
+  end
+
+  -- Fallback to daily file if no Top3 from diary
+  if #top3 == 0 and vim.fn.filereadable(daily_yesterday) == 1 then
+    local ok_read, daily_content = pcall(vim.fn.readfile, daily_yesterday)
+    if ok_read and daily_content then
+      top3 = extract_top3_from_daily(daily_content)
+    else
+      vim.notify("Today: failed to read " .. daily_yesterday .. ": " .. tostring(daily_content), vim.log.levels.WARN)
     end
   end
 

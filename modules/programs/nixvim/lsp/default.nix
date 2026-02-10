@@ -9,102 +9,42 @@ delib.module {
 
   options = delib.singleEnableOption true;
 
-  home.ifEnabled.programs.nixvim = {
+  home.ifEnabled.programs.nixvim = let
+    # Shared defaults for all LSP servers managed by Nix.
+    # All servers use package = null (PATH-based binary resolution).
+    # Servers needing custom config override via `mkServer config`.
+    defaultServer = {enable = true; package = null;};
+    mkServer = config: defaultServer // {inherit config;};
+  in {
     lsp = {
       inlayHints.enable = true;
       servers = {
-        bashls = {
-          enable = true;
-          package = null;
-          config = {
-            cmd = ["${lib.getExe pkgs.bash-language-server}"];
-          };
+        # --- Servers with custom config ---
+
+        bashls = mkServer {
+          cmd = ["${lib.getExe pkgs.bash-language-server}"];
         };
-        basedpyright = {
-          enable = true;
-          package = null;
+        elmls = mkServer {
+          root_markers = ["elm.json"];
         };
-        biome = {
-          enable = true;
-          package = null;
+        hls = mkServer {
+          haskell.formattingProvider = "fourmolu";
         };
-        elmls = {
-          enable = true;
-          package = null;
-          config = {
-            root_markers = [
-              "elm.json"
-            ];
-          };
+        kotlin_language_server = mkServer {
+          root_markers = [];
         };
-        gopls = {
-          enable = true;
-          package = null;
+        marksman = mkServer {
+          filetypes = ["markdown"];
         };
-        hls = {
-          enable = true;
-          package = null;
-          config = {
-            haskell = {
-              formattingProvider = "fourmolu";
-            };
-          };
+        nixd = mkServer {
+          cmd = ["${lib.getExe pkgs.nixd}"];
+          nixpkgs.expr = "import <nixpkgs> { }";
+          formatting.command = ["alejandra"];
         };
-        kotlin_language_server = {
-          enable = true;
-          package = null;
-          config = {
-            root_markers = [];
-          };
+        tinymist = mkServer {
+          formatterMode = "typstyle";
         };
-        marksman = {
-          enable = true;
-          package = null;
-          config = {
-            filetypes = ["markdown"];
-          };
-        };
-        nickel_ls = {
-          enable = true;
-          package = null;
-        };
-        nixd = {
-          enable = true;
-          package = null;
-          config = {
-            cmd = ["${lib.getExe pkgs.nixd}"];
-            nixpkgs.expr = "import <nixpkgs> { }";
-            formatting = {
-              command = ["alejandra"];
-            };
-          };
-        };
-        nim_langserver = {
-          enable = true;
-          package = null;
-        };
-        nushell = {
-          enable = true;
-          package = null;
-        };
-        prismals = {
-          enable = true;
-          package = null;
-        };
-        taplo = {
-          enable = true;
-          package = null;
-        };
-        tinymist = {
-          enable = true;
-          package = null;
-          config = {
-            formatterMode = "typstyle";
-          };
-        };
-        zls = {
-          enable = true;
-          package = null;
+        zls = defaultServer // {
           config.zls = {
             enable_snippets = true;
             enable_ast_check_diagnostics = true;
@@ -120,12 +60,21 @@ delib.module {
             include_at_in_builtins = true;
           };
         };
+
+        # --- Servers with default config (enable + PATH-based binary) ---
+
+        basedpyright = defaultServer;
+        biome = defaultServer;
+        gopls = defaultServer;
+        nickel_ls = defaultServer;
+        nim_langserver = defaultServer;
+        nushell = defaultServer;
+        prismals = defaultServer;
+        taplo = defaultServer;
       };
     };
     plugins = {
-      lspconfig = {
-        enable = true;
-      };
+      lspconfig.enable = true;
       lsp-format = {
         enable = true;
         lspServersToEnable = [
@@ -138,6 +87,10 @@ delib.module {
         ];
       };
     };
+    # Imperative LSP concerns live in extra.lua:
+    # - Servers not in nixvim schema (emmylua_ls, sourcekit, denols, ts_ls, efm, moonbit-lsp)
+    # - vim.lsp.config overrides requiring Lua-only APIs (workspace library paths, init_options)
+    # - efm language/formatter definitions
     extraConfigLuaPost = builtins.readFile ./extra.lua;
     extraPackages = [pkgs.efm-langserver];
   };

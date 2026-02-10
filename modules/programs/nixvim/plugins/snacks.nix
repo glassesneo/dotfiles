@@ -1,8 +1,11 @@
 {
   delib,
-  # homeConfig,
+  nixvimConventions,
   ...
 }:
+let
+  owns = nixvimConventions.keymapOwnership;
+in
 delib.module {
   name = "programs.nixvim.plugins.snacks";
 
@@ -103,32 +106,15 @@ delib.module {
         action.__raw = "Snacks.bufdelete.delete";
         key = "<Space><CR>";
       }
-      {
+    ] ++ (if owns.smartPicker == "snacks" then [{
         action.__raw = "Snacks.picker.smart";
         key = "<Space><Space>";
-      }
-      # {
-      #   action.__raw = ''
-      #     function()
-      #       require("lz.n").trigger_load('orgmode')
-      #       Snacks.picker.files({ cwd = "${homeConfig.home.homeDirectory}/orgfiles" })
-      #     end
-      #   '';
-      #   key = "<Space>o<Space>";
-      # }
-      {
+      }] else [])
+    ++ (if owns.grep == "snacks" then [{
         action.__raw = "Snacks.picker.grep";
         key = "<Space>g";
-      }
-      # {
-      #   action.__raw = ''
-      #     function()
-      #       require("lz.n").trigger_load('orgmode')
-      #       Snacks.picker.grep({ cwd = "${homeConfig.home.homeDirectory}/orgfiles" })
-      #     end
-      #   '';
-      #   key = "<Space>og";
-      # }
+      }] else [])
+    ++ [
       {
         action.__raw = "Snacks.picker.pickers";
         key = "<Space><C-p>";
@@ -141,10 +127,9 @@ delib.module {
         action.__raw = "Snacks.picker.lsp_symbols";
         key = "<Space><C-l>";
       }
-      {
+    ] ++ (if owns.explorer == "snacks" then [{
         action.__raw = "Snacks.picker.explorer";
         key = "<Space>f";
-      }
-    ];
+      }] else []);
   };
 }

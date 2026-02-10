@@ -13,14 +13,58 @@ delib.module {
     orgfiles = "${homeConfig.home.homeDirectory}/orgfiles";
     journalTemplate = "${orgfiles}/journal/%<%Y-%m>.org";
     readLaterFile = "${orgfiles}/inbox.org";
+
+    # --- Shared file lists (deduplicated) ---
+    inboxOnly = ["${orgfiles}/inbox.org"];
+    allFiles = ["${orgfiles}/inbox.org" "${orgfiles}/projects/**/*"];
+    journalFiles = ["${orgfiles}/journal/**/*.org"];
+    zettelLitFiles = ["${orgfiles}/zettelkasten/literature/**/*"];
+    zettelKnowFiles = ["${orgfiles}/zettelkasten/knowledge/**/*"];
+
+    # --- Agenda command constructors ---
+    # Single tags query (non-todo).
+    mkTagsCmd = {description, match, header, files, extra ? {}}: {
+      inherit description;
+      types = [(
+        {
+          type = "tags";
+          inherit match;
+          todo_only = false;
+          org_agenda_overriding_header = header;
+          org_agenda_files = files;
+        } // extra
+      )];
+    };
+
+    # Single tags_todo query with LEVEL=1 default.
+    mkTodoCmd = {description, header, files, match ? "LEVEL=1", extra ? {}}: {
+      inherit description;
+      types = [(
+        {
+          type = "tags_todo";
+          inherit match;
+          org_agenda_overriding_header = header;
+          org_agenda_files = files;
+        } // extra
+      )];
+    };
+
+    # Single agenda query with optional span.
+    mkAgendaCmd = {description, header, files, extra ? {}}: {
+      inherit description;
+      types = [(
+        {
+          type = "agenda";
+          org_agenda_overriding_header = header;
+          org_agenda_files = files;
+        } // extra
+      )];
+    };
   in {
     programs.nixvim.plugins.orgmode = {
       enable = true;
       settings = {
-        org_agenda_files = [
-          "${orgfiles}/inbox.org"
-          "${orgfiles}/projects/**/*"
-        ];
+        org_agenda_files = allFiles;
         org_default_notes_file = "${orgfiles}/inbox.org";
         org_archive_location = "${orgfiles}/archive/%s_archive::";
         org_todo_keywords = [
@@ -32,283 +76,38 @@ delib.module {
           "CANCELLED"
         ];
         org_agenda_custom_commands = {
-          i = {
+          # --- GTD views ---
+          i = mkTagsCmd {
             description = "Inbox";
-            types = [
-              {
-                type = "tags";
-                match = "LEVEL=1";
-                todo_only = false;
-                org_agenda_overriding_header = "Inbox";
-                org_agenda_files = ["${orgfiles}/inbox.org"];
-              }
-            ];
+            match = "LEVEL=1";
+            header = "Inbox";
+            files = inboxOnly;
           };
-          t = {
+          t = mkTodoCmd {
             description = "Todo";
-            types = [
-              {
-                type = "tags_todo";
-                match = "LEVEL=1";
-                org_agenda_overriding_header = "Todo";
-                org_agenda_files = ["${orgfiles}/inbox.org"];
-              }
-            ];
+            header = "Todo";
+            files = inboxOnly;
           };
-          p = {
+          p = mkTodoCmd {
             description = "Project TODOs";
-            types = [
-              {
-                type = "tags_todo";
-                match = "LEVEL=1";
-                org_agenda_overriding_header = "Projects";
-                org_agenda_files = [
-                  "${orgfiles}/inbox.org"
-                  "${orgfiles}/projects/**/*"
-                ];
-              }
-            ];
+            header = "Projects";
+            files = allFiles;
           };
-          n = {
+          n = mkTodoCmd {
             description = "Next Actions";
-            types = [
-              {
-                type = "tags_todo";
-                match = "LEVEL=1";
-                org_agenda_overriding_header = "Next Actions";
-                org_agenda_files = [
-                  "${orgfiles}/inbox.org"
-                  "${orgfiles}/projects/**/*"
-                ];
-              }
-            ];
+            header = "Next Actions";
+            files = allFiles;
           };
-          w = {
+          w = mkTodoCmd {
             description = "Waiting";
-            types = [
-              {
-                type = "tags_todo";
-                match = "LEVEL=1";
-                org_agenda_overriding_header = "Waiting";
-                org_agenda_files = [
-                  "${orgfiles}/inbox.org"
-                  "${orgfiles}/projects/**/*"
-                ];
-              }
-            ];
+            header = "Waiting";
+            files = allFiles;
           };
-          d = {
+          d = mkAgendaCmd {
             description = "Deadlines (14d)";
-            types = [
-              {
-                type = "agenda";
-                org_agenda_deadline_warning_days = 14;
-                org_agenda_files = [
-                  "${orgfiles}/inbox.org"
-                  "${orgfiles}/projects/**/*"
-                ];
-              }
-            ];
-          };
-          O = {
-            description = "Daily Overview";
-            types = [
-              {
-                type = "agenda";
-                org_agenda_span = "day";
-                org_agenda_overriding_header = "Daily Overview";
-                org_agenda_files = [
-                  "${orgfiles}/inbox.org"
-                  "${orgfiles}/projects/**/*"
-                ];
-              }
-            ];
-          };
-          C = {
-            description = "Daily Check-in";
-            types = [
-              {
-                type = "tags";
-                match = "checkin";
-                todo_only = false;
-                org_agenda_overriding_header = "Daily Check-in";
-                org_agenda_files = [
-                  "${orgfiles}/journal/**/*.org"
-                ];
-              }
-            ];
-          };
-          D = {
-            description = "Diary Entries";
-            types = [
-              {
-                type = "tags";
-                match = "diary";
-                todo_only = false;
-                org_agenda_overriding_header = "Diary Entries";
-                org_agenda_files = [
-                  "${orgfiles}/journal/**/*.org"
-                ];
-              }
-            ];
-          };
-          W = {
-            description = "Weekly Overview";
-            types = [
-              {
-                type = "agenda";
-                org_agenda_span = "week";
-                org_agenda_overriding_header = "Weekly Overview";
-                org_agenda_files = [
-                  "${orgfiles}/inbox.org"
-                  "${orgfiles}/projects/**/*"
-                ];
-              }
-              {
-                type = "tags_todo";
-                match = "LEVEL=1";
-                org_agenda_overriding_header = "Unscheduled Actions";
-                org_agenda_todo_ignore_scheduled = "all";
-                org_agenda_todo_ignore_deadlines = "all";
-                org_agenda_files = [
-                  "${orgfiles}/inbox.org"
-                  "${orgfiles}/projects/**/*"
-                ];
-              }
-              {
-                type = "tags_todo";
-                match = "LEVEL=1";
-                org_agenda_overriding_header = "Recently Completed";
-                org_agenda_files = [
-                  "${orgfiles}/inbox.org"
-                  "${orgfiles}/projects/**/*"
-                ];
-              }
-            ];
-          };
-          M = {
-            description = "Monthly Overview";
-            types = [
-              {
-                type = "agenda";
-                org_agenda_span = "month";
-                org_agenda_overriding_header = "Monthly Overview";
-                org_agenda_files = [
-                  "${orgfiles}/inbox.org"
-                  "${orgfiles}/projects/**/*"
-                ];
-              }
-            ];
-          };
-          Z = {
-            description = "Zettelkasten Overview";
-            types = [
-              {
-                type = "tags";
-                match = "LEVEL=1";
-                org_agenda_overriding_header = "Fleeting Notes";
-                org_agenda_files = [
-                  "${orgfiles}/inbox.org"
-                ];
-              }
-              {
-                type = "tags";
-                match = "LEVEL=1+literature";
-                org_agenda_overriding_header = "Literature Notes";
-                org_agenda_files = [
-                  "${orgfiles}/zettelkasten/literature/**/*"
-                ];
-              }
-              {
-                type = "tags";
-                match = "LEVEL=1+permanent";
-                org_agenda_overriding_header = "Permanent Notes";
-                org_agenda_files = [
-                  "${orgfiles}/zettelkasten/knowledge/**/*"
-                ];
-              }
-              {
-                type = "tags";
-                match = "LEVEL=1+structure";
-                org_agenda_overriding_header = "Structure Notes";
-                org_agenda_files = [
-                  "${orgfiles}/zettelkasten/knowledge/**/*"
-                ];
-              }
-              {
-                type = "tags";
-                match = "LEVEL=1+index";
-                org_agenda_overriding_header = "Index Notes";
-                org_agenda_files = [
-                  "${orgfiles}/zettelkasten/knowledge/**/*"
-                ];
-              }
-            ];
-          };
-          F = {
-            description = "Zettelkasten | Fleeting Notes";
-            types = [
-              {
-                type = "tags";
-                match = "LEVEL=1";
-                org_agenda_overriding_header = "Fleeting Notes";
-                org_agenda_files = [
-                  "${orgfiles}/inbox.org"
-                ];
-              }
-            ];
-          };
-          L = {
-            description = "Zettelkasten | Literature Notes";
-            types = [
-              {
-                type = "tags";
-                match = "LEVEL=1+literature";
-                org_agenda_overriding_header = "Literature Notes";
-                org_agenda_files = [
-                  "${orgfiles}/zettelkasten/literature/**/*"
-                ];
-              }
-            ];
-          };
-          P = {
-            description = "Zettelkasten | Permanent Notes";
-            types = [
-              {
-                type = "tags";
-                match = "LEVEL=1+permanent";
-                org_agenda_overriding_header = "Permanent Notes";
-                org_agenda_files = [
-                  "${orgfiles}/zettelkasten/knowledge/**/*"
-                ];
-              }
-            ];
-          };
-          S = {
-            description = "Zettelkasten | Structure Notes";
-            types = [
-              {
-                type = "tags";
-                match = "LEVEL=1+structure";
-                org_agenda_overriding_header = "Structure Notes";
-                org_agenda_files = [
-                  "${orgfiles}/zettelkasten/knowledge/**/*"
-                ];
-              }
-            ];
-          };
-          I = {
-            description = "Zettelkasten | Index Notes";
-            types = [
-              {
-                type = "tags";
-                match = "LEVEL=1+index";
-                org_agenda_overriding_header = "Index Notes";
-                org_agenda_files = [
-                  "${orgfiles}/zettelkasten/knowledge/**/*"
-                ];
-              }
-            ];
+            header = "Deadlines (14d)";
+            files = allFiles;
+            extra.org_agenda_deadline_warning_days = 14;
           };
           R = {
             description = "Read later";
@@ -320,6 +119,131 @@ delib.module {
                 org_agenda_files = [readLaterFile];
               }
             ];
+          };
+
+          # --- Time-span overviews ---
+          O = mkAgendaCmd {
+            description = "Daily Overview";
+            header = "Daily Overview";
+            files = allFiles;
+            extra.org_agenda_span = "day";
+          };
+          W = {
+            description = "Weekly Overview";
+            types = [
+              {
+                type = "agenda";
+                org_agenda_span = "week";
+                org_agenda_overriding_header = "Weekly Overview";
+                org_agenda_files = allFiles;
+              }
+              {
+                type = "tags_todo";
+                match = "LEVEL=1";
+                org_agenda_overriding_header = "Unscheduled Actions";
+                org_agenda_todo_ignore_scheduled = "all";
+                org_agenda_todo_ignore_deadlines = "all";
+                org_agenda_files = allFiles;
+              }
+              {
+                type = "tags_todo";
+                match = "LEVEL=1";
+                org_agenda_overriding_header = "Recently Completed";
+                org_agenda_files = allFiles;
+              }
+            ];
+          };
+          M = mkAgendaCmd {
+            description = "Monthly Overview";
+            header = "Monthly Overview";
+            files = allFiles;
+            extra.org_agenda_span = "month";
+          };
+
+          # --- Journal views ---
+          C = mkTagsCmd {
+            description = "Daily Check-in";
+            match = "checkin";
+            header = "Daily Check-in";
+            files = journalFiles;
+          };
+          D = mkTagsCmd {
+            description = "Diary Entries";
+            match = "diary";
+            header = "Diary Entries";
+            files = journalFiles;
+          };
+
+          # --- Zettelkasten views ---
+          Z = {
+            description = "Zettelkasten Overview";
+            types = [
+              {
+                type = "tags";
+                match = "LEVEL=1";
+                todo_only = false;
+                org_agenda_overriding_header = "Fleeting Notes";
+                org_agenda_files = inboxOnly;
+              }
+              {
+                type = "tags";
+                match = "LEVEL=1+literature";
+                todo_only = false;
+                org_agenda_overriding_header = "Literature Notes";
+                org_agenda_files = zettelLitFiles;
+              }
+              {
+                type = "tags";
+                match = "LEVEL=1+permanent";
+                todo_only = false;
+                org_agenda_overriding_header = "Permanent Notes";
+                org_agenda_files = zettelKnowFiles;
+              }
+              {
+                type = "tags";
+                match = "LEVEL=1+structure";
+                todo_only = false;
+                org_agenda_overriding_header = "Structure Notes";
+                org_agenda_files = zettelKnowFiles;
+              }
+              {
+                type = "tags";
+                match = "LEVEL=1+index";
+                todo_only = false;
+                org_agenda_overriding_header = "Index Notes";
+                org_agenda_files = zettelKnowFiles;
+              }
+            ];
+          };
+          F = mkTagsCmd {
+            description = "Zettelkasten | Fleeting Notes";
+            match = "LEVEL=1";
+            header = "Fleeting Notes";
+            files = inboxOnly;
+          };
+          L = mkTagsCmd {
+            description = "Zettelkasten | Literature Notes";
+            match = "LEVEL=1+literature";
+            header = "Literature Notes";
+            files = zettelLitFiles;
+          };
+          P = mkTagsCmd {
+            description = "Zettelkasten | Permanent Notes";
+            match = "LEVEL=1+permanent";
+            header = "Permanent Notes";
+            files = zettelKnowFiles;
+          };
+          S = mkTagsCmd {
+            description = "Zettelkasten | Structure Notes";
+            match = "LEVEL=1+structure";
+            header = "Structure Notes";
+            files = zettelKnowFiles;
+          };
+          I = mkTagsCmd {
+            description = "Zettelkasten | Index Notes";
+            match = "LEVEL=1+index";
+            header = "Index Notes";
+            files = zettelKnowFiles;
           };
         };
         org_capture_templates = {

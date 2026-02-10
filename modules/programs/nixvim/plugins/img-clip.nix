@@ -1,6 +1,6 @@
 {
   delib,
-  homeConfig,
+  nixvimConventions,
   lib,
   pkgs,
   ...
@@ -21,7 +21,7 @@ delib.module {
       };
       settings = {
         filetypes = {
-          codecompanion = lib.mkIf homeConfig.programs.nixvim.plugins.codecompanion.enable {
+          codecompanion = lib.mkIf nixvimConventions.capabilities.hasCodeCompanion {
             prompt_for_file_name = false;
             template = "[Image]($FILE_PATH)";
             use_absolute_path = true;

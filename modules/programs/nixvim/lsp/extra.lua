@@ -1,3 +1,15 @@
+-- LSP extra.lua: Imperative Lua-only server configuration.
+--
+-- Responsibility split with lsp/default.nix:
+--   Nix (default.nix):  Servers with nixvim schema support — enable, package, config attrs.
+--   Lua (this file):    Servers without nixvim schema (emmylua_ls, sourcekit, denols,
+--                        ts_ls, efm, moonbit-lsp) — vim.lsp.enable + vim.lsp.config.
+--                        Also: settings requiring Lua-only APIs (workspace library paths,
+--                        init_options, efm language/formatter definitions).
+--
+-- Adding a new server? If nixvim has schema support, add to default.nix.
+-- Otherwise, add vim.lsp.enable + vim.lsp.config here.
+
 vim.lsp.enable({ "emmylua_ls" })
 vim.lsp.enable({ "sourcekit" })
 vim.lsp.enable({ "denols" })

@@ -1,4 +1,11 @@
-{delib, ...}:
+{
+  delib,
+  nixvimConventions,
+  ...
+}:
+let
+  owns = nixvimConventions.keymapOwnership;
+in
 delib.module {
   name = "programs.nixvim.plugins.fzf-lua";
 
@@ -41,15 +48,19 @@ delib.module {
           enable = true;
           settings = {
             cmd = ["FzfLua"];
-            keys = [
+            keys = (if owns.smartPicker == "fzf-lua" then [
               {
                 __unkeyed-1 = "<Space><Space>";
                 __unkeyed-3 = "<Cmd>FzfLua files<CR>";
               }
+            ] else [])
+            ++ (if owns.grep == "fzf-lua" then [
               {
                 __unkeyed-1 = "<Space>g";
                 __unkeyed-3 = "<Cmd>FzfLua live_grep<CR>";
               }
+            ] else [])
+            ++ [
               {
                 __unkeyed-1 = "<Space>o";
                 __unkeyed-3 = "<Cmd>FzfLua oldfiles cwd_only=true stat_file=true<CR>";

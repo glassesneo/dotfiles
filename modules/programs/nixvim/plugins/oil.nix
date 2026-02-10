@@ -1,4 +1,11 @@
-{delib, ...}:
+{
+  delib,
+  nixvimConventions,
+  ...
+}:
+let
+  owns = nixvimConventions.keymapOwnership;
+in
 delib.module {
   name = "programs.nixvim.plugins.oil";
 
@@ -40,7 +47,7 @@ delib.module {
         };
       };
     };
-    keymaps = [
+    keymaps = if owns.explorer == "oil" then [
       {
         # action = "<Cmd>Oil<CR>";
         action.__raw = ''
@@ -57,6 +64,6 @@ delib.module {
         '';
         key = "<Space>f";
       }
-    ];
+    ] else [];
   };
 }

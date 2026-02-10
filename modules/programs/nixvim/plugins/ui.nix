@@ -1,6 +1,6 @@
 {
   delib,
-  homeConfig,
+  nixvimConventions,
   ...
 }:
 delib.module {
@@ -52,7 +52,7 @@ delib.module {
             };
           };
           presets = {
-            inc_rename = homeConfig.programs.nixvim.plugins.inc-rename.enable;
+            inc_rename = nixvimConventions.capabilities.hasIncRename;
           };
           cmdline = {
             enabled = true;
