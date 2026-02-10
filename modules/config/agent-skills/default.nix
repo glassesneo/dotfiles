@@ -110,6 +110,20 @@ delib.module {
         explicitPath = ".";
       };
 
+      architecture-planning-perspective = {
+        path = ./architecture-planning-perspective;
+        subdir = ".";
+        discoverable = false;
+        explicitPath = ".";
+      };
+
+      performance-planning-perspective = {
+        path = ./performance-planning-perspective;
+        subdir = ".";
+        discoverable = false;
+        explicitPath = ".";
+      };
+
       codex-subagent = {
         path = ./codex-subagent;
         subdir = ".";
