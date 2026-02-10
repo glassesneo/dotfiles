@@ -23,10 +23,10 @@ Full Neovim configuration via nixvim. Module name: `programs.nixvim`.
 
 - **Lazy loading**: Most plugins use `lz.n` with event/cmd/ft triggers.
 - **DPP (Denops plugin manager)**: Manages editing/motion/SKK plugins via TOML configs generated from Nickel.
-  - Source of truth: `.ncl` files. TOML files are generated snapshots.
-  - Regenerate: `nix develop -c bash plugins/dpp/regenerate-toml.sh`
-  - Drift check: run regenerate, then `git diff --exit-code -- plugins/dpp/plugins/*.toml`
-  - Plugin definitions: `plugins/dpp/plugins/{editing,motion,skk}.{ncl,toml}`
+  - Source of truth: `.ncl` files. TOML is generated from Nickel and loaded from the config plugin dir.
+  - Regenerate helper (optional/manual): `nix develop -c bash plugins/dpp/regenerate-toml.sh`
+  - Plugin definitions live in Nickel: `plugins/dpp/plugins/{editing,motion,skk}.ncl`
+  - Generated TOML artifacts may be local/untracked and are not required git snapshots.
   - Nickel contract validation: `plugins/dpp/plugins/plugins_contract.ncl`
   - State cached in `$XDG_CACHE_HOME/dpp/`. Commands: `:DppInstall`, `:DppUpdate`, `:DppClearState`.
 - **Completion**: blink-cmp with LSP, path, buffer, ripgrep, copilot, snippets, git sources.

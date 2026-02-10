@@ -33,96 +33,119 @@ delib.module {
       "morph-fast-apply-mcp" = pkgs.lib.getExe' nodePkgs."@morph-llm/morph-fast-apply" "mcp-server-filesystem";
       "kiri-mcp" = pkgs.lib.getExe' nodePkgs."kiri-mcp-server" "kiri-mcp-server";
       "context7-mcp" = pkgs.lib.getExe inputs.mcp-servers-nix.packages.${host.homeManagerSystem}.context7-mcp;
+      # TODO(ownership): This path is host-specific and should move to a
+      # host/flake-input based design in a separate follow-up.
+      # Out of scope for the Nickel expansion plan: we intentionally keep the
+      # current absolute path workaround so local dev can run the MCP server.
       "relative-filesystem-mcp" = "${deno} run -A /Users/neo/dev/relative-filesystem-mcp/server.ts";
     };
+
+    # Command token resolved from commands map, fallback to command_id token
+    resolveCommandToken = server: commands.${server.command_id} or server.command_id or "";
 
     # Helper to get command for a server
     getCommand = server:
       if server.needs_node
       then nodejs
-      else commands.${server.command_id} or server.command_id;
+      else resolveCommandToken server;
 
     # Helper to get args for a server (prepend script path for node servers)
     getArgs = server:
       if server.needs_node
-      then [commands.${server.command_id}] ++ server.args
+      then [(resolveCommandToken server)] ++ server.args
       else server.args;
 
-    # Environment variable syntax formatters for each target
-    # mcphub uses: ${env:KEY}
-    mcphubEnv = key: "\${env:" + key + "}";
-    # claude-code uses: ${KEY}
-    claudeCodeEnv = key: "\${" + key + "}";
-    # crush uses: $KEY
-    crushEnv = key: "$" + key;
-    # opencode uses: {env:KEY}
-    opencodeEnv = key: "{env:" + key + "}";
+    commandBasedServers = lib.filterAttrs (_: server: server ? command_id) serverData.servers;
 
-    # Unified server config builder
-    # Parameters:
-    #   envFormat: function to format env var references (null = no formatting)
-    #   urlType: type field value for URL servers (null = omit type)
-    #   localType: type field value for local servers (null = omit type)
-    #   commandAsList: whether command+args should be merged into single array
-    #   envField: name of environment field ("env" or "environment")
-    #   envKeysAsArray: special codex mode - env_keys become env_vars array
-    mkServer = {
-      envFormat ? null,
-      urlType ? "sse",
-      localType ? null,
-      commandAsList ? false,
-      envField ? "env",
-      envKeysAsArray ? false,
-    }: _name: server:
-      if server ? url
-      then
-        {url = server.url;}
-        // lib.optionalAttrs (urlType != null) {type = urlType;}
-      else
-        (
-          if commandAsList
-          then {command = [(getCommand server)] ++ (getArgs server);}
-          else
-            {command = getCommand server;}
-            // lib.optionalAttrs ((getArgs server) != []) {args = getArgs server;}
-        )
-        // lib.optionalAttrs (localType != null) {type = localType;}
-        // (
-          if envKeysAsArray
-          then
-            # Codex special handling: static env + env_keys as array
-            lib.optionalAttrs (server.env_static != {}) {env = server.env_static;}
-            // lib.optionalAttrs (server.env_keys != {}) {env_vars = lib.attrValues server.env_keys;}
-          else
-            # Standard handling: merge formatted env_keys with static env
-            lib.optionalAttrs (server.env_keys != {} || server.env_static != {}) {
-              ${envField} =
-                (lib.mapAttrs (_: key: envFormat key) server.env_keys)
-                // server.env_static;
+    commandAssertions = lib.flatten (
+      lib.mapAttrsToList (name: server:
+        let
+          resolvedToken = resolveCommandToken server;
+          hasCommandMapping = builtins.hasAttr server.command_id commands;
+        in
+          [
+            {
+              assertion = builtins.stringLength resolvedToken > 0;
+              message = "MCP server `${name}` command invariant failed: command_id `${server.command_id}` resolved to an empty command token.";
             }
-        );
+          ]
+          ++ lib.optional server.needs_node {
+            assertion = hasCommandMapping;
+            message = "MCP server `${name}` needs_node invariant failed: command_id `${server.command_id}` is missing from config.programs.mcp-servers.commands.";
+          }
+      )
+      commandBasedServers
+    );
 
-    # Target-specific builders using the unified mkServer
-    mkMcphubServer = mkServer {envFormat = mcphubEnv;};
-    mkClaudeCodeServer = mkServer {envFormat = claudeCodeEnv;};
-    mkClaudeDesktopServer = mkClaudeCodeServer;
-    mkCodexServer = mkServer {
-      urlType = null;
-      envKeysAsArray = true;
-    };
-    mkCrushServer = mkServer {envFormat = crushEnv;};
-    mkOpencodeServer = mkServer {
-      envFormat = opencodeEnv;
-      urlType = "remote";
-      localType = "local";
-      commandAsList = true;
-      envField = "environment";
+    envFormatters = {
+      dollar_env_colon = key: "\${env:" + key + "}";
+      dollar_braces = key: "\${" + key + "}";
+      dollar_bare = key: "$" + key;
+      braces_env_colon = key: "{env:" + key + "}";
+      raw = key: key;
     };
 
-    # Filter servers by enabled list and build with the appropriate formatter
-    mkServersForTarget = target: mkServerFn:
-      lib.filterAttrs (name: _: builtins.elem name serverData.enabled.${target})
-      (lib.mapAttrs mkServerFn serverData.servers);
+    formatEnvValue = mode: key:
+      let formatter = envFormatters.${mode} or null;
+      in
+        if formatter == null
+        then throw "Unsupported MCP env_syntax_mode `${mode}`"
+        else formatter key;
+
+    mkEnvFields = targetMeta: server:
+      let
+        dynamicFieldName = targetMeta.env_field_name;
+        staticFieldName = targetMeta.static_env_field_name;
+
+        dynamicFields =
+          if server.env_keys == {}
+          then {}
+          else if dynamicFieldName == "env_vars"
+          then {${dynamicFieldName} = lib.attrValues server.env_keys;}
+          else {
+            ${dynamicFieldName} = lib.mapAttrs (_: key: formatEnvValue targetMeta.env_syntax_mode key) server.env_keys;
+          };
+
+        staticFields =
+          if server.env_static == {}
+          then {}
+          else {${staticFieldName} = server.env_static;};
+      in
+        if dynamicFields == {}
+        then staticFields
+        else if staticFields == {}
+        then dynamicFields
+        else if dynamicFieldName == staticFieldName
+        then {
+          ${dynamicFieldName} = dynamicFields.${dynamicFieldName} // staticFields.${staticFieldName};
+        }
+        else dynamicFields // staticFields;
+
+    mkServer = targetMeta: _name: server:
+      let
+        urlTypePolicy = targetMeta.url_type_policy;
+        localTypePolicy = targetMeta.local_type_policy;
+      in
+        if server ? url
+        then
+          {url = server.url;}
+          // lib.optionalAttrs (urlTypePolicy != null) {type = urlTypePolicy;}
+        else
+          (
+            if targetMeta.command_list_behavior
+            then {command = [(getCommand server)] ++ (getArgs server);}
+            else
+              {command = getCommand server;}
+              // lib.optionalAttrs ((getArgs server) != []) {args = getArgs server;}
+          )
+          // lib.optionalAttrs (localTypePolicy != null) {type = localTypePolicy;}
+          // mkEnvFields targetMeta server;
+
+    mkServersForTarget = target:
+      let targetMeta = serverData.targets_meta.${target};
+      in
+        lib.filterAttrs (name: _: builtins.elem name serverData.enabled.${target})
+        (lib.mapAttrs (mkServer targetMeta) serverData.servers);
 
     # The syntax follows https://github.com/ravitemer/mcphub.nvim/blob/main/doc/mcp/servers_json.md
     mcphub-servers = {
@@ -147,7 +170,7 @@ delib.module {
         };
         sequential-thinking.type = "stdio";
       };
-      settings.servers = mkServersForTarget "mcphub" mkMcphubServer;
+      settings.servers = mkServersForTarget "mcphub";
     };
 
     # The syntax follows https://docs.claude.com/en/docs/claude-code/mcp
@@ -156,7 +179,7 @@ delib.module {
         enable = true;
         type = "stdio";
       };
-      settings.servers = mkServersForTarget "claude_code" mkClaudeCodeServer;
+      settings.servers = mkServersForTarget "claude_code";
     };
 
     claude-desktop-servers = {
@@ -164,7 +187,7 @@ delib.module {
         enable = true;
         type = "stdio";
       };
-      settings.servers = mkServersForTarget "claude_desktop" mkClaudeDesktopServer;
+      settings.servers = mkServersForTarget "claude_desktop";
     };
 
     codex-servers = {
@@ -172,7 +195,7 @@ delib.module {
         enable = true;
         type = "stdio";
       };
-      settings.servers = mkServersForTarget "codex" mkCodexServer;
+      settings.servers = mkServersForTarget "codex";
     };
 
     crush-servers = {
@@ -180,14 +203,15 @@ delib.module {
         enable = true;
         type = "stdio";
       };
-      settings.servers = mkServersForTarget "crush" mkCrushServer;
+      settings.servers = mkServersForTarget "crush";
     };
 
     # The syntax follows https://opencode.ai/docs/mcp-servers
     opencode-servers = {
-      settings.servers = mkServersForTarget "opencode" mkOpencodeServer;
+      settings.servers = mkServersForTarget "opencode";
     };
   in {
+    assertions = commandAssertions;
     home.file = {
       "${homeConfig.xdg.configHome}/mcphub/servers.json".source = inputs.mcp-servers-nix.lib.mkConfig pkgs mcphub-servers;
       "Library/Application Support/Claude/claude_desktop_config.json".source = inputs.mcp-servers-nix.lib.mkConfig pkgs claude-desktop-servers;

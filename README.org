@@ -93,11 +93,12 @@ nix flake lock --update-input nixpkgs
 
 * Node Package Management
 
-Custom Node inputs used by MCP servers live in =node2nix/=. When modifying =node2nix/node-packages.json=, regenerate the Nix expressions:
+Active Node packages for MCP server wiring are managed via =node2nix/node-packages.json= and generated Nix expressions in =node2nix/=. The Nickel file =nickel/packages/node.ncl= is currently an informational manifest and is not wired into the active node2nix pipeline.
+
+When modifying active node2nix inputs, regenerate expressions from repository root:
 
 #+begin_src sh
-cd node2nix
-nix-shell -p node2nix --run "node2nix --input node-packages.json --output node-packages.nix --composition default.nix"
+nix-shell -p node2nix --run "node2nix --input node2nix/node-packages.json --output node2nix/node-packages.nix --composition node2nix/default.nix"
 #+end_src
 
 * Cleanup

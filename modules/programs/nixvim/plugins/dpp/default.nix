@@ -32,11 +32,30 @@ delib.module {
       '')
       dpp-plugins;
     nickel = lib.getExe pkgs.nickel;
+    pluginsDir = ./plugins;
+    pluginDirEntries = builtins.readDir pluginsDir;
+    # Auto-discovery convention:
+    # - Include only plugin source files named `^[a-z0-9-]+\.ncl$`.
+    # - Explicitly exclude non-plugin Nickel files (contract, fixtures, scratch).
+    # - WARNING: Any scratch `.ncl` matching the pattern is exported and loaded.
+    excludedPluginNclFiles = ["plugins_contract.ncl"];
+    pluginNclFiles =
+      builtins.attrNames pluginDirEntries
+      |> builtins.filter (fileName:
+        (builtins.getAttr fileName pluginDirEntries) == "regular"
+        &&
+        builtins.match "^[a-z0-9-]+\\.ncl$" fileName != null
+        && !(builtins.elem fileName excludedPluginNclFiles))
+      |> builtins.sort (a: b: a < b);
+    pluginTomlExportCommands = lib.strings.concatMapStringsSep "\n" (pluginNclFile:
+      let
+        pluginTomlFile = lib.strings.removeSuffix ".ncl" pluginNclFile + ".toml";
+      in ''
+        ${nickel} export --format toml ${pluginsDir}/${pluginNclFile} --apply-contract ${pluginsDir}/plugins_contract.ncl > "$out/${pluginTomlFile}"
+      '') pluginNclFiles;
     pluginTomls = pkgs.runCommand "dpp-plugins" {buildInputs = [pkgs.nickel];} ''
-      mkdir -p $out
-      ${nickel} export --format toml ${./plugins/editing.ncl} --apply-contract ${./plugins/plugins_contract.ncl} > $out/editing.toml
-      ${nickel} export --format toml ${./plugins/motion.ncl} --apply-contract ${./plugins/plugins_contract.ncl} > $out/motion.toml
-      ${nickel} export --format toml ${./plugins/skk.ncl} --apply-contract ${./plugins/plugins_contract.ncl} > $out/skk.toml
+      mkdir -p "$out"
+      ${pluginTomlExportCommands}
     '';
   in {
     xdg.configFile = {

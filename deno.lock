@@ -5,18 +5,23 @@
     "jsr:@core/unknownutil@^4.3.0": "4.3.0",
     "jsr:@denops/core@7": "7.0.1",
     "jsr:@denops/std@7.1": "7.1.1",
+    "jsr:@denops/std@7.6": "7.6.0",
     "jsr:@denops/std@^7.6.0": "7.6.0",
     "jsr:@lambdalisue/errorutil@1": "1.1.1",
     "jsr:@lambdalisue/itertools@^1.1.2": "1.1.2",
     "jsr:@lambdalisue/unreachable@^1.0.1": "1.0.1",
+    "jsr:@shougo/dpp-ext-lazy@1.5": "1.5.0",
     "jsr:@shougo/dpp-ext-lazy@^1.5.0": "1.5.0",
+    "jsr:@shougo/dpp-ext-toml@1.3": "1.3.0",
     "jsr:@shougo/dpp-ext-toml@^1.3.0": "1.3.0",
     "jsr:@shougo/dpp-vim@3.0": "3.0.0",
+    "jsr:@shougo/dpp-vim@4.7": "4.7.0",
     "jsr:@shougo/dpp-vim@^4.7.0": "4.7.0",
     "jsr:@std/assert@~1.0.2": "1.0.13",
     "jsr:@std/collections@^1.1.1": "1.1.2",
     "jsr:@std/fs@1": "1.0.19",
     "jsr:@std/fs@^1.0.19": "1.0.19",
+    "jsr:@std/fs@~1.0.19": "1.0.19",
     "jsr:@std/internal@^1.0.6": "1.0.9",
     "jsr:@std/internal@^1.0.9": "1.0.9",
     "jsr:@std/path@1.1": "1.1.1",
@@ -41,6 +46,7 @@
       "integrity": "9178027fc9192034842ac4d8d7219ce65ea80cb115b722e681e5c3630b503cb8",
       "dependencies": [
         "jsr:@core/unknownutil@^4.3.0",
+        "jsr:@denops/core",
         "jsr:@std/semver",
         "jsr:@std/ulid"
       ]
@@ -81,6 +87,7 @@
     "@shougo/dpp-ext-toml@1.3.0": {
       "integrity": "25a44defbc857c50d6426c74ddabd4280041c972a55e8ee76820878015c33d47",
       "dependencies": [
+        "jsr:@denops/std@7.1",
         "jsr:@shougo/dpp-vim@3.0",
         "jsr:@std/path@~1.0.2",
         "jsr:@std/toml"
@@ -89,6 +96,7 @@
     "@shougo/dpp-vim@3.0.0": {
       "integrity": "0c5e5ac938f8ed464e224dfa530d187fd9ca41a370d7b9b3c8b66cd0ab983ad2",
       "dependencies": [
+        "jsr:@denops/std@7.1",
         "jsr:@std/assert",
         "jsr:@std/path@~1.0.2"
       ]
@@ -96,6 +104,7 @@
     "@shougo/dpp-vim@4.7.0": {
       "integrity": "ef669cfb6d8cac434d140a0ec2acb024c82a8221accf5018addd1e2667896654",
       "dependencies": [
+        "jsr:@denops/std@7.6",
         "jsr:@std/assert",
         "jsr:@std/path@1.1"
       ]
