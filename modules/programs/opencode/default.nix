@@ -92,18 +92,29 @@ delib.module {
     '';
 
     planningInternetResearchPhase = ''
-      Phase 2.5: External Knowledge Fallback
-      Goal: Resolve gaps that require internet knowledge when local repo evidence is insufficient.
+      Phase 2.5: Knowledge-Gap Escalation (Mandatory)
+      Goal: Resolve any material knowledge uncertainty that can affect planning decisions.
 
-      1) Only delegate to `internet_research` when unresolved questions require external documentation, upstream repository context, or current web information.
-      2) Ask `internet_research` to prioritize tools in this order:
+      1) Run a material knowledge-gap check after initial exploration and before finalizing design decisions.
+      2) If any unresolved gap can change scope, architecture, migration sequencing, risk, or verification strategy, you MUST delegate to `internet_research`.
+      3) Treat this as hard-fail policy: do not continue to final plan synthesis while qualifying gaps remain unresearched.
+      4) Ask `internet_research` to prioritize tools in this order:
          - `context7` for official library/framework documentation
          - `deepwiki` for repository-level architecture and API context
          - `brave-search` for broader web discovery and recency checks
          - `readability` to fetch full content for selected pages
-      3) Pass concrete research questions and known local findings to reduce redundant searching.
-      4) Keep delegation concise (normally one focused `internet_research` call per planning pass).
-      5) Integrate returned findings into explicit assumptions/defaults in the final plan, including source links and confidence where applicable.
+      5) Pass concrete research questions and known local findings to reduce redundant searching.
+      6) Keep delegation concise (normally one focused `internet_research` call per planning pass, or per related gap cluster).
+      7) Integrate returned findings into explicit assumptions/defaults in the final plan, including source links, confidence, and unresolved uncertainty.
+    '';
+
+    planningKnowledgeGapGate = ''
+      Knowledge-Gap Gate (Mandatory Before Final Plan Write)
+
+      1) Before entering Phase 4, run a final material knowledge-gap check.
+      2) If any qualifying gap remains, you MUST call `internet_research` before writing the final plan file.
+      3) Skipping required delegation is a hard-fail policy violation.
+      4) In the final plan, include integrated findings, source links, confidence, and conservative defaults for unresolved uncertainty.
     '';
 
     planningFinalFileRequirements = ''
@@ -223,6 +234,10 @@ delib.module {
               + planningDesignPhase
               + ''
 
+              ''
+              + planningKnowledgeGapGate
+              + ''
+
                 Phase 4: Final Plan File
                 Goal: Synthesize the draft plan and write the final plan file.
 
@@ -283,6 +298,10 @@ delib.module {
               + planningDesignPhase
               + ''
 
+              ''
+              + planningKnowledgeGapGate
+              + ''
+
                 Phase 4: Final Plan File
                 Goal: Synthesize clarified requirements + draft plan(s), then write the final plan file.
 
@@ -341,6 +360,10 @@ delib.module {
 
               ''
               + planningDesignPhase
+              + ''
+
+              ''
+              + planningKnowledgeGapGate
               + ''
 
                 Phase 4: Final Plan File
@@ -405,6 +428,10 @@ delib.module {
 
               ''
               + planningDesignPhase
+              + ''
+
+              ''
+              + planningKnowledgeGapGate
               + ''
 
                 Phase 4: Final Plan File
@@ -698,18 +725,19 @@ delib.module {
           internet_research = {
             mode = "subagent";
             model = "openai/gpt-5.3-codex";
-            description = "Performs targeted internet research when primary planning agents lack required external knowledge.";
+            description = "Performs targeted internet research when primary planning agents have material knowledge uncertainty.";
             reasoningEffort = "high";
             prompt =
               ''
                 You are the `internet_research` subagent. Your role is targeted external knowledge retrieval for planning agents.
 
               ''
-              + readOnlyReviewHeader "external documentation/repository/web research synthesis with source-backed findings"
+              + readOnlyReviewHeader "source-backed research synthesis for material planning knowledge gaps"
               + ''
 
                 Trigger condition (strict):
-                - Execute only when primary planning agents cannot resolve a material knowledge gap from local repository/context.
+                - Execute when delegated by a primary planning agent because material knowledge uncertainty could affect planning decisions.
+                - This may include external documentation, upstream repository context, domain/genre knowledge, or recency-sensitive web information not confidently resolved locally.
 
                 Tool priority (strict):
                 1) `context7` for official library/framework docs and API behavior.
@@ -758,7 +786,8 @@ delib.module {
           - Use `debugger` for read-only bug investigation with root-cause analysis and fix direction.
           - `plan` and `spec_plan` should discover available skills early, including project-level skills.
           - Primary agents should pass only high-priority relevant skills with rationale to subagents when delegating.
-          - Primary planning agents should call `internet_research` only when external knowledge is required and local repository evidence is insufficient.
+          - Primary planning agents must call `internet_research` when they have material knowledge uncertainty that can affect planning decisions.
+          - Skipping required `internet_research` delegation in qualifying cases is a hard-fail policy violation.
           - Primary agents should omit the skill brief entirely when no high-priority skill applies.
           - Subagents should prioritize only delegated skills marked high when they clearly match the task.
           - Subagents should ignore delegated skills marked low or none.
