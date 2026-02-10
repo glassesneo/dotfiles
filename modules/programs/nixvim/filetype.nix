@@ -28,6 +28,15 @@ delib.module {
       }
       {
         event = "FileType";
+        pattern = ["moonbit"];
+        callback.__raw = ''
+          function(args)
+            pcall(vim.treesitter.start, args.buf)
+          end
+        '';
+      }
+      {
+        event = "FileType";
         pattern = ["python" "zig"];
         callback.__raw = ''
           function()
