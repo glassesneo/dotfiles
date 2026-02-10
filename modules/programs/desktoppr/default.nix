@@ -14,11 +14,12 @@
 delib.module {
   name = "programs.desktoppr";
 
-  options = delib.singleEnableOption false;
+  options = delib.singleEnableOption true;
 
   home.ifEnabled = {
     programs.desktoppr = {
       enable = true;
+      settings.setOnlyOnce = false;
     };
 
     # Fix: home-manager writes to "desktoppr" but the tool reads from
