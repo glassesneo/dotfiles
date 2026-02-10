@@ -79,10 +79,8 @@ delib.module {
       };
     };
 
-    # Set EDITOR environment variable (override nixvim's default)
-    home.sessionVariables = {
-      EDITOR = lib.mkForce "vim";
-    };
+    # EDITOR defaults to nvim via nixvim (no vim override needed)
+    # vim remains available as explicit command
 
     # Configure vim with dpp.vim
     programs.vim = {

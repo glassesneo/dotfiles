@@ -37,5 +37,10 @@ delib.module {
         }
       ];
     };
+
+    home.sessionVariables = {
+      EDITOR = "nvim";
+      VISUAL = "nvim";
+    };
   };
 }

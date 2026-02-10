@@ -66,7 +66,9 @@ delib.module {
         basedpyright = defaultServer;
         biome = defaultServer;
         gopls = defaultServer;
-        nickel_ls = defaultServer;
+        nickel_ls = mkServer {
+          cmd = ["${lib.getExe pkgs.nls}"];
+        };
         nim_langserver = defaultServer;
         nushell = defaultServer;
         prismals = defaultServer;
@@ -92,6 +94,6 @@ delib.module {
     # - vim.lsp.config overrides requiring Lua-only APIs (workspace library paths, init_options)
     # - efm language/formatter definitions
     extraConfigLuaPost = builtins.readFile ./extra.lua;
-    extraPackages = [pkgs.efm-langserver];
+    extraPackages = [pkgs.efm-langserver pkgs.nls pkgs.nickel];
   };
 }
