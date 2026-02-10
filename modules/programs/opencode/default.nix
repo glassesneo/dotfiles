@@ -11,7 +11,7 @@ delib.module {
 
   myconfig.ifEnabled = {
     agentSkills.agents.opencode = {
-      skills = ["skill-creator" "ui-ux-pro-max" "ai-first-doccomments" "tmux-runner" "codex-subagent" "codex-exec"];
+      skills = ["ui-ux-pro-max" "ai-first-doccomments" "tmux-runner"];
       targetDir = ".opencode/skills";
     };
   };
