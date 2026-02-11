@@ -45,6 +45,17 @@ delib.module {
       };
     };
 
+    debuggerPermission = {
+      edit = {
+        "*" = "deny";
+      };
+      write = {
+        "*" = "deny";
+        "/tmp/**" = "allow";
+        "/private/tmp/**" = "allow";
+      };
+    };
+
     fullAccessPermission = {
       edit = {
         "*" = "allow";
@@ -119,21 +130,22 @@ delib.module {
       - Structure can be flexible, but all fields above must be present per task.
     '';
 
-    planningDesignPhase = ''
-      1) Choose draft strategy per routing policy.
-      2) Draft planning:
-         - Call `draft_planner` for normal decision-complete drafts.
-         - Call `draft_planner_dividable` for large split-ready drafts.
-      3) Require each draft to cover:
-         - architecture and data flow
-         - touched interfaces, APIs, and types
-         - migration and compatibility concerns
-         - failure modes and rollback strategy
-         - verification strategy
-      4) Require draft plan path + short summary from the selected draft planner.
-      5) Apply when dividable strategy is selected:
-    ''
-    + dividableTaskRequirements;
+    planningDesignPhase =
+      ''
+        1) Choose draft strategy per routing policy.
+        2) Draft planning:
+           - Call `draft_planner` for normal decision-complete drafts.
+           - Call `draft_planner_dividable` for large split-ready drafts.
+        3) Require each draft to cover:
+           - architecture and data flow
+           - touched interfaces, APIs, and types
+           - migration and compatibility concerns
+           - failure modes and rollback strategy
+           - verification strategy
+        4) Require draft plan path + short summary from the selected draft planner.
+        5) Apply when dividable strategy is selected:
+      ''
+      + dividableTaskRequirements;
 
     planningReviewPhase = ''
       1) `plan_reviewer` is final-plan-only: review ONLY `.opencode/plans/*.md` file(s) that are not `*.draft.md`.
@@ -237,12 +249,6 @@ delib.module {
             agent = "implementation_reviewer";
             subtask = true;
           };
-          debugger = {
-            template = ''
-            '';
-            agent = "bug_investigator";
-            subtask = true;
-          };
         };
         autoshare = false;
         autoupdate = false;
@@ -250,8 +256,7 @@ delib.module {
           orchestrator = {
             mode = "primary";
             description = "Primary implementation orchestrator that delegates exploration and edits to specialized subagents.";
-            model = "openai/gpt-5.3-codex";
-            reasoningEffort = "high";
+            model = "zai-coding-plan/glm-4.7";
             prompt =
               ''
                 You are the `orchestrator` primary implementation agent.
@@ -538,20 +543,19 @@ delib.module {
             model = "openai/gpt-5.3-codex";
             description = "Implementation subagent that can explore and edit to complete one assigned task end-to-end.";
             reasoningEffort = "high";
-            prompt =
-              ''
-                You are the `full` implementation subagent.
+            prompt = ''
+              You are the `full` implementation subagent.
 
-                Scope:
-                - Complete one delegated task end-to-end.
-                - You may explore relevant code and edit files.
+              Scope:
+              - Complete one delegated task end-to-end.
+              - You may explore relevant code and edit files.
 
-                Required workflow:
-                1) Understand delegated task objective and boundaries.
-                2) Perform focused exploration only for files needed to complete the task.
-                3) Apply edits and keep changes minimal and coherent.
-                4) Validate task completion criteria and report status, changed files, and residual risks.
-              '';
+              Required workflow:
+              1) Understand delegated task objective and boundaries.
+              2) Perform focused exploration only for files needed to complete the task.
+              3) Apply edits and keep changes minimal and coherent.
+              4) Validate task completion criteria and report status, changed files, and residual risks.
+            '';
             permission = fullAccessPermission;
           };
           editor = {
@@ -559,21 +563,20 @@ delib.module {
             model = "openai/gpt-5.3-codex";
             description = "Instruction-following editor subagent for bounded file edits with minimal required context reads.";
             reasoningEffort = "medium";
-            prompt =
-              ''
-                You are the `editor` implementation subagent.
+            prompt = ''
+              You are the `editor` implementation subagent.
 
-                Scope (strict):
-                - Apply only the delegated edit instructions.
-                - Edit only explicit target files from the delegation.
-                - Perform minimal context reads required to avoid incorrect patches.
-                - Do NOT perform broad codebase exploration.
+              Scope (strict):
+              - Apply only the delegated edit instructions.
+              - Edit only explicit target files from the delegation.
+              - Perform minimal context reads required to avoid incorrect patches.
+              - Do NOT perform broad codebase exploration.
 
-                Required output:
-                - list edited files
-                - what changed per file
-                - completion status vs delegated criteria
-              '';
+              Required output:
+              - list edited files
+              - what changed per file
+              - completion status vs delegated criteria
+            '';
             permission = fullAccessPermission;
           };
           explore = {
@@ -652,38 +655,41 @@ delib.module {
               '';
             permission = readOnlyPermission;
           };
-          bug_investigator = {
+          debugger = {
             mode = "subagent";
             model = "openai/gpt-5.3-codex";
-            description = "Performs read-only bug investigation with root-cause analysis and concrete fix direction.";
+            description = "Performs command-driven bug investigation with reproduction, root-cause analysis, and evidence-only reporting.";
             reasoningEffort = "xhigh";
-            prompt =
-              ''
-                You are the `bug_investigator` subagent. Your sole responsibility is rigorous bug investigation.
+            prompt = ''
+              You are the `debugger` subagent. Your sole responsibility is rigorous bug investigation.
 
-              ''
-              + readOnlyReviewHeader "reproduction analysis, root-cause identification, impact assessment, and fix-direction planning"
-              + ''
+              Operating constraints (strict):
+              - Investigation mode: run commands to gather evidence.
+              - You MAY run tests, builds, repro commands, and diagnostics when needed.
+              - Use a temporary workspace copy under `/tmp` (or `/private/tmp`) for commands that require writes.
+              - NEVER edit source/config files directly.
+              - If a check cannot be executed safely under these constraints, report it as unknown with the concrete blocker.
 
-                Skill usage policy:
-                - Primary agents may provide delegated skills with priority in delegation context.
-                - Use only delegated skills marked `high` priority when they improve investigation quality for language/ecosystem-specific concerns.
-                - Ignore delegated skills marked `low` or `none`.
-                - If no delegated high-priority skill applies, continue with normal investigation workflow.
+              Skill usage policy:
+              - Primary agents may provide delegated skills with priority in delegation context.
+              - Use only delegated skills marked `high` priority when they improve investigation quality for language/ecosystem-specific concerns.
+              - Ignore delegated skills marked `low` or `none`.
+              - If no delegated high-priority skill applies, continue with normal investigation workflow.
 
-                Required workflow:
-                1) Clarify bug symptoms and expected/actual behavior.
-                2) Trace likely failing paths and identify the most probable root cause(s).
-                3) Assess impact radius and regression risk.
-                4) Propose fix direction with implementation constraints and validation strategy.
+              Required workflow:
+              1) Clarify bug symptoms and expected vs actual behavior.
+              2) Reproduce with concrete commands whenever possible.
+              3) Trace failing paths and identify candidate root causes based on observed evidence.
+              4) Assess impact radius and regression risk.
+              5) Propose fix direction with implementation constraints and validation strategy.
 
-                Output requirements:
-                - Findings first, sorted by severity (high -> medium -> low).
-                - For each finding include: impact, evidence (`file:line` when available), and fix direction.
-                - Do NOT edit files or propose direct write operations.
-                - If uncertain, list assumptions and the minimum checks needed to validate them.
-              '';
-            permission = readOnlyPermission;
+              Output requirements:
+              - Findings first, sorted by severity (high -> medium -> low).
+              - For each finding include: impact, evidence (`file:line` when available and/or command output), and fix direction.
+              - Include an `Attempted checks` section listing commands and outcomes.
+              - Include an `Unknowns` section for anything unverified; do not assume or invent missing facts.
+            '';
+            permission = debuggerPermission;
           };
           cleanup_maintainer = {
             mode = "subagent";
@@ -810,7 +816,6 @@ delib.module {
           - Use `plan` when the user request is already well-scoped and you can produce an implementation-ready plan directly.
           - For architecture-focused planning, use `plan` or `spec_plan` and prioritize `architecture-planning-perspective` when the user explicitly requests architecture focus.
           - For performance-focused planning, use `plan` or `spec_plan` and prioritize `performance-planning-perspective` when the user explicitly requests performance focus.
-          - Use `debugger` for read-only bug investigation with root-cause analysis and fix direction.
           - Plan format override markers: `plan:dividable` and `plan:normal`.
           - Primary planning agents should route to `draft_planner` (normal) or `draft_planner_dividable` (split-ready) before final plan synthesis.
           - `plan` and `spec_plan` should discover available skills early, including project-level skills.
@@ -826,7 +831,7 @@ delib.module {
           - Primary planning agents should read drafts and write final decision-complete plan files (`*.md`).
           - `plan_reviewer` is for reviewing final plan files (`*.md`) during planning workflows.
           - `implementation_reviewer` is for post-implementation code review when explicitly requested by the user.
-          - `bug_investigator` is for root-cause investigation and fix-direction planning without code edits.
+          - `debugger` is for root-cause investigation using command-driven evidence (tests/build/repro) without assuming unverified facts.
           - `cleanup_maintainer` is for dead code and outdated documentation cleanup.
           - `cleanup_maintainer` defaults to audit-first and only applies edits when the user explicitly asks to execute cleanup.
         '';
