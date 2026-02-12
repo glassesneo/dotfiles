@@ -128,18 +128,7 @@ delib.module {
       Report chosen draft strategy in your synthesis before final plan write.
     '';
 
-    dividableTaskRequirements = ''
-      Dividable task requirements (guided but mandatory fields):
-      - If `draft_planner_dividable` is used, include a split-ready "Task Breakdown" section.
-      - Use task IDs (`T1`, `T2`, ...).
-      - For each task include:
-        - target file(s) to edit
-        - what to change in each target file
-        - files to refer (optional) and why they are needed
-        - task dependency graph/prerequisites (optional)
-        - completion criteria
-      - Structure can be flexible, but all fields above must be present per task.
-    '';
+    dividableTaskRequirements = dividableTaskStructure;
 
     planningDesignPhase =
       ''
@@ -173,14 +162,9 @@ delib.module {
       1) Run a material knowledge-gap check after initial exploration and before finalizing design decisions.
       2) If any unresolved gap can change scope, architecture, migration sequencing, risk, or verification strategy, you MUST delegate to `internet_research`.
       3) Treat this as hard-fail policy: do not continue to final plan synthesis while qualifying gaps remain unresearched.
-      4) Ask `internet_research` to prioritize tools in this order:
-         - `context7` for official library/framework documentation
-         - `deepwiki` for repository-level architecture and API context
-         - `brave-search` for broader web discovery and recency checks
-         - `readability` to fetch full content for selected pages
-      5) Pass concrete research questions and known local findings to reduce redundant searching.
-      6) Keep delegation concise (normally one focused `internet_research` call per planning pass, or per related gap cluster).
-      7) Integrate returned findings into explicit assumptions/defaults in the final plan, including source links, confidence, and unresolved uncertainty.
+      4) Pass concrete research questions and known local findings to the `internet_research` agent.
+      5) Keep delegation concise (normally one focused `internet_research` call per planning pass, or per related gap cluster).
+      6) Integrate returned findings into explicit assumptions/defaults in the final plan, including source links, confidence, and unresolved uncertainty.
     '';
 
     planningKnowledgeGapGate = ''
@@ -216,20 +200,103 @@ delib.module {
       - Do not fall back to chat-only final plans.
     '';
 
-    skillPolicyCommon = ''
+    planningPrompt = {
+      workflowTitle,
+      phase1Goal,
+      phase1Focus,
+      phase1Clarify,
+      phase3Title,
+      phase3Goal,
+      phase4Goal,
+      agentName,
+    }:
+      planModeHeader
+      + ''
+        ${workflowTitle}:
+
+        Phase 1: Initial Understanding
+        Goal: ${phase1Goal}
+
+        1) ${phase1Focus}
+        2) Launch up to 3 `explore` subagents in parallel for read-only investigation.
+        3) Synthesize findings and identify ambiguities.
+        4) ${phase1Clarify}
+
+      ''
+      + planningInternetResearchPhase
+      + planningSkillPhase
+      + planningDraftRoutingPhase
+      + ''
+
+        Phase 3: ${phase3Title}
+        Goal: ${phase3Goal}
+
+      ''
+      + planningDesignPhase
+      + planningKnowledgeGapGate
+      + ''
+
+        Phase 4: Final Plan File
+        Goal: ${phase4Goal}
+
+        1) Read the draft plan produced in Phase 3.
+        2) Write a decision-complete final plan file (`*.md`) under `.opencode/plans/`.
+        3) Use:
+      ''
+      + planningFinalFileRequirements
+      + ''
+
+        Phase 5: Review
+        Goal: Validate the final plan and close any critical gaps before reporting.
+
+        1) Call `plan_reviewer` to review the final plan file (`*.md`) written in Phase 4.
+        2) If `plan_reviewer` reports any high/medium finding, revise the same final plan file and run one additional `plan_reviewer` pass.
+      ''
+      + planningReviewPhase
+      + ''
+
+        After final write and review, report:
+        - Plan file: <path>
+        - Summary: <2-4 sentences>
+
+      ''
+      + planningExitAndFailure agentName;
+
+    skillPolicy = { when, fallback }: ''
       Skill usage policy:
       - Primary agents may provide delegated skills with priority in delegation context.
-      - Use only delegated skills marked `high` priority when they clearly fit the task.
+      - Use only delegated skills marked `high` priority ${when}.
       - Ignore delegated skills marked `low` or `none`.
-      - If no delegated high-priority skill applies, continue with normal planning workflow.
+      - If no delegated high-priority skill applies, continue with ${fallback}.
     '';
 
-    readonlyExploreSkillPolicy = ''
-      Skill usage policy:
-      - Primary agents may provide delegated skills with priority in delegation context.
-      - Use only delegated skills marked `high` priority for matching ecosystem/language/task guidance.
-      - Ignore delegated skills marked `low` or `none`.
-      - If no delegated high-priority skill applies, continue with normal read-only exploration.
+    draftFilenamePolicy = ''
+      Filename policy (strict):
+      - Create a NEW timestamped file:
+        `.opencode/plans/YYYYMMDD-HHMM-<kebab-task-slug>.draft.md`
+      - Never overwrite existing files.
+      - If collision occurs, append `-v2`, `-v3`, etc.
+    '';
+
+    draftFailureProtocol = ''
+      Failure protocol:
+      - If write fails, return:
+        - Write status: failed
+        - attempted path
+        - exact error
+      - Do not fall back to chat-only plan text.
+    '';
+
+    dividableTaskStructure = ''
+      Required task-dividable structure:
+      - Include a "Task Breakdown" section with task IDs (`T1`, `T2`, ...).
+      - For each task include:
+        - target file(s) to edit
+        - what to change in each target file
+        - files to refer (optional) and why they are needed
+        - task dependency graph/prerequisites (optional)
+        - completion criteria
+      - Headings may vary, but all fields are mandatory per task.
     '';
 
     readOnlyReviewHeader = focus: ''
@@ -291,67 +358,16 @@ delib.module {
             mode = "primary";
             description = "Primary planner for well-scoped requests that are already implementation-ready.";
             model = "zai-coding-plan/glm-4.7";
-            prompt =
-              planModeHeader
-              + ''
-                Plan Workflow:
-
-                Phase 1: Initial Understanding
-                Goal: Build a precise understanding of the request and relevant code.
-
-                1) Focus on user intent, constraints, and affected code paths.
-                2) Launch up to 3 `explore` subagents in parallel for read-only investigation.
-                3) Synthesize findings and identify ambiguities.
-                4) Use the question tool to ask only high-impact clarifications that change scope or design.
-
-              ''
-              + planningInternetResearchPhase
-              + ''
-
-              ''
-              + planningSkillPhase
-              + ''
-
-              ''
-              + planningDraftRoutingPhase
-              + ''
-
-                Phase 3: Design
-                Goal: Produce candidate implementation approaches (still no execution).
-
-              ''
-              + planningDesignPhase
-              + ''
-
-              ''
-              + planningKnowledgeGapGate
-              + ''
-
-                Phase 4: Final Plan File
-                Goal: Synthesize the draft plan and write the final plan file.
-
-                1) Read the draft plan produced in Phase 3.
-                2) Write a decision-complete final plan file (`*.md`) under `.opencode/plans/`.
-                3) Use:
-              ''
-              + planningFinalFileRequirements
-              + ''
-
-                Phase 5: Review
-                Goal: Validate the final plan and close any critical gaps before reporting.
-
-                1) Call `plan_reviewer` to review the final plan file (`*.md`) written in Phase 4.
-                2) If `plan_reviewer` reports any high/medium finding, revise the same final plan file and run one additional `plan_reviewer` pass.
-              ''
-              + planningReviewPhase
-              + ''
-
-                After final write and review, report:
-                - Plan file: <path>
-                - Summary: <2-4 sentences>
-
-              ''
-              + planningExitAndFailure "plan";
+            prompt = planningPrompt {
+              workflowTitle = "Plan Workflow";
+              phase1Goal = "Build a precise understanding of the request and relevant code.";
+              phase1Focus = "Focus on user intent, constraints, and affected code paths.";
+              phase1Clarify = "Use the question tool to ask only high-impact clarifications that change scope or design.";
+              phase3Title = "Design";
+              phase3Goal = "Produce candidate implementation approaches (still no execution).";
+              phase4Goal = "Synthesize the draft plan and write the final plan file.";
+              agentName = "plan";
+            };
             permission = plansOnlyPermission;
           };
           spec_plan = {
@@ -359,67 +375,16 @@ delib.module {
             description = "Primary interactive spec planner for ambiguous requests where requirements and scope must be clarified first.";
             model = "openai/gpt-5.3-codex";
             reasoningEffort = "high";
-            prompt =
-              planModeHeader
-              + ''
-                Spec Planning Workflow:
-
-                Phase 1: Initial Understanding
-                Goal: Build a precise understanding of intent, requirements, constraints, and affected code.
-
-                1) Focus on user intent, success criteria, scope boundaries, constraints, and tradeoffs.
-                2) Launch up to 3 `explore` subagents in parallel for read-only investigation.
-                3) Synthesize findings and identify ambiguities.
-                4) Use the `question` tool for high-impact clarifications only when answers are not discoverable from the environment.
-
-              ''
-              + planningInternetResearchPhase
-              + ''
-
-              ''
-              + planningSkillPhase
-              + ''
-
-              ''
-              + planningDraftRoutingPhase
-              + ''
-
-                Phase 3: Specification Design
-                Goal: Convert clarified intent into implementable specification drafts (still no execution).
-
-              ''
-              + planningDesignPhase
-              + ''
-
-              ''
-              + planningKnowledgeGapGate
-              + ''
-
-                Phase 4: Final Plan File
-                Goal: Synthesize clarified requirements + draft plan(s), then write the final plan file.
-
-                1) Read the draft plan produced in Phase 3.
-                2) Write a decision-complete final plan file (`*.md`) under `.opencode/plans/`.
-                3) Use:
-              ''
-              + planningFinalFileRequirements
-              + ''
-
-                Phase 5: Review
-                Goal: Validate the final plan and close any critical gaps before reporting.
-
-                1) Call `plan_reviewer` to review the final plan file (`*.md`) written in Phase 4.
-                2) If `plan_reviewer` reports any high/medium finding, revise the same final plan file and run one additional `plan_reviewer` pass.
-              ''
-              + planningReviewPhase
-              + ''
-
-                After final write and review, report:
-                - Plan file: <path>
-                - Summary: <2-4 sentences>
-
-              ''
-              + planningExitAndFailure "spec_plan";
+            prompt = planningPrompt {
+              workflowTitle = "Spec Planning Workflow";
+              phase1Goal = "Build a precise understanding of intent, requirements, constraints, and affected code.";
+              phase1Focus = "Focus on user intent, success criteria, scope boundaries, constraints, and tradeoffs.";
+              phase1Clarify = "Use the `question` tool for high-impact clarifications only when answers are not discoverable from the environment.";
+              phase3Title = "Specification Design";
+              phase3Goal = "Convert clarified intent into implementable specification drafts (still no execution).";
+              phase4Goal = "Synthesize clarified requirements + draft plan(s), then write the final plan file.";
+              agentName = "spec_plan";
+            };
             permission = plansOnlyPermission // {question = "allow";};
           };
           draft_planner = {
@@ -430,7 +395,7 @@ delib.module {
                 You are the `draft_planner` subagent. Your sole responsibility is to write normal-format draft plan files.
 
               ''
-              + skillPolicyCommon
+              + skillPolicy { when = "when they clearly fit the task"; fallback = "normal planning workflow"; }
               + ''
 
                 Primary objective:
@@ -441,11 +406,9 @@ delib.module {
                 - Write draft files ONLY (`*.draft.md`).
                 - Do not modify source code or other files.
 
-                Filename policy (strict):
-                - Create a NEW timestamped file:
-                  `.opencode/plans/YYYYMMDD-HHMM-<kebab-task-slug>.draft.md`
-                - Never overwrite existing files.
-                - If collision occurs, append `-v2`, `-v3`, etc.
+              ''
+              + draftFilenamePolicy
+              + ''
 
                 Plan template (fixed headings, in this order):
                 1. Title
@@ -477,12 +440,9 @@ delib.module {
                    - Write status: success
                    - Summary: <2-4 sentences>
 
-                Failure protocol:
-                - If write fails, return:
-                  - Write status: failed
-                  - attempted path
-                  - exact error
-                - Do not fall back to chat-only plan text.
+              ''
+              + draftFailureProtocol
+              + ''
               '';
             permission = plansOnlyPermission;
           };
@@ -494,7 +454,7 @@ delib.module {
                 You are the `draft_planner_dividable` subagent. Your sole responsibility is to write split-ready draft plan files.
 
               ''
-              + skillPolicyCommon
+              + skillPolicy { when = "when they clearly fit the task"; fallback = "normal planning workflow"; }
               + ''
 
                 Primary objective:
@@ -505,21 +465,13 @@ delib.module {
                 - Write draft files ONLY (`*.draft.md`).
                 - Do not modify source code or other files.
 
-                Filename policy (strict):
-                - Create a NEW timestamped file:
-                  `.opencode/plans/YYYYMMDD-HHMM-<kebab-task-slug>.draft.md`
-                - Never overwrite existing files.
-                - If collision occurs, append `-v2`, `-v3`, etc.
+              ''
+              + draftFilenamePolicy
+              + ''
 
-                Required task-dividable structure:
-                - Include a "Task Breakdown" section with task IDs (`T1`, `T2`, ...).
-                - For each task include:
-                  - target file(s) to edit
-                  - what to change in each target file
-                  - files to refer (optional) and why they are needed
-                  - task dependency graph/prerequisites (optional)
-                  - completion criteria
-                - Headings may vary, but all fields are mandatory per task.
+              ''
+              + dividableTaskStructure
+              + ''
 
                 Quality bar:
                 - Decision-complete: implementer should not need to choose defaults.
@@ -537,12 +489,9 @@ delib.module {
                    - Write status: success
                    - Summary: <2-4 sentences>
 
-                Failure protocol:
-                - If write fails, return:
-                  - Write status: failed
-                  - attempted path
-                  - exact error
-                - Do not fall back to chat-only plan text.
+              ''
+              + draftFailureProtocol
+              + ''
               '';
             permission = plansOnlyPermission;
           };
@@ -599,7 +548,7 @@ delib.module {
                 You are the `explore` agent. Your role is fast, read-only exploration.
 
               ''
-              + readonlyExploreSkillPolicy;
+              + skillPolicy { when = "for matching ecosystem/language/task guidance"; fallback = "normal read-only exploration"; };
           };
           plan_reviewer = {
             mode = "subagent";
@@ -618,11 +567,9 @@ delib.module {
                 - Review ONLY final plan files matching `.opencode/plans/*.md`.
                 - If input is a draft plan file (`*.draft.md`) or any non-plan path, return invalid-scope refusal and do not perform review.
 
-                Skill usage policy:
-                - Primary agents may provide delegated skills with priority in delegation context.
-                - Use only delegated skills marked `high` priority when they improve review quality for domain-specific conventions.
-                - Ignore delegated skills marked `low` or `none`.
-                - If no delegated high-priority skill applies, continue with normal review workflow.
+              ''
+              + skillPolicy { when = "when they improve review quality for domain-specific conventions"; fallback = "normal review workflow"; }
+              + ''
 
                 Required output format:
                 1) Findings first, sorted by severity (high -> medium -> low).
@@ -649,11 +596,9 @@ delib.module {
               + readOnlyReviewHeader "correctness, regressions, edge cases, API contract mismatches, and missing tests"
               + ''
 
-                Skill usage policy:
-                - Primary agents may provide delegated skills with priority in delegation context.
-                - Use only delegated skills marked `high` priority when they improve review quality for language/ecosystem-specific concerns.
-                - Ignore delegated skills marked `low` or `none`.
-                - If no delegated high-priority skill applies, continue with normal review workflow.
+              ''
+              + skillPolicy { when = "when they improve review quality for language/ecosystem-specific concerns"; fallback = "normal review workflow"; }
+              + ''
 
                 Required output format:
                 1) Findings first, sorted by severity (high -> medium -> low).
@@ -681,11 +626,9 @@ delib.module {
               - NEVER edit source/config files directly.
               - If a check cannot be executed safely under these constraints, report it as unknown with the concrete blocker.
 
-              Skill usage policy:
-              - Primary agents may provide delegated skills with priority in delegation context.
-              - Use only delegated skills marked `high` priority when they improve investigation quality for language/ecosystem-specific concerns.
-              - Ignore delegated skills marked `low` or `none`.
-              - If no delegated high-priority skill applies, continue with normal investigation workflow.
+            ''
+            + skillPolicy { when = "when they improve investigation quality for language/ecosystem-specific concerns"; fallback = "normal investigation workflow"; }
+            + ''
 
               Required workflow:
               1) Clarify bug symptoms and expected vs actual behavior.
@@ -710,11 +653,9 @@ delib.module {
             prompt = ''
               You are the `cleanup_maintainer` subagent. Your responsibility is to identify and clean dead code and outdated documentation.
 
-              Skill usage policy:
-              - Primary agents may provide delegated skills with priority in delegation context.
-              - Use only delegated skills marked `high` priority when they fit project conventions or ecosystem-specific cleanup work.
-              - Ignore delegated skills marked `low` or `none`.
-              - If no delegated high-priority skill applies, continue with normal cleanup workflow.
+            ''
+            + skillPolicy { when = "when they fit project conventions or ecosystem-specific cleanup work"; fallback = "normal cleanup workflow"; }
+            + ''
 
               Default operating mode (critical):
               - Conservative and evidence-first.
@@ -762,7 +703,7 @@ delib.module {
                 You are the `deep_explore` subagent. Your role is deep, read-only architecture exploration.
 
               ''
-              + readonlyExploreSkillPolicy;
+              + skillPolicy { when = "for matching ecosystem/language/task guidance"; fallback = "normal read-only exploration"; };
           };
           internet_research = {
             mode = "subagent";
@@ -822,29 +763,11 @@ delib.module {
           - If you are unable to run commands in background, use `nohup` command
           - Make sure terminate your nohup process
           - Use `orchestrator` when implementation should be coordinated across multiple delegated subagents.
-          - `orchestrator` must never write files directly and should delegate edits to `full` or `editor`.
           - Use `spec_plan` when user intent is unclear and you must iteratively determine requirements and specification details before planning.
           - Use `plan` when the user request is already well-scoped and you can produce an implementation-ready plan directly.
           - For architecture-focused planning, use `plan` or `spec_plan` and prioritize `architecture-planning-perspective` when the user explicitly requests architecture focus.
           - For performance-focused planning, use `plan` or `spec_plan` and prioritize `performance-planning-perspective` when the user explicitly requests performance focus.
           - Plan format override markers: `plan:dividable` and `plan:normal`.
-          - Primary planning agents should route to `draft_planner` (normal) or `draft_planner_dividable` (split-ready) before final plan synthesis.
-          - `plan` and `spec_plan` should discover available skills early, including project-level skills.
-          - Primary agents should pass only high-priority relevant skills with rationale to subagents when delegating.
-          - Primary planning agents must call `internet_research` when they have material knowledge uncertainty that can affect planning decisions.
-          - Skipping required `internet_research` delegation in qualifying cases is a hard-fail policy violation.
-          - Primary agents should omit the skill brief entirely when no high-priority skill applies.
-          - Subagents should prioritize only delegated skills marked high when they clearly match the task.
-          - Subagents should ignore delegated skills marked low or none.
-          - If no delegated high-priority skill applies, continue with normal workflow instead of blocking execution.
-          - `draft_planner` creates normal scoped decision-complete draft plan files (`*.draft.md`).
-          - `draft_planner_dividable` creates split-ready decision-complete draft plan files (`*.draft.md`).
-          - Primary planning agents should read drafts and write final decision-complete plan files (`*.md`).
-          - `plan_reviewer` is for reviewing final plan files (`*.md`) during planning workflows.
-          - `implementation_reviewer` is for post-implementation code review when explicitly requested by the user.
-          - `debugger` is for root-cause investigation using command-driven evidence (tests/build/repro) without assuming unverified facts.
-          - `cleanup_maintainer` is for dead code and outdated documentation cleanup.
-          - `cleanup_maintainer` defaults to audit-first and only applies edits when the user explicitly asks to execute cleanup.
         '';
     };
 
