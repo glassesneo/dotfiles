@@ -18,47 +18,74 @@ delib.module {
     inboxOnly = ["${orgfiles}/inbox.org"];
     allFiles = ["${orgfiles}/inbox.org" "${orgfiles}/projects/**/*"];
     journalFiles = ["${orgfiles}/journal/**/*.org"];
+    dailyFiles = ["${orgfiles}/journal/daily/**/*.org"];
     zettelLitFiles = ["${orgfiles}/zettelkasten/literature/**/*"];
     zettelKnowFiles = ["${orgfiles}/zettelkasten/knowledge/**/*"];
 
     # --- Agenda command constructors ---
     # Single tags query (non-todo).
-    mkTagsCmd = {description, match, header, files, extra ? {}}: {
+    mkTagsCmd = {
+      description,
+      match,
+      header,
+      files,
+      extra ? {},
+    }: {
       inherit description;
-      types = [(
-        {
-          type = "tags";
-          inherit match;
-          todo_only = false;
-          org_agenda_overriding_header = header;
-          org_agenda_files = files;
-        } // extra
-      )];
+      types = [
+        (
+          {
+            type = "tags";
+            inherit match;
+            todo_only = false;
+            org_agenda_overriding_header = header;
+            org_agenda_files = files;
+          }
+          // extra
+        )
+      ];
     };
 
     # Single tags_todo query with LEVEL=1 default.
-    mkTodoCmd = {description, header, files, match ? "LEVEL=1", extra ? {}}: {
+    mkTodoCmd = {
+      description,
+      header,
+      files,
+      match ? "LEVEL=1",
+      extra ? {},
+    }: {
       inherit description;
-      types = [(
-        {
-          type = "tags_todo";
-          inherit match;
-          org_agenda_overriding_header = header;
-          org_agenda_files = files;
-        } // extra
-      )];
+      types = [
+        (
+          {
+            type = "tags_todo";
+            inherit match;
+            org_agenda_overriding_header = header;
+            org_agenda_files = files;
+          }
+          // extra
+        )
+      ];
     };
 
     # Single agenda query with optional span.
-    mkAgendaCmd = {description, header, files, extra ? {}}: {
+    mkAgendaCmd = {
+      description,
+      header,
+      files,
+      extra ? {},
+    }: {
       inherit description;
-      types = [(
-        {
-          type = "agenda";
-          org_agenda_overriding_header = header;
-          org_agenda_files = files;
-        } // extra
-      )];
+      types = [
+        (
+          {
+            type = "agenda";
+            org_agenda_overriding_header = header;
+            org_agenda_files = files;
+          }
+          // extra
+        )
+      ];
     };
   in {
     programs.nixvim.plugins.orgmode = {
@@ -172,6 +199,12 @@ delib.module {
             match = "diary";
             header = "Diary Entries";
             files = journalFiles;
+          };
+          j = mkTagsCmd {
+            description = "Daily Journal Files";
+            match = "LEVEL=1";
+            header = "Daily Journal Files";
+            files = dailyFiles;
           };
 
           # --- Zettelkasten views ---

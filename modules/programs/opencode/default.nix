@@ -46,6 +46,17 @@ delib.module {
     };
 
     debuggerPermission = {
+      external_directory = {
+        "/tmp/*" = "allow";
+        "/private/tmp/*" = "allow";
+        "/nix/store/*" = "allow";
+      };
+      read = {
+        "/tmp/*" = "allow";
+        "/private/tmp/*" = "allow";
+        "/nix/store" = "allow";
+        "/nix/store/*" = "allow";
+      };
       edit = {
         "*" = "deny";
       };
