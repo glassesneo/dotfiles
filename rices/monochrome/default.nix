@@ -119,7 +119,7 @@ in
     # };
 
     # Use rice-aware options for vim and tmux
-    myconfig.programs.myvimeditor.colorscheme = {
+    myconfig.programs.vim.colorscheme = {
       plugin = "base16-vim";
       config = ''
         " Monochrome base16 colorscheme

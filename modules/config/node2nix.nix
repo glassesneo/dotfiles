@@ -12,9 +12,11 @@
     exec ${pkgs.nodejs}/bin/npx -y kiri-mcp-server@0.9.2 "$@"
   '';
 
-  nodePkgs = nodePkgsBase // {
-    "kiri-mcp-server" = kiri-mcp-server-wrapper;
-  };
+  nodePkgs =
+    nodePkgsBase
+    // {
+      "kiri-mcp-server" = kiri-mcp-server-wrapper;
+    };
 in
   delib.module {
     name = "node2nix";

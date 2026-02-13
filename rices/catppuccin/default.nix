@@ -122,7 +122,7 @@ in
       };
 
       # Use rice-aware options for vim and tmux
-      programs.myvimeditor.colorscheme = {
+      programs.vim.colorscheme = {
         plugin = "catppuccin-vim";
         config = ''
           " Catppuccin colorscheme configuration

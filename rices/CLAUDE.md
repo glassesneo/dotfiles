@@ -8,7 +8,7 @@ Rices **cannot** reference `pkgs` directly — `pkgs` in `delib.rice` resolves t
 
 ```nix
 # Module (e.g., modules/programs/vim/default.nix)
-options.programs.myvimeditor.colorscheme = {
+options.programs.vim.colorscheme = {
   plugin = strOption "";  # Rice sets: "catppuccin-vim"
   config = strOption "";  # Rice sets: vimscript string
 };
@@ -22,7 +22,7 @@ home.ifEnabled = {cfg, ...}: let
 in { ... };
 
 # Rice (e.g., rices/catppuccin.nix)
-myconfig.programs.myvimeditor.colorscheme = {
+myconfig.programs.vim.colorscheme = {
   plugin = "catppuccin-vim";  # Pure string, no pkgs reference
   config = "colorscheme catppuccin_macchiato";
 };

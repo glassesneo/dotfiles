@@ -45,19 +45,12 @@ delib.module {
       # Add theme plugin if specified
       plugins = themePlugins;
 
-      extraConfig = ''
-        set -g mouse on
-        set -g default-terminal "tmux-256color"
-        set -g extended-keys on
-        set -g extended-keys-format csi-u
-        set -as terminal-features ',xterm*:extkeys'
-        set -as terminal-features ',xterm-ghostty:extkeys'
-        set -as terminal-features ',xterm-ghostty:RGB'
-        run-shell -b '${lib.getExe pkgs.nushell} ${./config.nu}'
-
-        # Rice-specific configuration
-        ${cfg.theme.extraConfig}
-      '';
+      extraConfig =
+        builtins.readFile ./tmux.conf
+        + ''
+          # Rice-specific configuration
+          ${cfg.theme.extraConfig}
+        '';
     };
     programs.ghostty.settings.keybind = keybinds_for_ghostty;
   };

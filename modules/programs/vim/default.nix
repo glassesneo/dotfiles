@@ -7,9 +7,9 @@
   ...
 }:
 delib.module {
-  name = "programs.myvimeditor";
+  name = "programs.vim";
 
-  options.programs.myvimeditor = with delib; {
+  options.programs.vim = with delib; {
     enable = boolOption true;
     # Rice-aware colorscheme configuration
     colorscheme = {
@@ -39,10 +39,9 @@ delib.module {
       if cfg.colorscheme.plugin != ""
       then
         assert lib.assertMsg pluginExists
-          "vim colorscheme plugin '${cfg.colorscheme.plugin}' not found in pkgs.vimPlugins";
+        "vim colorscheme plugin '${cfg.colorscheme.plugin}' not found in pkgs.vimPlugins";
         assert lib.assertMsg (!configWithoutPlugin)
-          "vim colorscheme.config is set but colorscheme.plugin is empty - the colorscheme won't be available";
-        [pkgs.vimPlugins.${cfg.colorscheme.plugin}]
+        "vim colorscheme.config is set but colorscheme.plugin is empty - the colorscheme won't be available"; [pkgs.vimPlugins.${cfg.colorscheme.plugin}]
       else [];
   in {
     # TODO(stabilization-window): Keep legacy artifacts for rollback safety.

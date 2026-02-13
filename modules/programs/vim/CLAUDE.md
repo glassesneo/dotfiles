@@ -2,14 +2,14 @@
 
 ## Overview
 
-Vim configuration with DPP (Dark Powered Plugin manager) via Denops. Module name: `programs.myvimeditor` (avoids collision with nixvim's `programs.vim`).
+Vim configuration with DPP (Dark Powered Plugin manager) via Denops. Module name: `programs.vim` (avoids collision with nixvim's `programs.vim`).
 
 ## Rice-Aware Colorscheme Pattern
 
 This module is the primary example of the rice-aware options architecture:
 
 ```nix
-options.programs.myvimeditor.colorscheme = {
+options.programs.vim.colorscheme = {
   plugin = strOption "";   # Rice sets pure string, e.g., "catppuccin-vim"
   config = strOption "";   # Rice sets vimscript string
 };
@@ -36,4 +36,4 @@ options.programs.myvimeditor.colorscheme = {
 
 ## Key Detail
 
-`programs.myvimeditor` remains a dedicated module name to avoid collision with nixvim's `programs.vim`.
+`programs.vim` remains a dedicated module name to avoid collision with nixvim's `programs.vim`.
