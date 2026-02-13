@@ -9,13 +9,6 @@ delib.module {
 
   options = delib.singleEnableOption true;
 
-  myconfig.ifEnabled = {
-    agentSkills.agents.claude-code = {
-      skills = ["skill-creator" "ui-ux-pro-max" "hierarchical-claude-md" "ai-first-doccomments" "tmux-runner" "codex-subagent" "codex-exec"];
-      targetDir = ".claude/skills";
-    };
-  };
-
   home.ifEnabled = let
     # SketchyBar integration hook scripts
     sketchybarActiveScript =

@@ -664,10 +664,31 @@
         "nix-darwin": "nix-darwin",
         "nixpkgs": "nixpkgs_3",
         "nixvim": "nixvim",
+        "skills-deployer": "skills-deployer",
         "sparze": "sparze",
         "tree-sitter-moonbit": "tree-sitter-moonbit",
         "ui-ux-pro-max": "ui-ux-pro-max",
         "various-wallpapers": "various-wallpapers"
+      }
+    },
+    "skills-deployer": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1770987039,
+        "narHash": "sha256-PKfMw8HBrmqXc2YMHIHp8i77RnClG87+xl+TA5cmHAw=",
+        "owner": "glassesneo",
+        "repo": "skills-deployer",
+        "rev": "db5cf0153bacc4d3ca21c1b1206868aa633dd76e",
+        "type": "github"
+      },
+      "original": {
+        "owner": "glassesneo",
+        "repo": "skills-deployer",
+        "type": "github"
       }
     },
     "sparze": {

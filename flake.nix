@@ -130,6 +130,10 @@
       url = "github:sourcegraph/amp.nvim";
       flake = false;
     };
+    skills-deployer = {
+      url = "github:glassesneo/skills-deployer";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     anthropic-skills = {
       url = "github:anthropics/skills";
       flake = false;

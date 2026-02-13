@@ -9,16 +9,6 @@ delib.module {
 
   options = delib.singleEnableOption true;
 
-  myconfig.ifEnabled = {
-    agentSkills.agents.codex = {
-      # Note: skill-creator is already built-in to Codex (.system/skill-creator)
-      skills = ["agent-browser" "ai-first-doccomments" "tmux-runner"];
-      targetDir = ".codex/skills";
-      # Codex doesn't follow symlinks, so we need to copy files
-      structure = "copy";
-    };
-  };
-
   home.ifEnabled = {
     programs.codex = {
       enable = true;
