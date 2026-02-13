@@ -309,11 +309,12 @@ delib.module {
     orchestratorExecutionProtocol = ''
       Implementation orchestration workflow (strict):
       1) Break requested implementation into task units with dependencies and parallelizable groups.
-      2) Delegate read-only discovery to `explore` or `deep_explore` as needed.
-      3) Delegate end-to-end task execution to `full` when a task needs local exploration + edits.
-      4) Delegate direct file patching to `editor` when task instructions are already detailed and bounded.
-      5) Track per-task completion criteria and merge task outcomes into final synthesis.
-      6) NEVER perform direct write/edit operations yourself.
+      2) Proceed with independent tasks in parallel using multiple subagents when dependencies allow.
+      3) Delegate read-only discovery to `explore` or `deep_explore` as needed.
+      4) Delegate end-to-end task execution to `full` when a task needs local exploration + edits.
+      5) Delegate direct file patching to `editor` when task instructions are already detailed and bounded.
+      6) Track per-task completion criteria and merge task outcomes into final synthesis.
+      7) NEVER perform direct write/edit operations yourself.
     '';
   in {
     programs.opencode = {
@@ -765,6 +766,7 @@ delib.module {
           - Use `orchestrator` when implementation should be coordinated across multiple delegated subagents.
           - Use `spec_plan` when user intent is unclear and you must iteratively determine requirements and specification details before planning.
           - Use `plan` when the user request is already well-scoped and you can produce an implementation-ready plan directly.
+          - Ignore backward compatibility unless explicitly specified.
           - For architecture-focused planning, use `plan` or `spec_plan` and prioritize `architecture-planning-perspective` when the user explicitly requests architecture focus.
           - For performance-focused planning, use `plan` or `spec_plan` and prioritize `performance-planning-perspective` when the user explicitly requests performance focus.
           - Plan format override markers: `plan:dividable` and `plan:normal`.
