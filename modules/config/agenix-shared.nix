@@ -1,7 +1,9 @@
 {
   delib,
+  homeConfig,
   inputs,
   lib,
+  pkgs,
   ...
 }:
 delib.module {
@@ -14,14 +16,10 @@ delib.module {
 
   home.always.imports = [inputs.agenix.homeManagerModules.default];
 
-  home.ifEnabled = {
-    config,
-    myconfig,
-    pkgs,
-    ...
-  }: let
+  home.ifEnabled = {myconfig, ...}: let
     cfg = myconfig.agenix-shared;
     secretDefs = myconfig.args.shared.agenixSecrets;
+    cat = lib.getExe' pkgs.coreutils "cat";
 
     # Helper to generate secret file mapping
     mkSecretFile = secretName: {
@@ -36,15 +34,13 @@ delib.module {
 
     # Auto-generate environment variable exports ONLY for selected secrets
     home.sessionVariables = let
-      cat = lib.getExe' pkgs.coreutils "cat";
-
       # Filter to only export selected secrets
       exportedSecrets = lib.filter (s: builtins.elem s cfg.exportSecrets) secretDefs.secretNames;
 
       # Generate env var mapping for each exported secret
       mkEnvVar = secretName: let
         envVarName = secretDefs.secretToEnvVar.${secretName};
-        secretPath = config.age.secrets.${secretName}.path;
+        secretPath = homeConfig.age.secrets.${secretName}.path;
       in {
         name = envVarName;
         value = ''$(${cat} ${secretPath})'';

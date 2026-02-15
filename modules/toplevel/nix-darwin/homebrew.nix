@@ -4,65 +4,6 @@ delib.module {
 
   options = delib.singleEnableOption true;
 
-  home.ifEnabled = {
-    home.file = {
-      "Library/Application Support/AquaSKK/keymap.conf".text = ''
-        ###
-        ### keymap.conf
-        ###
-
-        # ======================================================================
-        # event section
-        # ======================================================================
-
-        SKK_JMODE   ctrl::j
-        SKK_ENTER   group::hex::0x03,0x0a,0x0d||ctrl::m
-        SKK_CANCEL    ctrl::g||hex::0x1b
-        SKK_BACKSPACE   hex::0x08||ctrl::h
-        SKK_DELETE    hex::0x7f||ctrl::d
-        SKK_TAB     hex::0x09||ctrl::i
-        SKK_PASTE   ctrl::y
-        SKK_LEFT    hex::0x1c||ctrl::b||keycode::7b
-        SKK_RIGHT   hex::0x1d||ctrl::f||keycode::7c
-        SKK_UP      hex::0x1e||ctrl::a||keycode::7e
-        SKK_DOWN    hex::0x1f||ctrl::e||keycode::7d
-        SKK_PING    ctrl::l
-        SKK_UNDO                ctrl::/
-
-        # ======================================================================
-        # attribute section(for SKK_CHAR)
-        # ======================================================================
-
-        ToggleKana    q
-        ToggleJisx0201Kana  ctrl::q
-        SwitchToAscii   ctrl::l
-        SwitchToJisx0208Latin L
-
-        EnterAbbrev   /
-        EnterJapanese   Q
-        NextCompletion    .
-        PrevCompletion    ,
-        NextCandidate   hex::0x20||ctrl::n
-        PrevCandidate   x||ctrl::p
-        RemoveTrigger   X
-
-        UpperCases    group::A-K,M-P,R-Z
-        Direct      group::keycode::0x41,0x43,0x45,0x4b,0x4e,0x51-0x59,0x5b,0x5c,0x5f
-        InputChars              group::hex::0x20-0x7e
-
-        CompConversion    alt::hex::0x20||shift::hex::0x20
-
-        # ======================================================================
-        # handle option
-        # ======================================================================
-
-        AlwaysHandled           group::keycode::0x66,0x68
-        PseudoHandled           ctrl::l
-        StickyKey :
-      '';
-    };
-  };
-
   darwin.ifEnabled = {cfg, ...}: {
     homebrew = {
       enable = cfg.enable;
@@ -85,13 +26,13 @@ delib.module {
       # `brew install --cask`
       casks = [
         "arc"
-        "aquaskk"
         "karabiner-elements"
       ];
 
       masApps = {
-        XCode = 497799835;
-        LINE = 539883307;
+        # Temporarily commented out due to mas download issues
+        # XCode = 497799835;
+        # LINE = 539883307;
       };
     };
   };
