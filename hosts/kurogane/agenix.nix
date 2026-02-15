@@ -1,50 +1,24 @@
-{
-  delib,
-  homeConfig,
-  inputs,
-  lib,
-  pkgs,
-  ...
-}:
+{delib, ...}:
 delib.host {
   name = "kurogane";
 
-  home = {myconfig, ...}: {
-    imports = [inputs.agenix.homeManagerModules.default];
-    age = {
-      identityPaths = ["/Users/${myconfig.constants.username}/.ssh/id_agenix"];
-      secrets = {
-        claude-code-oauth-token.file = ../../secrets/claude-code-oauth-token.age;
-        gemini-api-key.file = ../../secrets/gemini-api-key.age;
-        ai-mop-api-key.file = ../../secrets/ai-mop-api-key.age;
-        brave-api-key.file = ../../secrets/brave-api-key.age;
-        openrouter-api-key.file = ../../secrets/openrouter-api-key.age;
-        tavily-api-key.file = ../../secrets/tavily-api-key.age;
-        hf-inference-api-key.file = ../../secrets/hf-inference-api-key.age;
-        cerebras-api-key.file = ../../secrets/cerebras-api-key.age;
-        morph-fast-apply-api-key.file = ../../secrets/morph-fast-apply-api-key.age;
-        io-intelligence-api-key.file = ../../secrets/io-intelligence-api-key.age;
-        google-cloud-api-key.file = ../../secrets/google-cloud-api-key.age;
-        iniad-id.file = ../../secrets/iniad-id.age;
-        iniad-password.file = ../../secrets/iniad-password.age;
-      };
-    };
-    home.sessionVariables = let
-      cat = lib.getExe' pkgs.coreutils "cat";
-    in {
-      BRAVE_API_KEY = ''$(${cat} ${homeConfig.age.secrets.brave-api-key.path})'';
-      OPENROUTER_API_KEY = ''$(${cat} ${homeConfig.age.secrets.openrouter-api-key.path})'';
-      TAVILY_API_KEY = ''$(${cat} ${homeConfig.age.secrets.tavily-api-key.path})'';
-      CLAUDE_CODE_OAUTH_TOKEN = ''$(${cat} ${homeConfig.age.secrets.claude-code-oauth-token.path})'';
-      GEMINI_API_KEY = ''$(${cat} ${homeConfig.age.secrets.gemini-api-key.path})'';
-      AI_MOP_API_KEY = ''$(${cat} ${homeConfig.age.secrets.ai-mop-api-key.path})'';
-      HF_INFERENCE_API_KEY = ''$(${cat} ${homeConfig.age.secrets.hf-inference-api-key.path})'';
-      CEREBRAS_API_KEY = ''$(${cat} ${homeConfig.age.secrets.cerebras-api-key.path})'';
-      MORPH_API_KEY = ''$(${cat} ${homeConfig.age.secrets.morph-fast-apply-api-key.path})'';
-      IO_INTELLIGENCE_API_KEY = ''$(${cat} ${homeConfig.age.secrets.io-intelligence-api-key.path})'';
-      GOOGLE_CLOUD_API_KEY = ''$(${cat} ${homeConfig.age.secrets.google-cloud-api-key.path})'';
-      INIAD_ID = ''$(${cat} ${homeConfig.age.secrets.iniad-id.path})'';
-      INIAD_PASSWORD = ''$(${cat} ${homeConfig.age.secrets.iniad-password.path})'';
-    };
+  myconfig.agenix-shared = {
+    enable = true;
+    # Export all 13 secrets (same as current behavior)
+    exportSecrets = [
+      "claude-code-oauth-token"
+      "gemini-api-key"
+      "ai-mop-api-key"
+      "brave-api-key"
+      "openrouter-api-key"
+      "tavily-api-key"
+      "hf-inference-api-key"
+      "cerebras-api-key"
+      "morph-fast-apply-api-key"
+      "io-intelligence-api-key"
+      "google-cloud-api-key"
+      "iniad-id"
+      "iniad-password"
+    ];
   };
 }

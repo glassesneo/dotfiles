@@ -1,17 +1,33 @@
 let
-  userKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBOIatJ4jxTsywrBNYLuIP4p8AIANP1jmj7wM0KcIXb/ neo@macos-personal-laptop-01";
-in {
-  "claude-code-oauth-token.age".publicKeys = [userKey];
-  "gemini-api-key.age".publicKeys = [userKey];
-  "ai-mop-api-key.age".publicKeys = [userKey];
-  "brave-api-key.age".publicKeys = [userKey];
-  "openrouter-api-key.age".publicKeys = [userKey];
-  "tavily-api-key.age".publicKeys = [userKey];
-  "hf-inference-api-key.age".publicKeys = [userKey];
-  "cerebras-api-key.age".publicKeys = [userKey];
-  "morph-fast-apply-api-key.age".publicKeys = [userKey];
-  "io-intelligence-api-key.age".publicKeys = [userKey];
-  "google-cloud-api-key.age".publicKeys = [userKey];
-  "iniad-id.age".publicKeys = [userKey];
-  "iniad-password.age".publicKeys = [userKey];
-}
+  # Import host public key registry
+  hosts = import ./hosts.nix;
+
+  # Extract all host keys for encryption
+  allHostKeys = builtins.attrValues hosts;
+
+  # List of all secret names (must match agenix-secrets.nix)
+  # NOTE: This list is duplicated from modules/config/agenix-secrets.nix
+  # because we can't import that module here (Denix auto-loading limitation)
+  secretNames = [
+    "claude-code-oauth-token"
+    "gemini-api-key"
+    "ai-mop-api-key"
+    "brave-api-key"
+    "openrouter-api-key"
+    "tavily-api-key"
+    "hf-inference-api-key"
+    "cerebras-api-key"
+    "morph-fast-apply-api-key"
+    "io-intelligence-api-key"
+    "google-cloud-api-key"
+    "iniad-id"
+    "iniad-password"
+  ];
+
+  # Generate secret entry for a single secret
+  mkSecret = secretName: {
+    "${secretName}.age".publicKeys = allHostKeys;
+  };
+in
+  # Auto-generate secret entries for all hosts
+  builtins.foldl' (a: b: a // b) {} (map mkSecret secretNames)
