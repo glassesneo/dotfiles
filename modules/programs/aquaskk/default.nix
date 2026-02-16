@@ -1,5 +1,5 @@
 {
-  brewCasks ? {},
+  brewCasks,
   delib,
   host,
   ...

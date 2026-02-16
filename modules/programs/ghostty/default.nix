@@ -1,6 +1,7 @@
 {
-  brewCasks ? {},
+  brewCasks,
   delib,
+  pkgs,
   ...
 }:
 delib.module {
@@ -18,9 +19,9 @@ delib.module {
     programs.ghostty = {
       enable = cfg.enable;
       package =
-        if myconfig.brew-nix.enable && brewCasks ? ghostty
+        if myconfig.brew-nix.enable
         then brewCasks.ghostty
-        else null;
+        else pkgs.ghostty;
       clearDefaultKeybinds = true;
       settings = {
         keybind = [

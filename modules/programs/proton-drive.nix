@@ -1,16 +1,16 @@
 {
-  brewCasks,
   delib,
+  brewCasks,
   ...
 }:
 delib.module {
-  name = "programs.claude-desktop";
+  name = "programs.proton-drive";
 
   options = delib.singleEnableOption true;
 
   darwin.ifEnabled = {
     environment.systemPackages = [
-      brewCasks.claude
+      brewCasks.proton-drive
     ];
   };
 }
