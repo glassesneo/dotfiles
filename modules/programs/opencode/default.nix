@@ -457,7 +457,7 @@ delib.module {
             mode = "primary";
             description = "Primary interactive spec planner for ambiguous requests where requirements and scope must be clarified first.";
             model = "openai/gpt-5.3-codex";
-            reasoningEffort = "high";
+            reasoningEffort = "xhigh";
             prompt = specPlanningPrompt {
               workflowTitle = "Spec Planning Workflow";
               phase1Goal = "Build a precise understanding of intent, requirements, constraints, and affected code.";
@@ -527,7 +527,7 @@ delib.module {
             mode = "subagent";
             model = "openai/gpt-5.3-codex";
             description = "Implementation subagent that can explore and edit to complete one assigned task end-to-end.";
-            reasoningEffort = "high";
+            reasoningEffort = "medium";
             prompt = ''
               You are the `general` implementation subagent.
 
@@ -621,7 +621,7 @@ delib.module {
             mode = "subagent";
             model = "openai/gpt-5.3-codex";
             description = "Performs strict read-only review of final plan files (`*.md`) with actionable revisions.";
-            reasoningEffort = "xhigh";
+            reasoningEffort = "medium";
             prompt =
               ''
                 You are the `plan_reviewer` subagent. Your sole responsibility is rigorous review of final plan files (`*.md`) only.
@@ -657,7 +657,7 @@ delib.module {
             mode = "subagent";
             model = "openai/gpt-5.3-codex";
             description = "Performs strict read-only code review with severity-ordered findings and concrete file/line evidence.";
-            reasoningEffort = "xhigh";
+            reasoningEffort = "high";
             prompt =
               ''
                 You are the `code_reviewer` subagent. Your sole responsibility is rigorous code review.
@@ -688,7 +688,7 @@ delib.module {
             mode = "subagent";
             model = "openai/gpt-5.3-codex";
             description = "Performs command-driven bug investigation with reproduction, root-cause analysis, and evidence-only reporting.";
-            reasoningEffort = "xhigh";
+            reasoningEffort = "high";
             prompt =
               ''
                 You are the `debugger` subagent. Your sole responsibility is rigorous bug investigation.
@@ -791,9 +791,8 @@ delib.module {
           };
           internet_research = {
             mode = "subagent";
-            model = "openai/gpt-5.3-codex";
+            model = "zai-coding-plan/glm-4.7";
             description = "Performs targeted internet research when primary planning agents have material knowledge uncertainty.";
-            reasoningEffort = "high";
             prompt =
               ''
                 You are the `internet_research` subagent. Your role is targeted external knowledge retrieval for planning agents.
@@ -887,9 +886,8 @@ delib.module {
           };
           tester = {
             mode = "subagent";
-            model = "openai/gpt-5.3-codex";
+            model = "zai-coding-plan/glm-4.7";
             description = "Runs and triages test suites with reproducible, decision-oriented evidence.";
-            reasoningEffort = "xhigh";
             prompt = ''
               You are the `tester` subagent. Your responsibility is executing and triaging tests to unblock development decisions.
 

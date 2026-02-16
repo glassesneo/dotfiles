@@ -25,8 +25,35 @@ delib.module {
                     template = "https://search.brave.com/search?q={searchTerms}";
                   }
                 ];
-                icon = "https://cdn.search.brave.com/serp/favicon.ico";
+                iconUdpateURL = "https://cdn.search.brave.com/serp/favicon.ico";
                 definedAliases = ["@brave"];
+              };
+              "github-repo" = {
+                urls = [
+                  {
+                    template = "https://github.com/search?q={searchTerms}&type=repositories";
+                  }
+                ];
+                iconUdpateURL = "https://github.githubassets.com/favicons/favicon.svg";
+                definedAliases = ["@repo"];
+              };
+              "nixpkgs" = {
+                urls = [
+                  {
+                    template = "https://search.nixos.org/packages?channel=unstable&query={searchTerms}";
+                  }
+                ];
+                iconUpdateURL = "https://nixos.org/favicon.ico";
+                definedAliases = ["@nixpkgs"];
+              };
+              "home-manager" = {
+                urls = [
+                  {
+                    template = "https://home-manager-options.extranix.com/?query={searchTerms}&release=master";
+                  }
+                ];
+                iconUpdateURL = "https://nixos.org/favicon.ico";
+                definedAliases = ["@hm"];
               };
               "bing".metaData.hidden = true;
               "ddg".metaData.hidden = true;
