@@ -416,7 +416,7 @@ delib.module {
           orchestrator = {
             mode = "primary";
             description = "Primary implementation orchestrator that delegates exploration and edits to specialized subagents.";
-            model = "zai-coding-plan/glm-4.7";
+            model = "minimax-coding-plan/MiniMax-M2.5";
             prompt =
               ''
                 You are the `orchestrator` primary implementation agent.
@@ -456,7 +456,7 @@ delib.module {
           spec_plan = {
             mode = "primary";
             description = "Primary interactive spec planner for ambiguous requests where requirements and scope must be clarified first.";
-            model = "openai/gpt-5.3-codex";
+            model = "minimax-coding-plan/MiniMax-M2.5";
             reasoningEffort = "xhigh";
             prompt = specPlanningPrompt {
               workflowTitle = "Spec Planning Workflow";
@@ -525,7 +525,7 @@ delib.module {
           };
           general = {
             mode = "subagent";
-            model = "openai/gpt-5.3-codex";
+            model = "minimax-coding-plan/MiniMax-M2.5";
             description = "Implementation subagent that can explore and edit to complete one assigned task end-to-end.";
             reasoningEffort = "medium";
             prompt = ''
@@ -604,7 +604,7 @@ delib.module {
             permission = fullAccessPermission;
           };
           explore = {
-            model = "openai/gpt-5.3-codex";
+            model = "minimax-coding-plan/MiniMax-M2.5";
             reasoningEffort = "medium";
             description = "Read-only exploration agent that should prioritize relevant skills provided by primary-agent delegation context.";
             prompt =
