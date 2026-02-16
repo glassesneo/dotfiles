@@ -10,7 +10,7 @@
 delib.module {
   name = "programs.crush";
 
-  options = delib.singleEnableOption true;
+  options = delib.singleEnableOption false;
 
   home.always.imports = [
     inputs.charmbracelet.homeModules.crush
