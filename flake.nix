@@ -23,6 +23,7 @@
             args.enable = true;
             rices.enable = true;
           })
+          overlays
         ];
 
         specialArgs = {
