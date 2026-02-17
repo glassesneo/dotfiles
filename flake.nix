@@ -41,12 +41,15 @@
       dotfiles = pkgs.mkShellNoCC {
         name = "dotfiles";
         packages = with pkgs; [
+          bun
           deno
           # lua-language-server
           emmylua-ls
           nickel
           nls
           stylua
+        ] ++ [
+          inputs.bun2nix.packages.aarch64-darwin.default
         ];
       };
       default = dotfiles;
@@ -157,6 +160,10 @@
     various-wallpapers = {
       url = "github:andrewzn69/wallpapers";
       flake = false;
+    };
+    bun2nix = {
+      url = "github:nix-community/bun2nix";
+      inputs.nixpkgs.follows = "nixpkgs";
     };
     catppuccin = {
       url = "github:catppuccin/nix";

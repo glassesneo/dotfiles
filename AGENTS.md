@@ -3,7 +3,7 @@
 ## Project Structure & Module Organization
 - `flake.nix`, `flake.lock`, and `modules/` form the declarative backbone. `modules/programs` hosts reusable program configs, `modules/toplevel` covers system-wide options, and `modules/config` wires together host-specific overlays.
 - `var/`, `hosts/`, and `secrets/` hold target-specific data: `hosts/` defines machine metadata, `secrets/` stores age-encrypted keys referenced via `config.age.secrets`, and `var/` keeps generated artifacts.
-- `node2nix/` manages custom Node package inputs used by MCP servers; update `node2nix/node-packages.json` before adjusting related `modules/config/node2nix.nix` expressions.
+- `node-packages/` manages MCP server npm packages via bun2nix; update `node-packages/package.json`, run `bun install && bun2nix -o bun.nix`, then rebuild.
 
 ## Build, Test, and Development Commands
 - `nh darwin switch . --hostname kurogane -Lt` — build+activate the nix-darwin + Home Manager profile for the `kurogane` host, showing trace output on errors. Use `--dry`/`--ask` for previews.

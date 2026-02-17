@@ -8,17 +8,21 @@ Use `constants.username`, `constants.userfullname`, `constants.useremail` instea
 ## Kiri Wrapper
 
 Kiri MCP uses a wrapper to avoid tree-sitter download issues, implemented in:
-- @modules/config/node2nix.nix
+- @modules/config/node-packages.nix
 
 Key behavior:
 - Wrapper runs `kiri-mcp-server` via `npx` with explicit `PATH`.
 - Kiri writes its index to `.kiri/index.duckdb` at repo root.
 - Watch mode uses `--watch` and keeps the DuckDB index in `.kiri/`.
 
-## Node Package Management
+## MCP Node Package Management (bun2nix)
 
-When modifying `node2nix/node-packages.json`:
+MCP server npm packages are managed via bun2nix in `node-packages/`.
+To add, update, or remove packages:
 ```bash
-cd node2nix
-nix-shell -p node2nix --run "node2nix --input node-packages.json --output node-packages.nix --composition default.nix"
+cd node-packages
+# Edit package.json
+bun install && bun2nix -o bun.nix
+git add package.json bun.lock bun.nix
+nh home switch
 ```

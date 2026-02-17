@@ -1,0 +1,12 @@
+{
+  "name": "node-packages",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "@brave/brave-search-mcp-server": "^2.0.72",
+    "@mizchi/readability": "^0.7.7",
+    "@morph-llm/morph-fast-apply": "^0.8.1",
+    "chrome-devtools-mcp": "^0.17.1",
+    "tavily-mcp": "^0.2.17"
+  }
+}

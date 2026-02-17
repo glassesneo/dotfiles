@@ -25,7 +25,7 @@ nix develop                           # Enter development shell
 - System: @modules/toplevel/
 - Hosts: @hosts/
 - Config core: @modules/config/
-- Node2nix: @node2nix/
+- MCP Node packages: @node-packages/
 - Secrets: @secrets/
 - Rices: @rices/
 - Var artifacts: @var/

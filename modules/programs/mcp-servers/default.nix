@@ -4,6 +4,7 @@
   homeConfig,
   inputs,
   lib,
+  nodePackages,
   nickelLib,
   nodePkgs,
   pkgs,
@@ -26,11 +27,11 @@ delib.module {
     nodejs = pkgs.lib.getExe pkgs.nodejs;
 
     commands = {
-      "brave-search-mcp" = pkgs.lib.getExe' nodePkgs."@brave/brave-search-mcp-server" "brave-search-mcp-server";
-      "readability-mcp" = "${nodePkgs."@mizchi/readability"}/lib/node_modules/@mizchi/readability/dist/mcp.js";
-      "tavily-mcp" = pkgs.lib.getExe' nodePkgs."tavily-mcp" "tavily-mcp";
-      "chrome-devtools-mcp" = pkgs.lib.getExe' nodePkgs."chrome-devtools-mcp" "chrome-devtools-mcp";
-      "morph-fast-apply-mcp" = pkgs.lib.getExe' nodePkgs."@morph-llm/morph-fast-apply" "mcp-server-filesystem";
+      "brave-search-mcp" = "${nodePackages}/bin/brave-search-mcp-server";
+      "readability-mcp" = "${nodePackages}/lib/node_modules/@mizchi/readability/dist/mcp.js";
+      "tavily-mcp" = "${nodePackages}/bin/tavily-mcp";
+      "chrome-devtools-mcp" = "${nodePackages}/bin/chrome-devtools-mcp";
+      "morph-fast-apply-mcp" = "${nodePackages}/bin/mcp-server-filesystem";
       "kiri-mcp" = pkgs.lib.getExe' nodePkgs."kiri-mcp-server" "kiri-mcp-server";
       "context7-mcp" = pkgs.lib.getExe inputs.mcp-servers-nix.packages.${host.homeManagerSystem}.context7-mcp;
       # TODO(ownership): This path is host-specific and should move to a
@@ -58,8 +59,8 @@ delib.module {
     commandBasedServers = lib.filterAttrs (_: server: server ? command_id) serverData.servers;
 
     commandAssertions = lib.flatten (
-      lib.mapAttrsToList (name: server:
-        let
+      lib.mapAttrsToList (
+        name: server: let
           resolvedToken = resolveCommandToken server;
           hasCommandMapping = builtins.hasAttr server.command_id commands;
         in
@@ -85,67 +86,65 @@ delib.module {
       raw = key: key;
     };
 
-    formatEnvValue = mode: key:
-      let formatter = envFormatters.${mode} or null;
-      in
-        if formatter == null
-        then throw "Unsupported MCP env_syntax_mode `${mode}`"
-        else formatter key;
+    formatEnvValue = mode: key: let
+      formatter = envFormatters.${mode} or null;
+    in
+      if formatter == null
+      then throw "Unsupported MCP env_syntax_mode `${mode}`"
+      else formatter key;
 
-    mkEnvFields = targetMeta: server:
-      let
-        dynamicFieldName = targetMeta.env_field_name;
-        staticFieldName = targetMeta.static_env_field_name;
+    mkEnvFields = targetMeta: server: let
+      dynamicFieldName = targetMeta.env_field_name;
+      staticFieldName = targetMeta.static_env_field_name;
 
-        dynamicFields =
-          if server.env_keys == {}
-          then {}
-          else if dynamicFieldName == "env_vars"
-          then {${dynamicFieldName} = lib.attrValues server.env_keys;}
-          else {
-            ${dynamicFieldName} = lib.mapAttrs (_: key: formatEnvValue targetMeta.env_syntax_mode key) server.env_keys;
-          };
+      dynamicFields =
+        if server.env_keys == {}
+        then {}
+        else if dynamicFieldName == "env_vars"
+        then {${dynamicFieldName} = lib.attrValues server.env_keys;}
+        else {
+          ${dynamicFieldName} = lib.mapAttrs (_: key: formatEnvValue targetMeta.env_syntax_mode key) server.env_keys;
+        };
 
-        staticFields =
-          if server.env_static == {}
-          then {}
-          else {${staticFieldName} = server.env_static;};
-      in
-        if dynamicFields == {}
-        then staticFields
-        else if staticFields == {}
-        then dynamicFields
-        else if dynamicFieldName == staticFieldName
-        then {
-          ${dynamicFieldName} = dynamicFields.${dynamicFieldName} // staticFields.${staticFieldName};
-        }
-        else dynamicFields // staticFields;
+      staticFields =
+        if server.env_static == {}
+        then {}
+        else {${staticFieldName} = server.env_static;};
+    in
+      if dynamicFields == {}
+      then staticFields
+      else if staticFields == {}
+      then dynamicFields
+      else if dynamicFieldName == staticFieldName
+      then {
+        ${dynamicFieldName} = dynamicFields.${dynamicFieldName} // staticFields.${staticFieldName};
+      }
+      else dynamicFields // staticFields;
 
-    mkServer = targetMeta: _name: server:
-      let
-        urlTypePolicy = targetMeta.url_type_policy;
-        localTypePolicy = targetMeta.local_type_policy;
-      in
-        if server ? url
-        then
-          {url = server.url;}
-          // lib.optionalAttrs (urlTypePolicy != null) {type = urlTypePolicy;}
-        else
-          (
-            if targetMeta.command_list_behavior
-            then {command = [(getCommand server)] ++ (getArgs server);}
-            else
-              {command = getCommand server;}
-              // lib.optionalAttrs ((getArgs server) != []) {args = getArgs server;}
-          )
-          // lib.optionalAttrs (localTypePolicy != null) {type = localTypePolicy;}
-          // mkEnvFields targetMeta server;
+    mkServer = targetMeta: _name: server: let
+      urlTypePolicy = targetMeta.url_type_policy;
+      localTypePolicy = targetMeta.local_type_policy;
+    in
+      if server ? url
+      then
+        {url = server.url;}
+        // lib.optionalAttrs (urlTypePolicy != null) {type = urlTypePolicy;}
+      else
+        (
+          if targetMeta.command_list_behavior
+          then {command = [(getCommand server)] ++ (getArgs server);}
+          else
+            {command = getCommand server;}
+            // lib.optionalAttrs ((getArgs server) != []) {args = getArgs server;}
+        )
+        // lib.optionalAttrs (localTypePolicy != null) {type = localTypePolicy;}
+        // mkEnvFields targetMeta server;
 
-    mkServersForTarget = target:
-      let targetMeta = serverData.targets_meta.${target};
-      in
-        lib.filterAttrs (name: _: builtins.elem name serverData.enabled.${target})
-        (lib.mapAttrs (mkServer targetMeta) serverData.servers);
+    mkServersForTarget = target: let
+      targetMeta = serverData.targets_meta.${target};
+    in
+      lib.filterAttrs (name: _: builtins.elem name serverData.enabled.${target})
+      (lib.mapAttrs (mkServer targetMeta) serverData.servers);
 
     # The syntax follows https://github.com/ravitemer/mcphub.nvim/blob/main/doc/mcp/servers_json.md
     mcphub-servers = {
