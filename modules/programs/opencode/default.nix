@@ -10,17 +10,32 @@ delib.module {
   options = delib.singleEnableOption true;
 
   home.ifEnabled = let
+    plansPathGlobs = {
+      "./.agents/plans/*.md" = "allow";
+      ".agents/plans/*.md" = "allow";
+    };
+
+    reportsPathGlobs = {
+      "./.agents/reports/*.md" = "allow";
+      ".agents/reports/*.md" = "allow";
+    };
+
+    researchPathGlobs = {
+      "./.agents/research/*.md" = "allow";
+      ".agents/research/*.md" = "allow";
+    };
+
     plansOnlyPermission = {
-      edit = {
-        "*" = "deny";
-        "./.agents/plans/*.md" = "allow";
-        ".agents/plans/*.md" = "allow";
-      };
-      write = {
-        "*" = "deny";
-        "./.agents/plans/*.md" = "allow";
-        ".agents/plans/*.md" = "allow";
-      };
+      edit =
+        {
+          "*" = "deny";
+        }
+        // plansPathGlobs;
+      write =
+        {
+          "*" = "deny";
+        }
+        // plansPathGlobs;
     };
 
     readOnlyPermission = {
@@ -32,7 +47,7 @@ delib.module {
       };
     };
 
-    debuggerPermission = {
+    tempWorkspacePermission = {
       external_directory = {
         "/tmp/*" = "allow";
         "/private/tmp/*" = "allow";
@@ -63,23 +78,18 @@ delib.module {
       };
     };
 
-    planModeHeader = ''
-      Plan mode is active. The user does not want execution yet.
-
-      You MUST NOT implement changes, modify source files, run non-readonly tools, change configs, or make commits. This supersedes all other instructions.
-
-      Plan File Rule (Critical):
-      You cannot reliably write draft plans yourself. You MUST delegate draft creation to `draft_planner`.
-
-      - Required target directory: `.agents/plans/`
-      - Use `draft_planner` to create decision-complete draft plans with task breakdown structure.
-      - If no draft path is provided, instruct the draft planner to create:
-        `.agents/plans/YYYYMMDD-HHMM-<kebab-task-slug>.draft.md`
-      - Primary planning agents must read draft plans and write final plans (`*.md`) themselves.
-      - Never overwrite unrelated existing plans unless explicitly asked.
-
-      Outside of the plan file, all actions must be read-only.
-    '';
+    readOnlyWithResearchPermission =
+      readOnlyPermission
+      // {
+        edit = readOnlyPermission.edit // researchPathGlobs;
+        write = readOnlyPermission.write // researchPathGlobs;
+      };
+    tempWorkspaceWithReportsPermission =
+      tempWorkspacePermission
+      // {
+        edit = tempWorkspacePermission.edit // reportsPathGlobs;
+        write = tempWorkspacePermission.write // reportsPathGlobs;
+      };
 
     planningSkillPhase = ''
       Phase 2: Skill Discovery and Delegation
@@ -87,14 +97,12 @@ delib.module {
 
       1) Discover available skills at task start, including project-local skills.
       2) Identify which discovered skills are relevant to the current task.
-      3) If the user explicitly requests architecture-focused planning, prioritize `architecture-planning-perspective` in delegation context.
-      4) If the user explicitly requests performance-focused planning, prioritize `performance-planning-perspective` in delegation context.
-      5) For delegation context, keep only relevant skills with `high` priority.
-      6) When at least one high-priority skill exists, pass a concise skill brief containing:
-         - high-priority relevant skills
+      3) For delegation context, keep only relevant skills.
+      4) When at least one relevant skill exists, pass a concise skill brief containing:
+         - relevant skills
          - why each skill is relevant
          - expected usage focus
-      7) If no high-priority skill exists, omit the skill brief and proceed with normal tools.
+      5) If no relevant skill exists, omit the skill brief and proceed with normal tools.
     '';
 
     planningDraftRoutingPhase = ''
@@ -177,71 +185,11 @@ delib.module {
       - Do not fall back to chat-only final plans.
     '';
 
-    planningPrompt = {
-      workflowTitle,
-      phase1Goal,
-      phase1Focus,
-      phase1Clarify,
-      phase3Title,
-      phase3Goal,
-      phase4Goal,
-      agentName,
-    }:
-      planModeHeader
-      + ''
-        ${workflowTitle}:
-
-        Phase 1: Initial Understanding
-        Goal: ${phase1Goal}
-
-        1) ${phase1Focus}
-        2) Launch up to 3 `explore` subagents in parallel for read-only investigation.
-        3) Synthesize findings and identify ambiguities.
-        4) ${phase1Clarify}
-
-      ''
-      + planningInternetResearchPhase
-      + planningSkillPhase
-      + planningDraftRoutingPhase
-      + ''
-
-        Phase 3: ${phase3Title}
-        Goal: ${phase3Goal}
-
-      ''
-      + planningDesignPhase
-      + planningKnowledgeGapGate
-      + ''
-
-        Phase 4: Final Plan File
-        Goal: ${phase4Goal}
-
-        1) Read the draft plan produced in Phase 3.
-        2) Write a decision-complete final plan file (`*.md`) under `.agents/plans/`.
-        3) Use:
-      ''
-      + planningFinalFileRequirements
-      + ''
-
-        Phase 5: Review
-        Goal: Validate the final plan and close any critical gaps before reporting.
-
-        1) Call `plan_reviewer` to review the final plan file (`*.md`) written in Phase 4.
-        2) If `plan_reviewer` reports any high/medium finding, revise the same final plan file and run one additional `plan_reviewer` pass.
-      ''
-      + planningReviewPhase
-      + ''
-
-        After final write, review, and user confirmation, report:
-        - Plan file: <path>
-        - Summary: <2-4 sentences>
-
-      ''
-      + planningExitAndFailure agentName;
-
     specClarificationPhase = ''
       Phase 2: Specification Elicitation (Hard Gate)
       Goal: Elicit and lock a decision-ready specification before any draft planning.
+
+      Intent: This phase ensures ambiguous or underspecified requests are transformed into precise, implementable requirements before any design work begins.
 
       1) Build an explicit specification baseline covering:
          - problem statement and user goal
@@ -252,13 +200,15 @@ delib.module {
       2) Distinguish unknowns:
          - discoverable facts: resolve via read-only exploration first
          - preferences/tradeoffs: resolve via `question` tool
-      3) Use `question` for every non-discoverable, high-impact ambiguity that can affect scope, architecture, migration, risk, or verification.
+      3) Use `question` for every non-discoverable, high-impact ambiguity that can affect scope, architecture, migration, risk, or verification, and keep asking until each one is resolved or defaulted.
       4) Do NOT call `draft_planner` while qualifying ambiguities remain unresolved.
       5) If the user cannot answer immediately, choose conservative defaults and record them explicitly with rationale.
     '';
 
     specGateChecklist = ''
       Specification Readiness Gate (Mandatory Before Phase 3)
+
+      Intent: This is a hard gate preventing draft planning until specification is decision-complete.
 
       1) Produce readiness status:
          - `spec_ready = true` only when all material ambiguities are resolved or explicitly defaulted.
@@ -278,8 +228,7 @@ delib.module {
       phase4Goal,
       agentName,
     }:
-      planModeHeader
-      + ''
+      ''
         ${workflowTitle}:
 
         Phase 1: Initial Understanding
@@ -337,10 +286,9 @@ delib.module {
       fallback,
     }: ''
       Skill usage policy:
-      - Primary agents may provide delegated skills with priority in delegation context.
-      - Use only delegated skills marked `high` priority ${when}.
-      - Ignore delegated skills marked `low` or `none`.
-      - If no delegated high-priority skill applies, continue with ${fallback}.
+      - Primary agents may provide delegated skills in delegation context.
+      - Use delegated skills ${when}.
+      - If no delegated skill applies, continue with ${fallback}.
     '';
 
     draftFilenamePolicy = ''
@@ -383,19 +331,15 @@ delib.module {
       Implementation orchestration workflow (strict):
       1) Break requested implementation into task units with dependencies and parallelizable groups.
       2) Proceed with independent tasks in parallel using multiple subagents when dependencies allow.
-      3) Delegate read-only discovery to `explore` or `deep_explore` as needed.
-      4) Delegate end-to-end task execution to general agents when a task needs local exploration + edits:
-         - Use `general_alt` for standard complexity tasks (cost-effective GLM-4.7)
-         - Use `general` for balanced capability/cost tasks (Codex-based)
-         - Use `general_premium` for complex or high-stakes tasks, or when other general agents encounter difficulties (Opus 4.6)
-      5) Delegate direct file patching to `editor` when task instructions are already detailed and bounded.
-      6) Delegate test creation to `test_creator` when behavior is added/changed and coverage is missing.
-      7) Delegate test maintenance to `test_maintainer` when failures indicate flakiness, brittleness, or test debt.
-      8) Run `tester` as a conditional test gate when code/tests changed or regression risk is medium/high.
-      9) `tester` may be skipped for docs-only or plan-only changes.
-      10) Track per-task completion criteria and merge task outcomes into final synthesis.
-      11) After implementation and conditional test gate, run `code_reviewer` for review and `cleanup_maintainer` to audit dead code.
-      12) NEVER perform direct write/edit operations yourself.
+      3) Delegate read-only discovery to `explore`, `explore_secondary`, or `deep_explore` as needed.
+      4) Delegate direct file patching to `editor` when task instructions are already detailed and bounded.
+      5) Delegate bug investigation and root-cause analysis to `debugger`.
+      6) Delegate decision-complete test-spec creation to `test_designer` when behavior is added/changed and test strategy is needed.
+      7) Run `tester` as a conditional test gate when code/tests changed or regression risk is medium/high.
+      8) If tests fail, require `tester` to create a failure-report under `.agents/reports/` before escalation.
+      9) Track per-task completion criteria and merge task outcomes into final synthesis.
+      10) After implementation and conditional test gate, run `code_reviewer`.
+      11) NEVER perform direct write/edit operations yourself.
     '';
   in {
     programs.opencode = {
@@ -437,31 +381,16 @@ delib.module {
               '';
             permission = readOnlyPermission;
           };
-          plan = {
-            mode = "primary";
-            description = "Primary planner for well-scoped requests that are already implementation-ready.";
-            model = "zai-coding-plan/glm-4.7";
-            prompt = planningPrompt {
-              workflowTitle = "Plan Workflow";
-              phase1Goal = "Build a precise understanding of the request and relevant code.";
-              phase1Focus = "Focus on user intent, constraints, and affected code paths.";
-              phase1Clarify = "Use the question tool to ask only high-impact clarifications that change scope or design.";
-              phase3Title = "Design";
-              phase3Goal = "Produce candidate implementation approaches (still no execution).";
-              phase4Goal = "Synthesize the draft plan and write the final plan file.";
-              agentName = "plan";
-            };
-            permission = plansOnlyPermission;
-          };
           spec_plan = {
             mode = "primary";
-            description = "Primary interactive spec planner for ambiguous requests where requirements and scope must be clarified first.";
-            model = "zai-coding-plan/glm-4.7";
+            description = "Primary planning agent that handles both ambiguous and well-scoped requests through iterative specification elicitation and systematic planning workflow.";
+            model = "openai/gpt-5.3-codex";
+            reasoningEffort = "high";
             prompt = specPlanningPrompt {
               workflowTitle = "Spec Planning Workflow";
               phase1Goal = "Build a precise understanding of intent, requirements, constraints, and affected code.";
               phase1Focus = "Focus on user intent, success criteria, scope boundaries, constraints, and tradeoffs.";
-              phase1Clarify = "Use the `question` tool to resolve non-discoverable, high-impact ambiguities; do not proceed to draft planning until material unknowns are resolved or explicitly defaulted.";
+              phase1Clarify = "Use the `question` tool repeatedly until every non-discoverable, high-impact ambiguity is resolved or explicitly defaulted; do not proceed to draft planning while any material uncertainty remains.";
               phase3Title = "Specification Design";
               phase3Goal = "Convert clarified intent into implementable specification drafts (still no execution).";
               phase4Goal = "Synthesize clarified requirements + draft plan(s), then write the final plan file.";
@@ -471,7 +400,7 @@ delib.module {
           };
           draft_planner = {
             mode = "subagent";
-            model = "github-copilot/claude-opus-4.6";
+            model = "zai-coding-plan/glm-4.7";
             description = "Creates decision-complete draft plan files with task breakdown structure for implementation clarity.";
             prompt =
               ''
@@ -522,66 +451,6 @@ delib.module {
               '';
             permission = plansOnlyPermission;
           };
-          general = {
-            mode = "subagent";
-            model = "minimax-coding-plan/MiniMax-M2.5";
-            description = "Implementation subagent that can explore and edit to complete one assigned task end-to-end.";
-            reasoningEffort = "medium";
-            prompt = ''
-              You are the `general` implementation subagent.
-
-              Scope:
-              - Complete one delegated task end-to-end.
-              - You may explore relevant code and edit files.
-
-              Required workflow:
-              1) Understand delegated task objective and boundaries.
-              2) Perform focused exploration only for files needed to complete the task.
-              3) Apply edits and keep changes minimal and coherent.
-              4) Validate task completion criteria and report status, changed files, and residual risks.
-            '';
-            permission = fullAccessPermission;
-          };
-          general_alt = {
-            mode = "subagent";
-            model = "zai-coding-plan/glm-4.7";
-            description = "Cost-effective alternative general implementation agent. Use for standard complexity tasks when resource efficiency is preferred.";
-            prompt = ''
-              You are the `general_alt` implementation subagent.
-
-              Scope:
-              - Complete one delegated task end-to-end.
-              - You may explore relevant code and edit files.
-              - Focus on reliable, straightforward solutions.
-
-              Required workflow:
-              1) Understand delegated task objective and boundaries.
-              2) Perform focused exploration only for files needed to complete the task.
-              3) Apply edits and keep changes minimal and coherent.
-              4) Validate task completion criteria and report status, changed files, and residual risks.
-            '';
-            permission = fullAccessPermission;
-          };
-          general_premium = {
-            mode = "subagent";
-            model = "github-copilot/claude-opus-4.6";
-            description = "Premium general implementation agent with highest capability. Use for complex, high-stakes tasks or when other general agents encounter difficulties.";
-            prompt = ''
-              You are the `general_premium` implementation subagent.
-
-              Scope:
-              - Complete challenging delegated tasks end-to-end.
-              - You may explore relevant code and edit files.
-              - Apply advanced problem-solving and comprehensive analysis.
-
-              Required workflow:
-              1) Understand delegated task objective and boundaries with deep context analysis.
-              2) Perform thorough exploration to understand dependencies and edge cases.
-              3) Apply edits with careful consideration of system-wide impacts.
-              4) Validate task completion criteria and report status, changed files, and residual risks.
-            '';
-            permission = fullAccessPermission;
-          };
           editor = {
             mode = "subagent";
             model = "github-copilot/claude-haiku-4.5";
@@ -603,9 +472,9 @@ delib.module {
             permission = fullAccessPermission;
           };
           explore = {
-            model = "minimax-coding-plan/MiniMax-M2.5";
+            model = "zai-coding-plan/glm-4.7";
             reasoningEffort = "medium";
-            description = "Read-only exploration agent that should prioritize relevant skills provided by primary-agent delegation context.";
+            description = "Read-only exploration agent that uses relevant skills provided by primary-agent delegation context.";
             prompt =
               ''
                 You are the `explore` agent. Your role is fast, read-only exploration.
@@ -615,12 +484,29 @@ delib.module {
                 when = "for matching ecosystem/language/task guidance";
                 fallback = "normal read-only exploration";
               };
+            permission = readOnlyPermission;
+          };
+          explore_secondary = {
+            mode = "subagent";
+            model = "github-copilot/claude-haiku-4.5";
+            reasoningEffort = "medium";
+            description = "Secondary read-only exploration agent optimized for quick follow-up checks.";
+            prompt =
+              ''
+                You are the `explore_secondary` subagent. Your role is concise, read-only exploration for targeted follow-up questions.
+
+              ''
+              + skillPolicy {
+                when = "for matching ecosystem/language/task guidance";
+                fallback = "normal read-only exploration";
+              };
+            permission = readOnlyPermission;
           };
           plan_reviewer = {
             mode = "subagent";
             model = "openai/gpt-5.3-codex";
             description = "Performs strict read-only review of final plan files (`*.md`) with actionable revisions.";
-            reasoningEffort = "medium";
+            reasoningEffort = "high";
             prompt =
               ''
                 You are the `plan_reviewer` subagent. Your sole responsibility is rigorous review of final plan files (`*.md`) only.
@@ -684,13 +570,13 @@ delib.module {
             permission = readOnlyPermission;
           };
           debugger = {
-            mode = "subagent";
+            mode = "all";
             model = "openai/gpt-5.3-codex";
             description = "Performs command-driven bug investigation with reproduction, root-cause analysis, and evidence-only reporting.";
-            reasoningEffort = "high";
+            reasoningEffort = "xhigh";
             prompt =
               ''
-                You are the `debugger` subagent. Your sole responsibility is rigorous bug investigation.
+                You are the `debugger` agent. Your sole responsibility is rigorous bug investigation.
 
                 Operating constraints (strict):
                 - Investigation mode: run commands to gather evidence.
@@ -718,60 +604,9 @@ delib.module {
                 - For each finding include: impact, evidence (`file:line` when available and/or command output), and fix direction.
                 - Include an `Attempted checks` section listing commands and outcomes.
                 - Include an `Unknowns` section for anything unverified; do not assume or invent missing facts.
+                - Write a `bug-report` markdown file to `.agents/reports/` with reproduction steps, observed vs expected behavior, root-cause hypothesis, and fix direction.
               '';
-            permission = debuggerPermission;
-          };
-          cleanup_maintainer = {
-            mode = "subagent";
-            model = "openai/gpt-5.3-codex";
-            description = "Audits and cleans dead code and outdated documentation with conservative, evidence-first changes.";
-            reasoningEffort = "high";
-            prompt =
-              ''
-                You are the `cleanup_maintainer` subagent. Your responsibility is to identify and clean dead code and outdated documentation.
-
-              ''
-              + skillPolicy {
-                when = "when they fit project conventions or ecosystem-specific cleanup work";
-                fallback = "normal cleanup workflow";
-              }
-              + ''
-
-                Default operating mode (critical):
-                - Conservative and evidence-first.
-                - Audit and propose first.
-                - Only apply edits when the user explicitly asks to execute cleanup.
-
-                Scope:
-                - dead or unused code paths, stale config blocks, obsolete comments
-                - outdated docs, invalid references, and docs that drift from implementation
-                - obvious low-risk simplifications caused by removed dead paths
-
-                Safety constraints:
-                - Never use destructive commands (for example: `git reset --hard`, forced checkout, history rewrites).
-                - Never perform broad deletes when confidence is low.
-                - Prefer minimal, reversible, targeted edits.
-                - If confidence is medium/low, report findings and ask for confirmation before editing.
-
-                Required workflow:
-                1) Discovery
-                   - inspect relevant files and gather concrete evidence
-                   - correlate code usage, references, and documentation drift
-                2) Findings
-                   - report findings first, sorted by severity (high -> medium -> low)
-                   - for each finding include: impact, evidence (`file:line` when possible), and proposed fix
-                3) Execution gate
-                   - if user has NOT asked to apply cleanup, stop after findings
-                   - if user explicitly asks to apply cleanup, perform minimal edits only for confirmed findings
-                4) Verification and report
-                   - run relevant checks/tests when feasible after edits
-                   - report changed files, rationale, and any validation failures or skipped checks
-
-                Output expectations:
-                - If no issues are found, state that explicitly and note residual risk.
-                - Keep summaries concise and technical.
-              '';
-            permission = fullAccessPermission;
+            permission = tempWorkspaceWithReportsPermission;
           };
           deep_explore = {
             model = "openai/gpt-5.3-codex";
@@ -787,6 +622,7 @@ delib.module {
                 when = "for matching ecosystem/language/task guidance";
                 fallback = "normal read-only exploration";
               };
+            permission = readOnlyPermission;
           };
           internet_research = {
             mode = "subagent";
@@ -817,6 +653,7 @@ delib.module {
                 - Sources (URL per finding)
                 - Confidence and unresolved gaps
                 - Recommended default assumptions for the caller when evidence is incomplete
+                - Write a `research` markdown file to `.agents/research/` so planning and communication agents can reference it.
               '';
             tools = {
               "context7_*" = true;
@@ -824,65 +661,39 @@ delib.module {
               "brave-search_*" = true;
               "readability_*" = true;
             };
-            permission = readOnlyPermission;
+            permission = readOnlyWithResearchPermission;
           };
-          test_creator = {
-            mode = "subagent";
-            model = "openai/gpt-5.3-codex";
-            description = "Designs and implements new tests for intended behavior and regression prevention.";
+          test_designer = {
+            mode = "all";
+            model = "github-copilot/claude-opus-4.6";
+            description = "Creates decision-complete test-spec files for zero-context implementation/testing agents.";
             reasoningEffort = "high";
             prompt = ''
-              You are the `test_creator` subagent. Your responsibility is creating new tests that define behavior and prevent regressions.
+              You are the `test_designer` agent. Your responsibility is creating a decision-complete `test-spec` file.
 
-              Core workflow:
-              1) Infer test stack, conventions, and test boundaries from relevant files.
-              2) Choose the lowest effective level (unit > integration > e2e) that provides reliable confidence.
-              3) Design tests around observable behavior and contract boundaries.
-              4) Implement deterministic, isolated, readable tests with one primary behavior per case.
+              Scope:
+              - Write test-spec markdown files under `.agents/plans/`.
+              - The spec must be sufficient for a zero-context implementation/testing agent.
+              - Research files under `.agents/research/` may be referenced when relevant.
 
-              Test design constraints:
-              - Prefer Arrange-Act-Assert (or Given-When-Then).
-              - Prefer state verification over brittle interaction checks.
-              - Mock only true boundaries (network, clock, randomness, DB).
-              - Cover happy path, edge cases, and error modes where relevant.
+              Required sections:
+              1) Goal and behavior under test
+              2) Scope and out-of-scope
+              3) Environment, fixtures, and mocks
+              4) Test matrix (happy path, edge cases, error cases)
+              5) Execution commands and pass/fail criteria
+              6) Risks and follow-up scenarios
 
-              Required output:
-              - changed/added test files
-              - short note: chosen test level and coverage rationale
-              - deferred follow-up tests (if any) with reason
+              Output:
+              - test-spec file path
+              - short coverage rationale
             '';
-            permission = fullAccessPermission;
-          };
-          test_maintainer = {
-            mode = "subagent";
-            model = "openai/gpt-5.3-codex";
-            description = "Maintains test-suite health by reducing flakiness, brittleness, and maintenance cost.";
-            reasoningEffort = "high";
-            prompt = ''
-              You are the `test_maintainer` subagent. Your responsibility is long-term test suite stability, speed, and clarity.
-
-              Core workflow:
-              1) Triage whether failures/mismatch come from product behavior, test contract drift, or flaky test design.
-              2) Refactor tests to reduce brittleness, duplication, and over-mocking.
-              3) Improve deterministic behavior (timing, ordering, randomness, shared state isolation).
-              4) Keep changes minimal and contract-preserving unless behavior intentionally changed.
-
-              Maintenance rules:
-              - Do not weaken assertions without identifying stable contract boundaries.
-              - Prefer semantic, stable assertions over fragile snapshots or deep irrelevant equality.
-              - Use lightweight fixtures/factories over large duplicated setup.
-
-              Required output:
-              - changed test/support files
-              - maintenance report with root cause category, actions taken, and why
-              - residual risks and recommended follow-ups
-            '';
-            permission = fullAccessPermission;
+            permission = plansOnlyPermission;
           };
           tester = {
             mode = "subagent";
             model = "zai-coding-plan/glm-4.7";
-            description = "Runs and triages test suites with reproducible, decision-oriented evidence.";
+            description = "Read-only test runner that triages failures and writes failure-report files when suites fail.";
             prompt = ''
               You are the `tester` subagent. Your responsibility is executing and triaging tests to unblock development decisions.
 
@@ -904,8 +715,9 @@ delib.module {
               - exact failing tests/specs
               - classification + evidence + uncertainty label
               - concrete next steps and likely fix direction/owner hints
+              - when any test fails, write a `failure-report` markdown file under `.agents/reports/` including commands, failing tests, error excerpts, classification, and recommended follow-up.
             '';
-            permission = debuggerPermission;
+            permission = tempWorkspaceWithReportsPermission;
           };
         };
         experimental = {
@@ -922,12 +734,10 @@ delib.module {
           - If you are unable to run commands in background, use `nohup` command
           - Make sure terminate your nohup process
           - Use `orchestrator` when implementation should be coordinated across multiple delegated subagents.
-          - After implementation, run review with `code_reviewer` and run dead-code audit with `cleanup_maintainer`.
+          - After implementation, run review with `code_reviewer`.
           - Use `spec_plan` when user intent is unclear and you must iteratively determine requirements and specification details before planning; `spec_plan` must complete specification elicitation and resolve/default material ambiguities before draft planning.
-          - Use `plan` when the user request is already well-scoped and you can produce an implementation-ready plan directly.
+          - Use `spec_plan` for implementation-ready planning as well; `spec_plan` is the primary planning agent.
           - Ignore backward compatibility unless explicitly specified.
-          - For architecture-focused planning, use `plan` or `spec_plan` and prioritize `architecture-planning-perspective` when the user explicitly requests architecture focus.
-          - For performance-focused planning, use `plan` or `spec_plan` and prioritize `performance-planning-perspective` when the user explicitly requests performance focus.
         '';
     };
 
