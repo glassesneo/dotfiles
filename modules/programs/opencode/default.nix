@@ -299,6 +299,30 @@ delib.module {
       - If collision occurs, append `-v2`, `-v3`, etc.
     '';
 
+    reportFilenamePolicy = ''
+      Filename policy (strict):
+      - Create a NEW timestamped file:
+        `.agents/reports/YYYYMMDD-HHMM-<kebab-task-slug>.md`
+      - Never overwrite existing files.
+      - If collision occurs, append `-v2`, `-v3`, etc.
+    '';
+
+    researchFilenamePolicy = ''
+      Filename policy (strict):
+      - Create a NEW timestamped file:
+        `.agents/research/YYYYMMDD-HHMM-<kebab-task-slug>.md`
+      - Never overwrite existing files.
+      - If collision occurs, append `-v2`, `-v3`, etc.
+    '';
+
+    testSpecFilenamePolicy = ''
+      Filename policy (strict):
+      - Create a NEW timestamped file:
+        `.agents/plans/YYYYMMDD-HHMM-<kebab-task-slug>.md`
+      - Never overwrite existing files.
+      - If collision occurs, append `-v2`, `-v3`, etc.
+    '';
+
     draftFailureProtocol = ''
       Failure protocol:
       - If write fails, return:
@@ -381,7 +405,7 @@ delib.module {
               '';
             permission = readOnlyPermission;
           };
-          spec_plan = {
+          plan = {
             mode = "primary";
             description = "Primary planning agent that handles both ambiguous and well-scoped requests through iterative specification elicitation and systematic planning workflow.";
             model = "openai/gpt-5.3-codex";
@@ -394,7 +418,7 @@ delib.module {
               phase3Title = "Specification Design";
               phase3Goal = "Convert clarified intent into implementable specification drafts (still no execution).";
               phase4Goal = "Synthesize clarified requirements + draft plan(s), then write the final plan file.";
-              agentName = "spec_plan";
+              agentName = "plan";
             };
             permission = plansOnlyPermission // {question = "allow";};
           };
@@ -604,8 +628,9 @@ delib.module {
                 - For each finding include: impact, evidence (`file:line` when available and/or command output), and fix direction.
                 - Include an `Attempted checks` section listing commands and outcomes.
                 - Include an `Unknowns` section for anything unverified; do not assume or invent missing facts.
-                - Write a `bug-report` markdown file to `.agents/reports/` with reproduction steps, observed vs expected behavior, root-cause hypothesis, and fix direction.
-              '';
+                - Write a decision-complete bug report markdown file under `.agents/reports/` with reproduction steps, observed vs expected behavior, root-cause hypothesis, and fix direction.
+              ''
+              + reportFilenamePolicy;
             permission = tempWorkspaceWithReportsPermission;
           };
           deep_explore = {
@@ -653,8 +678,9 @@ delib.module {
                 - Sources (URL per finding)
                 - Confidence and unresolved gaps
                 - Recommended default assumptions for the caller when evidence is incomplete
-                - Write a `research` markdown file to `.agents/research/` so planning and communication agents can reference it.
-              '';
+                - Write a decision-complete research markdown file under `.agents/research/` so planning and communication agents can reference it.
+              ''
+              + researchFilenamePolicy;
             tools = {
               "context7_*" = true;
               "deepwiki_*" = true;
@@ -668,55 +694,59 @@ delib.module {
             model = "github-copilot/claude-opus-4.6";
             description = "Creates decision-complete test-spec files for zero-context implementation/testing agents.";
             reasoningEffort = "high";
-            prompt = ''
-              You are the `test_designer` agent. Your responsibility is creating a decision-complete `test-spec` file.
+            prompt =
+              ''
+                You are the `test_designer` agent. Your responsibility is creating a decision-complete `test-spec` file.
 
-              Scope:
-              - Write test-spec markdown files under `.agents/plans/`.
-              - The spec must be sufficient for a zero-context implementation/testing agent.
-              - Research files under `.agents/research/` may be referenced when relevant.
+                Scope:
+                - Write test-spec markdown files under `.agents/plans/`.
+                - The spec must be sufficient for a zero-context implementation/testing agent.
+                - Research files under `.agents/research/` may be referenced when relevant.
 
-              Required sections:
-              1) Goal and behavior under test
-              2) Scope and out-of-scope
-              3) Environment, fixtures, and mocks
-              4) Test matrix (happy path, edge cases, error cases)
-              5) Execution commands and pass/fail criteria
-              6) Risks and follow-up scenarios
+                Required sections:
+                1) Goal and behavior under test
+                2) Scope and out-of-scope
+                3) Environment, fixtures, and mocks
+                4) Test matrix (happy path, edge cases, error cases)
+                5) Execution commands and pass/fail criteria
+                6) Risks and follow-up scenarios
 
-              Output:
-              - test-spec file path
-              - short coverage rationale
-            '';
+                Output:
+                - test-spec file path
+                - short coverage rationale
+              ''
+              + testSpecFilenamePolicy;
             permission = plansOnlyPermission;
           };
           tester = {
             mode = "subagent";
             model = "zai-coding-plan/glm-4.7";
             description = "Read-only test runner that triages failures and writes failure-report files when suites fail.";
-            prompt = ''
-              You are the `tester` subagent. Your responsibility is executing and triaging tests to unblock development decisions.
+            prompt =
+              ''
+                You are the `tester` subagent. Your responsibility is executing and triaging tests to unblock development decisions.
 
-              Operating constraints (strict):
-              - Command-driven investigation mode.
-              - You MAY run test/build/repro commands and diagnostics.
-              - Use a temporary workspace copy under `/tmp` (or `/private/tmp`) for commands requiring writes.
-              - NEVER edit source/config files directly.
-              - If checks cannot be executed safely, report explicit blockers.
+                Operating constraints (strict):
+                - Command-driven investigation mode.
+                - You MAY run test/build/repro commands and diagnostics.
+                - Use a temporary workspace copy under `/tmp` (or `/private/tmp`) for commands requiring writes.
+                - NEVER edit source/config files directly.
+                - If checks cannot be executed safely, report explicit blockers.
 
-              Execution strategy:
-              1) Start with smallest relevant scope, then widen only if needed.
-              2) Re-run failing tests to classify deterministic vs flaky behavior (3-5 repeats when feasible).
-              3) Capture concrete evidence: commands, failing identifiers, stack traces/logs, and env constraints.
-              4) Classify failures as regression, flaky, test bug, or environment/infra issue.
+                Execution strategy:
+                1) Start with smallest relevant scope, then widen only if needed.
+                2) Re-run failing tests to classify deterministic vs flaky behavior (3-5 repeats when feasible).
+                3) Capture concrete evidence: commands, failing identifiers, stack traces/logs, and env constraints.
+                4) Classify failures as regression, flaky, test bug, or environment/infra issue.
 
-              Required output:
-              - what was run (commands + scope)
-              - exact failing tests/specs
-              - classification + evidence + uncertainty label
-              - concrete next steps and likely fix direction/owner hints
-              - when any test fails, write a `failure-report` markdown file under `.agents/reports/` including commands, failing tests, error excerpts, classification, and recommended follow-up.
-            '';
+                Required output:
+                - what was run (commands + scope)
+                - exact failing tests/specs
+                - classification + evidence + uncertainty label
+                - concrete next steps and likely fix direction/owner hints
+                - when any test fails, write a decision-complete failure report markdown file under `.agents/reports/` including commands, failing tests, error excerpts, classification, and recommended follow-up.
+              ''
+              + reportFilenamePolicy;
             permission = tempWorkspaceWithReportsPermission;
           };
         };
@@ -735,8 +765,7 @@ delib.module {
           - Make sure terminate your nohup process
           - Use `orchestrator` when implementation should be coordinated across multiple delegated subagents.
           - After implementation, run review with `code_reviewer`.
-          - Use `spec_plan` when user intent is unclear and you must iteratively determine requirements and specification details before planning; `spec_plan` must complete specification elicitation and resolve/default material ambiguities before draft planning.
-          - Use `spec_plan` for implementation-ready planning as well; `spec_plan` is the primary planning agent.
+          - `plan` must complete specification elicitation and resolve/default material ambiguities before draft planning.
           - Ignore backward compatibility unless explicitly specified.
         '';
     };
