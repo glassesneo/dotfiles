@@ -35,10 +35,11 @@ delib.module {
             "Skill(tmux-runner)"
             "Skill(codex-subagent)"
             "Skill(codex-exec)"
-            "mcp__context7__*"
+            "mcp__context7__resolve-library-id"
+            "mcp__context7__get-library-docs"
             "mcp__deepwiki__*"
             "mcp__brave-search__brave_web_search"
-            "mcp__readability__*"
+            "mcp__readability__read_url_content_as_markdown"
           ];
         };
 
@@ -77,11 +78,7 @@ delib.module {
           ---
           name: internet-research
           description: Performs targeted internet research when primary planning agents have material knowledge uncertainty.
-          mcpServers:
-            - context7
-            - deepwiki
-            - brave-search
-            - readability
+          disallowedTools: Write, Edit
           model: sonnet
           ---
 

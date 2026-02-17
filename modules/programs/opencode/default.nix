@@ -13,13 +13,13 @@ delib.module {
     plansOnlyPermission = {
       edit = {
         "*" = "deny";
-        "./.opencode/plans/*.md" = "allow";
-        ".opencode/plans/*.md" = "allow";
+        "./.agents/plans/*.md" = "allow";
+        ".agents/plans/*.md" = "allow";
       };
       write = {
         "*" = "deny";
-        "./.opencode/plans/*.md" = "allow";
-        ".opencode/plans/*.md" = "allow";
+        "./.agents/plans/*.md" = "allow";
+        ".agents/plans/*.md" = "allow";
       };
     };
 
@@ -71,10 +71,10 @@ delib.module {
       Plan File Rule (Critical):
       You cannot reliably write draft plans yourself. You MUST delegate draft creation to `draft_planner`.
 
-      - Required target directory: `.opencode/plans/`
+      - Required target directory: `.agents/plans/`
       - Use `draft_planner` to create decision-complete draft plans with task breakdown structure.
       - If no draft path is provided, instruct the draft planner to create:
-        `.opencode/plans/YYYYMMDD-HHMM-<kebab-task-slug>.draft.md`
+        `.agents/plans/YYYYMMDD-HHMM-<kebab-task-slug>.draft.md`
       - Primary planning agents must read draft plans and write final plans (`*.md`) themselves.
       - Never overwrite unrelated existing plans unless explicitly asked.
 
@@ -121,7 +121,7 @@ delib.module {
       + dividableTaskRequirements;
 
     planningReviewPhase = ''
-      1) `plan_reviewer` is final-plan-only: review ONLY `.opencode/plans/*.md` file(s) that are not `*.draft.md`.
+      1) `plan_reviewer` is final-plan-only: review ONLY `.agents/plans/*.md` file(s) that are not `*.draft.md`.
          - If any provided input is `*.draft.md` or non-plan scope, treat it as invalid scope and do not review it.
       2) Validate correctness, edge cases, verification completeness, and consistency with user constraints and codebase patterns.
       3) If high or medium findings exist, revise the final plan and run one additional `plan_reviewer` pass.
@@ -217,7 +217,7 @@ delib.module {
         Goal: ${phase4Goal}
 
         1) Read the draft plan produced in Phase 3.
-        2) Write a decision-complete final plan file (`*.md`) under `.opencode/plans/`.
+        2) Write a decision-complete final plan file (`*.md`) under `.agents/plans/`.
         3) Use:
       ''
       + planningFinalFileRequirements
@@ -310,7 +310,7 @@ delib.module {
         Goal: ${phase4Goal}
 
         1) Read the draft plan produced in Phase 3.
-        2) Write a decision-complete final plan file (`*.md`) under `.opencode/plans/`.
+        2) Write a decision-complete final plan file (`*.md`) under `.agents/plans/`.
         3) Use:
       ''
       + planningFinalFileRequirements
@@ -346,7 +346,7 @@ delib.module {
     draftFilenamePolicy = ''
       Filename policy (strict):
       - Create a NEW timestamped file:
-        `.opencode/plans/YYYYMMDD-HHMM-<kebab-task-slug>.draft.md`
+        `.agents/plans/YYYYMMDD-HHMM-<kebab-task-slug>.draft.md`
       - Never overwrite existing files.
       - If collision occurs, append `-v2`, `-v3`, etc.
     '';
@@ -416,7 +416,7 @@ delib.module {
           orchestrator = {
             mode = "primary";
             description = "Primary implementation orchestrator that delegates exploration and edits to specialized subagents.";
-            model = "minimax-coding-plan/MiniMax-M2.5";
+            model = "zai-coding-plan/glm-4.7";
             prompt =
               ''
                 You are the `orchestrator` primary implementation agent.
@@ -456,8 +456,7 @@ delib.module {
           spec_plan = {
             mode = "primary";
             description = "Primary interactive spec planner for ambiguous requests where requirements and scope must be clarified first.";
-            model = "minimax-coding-plan/MiniMax-M2.5";
-            reasoningEffort = "xhigh";
+            model = "zai-coding-plan/glm-4.7";
             prompt = specPlanningPrompt {
               workflowTitle = "Spec Planning Workflow";
               phase1Goal = "Build a precise understanding of intent, requirements, constraints, and affected code.";
@@ -486,10 +485,10 @@ delib.module {
               + ''
 
                 Primary objective:
-                - Produce a decision-complete, task-dividable draft plan as markdown under `.opencode/plans/`.
+                - Produce a decision-complete, task-dividable draft plan as markdown under `.agents/plans/`.
 
                 Allowed output and work:
-                - Write ONLY to `.opencode/plans/*.md`.
+                - Write ONLY to `.agents/plans/*.md`.
                 - Write draft files ONLY (`*.draft.md`).
                 - Do not modify source code or other files.
 
@@ -511,7 +510,7 @@ delib.module {
                 Execution protocol:
                 1) Parse request and infer task slug.
                 2) Generate full markdown content using required structure.
-                3) Write the file to `.opencode/plans/...md`.
+                3) Write the file to `.agents/plans/...md`.
                 4) Return ONLY:
                    - Draft plan file: <path>
                    - Write status: success
@@ -631,7 +630,7 @@ delib.module {
               + ''
 
                 Input scope (strict):
-                - Review ONLY final plan files matching `.opencode/plans/*.md`.
+                - Review ONLY final plan files matching `.agents/plans/*.md`.
                 - If input is a draft plan file (`*.draft.md`) or any non-plan path, return invalid-scope refusal and do not perform review.
 
               ''
