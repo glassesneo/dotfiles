@@ -2,7 +2,7 @@
 delib.host {
   name = "kurogane";
 
-  myconfig.agenix-shared = {
+  myconfig.config.agenix-shared = {
     enable = true;
     # Export all 13 secrets (same as current behavior)
     exportSecrets = [

@@ -9,7 +9,7 @@
 delib.module {
   name = "config.agenix-shared";
 
-  options.agenix-shared = with delib; {
+  options.config.agenix-shared = with delib; {
     enable = boolOption false;
     exportSecrets = listOfOption str [];
   };
@@ -17,7 +17,7 @@ delib.module {
   home.always.imports = [inputs.agenix.homeManagerModules.default];
 
   home.ifEnabled = {myconfig, ...}: let
-    cfg = myconfig.agenix-shared;
+    cfg = myconfig.config.agenix-shared;
     secretDefs = myconfig.args.shared.agenixSecrets;
     cat = lib.getExe' pkgs.coreutils "cat";
 
