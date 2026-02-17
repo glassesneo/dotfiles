@@ -74,6 +74,7 @@ let { Server, .. } = import "./schema.ncl" in
 
     claude_code = [
       "brave-search",
+      "deepwiki",
       "readability",
       "morph-fast-apply",
       "kiri",

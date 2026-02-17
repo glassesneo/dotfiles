@@ -801,10 +801,6 @@ delib.module {
               + readOnlyReviewHeader "source-backed research synthesis for material planning knowledge gaps"
               + ''
 
-                Trigger condition (strict):
-                - Execute when delegated by a primary planning agent because material knowledge uncertainty could affect planning decisions.
-                - This may include external documentation, upstream repository context, domain/genre knowledge, or recency-sensitive web information not confidently resolved locally.
-
                 Tool priority (strict):
                 1) `context7` for official library/framework docs and API behavior.
                 2) `deepwiki` for repository-level architecture/API details.
