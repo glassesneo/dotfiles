@@ -77,7 +77,6 @@ delib.module {
           ---
           name: internet-research
           description: Performs targeted internet research when primary planning agents have material knowledge uncertainty.
-          tools: Read, Grep
           mcpServers:
             - context7
             - deepwiki

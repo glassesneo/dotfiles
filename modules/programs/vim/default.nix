@@ -65,6 +65,15 @@ delib.module {
           skk-dict-path = "${pkgs.skkDictionaries.l}/share/skk/SKK-JISYO.L";
         };
       };
+      "vim-dpp/ddc.ts" = {
+        source = ./ddc.ts;
+      };
+      "vim-dpp/hooks/ddc.vim" = {
+        source = ./ddc-hook.vim;
+      };
+      "vim-dpp/hooks/vim-lsp.vim" = {
+        source = ./vim-lsp-hook.vim;
+      };
     };
 
     # EDITOR defaults to nvim via nixvim (no vim override needed)

@@ -9,6 +9,7 @@
     inputs
     |> lib.attrsets.getAttrs [
       "dpp-vim"
+      "dpp-ext-installer"
       "dpp-ext-lazy"
       "dpp-ext-toml"
       "dpp-protocol-git"
