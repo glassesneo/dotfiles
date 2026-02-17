@@ -10,6 +10,9 @@ delib.module {
   options = delib.singleEnableOption true;
 
   home.ifEnabled = let
+    overridePermissions = extra: permission:
+      builtins.mapAttrs (_: value: value // extra) permission;
+
     plansPathGlobs = {
       "./.agents/plans/*.md" = "allow";
       ".agents/plans/*.md" = "allow";
@@ -61,6 +64,8 @@ delib.module {
       };
       edit = {
         "*" = "deny";
+        "/tmp/**" = "allow";
+        "/private/tmp/**" = "allow";
       };
       write = {
         "*" = "deny";
@@ -78,18 +83,8 @@ delib.module {
       };
     };
 
-    readOnlyWithResearchPermission =
-      readOnlyPermission
-      // {
-        edit = readOnlyPermission.edit // researchPathGlobs;
-        write = readOnlyPermission.write // researchPathGlobs;
-      };
-    tempWorkspaceWithReportsPermission =
-      tempWorkspacePermission
-      // {
-        edit = tempWorkspacePermission.edit // reportsPathGlobs;
-        write = tempWorkspacePermission.write // reportsPathGlobs;
-      };
+    readOnlyWithResearchPermission = readOnlyPermission |> overridePermissions researchPathGlobs;
+    tempWorkspaceWithReportsPermission = tempWorkspacePermission |> overridePermissions reportsPathGlobs;
 
     planningSkillPhase = ''
       Phase 2: Skill Discovery and Delegation
