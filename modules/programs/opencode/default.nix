@@ -157,7 +157,7 @@ delib.module {
       3) Treat this as hard-fail policy: do not continue to final plan synthesis while qualifying gaps remain unresearched.
       4) Pass concrete research questions and known local findings to the `internet_research` agent.
       5) Keep delegation concise (normally one focused `internet_research` call per planning pass, or per related gap cluster).
-      6) Integrate returned findings into explicit assumptions/defaults in the final plan, including source links, confidence, and unresolved uncertainty.
+      6) Treat the **Conclusion** section of returned research files as verified facts. Integrate their statements directly into the plan without re-qualifying them. Confidence notes and unresolved gaps remain in the research file body.
     '';
 
     planningKnowledgeGapGate = ''
@@ -166,7 +166,7 @@ delib.module {
       1) Before entering Phase 4, run a final material knowledge-gap check.
       2) If any qualifying gap remains, you MUST call `internet_research` before writing the final plan file.
       3) Skipping required delegation is a hard-fail policy violation.
-      4) In the final plan, include integrated findings, source links, confidence, and conservative defaults for unresolved uncertainty.
+      4) In the final plan, state research conclusions as verified facts (from the research file's **Conclusion** section). Source links, confidence notes, and unresolved gaps belong in the research file, not the plan.
     '';
 
     planningFinalFileRequirements = ''
@@ -693,12 +693,17 @@ delib.module {
                 3) When claims are time-sensitive, include concrete dates and staleness notes.
                 4) Synthesize findings with confidence level and unresolved uncertainties.
 
-                Required output:
-                - Findings (ordered by relevance to delegated questions)
-                - Sources (URL per finding)
-                - Confidence and unresolved gaps
-                - Recommended default assumptions for the caller when evidence is incomplete
-                - Write a decision-complete research markdown file under `.agents/research/` so planning and communication agents can reference it.
+                Research file format (strict):
+                Write a decision-complete research markdown file under `.agents/research/` using this exact structure:
+
+                1) Conclusion (required, at the top):
+                   State what this research established using declarative, assertive language — no hedging, no qualifiers.
+                   - **Facts Revealed by This Research**: Confirmed facts, stated as facts.
+                   - **Approaches to Be Adopted**: Specific patterns, APIs, or methods the caller must use.
+                   - **Constraints and Caveats**: Hard limits, incompatibilities, or conditions the caller must respect.
+                2) Detailed Findings: Full evidence ordered by relevance to the delegated questions, with sources (URL per finding).
+                3) Confidence and unresolved gaps.
+                4) Recommended default assumptions for the caller when evidence is incomplete.
               ''
               + researchFilenamePolicy;
             tools = {
