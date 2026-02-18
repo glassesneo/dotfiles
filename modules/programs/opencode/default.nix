@@ -1,6 +1,7 @@
 {
   delib,
   homeConfig,
+  lib,
   llm-agents,
   ...
 }:
@@ -10,81 +11,97 @@ delib.module {
   options = delib.singleEnableOption true;
 
   home.ifEnabled = let
-    overridePermissions = extra: permission:
-      builtins.mapAttrs (_: value: value // extra) permission;
+    inherit (lib.attrsets) recursiveUpdate;
+    inherit (lib.attrsets) nameValuePair;
 
-    plansPathGlobs = {
-      "./.agents/plans/*.md" = "allow";
-      ".agents/plans/*.md" = "allow";
+    # list of paths -> { "path" = "allow"; ... }
+    mkRules = value: paths:
+      paths |> map (p: nameValuePair p value) |> builtins.listToAttrs;
+
+    allow = mkRules "allow";
+    deny = mkRules "deny";
+
+    denyAll = deny ["*"];
+    allowAll = allow ["*"];
+
+    merge = a: b: recursiveUpdate a b;
+
+    addRulesToOps = ops: rules: perm:
+      builtins.foldl' (
+        acc: op:
+          acc // {${op} = (acc.${op} or {}) // rules;}
+      )
+      perm
+      ops;
+
+    addExternalDirs = dirs: perm:
+      merge perm {external_directory = allow dirs;};
+
+    scopes = {
+      plans = {
+        dirs = [".agents/plans"];
+        files = [".agents/plans/*.md"];
+      };
+
+      reports = {
+        dirs = [".agents/reports"];
+        files = [".agents/reports/*.md"];
+      };
+
+      research = {
+        dirs = [".agents/research"];
+        files = [".agents/research/*.md"];
+      };
     };
 
-    reportsPathGlobs = {
-      "./.agents/reports/*.md" = "allow";
-      ".agents/reports/*.md" = "allow";
-    };
-
-    researchPathGlobs = {
-      "./.agents/research/*.md" = "allow";
-      ".agents/research/*.md" = "allow";
-    };
-
-    plansOnlyPermission = {
-      edit =
-        {
-          "*" = "deny";
-        }
-        // plansPathGlobs;
-      write =
-        {
-          "*" = "deny";
-        }
-        // plansPathGlobs;
-    };
+    withScope = {
+      name,
+      ops,
+    }: perm:
+      perm
+      |> addRulesToOps ops (allow scopes.${name}.files)
+      |> addExternalDirs scopes.${name}.dirs;
 
     readOnlyPermission = {
-      edit = {
-        "*" = "deny";
-      };
-      write = {
-        "*" = "deny";
-      };
-    };
-
-    tempWorkspacePermission = {
-      external_directory = {
-        "/tmp/*" = "allow";
-        "/private/tmp/*" = "allow";
-        "/nix/store/*" = "allow";
-      };
-      read = {
-        "/tmp/*" = "allow";
-        "/private/tmp/*" = "allow";
-        "/nix/store" = "allow";
-        "/nix/store/*" = "allow";
-      };
-      edit = {
-        "*" = "deny";
-        "/tmp/**" = "allow";
-        "/private/tmp/**" = "allow";
-      };
-      write = {
-        "*" = "deny";
-        "/tmp/**" = "allow";
-        "/private/tmp/**" = "allow";
-      };
+      edit = denyAll;
+      write = denyAll;
     };
 
     fullAccessPermission = {
-      edit = {
-        "*" = "allow";
-      };
-      write = {
-        "*" = "allow";
-      };
+      edit = allowAll;
+      write = allowAll;
     };
 
-    readOnlyWithResearchPermission = readOnlyPermission |> overridePermissions researchPathGlobs;
-    tempWorkspaceWithReportsPermission = tempWorkspacePermission |> overridePermissions reportsPathGlobs;
+    tempWorkspacePermission =
+      {}
+      |> addExternalDirs ["/tmp/*" "/private/tmp/*" "/nix/store/*"]
+      |> addRulesToOps ["read"] (allow ["/tmp/*" "/private/tmp/*" "/nix/store" "/nix/store/*"])
+      |> (p:
+        merge p {
+          edit = denyAll // allow ["/tmp/**" "/private/tmp/**"];
+          write = denyAll // allow ["/tmp/**" "/private/tmp/**"];
+        });
+
+    plansOnlyPermission =
+      readOnlyPermission
+      |> withScope {
+        name = "plans";
+        ops = ["edit" "write"];
+      };
+
+    researchOnlyPermission =
+      readOnlyPermission
+      |> withScope {
+        name = "research";
+        ops = ["edit" "write"];
+      };
+
+    tempWorkspaceWithReportsPermission =
+      tempWorkspacePermission
+      |> withScope {
+        name = "reports";
+        ops = ["read" "edit" "write"];
+      };
 
     planningSkillPhase = ''
       Phase 2: Skill Discovery and Delegation
@@ -375,7 +392,9 @@ delib.module {
         };
         autoshare = false;
         autoupdate = false;
+        default_agent = "spec";
         agent = {
+          plan.disable = true;
           orchestrator = {
             mode = "primary";
             description = "Primary implementation orchestrator that delegates exploration and edits to specialized subagents.";
@@ -400,7 +419,7 @@ delib.module {
               '';
             permission = readOnlyPermission;
           };
-          plan = {
+          spec = {
             mode = "primary";
             description = "Primary planning agent that handles both ambiguous and well-scoped requests through iterative specification elicitation and systematic planning workflow.";
             model = "openai/gpt-5.3-codex";
@@ -413,7 +432,13 @@ delib.module {
               phase3Title = "Specification Design";
               phase3Goal = "Convert clarified intent into implementable specification drafts (still no execution).";
               phase4Goal = "Synthesize clarified requirements + draft plan(s), then write the final plan file.";
-              agentName = "plan";
+              agentName = "spec";
+            };
+            # override default spec agent tools
+            tools = {
+              "write" = true;
+              "edit" = true;
+              "bash" = true;
             };
             permission = plansOnlyPermission // {question = "allow";};
           };
@@ -682,7 +707,7 @@ delib.module {
               "brave-search_*" = true;
               "readability_*" = true;
             };
-            permission = readOnlyWithResearchPermission;
+            permission = researchOnlyPermission;
           };
           test_designer = {
             mode = "all";
@@ -760,7 +785,7 @@ delib.module {
           - Make sure terminate your nohup process
           - Use `orchestrator` when implementation should be coordinated across multiple delegated subagents.
           - After implementation, run review with `code_reviewer`.
-          - `plan` must complete specification elicitation and resolve/default material ambiguities before draft planning.
+          - `spec` must complete specification elicitation and resolve/default material ambiguities before draft planning.
           - Ignore backward compatibility unless explicitly specified.
         '';
     };
