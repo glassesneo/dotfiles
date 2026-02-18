@@ -7,7 +7,7 @@
 delib.module {
   name = "programs.firefox";
 
-  options = delib.singleEnableOption host.isDesktop;
+  options = delib.singleEnableOption host.guiShellFeatured;
 
   home.ifEnabled = {
     programs.firefox = {

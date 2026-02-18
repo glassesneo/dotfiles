@@ -7,7 +7,7 @@
 delib.module {
   name = "programs.aquaskk";
 
-  options = delib.singleEnableOption host.isDesktop;
+  options = delib.singleEnableOption host.guiShellFeatured;
 
   home.ifEnabled.home.file = {
     # Symlink AquaSKK.app to ~/Library/Input Methods/ for macOS discovery

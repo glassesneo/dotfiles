@@ -22,6 +22,13 @@
           (base.withConfig {
             args.enable = true;
             rices.enable = true;
+            hosts.type.types = ["laptop" "server" "virtual"];
+            hosts.features.features = ["guiShell" "windowManagement" "devCore"];
+            hosts.features.defaultByHostType = {
+              laptop = ["guiShell" "windowManagement" "devCore"];
+              server = ["devCore"];
+              virtual = ["devCore"];
+            };
           })
           overlays
         ];

@@ -1,5 +1,6 @@
 {
   delib,
+  host,
   homeConfig,
   ...
 }:
@@ -14,7 +15,7 @@
 delib.module {
   name = "programs.desktoppr";
 
-  options = delib.singleEnableOption true;
+  options = delib.singleEnableOption host.guiShellFeatured;
 
   home.ifEnabled = {
     programs.desktoppr = {

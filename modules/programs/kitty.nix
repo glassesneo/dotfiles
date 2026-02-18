@@ -1,5 +1,6 @@
 {
   delib,
+  host,
   homeConfig,
   lib,
   ...
@@ -7,7 +8,7 @@
 delib.module {
   name = "programs.kitty";
 
-  options = delib.singleEnableOption true;
+  options = delib.singleEnableOption host.guiShellFeatured;
 
   home.ifEnabled.programs.kitty = {
     enable = true;

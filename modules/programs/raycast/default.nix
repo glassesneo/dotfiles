@@ -1,12 +1,13 @@
 {
   delib,
+  host,
   pkgs,
   ...
 }:
 delib.module {
   name = "programs.raycast";
 
-  options = delib.singleEnableOption true;
+  options = delib.singleEnableOption host.guiShellFeatured;
 
   home.ifEnabled = {
     home.packages = let

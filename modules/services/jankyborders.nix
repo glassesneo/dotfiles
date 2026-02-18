@@ -6,7 +6,7 @@
 delib.module {
   name = "jankyborders";
 
-  options = delib.singleEnableOption host.isDesktop;
+  options = delib.singleEnableOption host.windowManagementFeatured;
 
   darwin.ifEnabled.services.jankyborders = {
     enable = true;

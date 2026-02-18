@@ -1,6 +1,7 @@
 {
   brewCasks,
   delib,
+  host,
   pkgs,
   ...
 }:
@@ -8,7 +9,7 @@ delib.module {
   name = "programs.ghostty";
 
   options.programs.ghostty = with delib; {
-    enable = boolOption true;
+    enable = boolOption host.guiShellFeatured;
   };
 
   home.ifEnabled = {

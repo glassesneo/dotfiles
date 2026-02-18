@@ -9,7 +9,7 @@ delib.module {
   name = "services.sketchybar";
 
   options.services.sketchybar = with delib; {
-    enable = boolOption host.isDesktop;
+    enable = boolOption host.windowManagementFeatured;
     # Theme colors (Catppuccin naming) - all values use 0xAARRGGBB format
     colors = lib.mkOption {
       type = lib.types.attrsOf lib.types.str;

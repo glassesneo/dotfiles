@@ -1,12 +1,15 @@
 {
   delib,
+  host,
   pkgs,
   ...
 }:
 delib.module {
   name = "nix-darwin";
 
-  darwin.always = {
+  options = delib.singleEnableOption host.guiShellFeatured;
+
+  darwin.ifEnabled = {
     environment.systemPackages = with pkgs; [
       maccy
       raycast

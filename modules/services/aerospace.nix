@@ -9,7 +9,7 @@ delib.module {
   name = "services.aerospace";
 
   options.services.aerospace = with delib; {
-    enable = boolOption host.isDesktop;
+    enable = boolOption host.windowManagementFeatured;
     # Apps that should default to tiling layout (most apps float by default)
     tilingApps = lib.mkOption {
       type = lib.types.listOf lib.types.str;
