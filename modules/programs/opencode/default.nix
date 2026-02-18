@@ -444,7 +444,7 @@ delib.module {
           };
           draft_planner = {
             mode = "subagent";
-            model = "zai-coding-plan/glm-4.7";
+            model = "github-copilot/claude-sonnet-4.6";
             description = "Creates decision-complete draft plan files with task breakdown structure for implementation clarity.";
             prompt =
               ''
@@ -497,7 +497,7 @@ delib.module {
           };
           editor = {
             mode = "subagent";
-            model = "github-copilot/claude-haiku-4.5";
+            model = "zai-coding-plan/glm-4.7";
             description = "Instruction-following editor subagent for bounded file edits with minimal required context reads.";
             prompt = ''
               You are the `editor` implementation subagent.
@@ -516,7 +516,7 @@ delib.module {
             permission = fullAccessPermission;
           };
           explore = {
-            model = "zai-coding-plan/glm-4.7";
+            model = "openai/gpt-5.3-codex";
             reasoningEffort = "medium";
             description = "Read-only exploration agent that uses relevant skills provided by primary-agent delegation context.";
             prompt =
@@ -532,8 +532,7 @@ delib.module {
           };
           explore_secondary = {
             mode = "subagent";
-            model = "github-copilot/claude-haiku-4.5";
-            reasoningEffort = "medium";
+            model = "zai-coding-plan/glm-4.7";
             description = "Secondary read-only exploration agent optimized for quick follow-up checks.";
             prompt =
               ''
@@ -615,9 +614,8 @@ delib.module {
           };
           debugger = {
             mode = "all";
-            model = "openai/gpt-5.3-codex";
+            model = "github-copilot/claude-opus-4.6";
             description = "Performs command-driven bug investigation with reproduction, root-cause analysis, and evidence-only reporting.";
-            reasoningEffort = "xhigh";
             prompt =
               ''
                 You are the `debugger` agent. Your sole responsibility is rigorous bug investigation.
@@ -655,9 +653,9 @@ delib.module {
           };
           deep_explore = {
             model = "openai/gpt-5.3-codex";
+            reasoningEffort = "high";
             mode = "subagent";
             description = "Explores codebases in depth, understanding architecture and design patterns. Ideal for large or complex projects. Prioritizes skill guidance provided by primary-agent delegation context.";
-            reasoningEffort = "xhigh";
             prompt =
               ''
                 You are the `deep_explore` subagent. Your role is deep, read-only architecture exploration.
