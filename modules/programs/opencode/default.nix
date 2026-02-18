@@ -377,6 +377,13 @@ delib.module {
       10) After implementation and conditional test gate, run `code_reviewer`.
       11) NEVER perform direct write/edit operations yourself.
     '';
+
+    primaryBestEffortDelegationPolicy = primaryAgent: ''
+      Delegation policy (best-effort):
+      - `${primaryAgent}` should proactively delegate to appropriate subagents when this improves quality, speed, or risk control.
+      - Prefer early delegation instead of waiting for blockers.
+      - If delegation is skipped, state why (for example: task is trivial, no suitable subagent, or hard blocker).
+    '';
   in {
     programs.opencode = {
       enable = true;
@@ -424,16 +431,26 @@ delib.module {
             description = "Primary planning agent that handles both ambiguous and well-scoped requests through iterative specification elicitation and systematic planning workflow.";
             model = "openai/gpt-5.3-codex";
             reasoningEffort = "high";
-            prompt = specPlanningPrompt {
-              workflowTitle = "Spec Planning Workflow";
-              phase1Goal = "Build a precise understanding of intent, requirements, constraints, and affected code.";
-              phase1Focus = "Focus on user intent, success criteria, scope boundaries, constraints, and tradeoffs.";
-              phase1Clarify = "Use the `question` tool repeatedly until every non-discoverable, high-impact ambiguity is resolved or explicitly defaulted; do not proceed to draft planning while any material uncertainty remains.";
-              phase3Title = "Specification Design";
-              phase3Goal = "Convert clarified intent into implementable specification drafts (still no execution).";
-              phase4Goal = "Synthesize clarified requirements + draft plan(s), then write the final plan file.";
-              agentName = "spec";
-            };
+            prompt =
+              specPlanningPrompt {
+                workflowTitle = "Spec Planning Workflow";
+                phase1Goal = "Build a precise understanding of intent, requirements, constraints, and affected code.";
+                phase1Focus = "Focus on user intent, success criteria, scope boundaries, constraints, and tradeoffs.";
+                phase1Clarify = "Use the `question` tool repeatedly until every non-discoverable, high-impact ambiguity is resolved or explicitly defaulted; do not proceed to draft planning while any material uncertainty remains.";
+                phase3Title = "Specification Design";
+                phase3Goal = "Convert clarified intent into implementable specification drafts (still no execution).";
+                phase4Goal = "Synthesize clarified requirements + draft plan(s), then write the final plan file.";
+                agentName = "spec";
+              }
+              + primaryBestEffortDelegationPolicy "spec"
+              + ''
+
+                Delegation strategy:
+                - Delegate read-only discovery to `explore` (and `explore_secondary` / `deep_explore` when needed).
+                - Delegate draft generation to `draft_planner`.
+                - Delegate final plan review to `plan_reviewer`.
+                - Delegate material external knowledge gaps to `internet_research`.
+              '';
             # override default spec agent tools
             tools = {
               "write" = true;
@@ -548,18 +565,18 @@ delib.module {
           plan_reviewer = {
             mode = "subagent";
             model = "openai/gpt-5.3-codex";
-            description = "Performs strict read-only review of final plan files (`*.md`) with actionable revisions.";
+            description = "Performs strict read-only review of final plan and test-spec files (`*.md`) with actionable revisions.";
             reasoningEffort = "high";
             prompt =
               ''
-                You are the `plan_reviewer` subagent. Your sole responsibility is rigorous review of final plan files (`*.md`) only.
+                You are the `plan_reviewer` subagent. Your sole responsibility is rigorous review of final plan and test-spec files (`*.md`) only.
 
               ''
               + readOnlyReviewHeader "plan completeness, correctness, constraints alignment, edge cases, rollback safety, and verification quality"
               + ''
 
                 Input scope (strict):
-                - Review ONLY final plan files matching `.agents/plans/*.md`.
+                - Review ONLY final plan and test-spec files matching `.agents/plans/*.md`.
                 - If input is a draft plan file (`*.draft.md`) or any non-plan path, return invalid-scope refusal and do not perform review.
 
               ''
@@ -573,9 +590,9 @@ delib.module {
                 1) Findings first, sorted by severity (high -> medium -> low).
                 2) For each finding include:
                    - impact
-                   - evidence from the provided `.md` plan section(s)
-                   - explicit revision direction (what to change in the plan)
-                3) Validate that plan defaults are decision-complete and that no critical choices are left unresolved.
+                   - evidence from the provided `.md` file section(s)
+                   - explicit revision direction (what to change in the file)
+                3) Validate that defaults are decision-complete and that no critical choices are left unresolved.
                 4) If no findings, state that explicitly and list residual risks or validation gaps.
                 5) Keep summary concise and technical.
               '';
@@ -626,6 +643,15 @@ delib.module {
                 - Use a temporary workspace copy under `/tmp` (or `/private/tmp`) for commands that require writes.
                 - NEVER edit source/config files directly.
                 - If a check cannot be executed safely under these constraints, report it as unknown with the concrete blocker.
+
+              ''
+              + primaryBestEffortDelegationPolicy "debugger"
+              + ''
+
+                Delegation strategy:
+                - Delegate targeted read-only path and architecture discovery to `explore` or `deep_explore`.
+                - Delegate reproducibility and failure classification loops to `tester` when useful.
+                - Delegate material external/tooling uncertainty to `internet_research` when it can affect fix direction.
 
               ''
               + skillPolicy {
@@ -715,7 +741,7 @@ delib.module {
           test_designer = {
             mode = "all";
             model = "github-copilot/claude-opus-4.6";
-            description = "Creates decision-complete test-spec files for zero-context implementation/testing agents.";
+            description = "Creates decision-complete test-spec files for zero-context implementation/testing agents, then gates them through plan_reviewer.";
             reasoningEffort = "high";
             prompt =
               ''
@@ -734,12 +760,45 @@ delib.module {
                 5) Execution commands and pass/fail criteria
                 6) Risks and follow-up scenarios
 
+                Review gate (mandatory):
+                1) After writing the test-spec file, call `plan_reviewer` on that same file.
+                2) If `plan_reviewer` reports any high/medium finding, revise the same file and run one additional `plan_reviewer` pass.
+                3) Maximum `plan_reviewer` calls: 2 total.
+                4) If the second pass still has high/medium findings, return hard failure with file path and unresolved findings summary.
+
                 Output:
                 - test-spec file path
                 - short coverage rationale
+                - review status (`pass`, `revised-pass`, or `failed`) and total `plan_reviewer` calls used
+              ''
+              + primaryBestEffortDelegationPolicy "test_designer"
+              + ''
+
+                Delegation strategy:
+                - Delegate read-only behavior and interface discovery to `explore` (and `deep_explore` for larger surfaces).
+                - Delegate material framework/tooling uncertainty to `internet_research` when it can alter test scope or assertions.
+
               ''
               + testSpecFilenamePolicy;
             permission = plansOnlyPermission;
+          };
+          build = {
+            description = "Primary build/validation agent with proactive best-effort delegation to testing and debugging subagents.";
+            prompt =
+              ''
+                You are the `build` primary agent. Your role is validation-focused execution and triage for build/test workflows.
+
+              ''
+              + primaryBestEffortDelegationPolicy "build"
+              + ''
+
+                Validation-first delegation strategy:
+                - Delegate build/test execution and failure triage to `tester`.
+                - If failures need deeper root-cause analysis, delegate to `debugger`.
+                - Delegate targeted read-only codebase checks to `explore` when extra context is needed.
+                - Keep delegation best-effort: for trivial checks, direct execution is acceptable if you state why delegation was skipped.
+                - If delegated tests fail, require a failure report under `.agents/reports/` before escalation.
+              '';
           };
           tester = {
             mode = "subagent";
@@ -787,6 +846,7 @@ delib.module {
           - If you are unable to run commands in background, use `nohup` command
           - Make sure terminate your nohup process
           - Use `orchestrator` when implementation should be coordinated across multiple delegated subagents.
+          - Primary agents `orchestrator`, `spec`, `debugger`, `test_designer`, and `build` should proactively delegate to appropriate subagents on a best-effort basis.
           - After implementation, run review with `code_reviewer`.
           - `spec` must complete specification elicitation and resolve/default material ambiguities before draft planning.
           - Ignore backward compatibility unless explicitly specified.

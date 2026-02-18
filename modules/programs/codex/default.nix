@@ -34,13 +34,6 @@ delib.module {
         };
         profile = "full-auto";
         profiles = {
-          "planning" = {
-            model = "gpt-5.3-codex";
-            approval_policy = "on-request";
-            sandbox_mode = "read-only";
-            model_reasoning_effort = "medium";
-            model_reasoning_summary = "detailed";
-          };
           "full-auto" = {
             model = "gpt-5.3-codex";
             approval_policy = "never";
@@ -60,7 +53,7 @@ delib.module {
               XDG_DATA_HOME = "/tmp/agent-browser/data";
               XDG_STATE_HOME = "/tmp/agent-browser/state";
             };
-            model_reasoning_effort = "medium";
+            model_reasoning_effort = "high";
             # model_provider = "openrouter";
             # model = "kwaipilot/kat-coder-pro:free";
           };

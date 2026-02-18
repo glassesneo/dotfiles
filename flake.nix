@@ -37,27 +37,53 @@
           inherit inputs moduleSystem homeManagerUser;
         };
       };
+
+    homeConfigs = mkConfigurations "home";
   in {
     # nixosConfigurations = mkConfigurations "nixos";
-    homeConfigurations = mkConfigurations "home";
+    homeConfigurations = homeConfigs;
     darwinConfigurations = mkConfigurations "darwin";
+
+    checks.aarch64-darwin = let
+      pkgs = nixpkgs.legacyPackages.aarch64-darwin;
+
+      hmChecks =
+        pkgs.lib.mapAttrs' (name: config: {
+          name = "hm-" + builtins.replaceStrings ["@"] ["_at_"] name;
+          value = config.activationPackage;
+        })
+        homeConfigs;
+
+      nixvimChecks =
+        pkgs.lib.mapAttrs' (name: config: {
+          name = "nixvim-" + builtins.replaceStrings ["@"] ["_at_"] name;
+          value = config.config.programs.nixvim.build.test;
+        }) (pkgs.lib.filterAttrs (
+            name: _:
+              name == "neo@kurogane" || name == "neo@kurogane-catppuccin"
+          )
+          homeConfigs);
+    in
+      hmChecks // nixvimChecks;
 
     devShells.aarch64-darwin = let
       pkgs = nixpkgs.legacyPackages.aarch64-darwin;
     in rec {
       dotfiles = pkgs.mkShellNoCC {
         name = "dotfiles";
-        packages = with pkgs; [
-          bun
-          deno
-          # lua-language-server
-          emmylua-ls
-          nickel
-          nls
-          stylua
-        ] ++ [
-          inputs.bun2nix.packages.aarch64-darwin.default
-        ];
+        packages = with pkgs;
+          [
+            bun
+            deno
+            # lua-language-server
+            emmylua-ls
+            nickel
+            nls
+            stylua
+          ]
+          ++ [
+            inputs.bun2nix.packages.aarch64-darwin.default
+          ];
       };
       default = dotfiles;
     };
