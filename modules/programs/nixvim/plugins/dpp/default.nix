@@ -31,7 +31,7 @@ delib.module {
         };
       };
       "dpp/plugins" = {
-        source = dppShared.pluginTomls;
+        source = dppShared.pluginTomlsNvim;
       };
       "dpp/hooks/skk.vim" = {
         source = pkgs.replaceVars dppShared.sharedHookSources.skkVim {

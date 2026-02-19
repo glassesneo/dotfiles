@@ -61,8 +61,7 @@ export class Config extends BaseConfig {
       // - Include only generated plugin TOMLs named `^[a-z0-9-]+\.toml$`.
       // - Exclude non-plugin files explicitly (fixtures/scratch can be added here).
       // - WARNING: Any scratch `.toml` matching the pattern is auto-loaded.
-      // Exclude ddc.toml as it references Vim-only hooks.
-      const excludedTomlFiles = new Set<string>(["ddc.toml"]);
+      const excludedTomlFiles = new Set<string>([]);
       const discoveredTomlFiles: string[] = [];
       for await (const file of expandGlob(`@plugin-dir-path@/*.toml`)) {
         const fileName = file.name;
