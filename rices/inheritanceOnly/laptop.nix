@@ -2,6 +2,8 @@
 delib.rice {
   name = "laptop";
 
+  inheritanceOnly = true;
+
   home = {
     programs = {
       ghostty = {
