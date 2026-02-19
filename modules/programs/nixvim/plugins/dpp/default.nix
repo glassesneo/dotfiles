@@ -23,12 +23,10 @@ delib.module {
     # TODO(stabilization-window): Keep legacy artifacts for rollback safety.
     # Deletion is deferred to a follow-up after stability sign-off.
     # Pending cleanup targets:
-    # - modules/programs/vim/dpp.ts
     # - modules/programs/vim/plugins/skk.toml
-    # - modules/programs/nixvim/plugins/dpp/dpp.ts
     xdg.configFile = {
       "dpp/dpp.ts" = {
-        source = pkgs.replaceVars dppShared.dppTsSrc {
+        source = pkgs.replaceVars ./dpp.ts {
           plugin-dir-path = "${homeConfig.xdg.configHome}/dpp/plugins";
         };
       };

@@ -57,9 +57,28 @@ export class Config extends BaseConfig {
     if (tomlExt) {
       const action = tomlExt.actions.load;
 
-      const tomlPromises = [
-        { name: "skk.toml", lazy: true },
-      ].map((tomlFile) =>
+      // Auto-discovery convention:
+      // - Include only generated plugin TOMLs named `^[a-z0-9-]+\.toml$`.
+      // - Exclude non-plugin files explicitly (fixtures/scratch can be added here).
+      // - WARNING: Any scratch `.toml` matching the pattern is auto-loaded.
+      const excludedTomlFiles = new Set<string>([]);
+      const discoveredTomlFiles: string[] = [];
+      for await (const file of expandGlob(`@plugin-dir-path@/*.toml`)) {
+        const fileName = file.name;
+        if (!file.isFile) {
+          continue;
+        }
+        if (!/^[a-z0-9-]+\.toml$/.test(fileName)) {
+          continue;
+        }
+        if (excludedTomlFiles.has(fileName)) {
+          continue;
+        }
+        discoveredTomlFiles.push(fileName);
+      }
+      discoveredTomlFiles.sort((a, b) => a.localeCompare(b));
+
+      const tomlPromises = discoveredTomlFiles.map((tomlFile) =>
         action.callback({
           denops: args.denops,
           context,
@@ -68,8 +87,8 @@ export class Config extends BaseConfig {
           extOptions: tomlOptions,
           extParams: tomlParams,
           actionParams: {
-            path: "@plugin-dir-path@" + "/" + tomlFile.name,
-            options: { lazy: tomlFile.lazy },
+            path: "@plugin-dir-path@" + "/" + tomlFile,
+            options: { lazy: true },
           },
         })
       );

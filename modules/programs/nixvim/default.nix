@@ -1,6 +1,7 @@
 {
   delib,
   inputs,
+  pkgs,
   ...
 }:
 delib.module {
@@ -19,6 +20,7 @@ delib.module {
   home.ifEnabled = {cfg, ...}: {
     programs.nixvim = {
       enable = true;
+      package = inputs.neovim-nightly-overlay.packages.${pkgs.stdenv.hostPlatform.system}.default;
       inherit (cfg) defaultEditor;
       withNodeJs = false;
       withPerl = false;

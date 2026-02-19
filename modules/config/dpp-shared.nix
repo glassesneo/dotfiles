@@ -75,7 +75,8 @@ in
 
     myconfig.always.args.shared.dppShared = {
       inherit dppPluginPkgs pluginTomls;
-      dppTsSrc = ./dpp.ts;
-      sharedHookSources.skkVim = ./dpp-shared/hooks/skk.vim;
+      sharedHookSources = {
+        skkVim = ./dpp-shared/hooks/skk.vim;
+      };
     };
   }
