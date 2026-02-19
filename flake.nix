@@ -163,10 +163,6 @@
       url = "github:Shougo/dpp-protocol-git";
       flake = false;
     };
-    amp-nvim = {
-      url = "github:sourcegraph/amp.nvim";
-      flake = false;
-    };
     skills-deployer = {
       url = "github:glassesneo/skills-deployer";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -177,10 +173,6 @@
     };
     ui-ux-pro-max = {
       url = "github:nextlevelbuilder/ui-ux-pro-max-skill";
-      flake = false;
-    };
-    sparze = {
-      url = "github:glassesneo/sparze/develop";
       flake = false;
     };
     tree-sitter-moonbit = {

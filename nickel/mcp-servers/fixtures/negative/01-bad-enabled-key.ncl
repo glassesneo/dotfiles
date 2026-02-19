@@ -8,11 +8,9 @@ validate {
   },
 
   enabled = {
-    mcphub = ["missing-server"],
     claude_code = ["valid-server"],
     claude_desktop = ["valid-server"],
     codex = ["valid-server"],
-    crush = ["valid-server"],
     opencode = ["valid-server"],
   },
 }

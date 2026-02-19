@@ -23,22 +23,6 @@
         "type": "github"
       }
     },
-    "amp-nvim": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1765795793,
-        "narHash": "sha256-f/li32jpVigbZANnnbgSArnOH4nusj0DUz7952K+Znw=",
-        "owner": "sourcegraph",
-        "repo": "amp.nvim",
-        "rev": "3b9ad5ef0328de1b35cc9bfa723a37db5daf9434",
-        "type": "github"
-      },
-      "original": {
-        "owner": "sourcegraph",
-        "repo": "amp.nvim",
-        "type": "github"
-      }
-    },
     "anthropic-skills": {
       "flake": false,
       "locked": {
@@ -758,7 +742,6 @@
     "root": {
       "inputs": {
         "agenix": "agenix",
-        "amp-nvim": "amp-nvim",
         "anthropic-skills": "anthropic-skills",
         "brew-api": "brew-api",
         "brew-nix": "brew-nix",
@@ -781,7 +764,6 @@
         "nixvim": "nixvim",
         "nur": "nur",
         "skills-deployer": "skills-deployer",
-        "sparze": "sparze",
         "tree-sitter-moonbit": "tree-sitter-moonbit",
         "ui-ux-pro-max": "ui-ux-pro-max",
         "various-wallpapers": "various-wallpapers"
@@ -804,23 +786,6 @@
       "original": {
         "owner": "glassesneo",
         "repo": "skills-deployer",
-        "type": "github"
-      }
-    },
-    "sparze": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1767593447,
-        "narHash": "sha256-+jj9jFz71bo+AvpOc7imKn5GmlIsJlO5Wospsi2Bhag=",
-        "owner": "glassesneo",
-        "repo": "sparze",
-        "rev": "e72f8434be21bd2b2d9754974565a998bc4d22a5",
-        "type": "github"
-      },
-      "original": {
-        "owner": "glassesneo",
-        "ref": "develop",
-        "repo": "sparze",
         "type": "github"
       }
     },

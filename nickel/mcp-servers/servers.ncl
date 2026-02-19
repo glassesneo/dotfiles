@@ -62,16 +62,6 @@ let { Server, .. } = import "./schema.ncl" in
   # Lists of servers enabled for each target
   # This allows different subsets per tool while keeping data centralized
   enabled = {
-    mcphub = [
-      "brave-search",
-      "readability",
-      "tavily",
-      "chrome-devtools",
-      "morph-fast-apply",
-      "kiri",
-      "relative-filesystem",
-    ],
-
     claude_code = [
       "brave-search",
       "deepwiki",
@@ -96,15 +86,6 @@ let { Server, .. } = import "./schema.ncl" in
       "chrome-devtools",
       "morph-fast-apply",
       "kiri",
-      "context7",
-    ],
-
-    crush = [
-      "brave-search",
-      "readability",
-      "morph-fast-apply",
-      "kiri",
-      "codex",
       "context7",
     ],
 

@@ -1,11 +1,9 @@
 let { Server, .. } = import "./schema.ncl" in
 
 let RequiredTargets = [
-  "mcphub",
   "claude_code",
   "claude_desktop",
   "codex",
-  "crush",
   "opencode",
 ] in
 

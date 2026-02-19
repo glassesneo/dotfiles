@@ -1,7 +1,6 @@
 {
   delib,
   host,
-  homeConfig,
   inputs,
   lib,
   nodePackages,
@@ -148,27 +147,6 @@ delib.module {
 
     # The syntax follows https://github.com/ravitemer/mcphub.nvim/blob/main/doc/mcp/servers_json.md
     mcphub-servers = {
-      programs = {
-        filesystem = {
-          args = ["${homeConfig.home.homeDirectory}/.dotfiles"];
-          type = "stdio";
-        };
-        github = {
-          passwordCommand = {
-            GITHUB_PERSONAL_ACCESS_TOKEN = [
-              (lib.getExe homeConfig.programs.gh.package)
-              "auth"
-              "token"
-            ];
-          };
-          type = "stdio";
-        };
-        context7 = {
-          enable = true;
-          type = "stdio";
-        };
-        sequential-thinking.type = "stdio";
-      };
       settings.servers = mkServersForTarget "mcphub";
     };
 
@@ -197,14 +175,6 @@ delib.module {
       settings.servers = mkServersForTarget "codex";
     };
 
-    crush-servers = {
-      programs.context7 = {
-        enable = true;
-        type = "stdio";
-      };
-      settings.servers = mkServersForTarget "crush";
-    };
-
     # The syntax follows https://opencode.ai/docs/mcp-servers
     opencode-servers = {
       settings.servers = mkServersForTarget "opencode";
@@ -212,12 +182,11 @@ delib.module {
   in {
     assertions = commandAssertions;
     home.file = {
-      "${homeConfig.xdg.configHome}/mcphub/servers.json".source = inputs.mcp-servers-nix.lib.mkConfig pkgs mcphub-servers;
+      # "${homeConfig.xdg.configHome}/mcphub/servers.json".source = inputs.mcp-servers-nix.lib.mkConfig pkgs mcphub-servers;
       "Library/Application Support/Claude/claude_desktop_config.json".source = inputs.mcp-servers-nix.lib.mkConfig pkgs claude-desktop-servers;
     };
     programs.claude-code.mcpServers = (inputs.mcp-servers-nix.lib.evalModule pkgs claude-code-servers).config.settings.servers;
     programs.codex.settings.mcp_servers = (inputs.mcp-servers-nix.lib.evalModule pkgs codex-servers).config.settings.servers;
-    programs.crush.settings.mcp = (inputs.mcp-servers-nix.lib.evalModule pkgs crush-servers).config.settings.servers;
     programs.opencode.settings.mcp = (inputs.mcp-servers-nix.lib.evalModule pkgs opencode-servers).config.settings.servers;
   };
 }

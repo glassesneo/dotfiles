@@ -2,24 +2,13 @@
 # This keeps target formatting policy in Nickel data instead of Nix branches.
 {
   target_list = [
-    "mcphub",
     "claude_code",
     "claude_desktop",
     "codex",
-    "crush",
     "opencode",
   ],
 
   targets_meta = {
-    mcphub = {
-      env_syntax_mode = "dollar_env_colon",
-      env_field_name = "env",
-      static_env_field_name = "env",
-      url_type_policy = "sse",
-      local_type_policy = null,
-      command_list_behavior = false,
-    },
-
     claude_code = {
       env_syntax_mode = "dollar_braces",
       env_field_name = "env",
@@ -43,15 +32,6 @@
       env_field_name = "env_vars",
       static_env_field_name = "env",
       url_type_policy = null,
-      local_type_policy = null,
-      command_list_behavior = false,
-    },
-
-    crush = {
-      env_syntax_mode = "dollar_bare",
-      env_field_name = "env",
-      static_env_field_name = "env",
-      url_type_policy = "sse",
       local_type_policy = null,
       command_list_behavior = false,
     },

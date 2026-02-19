@@ -9,11 +9,9 @@ validate {
   },
 
   enabled = {
-    mcphub = ["dual-server"],
     claude_code = ["dual-server"],
     claude_desktop = ["dual-server"],
     codex = ["dual-server"],
-    crush = ["dual-server"],
     opencode = ["dual-server"],
   },
 }

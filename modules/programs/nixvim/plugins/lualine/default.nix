@@ -69,18 +69,6 @@ delib.module {
                 __unkeyed-1 = "filetype";
                 separator = "|";
               }
-              {
-                __unkeyed-1.__raw = ''
-                  function()
-                    ${builtins.readFile ./mcphub/init.lua}
-                  end
-                '';
-                color.__raw = ''
-                  function()
-                    ${builtins.readFile ./mcphub/color.lua}
-                  end
-                '';
-              }
             ];
             lualine_z = [];
           };

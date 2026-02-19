@@ -9,11 +9,9 @@ validate {
   },
 
   enabled = {
-    mcphub = ["node-server"],
     claude_code = ["node-server"],
     claude_desktop = ["node-server"],
     codex = ["node-server"],
-    crush = ["node-server"],
     opencode = ["node-server"],
   },
 }
