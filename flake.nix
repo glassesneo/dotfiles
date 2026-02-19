@@ -167,14 +167,6 @@
       url = "github:glassesneo/skills-deployer";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    anthropic-skills = {
-      url = "github:anthropics/skills";
-      flake = false;
-    };
-    ui-ux-pro-max = {
-      url = "github:nextlevelbuilder/ui-ux-pro-max-skill";
-      flake = false;
-    };
     tree-sitter-moonbit = {
       url = "github:moonbitlang/tree-sitter-moonbit/a5a7e0b9cb2db740cfcc4232b2f16493b42a0c82";
       flake = false;

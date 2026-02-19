@@ -23,22 +23,6 @@
         "type": "github"
       }
     },
-    "anthropic-skills": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1770171633,
-        "narHash": "sha256-8tANLG91vLbC30IFpEakPBN9bUjJJldpvX28w9e9y80=",
-        "owner": "anthropics",
-        "repo": "skills",
-        "rev": "a5bcdd7e58cdff48566bf876f0a72a2008dcefbc",
-        "type": "github"
-      },
-      "original": {
-        "owner": "anthropics",
-        "repo": "skills",
-        "type": "github"
-      }
-    },
     "blueprint": {
       "inputs": {
         "nixpkgs": [
@@ -742,7 +726,6 @@
     "root": {
       "inputs": {
         "agenix": "agenix",
-        "anthropic-skills": "anthropic-skills",
         "brew-api": "brew-api",
         "brew-nix": "brew-nix",
         "bun2nix": "bun2nix",
@@ -765,7 +748,6 @@
         "nur": "nur",
         "skills-deployer": "skills-deployer",
         "tree-sitter-moonbit": "tree-sitter-moonbit",
-        "ui-ux-pro-max": "ui-ux-pro-max",
         "various-wallpapers": "various-wallpapers"
       }
     },
@@ -905,22 +887,6 @@
       "original": {
         "owner": "numtide",
         "repo": "treefmt-nix",
-        "type": "github"
-      }
-    },
-    "ui-ux-pro-max": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1769696747,
-        "narHash": "sha256-dIfOk6IdlAw49Q/4IcL+igy3J2krrQSIlEYB1cp/TB0=",
-        "owner": "nextlevelbuilder",
-        "repo": "ui-ux-pro-max-skill",
-        "rev": "2ba6ca2f1ee68f73ce4fde139f1ede1432054c51",
-        "type": "github"
-      },
-      "original": {
-        "owner": "nextlevelbuilder",
-        "repo": "ui-ux-pro-max-skill",
         "type": "github"
       }
     },
