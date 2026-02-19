@@ -50,13 +50,6 @@ let { Server, .. } = import "./schema.ncl" in
     context7 = {
       command_id = "context7-mcp",
     },
-
-    # Maps
-
-    # Custom/local servers
-    relative-filesystem = {
-      command_id = "relative-filesystem-mcp",
-    },
   },
 
   # Lists of servers enabled for each target

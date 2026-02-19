@@ -1,11 +1,7 @@
 let { Server, .. } = import "./schema.ncl" in
+let { target_list, .. } = import "./targets.ncl" in
 
-let RequiredTargets = [
-  "claude_code",
-  "claude_desktop",
-  "codex",
-  "opencode",
-] in
+let RequiredTargets = target_list in
 
 let ConfigShape = {
   servers | { _ : Server },

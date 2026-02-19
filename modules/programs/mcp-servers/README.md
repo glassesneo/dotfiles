@@ -22,4 +22,3 @@ This module splits MCP responsibilities between Nickel data modeling and Nix run
 ## Notes
 
 - `nickel/packages/node.ncl` is informational only and is not part of active node2nix wiring.
-- The hardcoded `relative-filesystem-mcp` path in Nix is a temporary host-local workaround tracked as separate ownership work.

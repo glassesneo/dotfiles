@@ -22,7 +22,6 @@ delib.module {
 
     # Command resolution map: command_id -> executable path
     # Nix handles all path resolution
-    deno = pkgs.lib.getExe pkgs.deno;
     nodejs = pkgs.lib.getExe pkgs.nodejs;
 
     commands = {
@@ -33,11 +32,6 @@ delib.module {
       "morph-fast-apply-mcp" = "${nodePackages}/bin/mcp-server-filesystem";
       "kiri-mcp" = pkgs.lib.getExe' nodePkgs."kiri-mcp-server" "kiri-mcp-server";
       "context7-mcp" = pkgs.lib.getExe inputs.mcp-servers-nix.packages.${host.homeManagerSystem}.context7-mcp;
-      # TODO(ownership): This path is host-specific and should move to a
-      # host/flake-input based design in a separate follow-up.
-      # Out of scope for the Nickel expansion plan: we intentionally keep the
-      # current absolute path workaround so local dev can run the MCP server.
-      "relative-filesystem-mcp" = "${deno} run -A /Users/neo/dev/relative-filesystem-mcp/server.ts";
     };
 
     # Command token resolved from commands map, fallback to command_id token
@@ -145,40 +139,23 @@ delib.module {
       lib.filterAttrs (name: _: builtins.elem name serverData.enabled.${target})
       (lib.mapAttrs (mkServer targetMeta) serverData.servers);
 
-    # The syntax follows https://github.com/ravitemer/mcphub.nvim/blob/main/doc/mcp/servers_json.md
-    # mcphub-servers = {
-    # settings.servers = mkServersForTarget "mcphub";
-    # };
+    # Targets that require the context7 side-effect
+    # See https://docs.claude.com/en/docs/claude-code/mcp and https://opencode.ai/docs/mcp-servers
+    context7Targets = ["claude_code" "claude_desktop" "codex"];
 
-    # The syntax follows https://docs.claude.com/en/docs/claude-code/mcp
-    claude-code-servers = {
-      programs.context7 = {
-        enable = true;
-        type = "stdio";
-      };
-      settings.servers = mkServersForTarget "claude_code";
-    };
+    mkTargetConfig = target:
+      lib.optionalAttrs (builtins.elem target context7Targets) {
+        programs.context7 = {
+          enable = true;
+          type = "stdio";
+        };
+      }
+      // {settings.servers = mkServersForTarget target;};
 
-    claude-desktop-servers = {
-      programs.context7 = {
-        enable = true;
-        type = "stdio";
-      };
-      settings.servers = mkServersForTarget "claude_desktop";
-    };
-
-    codex-servers = {
-      programs.context7 = {
-        enable = true;
-        type = "stdio";
-      };
-      settings.servers = mkServersForTarget "codex";
-    };
-
-    # The syntax follows https://opencode.ai/docs/mcp-servers
-    opencode-servers = {
-      settings.servers = mkServersForTarget "opencode";
-    };
+    claude-code-servers = mkTargetConfig "claude_code";
+    claude-desktop-servers = mkTargetConfig "claude_desktop";
+    codex-servers = mkTargetConfig "codex";
+    opencode-servers = mkTargetConfig "opencode";
   in {
     assertions = commandAssertions;
     home.file = {

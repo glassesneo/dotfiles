@@ -1,5 +1,15 @@
 # Target adapter metadata consumed by the Nix MCP adapter.
 # This keeps target formatting policy in Nickel data instead of Nix branches.
+
+let claude_meta = {
+  env_syntax_mode = "dollar_braces",
+  env_field_name = "env",
+  static_env_field_name = "env",
+  url_type_policy = "sse",
+  local_type_policy = null,
+  command_list_behavior = false,
+} in
+
 {
   target_list = [
     "claude_code",
@@ -9,23 +19,9 @@
   ],
 
   targets_meta = {
-    claude_code = {
-      env_syntax_mode = "dollar_braces",
-      env_field_name = "env",
-      static_env_field_name = "env",
-      url_type_policy = "sse",
-      local_type_policy = null,
-      command_list_behavior = false,
-    },
+    claude_code = claude_meta,
 
-    claude_desktop = {
-      env_syntax_mode = "dollar_braces",
-      env_field_name = "env",
-      static_env_field_name = "env",
-      url_type_policy = "sse",
-      local_type_policy = null,
-      command_list_behavior = false,
-    },
+    claude_desktop = claude_meta,
 
     codex = {
       env_syntax_mode = "raw",
