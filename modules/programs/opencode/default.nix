@@ -102,6 +102,13 @@ delib.module {
         ops = ["edit" "write"];
       };
 
+    reportsOnlyPermission =
+      readOnlyPermission
+      |> withScope {
+        name = "reports";
+        ops = ["edit" "write"];
+      };
+
     tempWorkspaceWithReportsPermission =
       tempWorkspacePermission
       |> withScope {
@@ -433,6 +440,33 @@ delib.module {
       - <anything unverified, one per line - empty section if none>
     '';
 
+    docAuditorReportFormatContract = ''
+      `doc-update-instruction` output format (strict, exact):
+
+      # Documentation Drift Report: <title>
+
+      ## Summary
+      - **Scope**: <what code/docs were compared>
+      - **Result**: <X drift findings>
+
+      ## Drift Findings
+
+      ### D1: <short drift label>
+      - **Documentation file**: <path>
+      - **Source code file**: <path>
+      - **Outdated detail**: <what is stale: renamed function, changed args, removed module reference, etc.>
+      - **Update direction**: rewrite | delete | add
+
+      ### D2: <short drift label>
+      - **Documentation file**: <path>
+      - **Source code file**: <path>
+      - **Outdated detail**: <what is stale>
+      - **Update direction**: rewrite | delete | add
+
+      ## Notes
+      - Do not apply doc edits directly; this file is a one-shot update instruction prompt for Claude Code.
+    '';
+
     draftFilenamePolicy = ''
       Filename policy (strict):
       - Create a NEW timestamped file:
@@ -480,6 +514,7 @@ delib.module {
       - For each task include:
         - target file(s) to edit
         - what to change in each target file
+        - documentation update targets (required: list affected doc files such as `CLAUDE.md`, `README*`, or doc comments; use `none` if no update is needed)
         - files to refer (optional) and why they are needed
         - task dependency graph/prerequisites (optional)
         - completion criteria
@@ -791,6 +826,40 @@ delib.module {
               '';
             permission = readOnlyPermission;
           };
+          doc_auditor = {
+            mode = "all";
+            model = "openai/gpt-5.3-codex";
+            description = "Detects documentation drift against source code and writes update-instruction reports for Claude Code.";
+            reasoningEffort = "high";
+            prompt =
+              ''
+                You are the `doc_auditor` agent. Your sole responsibility is detecting drift between documentation and source code.
+
+              ''
+              + readOnlyReviewHeader "documentation/code consistency, stale references, API signature drift, and removed symbol/module mentions"
+              + ''
+
+                Scope and constraints (strict):
+                - Analyze docs vs source and identify concrete drift.
+                - NEVER edit documentation files directly.
+                - Write ONLY a drift report under `.agents/reports/` as a one-shot update-instruction prompt for Claude Code.
+
+              ''
+              + skillPolicy {
+                when = "when they improve drift detection quality for language/ecosystem-specific docs";
+                fallback = "normal documentation drift analysis";
+              }
+              + ''
+
+                Output requirements:
+                - Use the exact `doc-update-instruction` format below.
+                - Include only concrete, source-backed drift findings.
+                - If no drift is found, keep `## Drift Findings` empty and set `**Result**` to `0 drift findings`.
+              ''
+              + docAuditorReportFormatContract
+              + reportFilenamePolicy;
+            permission = reportsOnlyPermission;
+          };
           debugger = {
             mode = "all";
             model = "github-copilot/claude-opus-4.6";
@@ -928,6 +997,7 @@ delib.module {
                 - Use the exact headings, fields, and table structure from the `test-spec` format.
                 - Omit `## Existing Test Context` entirely when `Type` is `new`.
                 - The full file must be self-contained as a one-shot prompt for implementation/testing agents.
+                - If you include a task breakdown section, each task MUST include `documentation update targets` listing doc files to update (e.g., `CLAUDE.md`, `README*`, doc comments) or `none`.
 
                 Review gate (mandatory):
                 1) After writing the test-spec file, call `plan_reviewer` on that same file.
