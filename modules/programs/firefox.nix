@@ -63,16 +63,26 @@ delib.module {
           extensions = let
             getAddon = pname: pkgs.nur.repos.rycee.firefox-addons.${pname};
             proton-pass = getAddon "proton-pass";
+            ublacklist = getAddon "ublacklist";
           in {
             force = true;
             exhaustivePermissions = true;
             exactPermissions = true;
             packages = [
               proton-pass
+              # ublacklist
             ];
             settings = {
               "${proton-pass.addonId}" = {
                 permissions = proton-pass.meta.mozPermissions;
+              };
+              "${ublacklist.addonId}".settings = let
+                # mkSubscription = name: url: {
+                # inherit name url;
+                # };
+              in {
+                subscriptions = [
+                ];
               };
             };
           };
