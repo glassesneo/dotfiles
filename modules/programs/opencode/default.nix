@@ -72,6 +72,12 @@ delib.module {
       write = allowAll;
     };
 
+    noCommandPermission = {
+      bash = "deny";
+    };
+
+    boundedEditPermission = fullAccessPermission // noCommandPermission;
+
     tempWorkspacePermission =
       {}
       |> addExternalDirs ["/tmp/*" "/private/tmp/*" "/nix/store/*"]
@@ -121,24 +127,32 @@ delib.module {
       Phase 2.8: Draft Planning
       Goal: Delegate draft plan creation to `draft_planner`.
 
-      All draft plans include task breakdown structure (T1, T2, etc.) for implementation clarity.
+      Draft plans cover goals, approach rationale, step overviews, impact scope, and risks.
+      Draft plans do NOT include detailed implementation steps or task breakdown structure — those belong in the final plan after user approval.
     '';
 
     dividableTaskRequirements = dividableTaskStructure;
 
-    planningDesignPhase =
-      ''
-        1) Call `draft_planner` to create decision-complete draft plan with task breakdown structure.
-        2) Require each draft to cover:
-           - architecture and data flow
-           - touched interfaces, APIs, and types
-           - migration and compatibility concerns
-           - failure modes and rollback strategy
-           - verification strategy
-        3) Require draft plan path + short summary from the draft planner.
-        4) All drafts include task breakdown structure:
-      ''
-      + dividableTaskRequirements;
+    planningDesignPhase = ''
+      1) Call `draft_planner` to create decision-complete draft plan with task breakdown structure.
+      2) Require each draft to cover:
+         - architecture and data flow
+         - touched interfaces, APIs, and types
+         - migration and compatibility concerns
+         - failure modes and rollback strategy
+         - verification strategy
+      3) Require draft plan path + short summary from the draft planner.
+    '';
+
+    planningDraftConfirmationPhase = ''
+      Phase 3.5: Draft Confirmation Gate (Mandatory)
+      Goal: Confirm draft direction with the user before writing the final plan.
+
+      1) Ask the user for explicit confirmation to proceed, including the draft plan path from Phase 3.
+      2) If the user requests revisions or does not confirm, call `draft_planner` to produce a revised draft plan file (`*.draft.md`).
+      3) After each revision, return draft plan path + short summary and ask for confirmation again.
+      4) Do NOT proceed to Phase 4 until explicit user confirmation is received.
+    '';
 
     planningReviewPhase = ''
       1) `plan_reviewer` is final-plan-only: review ONLY `.agents/plans/*.md` file(s) that are not `*.draft.md`.
@@ -169,31 +183,33 @@ delib.module {
       4) In the final plan, state research conclusions as verified facts (from the research file's **Conclusion** section). Source links, confidence notes, and unresolved gaps belong in the research file, not the plan.
     '';
 
-    planningFinalFileRequirements = ''
-      - title and brief summary
-      - scope and out of scope
-      - step-by-step implementation plan
-      - critical file paths expected to change
-      - risks and mitigations
-      - verification section (tests, checks, and acceptance criteria)
-      - open questions (if any) and chosen defaults
-      - include split-ready task breakdown when dividable strategy is selected
-    '';
+    planningFinalFileRequirements =
+      ''
+        - title and brief summary
+        - scope and out of scope
+        - step-by-step implementation plan
+        - critical file paths expected to change
+        - risks and mitigations
+        - verification section (tests, checks, and acceptance criteria)
+        - open questions (if any) and chosen defaults
+        - task breakdown structure:
+      ''
+      + dividableTaskRequirements;
 
     planningExitAndFailure = primaryAgent: ''
-      Phase 6: User Confirmation Gate (Mandatory)
-      Before reporting completion, you MUST ask the user to confirm the final plan file created in Phase 4.
+      Phase 6: Completion and Failure Handling
+      Before reporting completion, ensure draft confirmation from Phase 3.5 occurred before final plan creation.
 
-      1) Ask for explicit confirmation with the final plan path.
-      2) If user requests revisions or does not confirm, revise the same final plan file and run `plan_reviewer` again when changes are material.
-      3) Report completion ONLY after explicit user confirmation.
+      1) Do NOT request an additional final-plan confirmation after Phase 4 or Phase 5.
+      2) Report completion after final write and review are complete.
+      3) Include the final plan path and concise summary in the completion report.
 
       Failure Handling:
       - If selected draft planner fails in Phase 3, retry once with clearer instructions.
       - If retry fails, return a hard failure with attempted path(s), exact error(s), and note that no valid draft plan was created.
       - If final plan write by `${primaryAgent}` fails in Phase 4, return a hard failure with attempted path and exact error.
       - If `plan_reviewer` fails in Phase 5, return a hard failure with attempted path and exact error.
-      - If post-revision re-review fails in Phase 5 or Phase 6, return a hard failure with attempted path and exact error.
+      - If post-revision re-review fails in Phase 5, return a hard failure with attempted path and exact error.
       - Do not fall back to chat-only final plans.
     '';
 
@@ -264,6 +280,7 @@ delib.module {
 
       ''
       + planningDesignPhase
+      + planningDraftConfirmationPhase
       + planningKnowledgeGapGate
       + ''
 
@@ -286,7 +303,7 @@ delib.module {
       + planningReviewPhase
       + ''
 
-        After final write, review, and user confirmation, report:
+        After draft confirmation, final write, and review, report:
         - Plan file: <path>
         - Summary: <2-4 sentences>
 
@@ -368,14 +385,15 @@ delib.module {
       1) Break requested implementation into task units with dependencies and parallelizable groups.
       2) Proceed with independent tasks in parallel using multiple subagents when dependencies allow.
       3) Delegate read-only discovery to `explore`, `explore_secondary`, or `deep_explore` as needed.
-      4) Delegate direct file patching to `editor` when task instructions are already detailed and bounded.
-      5) Delegate bug investigation and root-cause analysis to `debugger`.
-      6) Delegate decision-complete test-spec creation to `test_designer` when behavior is added/changed and test strategy is needed.
-      7) Run `tester` as a conditional test gate when code/tests changed or regression risk is medium/high.
-      8) If tests fail, require `tester` to create a failure-report under `.agents/reports/` before escalation.
-      9) Track per-task completion criteria and merge task outcomes into final synthesis.
-      10) After implementation and conditional test gate, run `code_reviewer`.
-      11) NEVER perform direct write/edit operations yourself.
+      4) Delegate bounded implementation tasks requiring targeted path exploration + file edits to `general`.
+      5) Delegate direct file patching to `editor` when task instructions are already detailed and bounded.
+      6) Delegate bug investigation and root-cause analysis to `debugger`.
+      7) Delegate decision-complete test-spec creation to `test_designer` when behavior is added/changed and test strategy is needed.
+      8) Run `tester` as a conditional test gate when code/tests changed or regression risk is medium/high.
+      9) If tests fail, require `tester` to create a failure-report under `.agents/reports/` before escalation.
+      10) Track per-task completion criteria and merge task outcomes into final synthesis.
+      11) After implementation and conditional test gate, run `code_reviewer`.
+      12) NEVER perform direct write/edit operations yourself.
     '';
 
     primaryBestEffortDelegationPolicy = primaryAgent: ''
@@ -451,21 +469,15 @@ delib.module {
                 - Delegate final plan review to `plan_reviewer`.
                 - Delegate material external knowledge gaps to `internet_research`.
               '';
-            # override default spec agent tools
-            tools = {
-              "write" = true;
-              "edit" = true;
-              "bash" = true;
-            };
             permission = plansOnlyPermission // {question = "allow";};
           };
           draft_planner = {
             mode = "subagent";
             model = "github-copilot/claude-sonnet-4.6";
-            description = "Creates decision-complete draft plan files with task breakdown structure for implementation clarity.";
+            description = "Creates direction-setting draft plan files for user approval before detailed final planning.";
             prompt =
               ''
-                You are the `draft_planner` subagent. Your sole responsibility is to write decision-complete draft plan files with task breakdown structure.
+                You are the `draft_planner` subagent. Your sole responsibility is to write direction-setting draft plan files.
 
               ''
               + skillPolicy {
@@ -475,7 +487,20 @@ delib.module {
               + ''
 
                 Primary objective:
-                - Produce a decision-complete, task-dividable draft plan as markdown under `.agents/plans/`.
+                - Produce a direction-setting draft plan as markdown under `.agents/plans/`.
+
+                Draft plan required sections:
+                - Goal: what this plan achieves (one sentence)
+                - Approach and rationale: chosen approach and why alternatives were rejected
+                - Step overview: each step described in 1-2 lines (what it does, not how)
+                - Impact scope: modules, files, and interfaces affected
+                - Risks and open questions: unknowns, user decisions needed, failure modes
+
+                Draft plan must NOT include:
+                - Detailed implementation instructions per step
+                - Task breakdown structure with task IDs (T1, T2, ...)
+                - Code snippets or concrete patches
+                - Test strategy details
 
                 Allowed output and work:
                 - Write ONLY to `.agents/plans/*.md`.
@@ -486,16 +511,11 @@ delib.module {
               + draftFilenamePolicy
               + ''
 
-              ''
-              + dividableTaskStructure
-              + ''
-
                 Quality bar:
-                - Decision-complete: implementer should not need to choose defaults.
-                - Tasks should be independently assignable where possible.
+                - Direction-complete: user can confirm or redirect the approach without ambiguity.
                 - Include explicit assumptions and chosen defaults.
-                - Use concrete file paths, interfaces, and checks when known.
-                - Keep concise but actionable.
+                - Reference file paths and interfaces for impact scope, but do not specify per-file edit instructions.
+                - Keep concise — aim for a document the user can review in under 2 minutes.
 
                 Execution protocol:
                 1) Parse request and infer task slug.
@@ -522,15 +542,40 @@ delib.module {
               Scope (strict):
               - Apply only the delegated edit instructions.
               - Edit only explicit target files from the delegation.
-              - Perform minimal context reads required to avoid incorrect patches.
+              - Use explicit delegated paths as the primary navigation surface.
+              - Perform the minimum context reads needed to produce correct patches.
+              - If context is still insufficient, stop and report the blocker instead of exploring broadly.
               - Do NOT perform broad codebase exploration.
+              - Do NOT run commands.
 
               Required output:
               - list edited files
               - what changed per file
               - completion status vs delegated criteria
             '';
-            permission = fullAccessPermission;
+            permission = boundedEditPermission;
+          };
+          general = {
+            mode = "subagent";
+            model = "zai-coding-plan/glm-4.7";
+            description = "General implementation subagent for delegated file edits plus targeted path exploration.";
+            prompt = ''
+              You are the `general` implementation subagent.
+
+              Scope (strict):
+              - Execute delegated implementation tasks end-to-end.
+              - Edit delegated target files and directly related files required to satisfy delegated criteria.
+              - Explore only paths directly related to delegated tasks.
+              - Avoid broad or open-ended codebase exploration.
+              - Do NOT run commands.
+
+              Required output:
+              - explored paths and why each was needed
+              - list edited files
+              - what changed per file
+              - completion status vs delegated criteria
+            '';
+            permission = boundedEditPermission;
           };
           explore = {
             model = "openai/gpt-5.3-codex";
@@ -678,8 +723,7 @@ delib.module {
             permission = tempWorkspaceWithReportsPermission;
           };
           deep_explore = {
-            model = "openai/gpt-5.3-codex";
-            reasoningEffort = "high";
+            model = "opencode/glm-5-free";
             mode = "subagent";
             description = "Explores codebases in depth, understanding architecture and design patterns. Ideal for large or complex projects. Prioritizes skill guidance provided by primary-agent delegation context.";
             prompt =
@@ -730,12 +774,6 @@ delib.module {
                 4) Recommended default assumptions for the caller when evidence is incomplete.
               ''
               + researchFilenamePolicy;
-            tools = {
-              "context7_*" = true;
-              "deepwiki_*" = true;
-              "brave-search_*" = true;
-              "readability_*" = true;
-            };
             permission = researchOnlyPermission;
           };
           test_designer = {
