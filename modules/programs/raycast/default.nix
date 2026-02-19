@@ -13,29 +13,23 @@ delib.module {
     home.packages = [
       pkgs.raycast
     ];
+
+    # Start at login
     launchd.agents."raycast" = {
       enable = true;
       config = {
         Label = "com.${host.name}.raycast";
         ProgramArguments = [
-          "/usr/bin/open"
-          "-a"
-          "${pkgs.raycast}/Applications/Raycast.app"
+          "/usr/bin/osascript"
+          "-e"
+          "tell application id \"com.raycast.macos\" to launch"
         ];
+        RunAtLoad = true;
       };
     };
   };
 
   darwin.ifEnabled = {
-    # Start at login
-    launchd.agents."raycast" = {
-      script = "/usr/bin/open -a ${pkgs.raycast}/Applications/Raycast.app";
-      serviceConfig = {
-        Label = "com.${host.name}.raycast";
-        RunAtLoad = true;
-      };
-    };
-
     system.defaults.CustomUserPreferences = {
       # Disable Spotlight hotkey so Raycast can claim ⌘Space
       "com.apple.symbolichotkeys" = {
