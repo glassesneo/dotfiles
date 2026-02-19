@@ -146,9 +146,9 @@ delib.module {
       (lib.mapAttrs (mkServer targetMeta) serverData.servers);
 
     # The syntax follows https://github.com/ravitemer/mcphub.nvim/blob/main/doc/mcp/servers_json.md
-    mcphub-servers = {
-      settings.servers = mkServersForTarget "mcphub";
-    };
+    # mcphub-servers = {
+    # settings.servers = mkServersForTarget "mcphub";
+    # };
 
     # The syntax follows https://docs.claude.com/en/docs/claude-code/mcp
     claude-code-servers = {
