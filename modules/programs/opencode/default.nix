@@ -320,6 +320,119 @@ delib.module {
       - If no delegated skill applies, continue with ${fallback}.
     '';
 
+    agentOutputFormatPrinciple = ''
+      Agent output file format principle:
+      - Use field-based sections with constrained answers to enforce concise, specific outputs.
+      - Use a two-layer structure:
+        - top `## Summary` block for primary-agent routing and planning decisions
+        - detail sections below for Claude Code / implementation agents as one-shot prompt context
+    '';
+
+    summaryFirstConsumptionPolicy = ''
+      Consumption policy for `test-spec`, `failure-report`, and `bug-report` files:
+      - Read the `## Summary` block first.
+      - Read detail sections only when implementation-level context is needed for delegation or execution.
+    '';
+
+    testSpecFormatContract = ''
+      `test-spec` output format (strict, exact):
+
+      # Test Spec: <title>
+
+      ## Summary
+      - **Target**: <module or function under test>
+      - **Type**: new | modification | both
+      - **Behavior**: <one-line description of behavior being tested>
+      - **Framework**: <test framework and relevant utilities>
+      - **Run command**: `<exact command to run these tests>`
+
+      ## Existing Test Context
+      <!-- omit section entirely if Type is "new" -->
+      - **File**: <path to existing test file>
+      - **What changes**: <one-line: what about existing tests needs to change and why>
+
+      ## Test Matrix
+
+      | ID | Category | Input / Condition | Expected Outcome |
+      |----|----------|-------------------|------------------|
+      | 1  | happy    | ...               | ...              |
+      | 2  | edge     | ...               | ...              |
+      | 3  | error    | ...               | ...              |
+
+      ## Setup
+      - **Fixtures**: <list with one-line description each>
+      - **Mocks**: <what to mock and why, one-line each>
+      - **Environment**: <env vars, config, or preconditions>
+
+      ## Constraints
+      - <hard constraint, one per line>
+
+      ## Pass/Fail Criteria
+      - <criterion, one per line>
+    '';
+
+    failureReportFormatContract = ''
+      `failure-report` output format (strict, exact):
+
+      # Failure Report: <title>
+
+      ## Summary
+      - **Scope**: <what was run - command and test scope>
+      - **Result**: <X passed, Y failed, Z skipped>
+      - **Classification**: regression | flaky | test-bug | env-issue | unknown
+      - **Likely owner**: implementation | test-code | infrastructure
+
+      ## Failures
+
+      ### <test identifier>
+      - **Error**: <one-line error message or assertion failure>
+      - **Stack**: <file:line of innermost relevant frame>
+      - **Repro**: `<minimal command to reproduce this single failure>`
+      - **Flaky check**: deterministic | flaky (<N/M passes on re-run>)
+
+      ### <test identifier>
+      ...
+
+      ## Evidence
+      - **Commands run**: <numbered list of commands and their exit codes>
+      - **Environment**: <OS, runtime version, relevant config>
+
+      ## Recommended Next Step
+      - <one specific action, e.g. "fix assertion in X" or "investigate regression in Y">
+    '';
+
+    bugReportFormatContract = ''
+      `bug-report` output format (strict, exact):
+
+      # Bug Report: <title>
+
+      ## Summary
+      - **Symptom**: <one-line observed behavior>
+      - **Expected**: <one-line expected behavior>
+      - **Root cause**: <one-line hypothesis with confidence: confirmed | probable | uncertain>
+      - **Fix direction**: <one-line recommended approach>
+      - **Affected files**: <comma-separated paths>
+
+      ## Reproduction
+      1. <step>
+      2. <step>
+      - **Minimal command**: `<single command that triggers the bug>`
+
+      ## Root Cause Analysis
+      - **Entry point**: <file:line where the fault originates>
+      - **Mechanism**: <2-3 sentences max: what goes wrong and why>
+      - **Impact radius**: <what else could break - list affected callers/dependents>
+
+      ## Fix Specification
+      - **Target files**: <path - one per line>
+      - **What to change**: <one-line per file: specific change needed>
+      - **What NOT to change**: <guard rails - one per line>
+      - **Regression check**: `<command to verify fix>`
+
+      ## Unknowns
+      - <anything unverified, one per line - empty section if none>
+    '';
+
     draftFilenamePolicy = ''
       Filename policy (strict):
       - Create a NEW timestamped file:
@@ -436,6 +549,8 @@ delib.module {
 
               ''
               + orchestratorExecutionProtocol
+              + agentOutputFormatPrinciple
+              + summaryFirstConsumptionPolicy
               + ''
 
                 Output expectations:
@@ -461,6 +576,8 @@ delib.module {
                 agentName = "spec";
               }
               + primaryBestEffortDelegationPolicy "spec"
+              + agentOutputFormatPrinciple
+              + summaryFirstConsumptionPolicy
               + ''
 
                 Delegation strategy:
@@ -703,6 +820,8 @@ delib.module {
                 when = "when they improve investigation quality for language/ecosystem-specific concerns";
                 fallback = "normal investigation workflow";
               }
+              + agentOutputFormatPrinciple
+              + summaryFirstConsumptionPolicy
               + ''
 
                 Required workflow:
@@ -713,11 +832,16 @@ delib.module {
                 5) Propose fix direction with implementation constraints and validation strategy.
 
                 Output requirements:
-                - Findings first, sorted by severity (high -> medium -> low).
-                - For each finding include: impact, evidence (`file:line` when available and/or command output), and fix direction.
-                - Include an `Attempted checks` section listing commands and outcomes.
-                - Include an `Unknowns` section for anything unverified; do not assume or invent missing facts.
-                - Write a decision-complete bug report markdown file under `.agents/reports/` with reproduction steps, observed vs expected behavior, root-cause hypothesis, and fix direction.
+                - Write a decision-complete bug report markdown file under `.agents/reports/` using the exact `bug-report` format below.
+                - The full report must be self-contained for one-shot implementation delegation.
+              ''
+              + bugReportFormatContract
+              + ''
+
+                Enforcement rules:
+                - Use the exact headings and fields from the `bug-report` format.
+                - Keep `Mechanism` to 2-3 sentences maximum.
+                - `What NOT to change` must contain concrete scope guard rails.
               ''
               + reportFilenamePolicy;
             permission = tempWorkspaceWithReportsPermission;
@@ -790,13 +914,20 @@ delib.module {
                 - The spec must be sufficient for a zero-context implementation/testing agent.
                 - Research files under `.agents/research/` may be referenced when relevant.
 
-                Required sections:
-                1) Goal and behavior under test
-                2) Scope and out-of-scope
-                3) Environment, fixtures, and mocks
-                4) Test matrix (happy path, edge cases, error cases)
-                5) Execution commands and pass/fail criteria
-                6) Risks and follow-up scenarios
+              ''
+              + agentOutputFormatPrinciple
+              + summaryFirstConsumptionPolicy
+              + ''
+
+                Required output format:
+              ''
+              + testSpecFormatContract
+              + ''
+
+                Enforcement rules:
+                - Use the exact headings, fields, and table structure from the `test-spec` format.
+                - Omit `## Existing Test Context` entirely when `Type` is `new`.
+                - The full file must be self-contained as a one-shot prompt for implementation/testing agents.
 
                 Review gate (mandatory):
                 1) After writing the test-spec file, call `plan_reviewer` on that same file.
@@ -828,6 +959,8 @@ delib.module {
 
               ''
               + primaryBestEffortDelegationPolicy "build"
+              + agentOutputFormatPrinciple
+              + summaryFirstConsumptionPolicy
               + ''
 
                 Validation-first delegation strategy:
@@ -858,13 +991,22 @@ delib.module {
                 2) Re-run failing tests to classify deterministic vs flaky behavior (3-5 repeats when feasible).
                 3) Capture concrete evidence: commands, failing identifiers, stack traces/logs, and env constraints.
                 4) Classify failures as regression, flaky, test bug, or environment/infra issue.
+              ''
+              + agentOutputFormatPrinciple
+              + ''
 
                 Required output:
-                - what was run (commands + scope)
-                - exact failing tests/specs
-                - classification + evidence + uncertainty label
-                - concrete next steps and likely fix direction/owner hints
-                - when any test fails, write a decision-complete failure report markdown file under `.agents/reports/` including commands, failing tests, error excerpts, classification, and recommended follow-up.
+                - when no test fails, return concise command/scope/result summary.
+                - when any test fails, write a decision-complete failure report markdown file under `.agents/reports/` using the exact `failure-report` format below.
+                - failure reports must be self-contained for one-shot handoff to implementation agents.
+              ''
+              + failureReportFormatContract
+              + ''
+
+                Enforcement rules:
+                - Every failing test must have its own subsection under `## Failures`.
+                - `## Recommended Next Step` must contain exactly one concrete action.
+                - Include flaky determination in the required `**Flaky check**` field for each failure.
               ''
               + reportFilenamePolicy;
             permission = tempWorkspaceWithReportsPermission;
@@ -888,6 +1030,8 @@ delib.module {
           - After implementation, run review with `code_reviewer`.
           - `spec` must complete specification elicitation and resolve/default material ambiguities before draft planning.
           - Ignore backward compatibility unless explicitly specified.
+          - When reading `test-spec`, `failure-report`, or `bug-report` files, read the `## Summary` block first.
+          - Read detail sections only when implementation-level context is needed for delegation.
         '';
     };
 
