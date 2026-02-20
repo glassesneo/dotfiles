@@ -21,4 +21,4 @@ This module splits MCP responsibilities between Nickel data modeling and Nix run
 
 ## Notes
 
-- `nickel/packages/node.ncl` is informational only and is not part of active node2nix wiring.
+- `nickel/packages/node.ncl` is informational only and is not part of the active Node packaging pipeline (`node-packages/` via bun2nix).

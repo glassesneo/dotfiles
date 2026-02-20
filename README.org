@@ -93,12 +93,12 @@ nix flake lock --update-input nixpkgs
 
 * Node Package Management
 
-Active Node packages for MCP server wiring are managed via =node2nix/node-packages.json= and generated Nix expressions in =node2nix/=. The Nickel file =nickel/packages/node.ncl= is currently an informational manifest and is not wired into the active node2nix pipeline.
+Active Node packages for MCP server wiring are managed via =node-packages/= and generated using bun2nix. The Nickel file =nickel/packages/node.ncl= is currently an informational manifest and is not wired into the active bun2nix pipeline.
 
-When modifying active node2nix inputs, regenerate expressions from repository root:
+When modifying Node package dependencies, regenerate the Nix expressions from repository root:
 
 #+begin_src sh
-nix-shell -p node2nix --run "node2nix --input node2nix/node-packages.json --output node2nix/node-packages.nix --composition node2nix/default.nix"
+cd node-packages && bun install && cd .. && bun2nix node-packages node-packages
 #+end_src
 
 * Cleanup
@@ -152,7 +152,7 @@ nh clean profile <profile-path> --keep 5
 Denix loads configuration via auto-discovery and extensions:
 
 #+begin_src nix
-paths = [./hosts ./modules]
+paths = [./hosts ./modules ./rices]
 extensions = [args base.withConfig]
 #+end_src
 
@@ -175,7 +175,7 @@ Secrets are defined via agenix and referenced as =config.age.secrets.<key>.path=
 
 Centralized MCP server definitions live in =modules/programs/mcp-servers/default.nix=. Each tool uses separate memory files under =$XDG_DATA_HOME= (for example, =claudecode_memory.json=, =opencode_memory.json=, and =crush_memory.json=).
 
-Kiri MCP is wrapped in =modules/config/node2nix.nix= to avoid tree-sitter download issues. It runs =kiri-mcp-server= via =npx=, stores its index at =.kiri/index.duckdb=, and supports watch mode via =--watch=.
+Kiri MCP is wrapped in =modules/config/node-packages.nix= to avoid tree-sitter download issues. It runs =kiri-mcp-server= via =npx=, stores its index at =.kiri/index.duckdb=, and supports watch mode via =--watch=.
 
 ** Rices (Theme Variants)
 
@@ -190,7 +190,7 @@ Rices define theme variants under =rices/= and should only set pure data (no =pk
 
 - =CLAUDE.md= :: Project instructions for Claude Code
 - =AGENTS.md= :: AI agent workflow instructions
-- Module examples: =modules/programs/fd.nix=, =modules/programs/git.nix=, =modules/services/aerospace.nix=
+- Module examples: =modules/programs/fd.nix=, =modules/programs/git/default.nix=, =modules/services/aerospace.nix=
 
 * License
 
