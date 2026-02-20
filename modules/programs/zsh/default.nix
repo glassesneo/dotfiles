@@ -1,6 +1,7 @@
 {
   delib,
   homeConfig,
+  lib,
   ...
 }:
 delib.module {
@@ -10,13 +11,24 @@ delib.module {
     enable = boolOption true;
   };
 
-  home.ifEnabled = {cfg, ...}: {
-    programs.zsh = {
+  home.ifEnabled = {
+    cfg,
+    myconfig,
+    ...
+  }: {
+    programs.zsh = let
+      ghqRoot = homeConfig.programs.git.settings.ghq.root;
+    in {
       enable = cfg.enable;
       enableCompletion = true;
       autosuggestion.enable = true;
       syntaxHighlighting.enable = true;
-      autocd = true;
+      cdpath = [
+        "${ghqRoot}/github.com"
+      ];
+      dirHashes = {
+        github = "${ghqRoot}/github.com";
+      };
       dotDir = "${homeConfig.xdg.configHome}/zsh";
       history = {
         extended = true;

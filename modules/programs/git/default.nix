@@ -1,6 +1,7 @@
 {
   delib,
   homeConfig,
+  pkgs,
   ...
 }:
 delib.module {
@@ -61,10 +62,14 @@ delib.module {
         merge = {
           tool = "neovimdiff";
         };
+        ghq.root = "${homeConfig.xdg.dataHome}/ghq";
         url."git@github.com:".insteadOf = "https://github.com/";
       };
       ignores = cfg.ignore_names ++ cfg.ignore_patterns;
     };
+    home.packages = [
+      pkgs.ghq
+    ];
     programs.delta = {
       enable = true;
       enableGitIntegration = true;
