@@ -7,15 +7,49 @@
 --                        Also: settings requiring Lua-only APIs (workspace library paths,
 --                        init_options, efm language/formatter definitions).
 --
+--   Executable gating: Both Lua-managed and Nixvim-managed PATH-based servers are
+--                        conditionally enabled via guarded_enable when their executables
+--                        are present. Store-pinned servers (bashls, nixd, nickel_ls)
+--                        have activate = true and are always available.
+--
 -- Adding a new server? If nixvim has schema support, add to default.nix.
 -- Otherwise, add vim.lsp.enable + vim.lsp.config here.
 
-vim.lsp.enable({ "emmylua_ls" })
-vim.lsp.enable({ "sourcekit" })
-vim.lsp.enable({ "denols" })
-vim.lsp.enable({ "ts_ls" })
--- vim.lsp.enable({ "kotlin_lsp" })
-vim.lsp.enable({ "efm" })
+-- Server executable mapping for PATH-based servers
+-- Only enable when executable is available to avoid health check warnings
+local lsp_executables = {
+  -- Lua-managed servers
+  ["emmylua_ls"] = "emmylua_ls",
+  ["sourcekit"] = "sourcekit-lsp",
+  ["denols"] = "deno",
+  ["ts_ls"] = "typescript-language-server",
+  ["efm"] = "efm-langserver",
+  ["moonbit-lsp"] = "moonbit-lsp",
+
+  -- Nixvim-managed PATH-based servers
+  ["elmls"] = "elm-language-server",
+  ["hls"] = "haskell-language-server-wrapper",
+  ["kotlin_language_server"] = "kotlin-language-server",
+  ["marksman"] = "marksman",
+  ["tinymist"] = "tinymist",
+  ["zls"] = "zls",
+  ["basedpyright"] = "basedpyright-langserver",
+  ["biome"] = "biome",
+  ["gopls"] = "gopls",
+  ["nim_langserver"] = "nimlangserver",
+  ["nushell"] = "nu",
+  ["prismals"] = "prisma-language-server",
+  ["taplo"] = "taplo",
+}
+
+-- Guarded LSP server enablement
+-- Only enables server if executable is present in PATH at startup
+local function guarded_enable(server_name)
+  local exe = lsp_executables[server_name]
+  if exe and vim.fn.executable(exe) == 1 then
+    vim.lsp.enable({ server_name })
+  end
+end
 
 local library_paths = {
   vim.env.VIMRUNTIME .. "/lua",
@@ -278,5 +312,30 @@ vim.lsp.config["moonbit-lsp"] = {
   },
 }
 
-vim.lsp.enable({ "moonbit-lsp" })
+-- Enable Lua-managed servers (executables from project-local environments)
+-- NOTE: Executable-gated enablement prevents health check warnings when
+-- project-local language servers are not available. Servers attach normally
+-- when opened from an activated project environment (direnv/nix-direnv).
+guarded_enable("emmylua_ls")
+guarded_enable("sourcekit")
+guarded_enable("denols")
+guarded_enable("ts_ls")
+guarded_enable("efm")
+guarded_enable("moonbit-lsp")
+
+-- Enable Nixvim-managed PATH-based servers (executables from project-local environments)
+-- These servers have activate = false in default.nix and are conditionally enabled here.
+guarded_enable("elmls")
+guarded_enable("hls")
+guarded_enable("kotlin_language_server")
+guarded_enable("marksman")
+guarded_enable("tinymist")
+guarded_enable("zls")
+guarded_enable("basedpyright")
+guarded_enable("biome")
+guarded_enable("gopls")
+guarded_enable("nim_langserver")
+guarded_enable("nushell")
+guarded_enable("prismals")
+guarded_enable("taplo")
 

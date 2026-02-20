@@ -13,7 +13,10 @@ delib.module {
     # Shared defaults for all LSP servers managed by Nix.
     # All servers use package = null (PATH-based binary resolution).
     # Servers needing custom config override via `mkServer config`.
-    defaultServer = {enable = true; package = null;};
+    # activate = false: PATH-based servers are disabled by default and
+    #   enabled conditionally by guarded_enable in extra.lua when executable is available.
+    # activate = true: Store-pinned servers (via explicit cmd) are always available.
+    defaultServer = {enable = true; package = null; activate = false;};
     mkServer = config: defaultServer // {inherit config;};
   in {
     lsp = {
@@ -23,6 +26,7 @@ delib.module {
 
         bashls = mkServer {
           cmd = ["${lib.getExe pkgs.bash-language-server}"];
+          activate = true;  # Store-pinned, always available
         };
         elmls = mkServer {
           root_markers = ["elm.json"];
@@ -38,6 +42,7 @@ delib.module {
         };
         nixd = mkServer {
           cmd = ["${lib.getExe pkgs.nixd}"];
+          activate = true;  # Store-pinned, always available
           nixpkgs.expr = "import <nixpkgs> { }";
           formatting.command = ["alejandra"];
         };
@@ -68,6 +73,7 @@ delib.module {
         gopls = defaultServer;
         nickel_ls = mkServer {
           cmd = ["${lib.getExe pkgs.nls}"];
+          activate = true;  # Store-pinned, always available
         };
         nim_langserver = defaultServer;
         nushell = defaultServer;

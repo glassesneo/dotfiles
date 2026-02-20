@@ -41,6 +41,8 @@ Full Neovim configuration via nixvim. Module name: `programs.nixvim`.
 
 - **Nix-managed servers** (`lsp/default.nix`): Use `defaultServer` / `mkServer` helpers. Add new servers here if nixvim has schema support.
 - **Lua-managed servers** (`lsp/extra.lua`): Servers without nixvim schema (emmylua_ls, sourcekit, denols, ts_ls, efm, moonbit-lsp). Also: settings requiring Lua-only APIs.
+- **Executable gating**: PATH-based servers are only enabled when their executables are present at Neovim startup (via `guarded_enable` in extra.lua). This prevents health check warnings for missing project-local servers. Store-pinned servers (bashls, nixd, nickel_ls) have `activate = true` and are always available.
+- **Workflow**: Open Neovim from an activated project environment (direnv/nix-direnv) when project-local LSP servers are required. Servers will attach automatically when executables are in PATH.
 - **lsp-format server list**: efm, denols, hls, moonbit-lsp, taplo, zls.
 
 ## Key Keymaps
