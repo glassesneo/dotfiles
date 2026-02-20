@@ -1,4 +1,5 @@
 " TypeScript / JavaScript via vtsls
+" hook_source {{{
 if executable('vtsls')
   au User lsp_setup call lsp#register_server({
     \ 'name': 'vtsls',
@@ -15,3 +16,4 @@ if executable('nil')
     \ 'allowlist': ['nix'],
     \ })
 endif
+" }}}
