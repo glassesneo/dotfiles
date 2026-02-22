@@ -1,0 +1,22 @@
+;; kanata.kbd — Swap semicolon and colon
+;; Pressing ; outputs : (colon)
+;; Pressing Shift+; outputs ; (semicolon)
+
+(defcfg
+  process-unmapped-keys yes
+  ;; Specify your keyboard(s) — run `kanata --list` to see names
+  ;; macos-dev-names-include (
+  ;;   "Apple Internal Keyboard / Trackpad"
+  ;; )
+)
+
+(defsrc)
+
+(deflayermap (base))
+
+;; Global override: swap shifted/unshifted states of semicolon
+(defoverrides
+  (;) (lsft ;)         ;; bare ; → Shift+; (colon)
+  (lsft ;) (;)         ;; LShift+; → ; (semicolon)
+  (rsft ;) (;)         ;; RShift+; → ; (semicolon)
+)
