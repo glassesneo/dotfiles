@@ -36,6 +36,12 @@ delib.module {
         location = "${homeDir}/Library/Application Support/AquaSKK/${jisyo.name}";
         type = 0;
       });
+    kanaRuleEucJP =
+      pkgs.runCommand "kana-rule.conf" {
+        nativeBuildInputs = [pkgs.libiconv];
+      } ''
+        iconv -f UTF-8 -t EUC-JP ${./kana-rule.conf} > $out
+      '';
   in
     {
       # Symlink AquaSKK.app to ~/Library/Input Methods/ for macOS discovery
@@ -54,7 +60,7 @@ delib.module {
 
       # Kana rule (romaji-to-kana mapping, must be EUC-JP encoded)
       "Library/Application Support/AquaSKK/kana-rule.conf" = {
-        source = "${brewCasks.aquaskk}/Library/Input Methods/AquaSKK.app/Contents/Resources/kana-rule.conf";
+        source = kanaRuleEucJP;
       };
       "Library/Application Support/AquaSKK/DictionarySet.plist".text = dictionarySet |> lib.generators.toPlist {escape = true;};
     }
