@@ -12,13 +12,13 @@ delib.module {
   darwin.always.imports = [inputs.kanata-darwin-nix.darwinModules.default];
 
   darwin.ifEnabled.services.kanata = {
-    enable = true;
+    enable = false;
     keyboards = {
       default = {
         configFile = ./kanata.kbd;
         port = 5829;
         vkAgent = {
-          enable = false;
+          enable = true;
           blacklist = [];
         };
       };
