@@ -245,12 +245,12 @@ vim.lsp.config.efm = {
           formatStdin = true,
         },
       },
-      nix = {
-        {
-          formatCommand = "alejandra -",
-          formatStdin = true,
-        },
-      },
+      -- nix = {
+      -- {
+      -- formatCommand = "alejandra -",
+      -- formatStdin = true,
+      -- },
+      -- },
       -- nu = {
       -- {
       -- formatCommand = "nufmt --stdin",
@@ -338,4 +338,3 @@ guarded_enable("nim_langserver")
 guarded_enable("nushell")
 guarded_enable("prismals")
 guarded_enable("taplo")
-

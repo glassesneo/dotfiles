@@ -1,5 +1,7 @@
 {
   delib,
+  homeConfig,
+  inputs,
   lib,
   pkgs,
   ...
@@ -16,8 +18,19 @@ delib.module {
     # activate = false: PATH-based servers are disabled by default and
     #   enabled conditionally by guarded_enable in extra.lua when executable is available.
     # activate = true: Store-pinned servers (via explicit cmd) are always available.
-    defaultServer = {enable = true; package = null; activate = false;};
-    mkServer = config: defaultServer // {inherit config;};
+    defaultServer = {
+      enable = true;
+      package = null;
+      activate = false;
+    };
+    serverLevelKeys = ["activate" "package"];
+    mkServer = args: let
+      serverAttrs = lib.filterAttrs (n: _: builtins.elem n serverLevelKeys) args;
+      configAttrs = removeAttrs args serverLevelKeys;
+    in
+      defaultServer // serverAttrs // lib.optionalAttrs (configAttrs != {}) {config = configAttrs;};
+    inherit (homeConfig.home) stateVersion;
+    _pkgs = "import ${pkgs.path} {}";
   in {
     lsp = {
       inlayHints.enable = true;
@@ -26,7 +39,7 @@ delib.module {
 
         bashls = mkServer {
           cmd = ["${lib.getExe pkgs.bash-language-server}"];
-          activate = true;  # Store-pinned, always available
+          activate = true; # Store-pinned, always available
         };
         elmls = mkServer {
           root_markers = ["elm.json"];
@@ -41,30 +54,54 @@ delib.module {
           filetypes = ["markdown"];
         };
         nixd = mkServer {
-          cmd = ["${lib.getExe pkgs.nixd}"];
-          activate = true;  # Store-pinned, always available
-          nixpkgs.expr = "import <nixpkgs> { }";
-          formatting.command = ["alejandra"];
+          package = pkgs.nixd;
+          activate = true;
+          settings.nixd = {
+            formatting.command = ["${pkgs.alejandra}/bin/alejandra"];
+            nixpkgs.expr = _pkgs;
+            options.home-manager.expr = ''
+              let
+                hmFlake = builtins.getFlake "${inputs.home-manager.outPath}";
+                nixvimFlake = builtins.getFlake "${inputs.nixvim.outPath}";
+                pkgs = ${_pkgs};
+              in
+                (hmFlake.lib.homeManagerConfiguration {
+                  inherit pkgs;
+                  modules = [
+                    nixvimFlake.homeModules.nixvim
+                    {
+                      home = {
+                        username = "neo";
+                        homeDirectory = "/Users/neo";
+                        stateVersion = "${stateVersion}";
+                      };
+                    }
+                  ];
+                }).options
+            '';
+          };
         };
         tinymist = mkServer {
           formatterMode = "typstyle";
         };
-        zls = defaultServer // {
-          config.zls = {
-            enable_snippets = true;
-            enable_ast_check_diagnostics = true;
-            enable_autofix = true;
-            enable_import_embedfile_argument_completions = true;
-            warn_style = true;
-            enable_semantic_tokens = true;
-            enable_inlay_hints = true;
-            inlay_hints_show_builtin = true;
-            inlay_hints_hide_redundant_param_names = true;
-            inlay_hints_hide_redundant_param_names_last_token = true;
-            operator_completions = true;
-            include_at_in_builtins = true;
+        zls =
+          defaultServer
+          // {
+            config.zls = {
+              enable_snippets = true;
+              enable_ast_check_diagnostics = true;
+              enable_autofix = true;
+              enable_import_embedfile_argument_completions = true;
+              warn_style = true;
+              enable_semantic_tokens = true;
+              enable_inlay_hints = true;
+              inlay_hints_show_builtin = true;
+              inlay_hints_hide_redundant_param_names = true;
+              inlay_hints_hide_redundant_param_names_last_token = true;
+              operator_completions = true;
+              include_at_in_builtins = true;
+            };
           };
-        };
 
         # --- Servers with default config (enable + PATH-based binary) ---
 
@@ -72,8 +109,8 @@ delib.module {
         biome = defaultServer;
         gopls = defaultServer;
         nickel_ls = mkServer {
-          cmd = ["${lib.getExe pkgs.nls}"];
-          activate = true;  # Store-pinned, always available
+          package = pkgs.nls;
+          activate = true;
         };
         nim_langserver = defaultServer;
         nushell = defaultServer;
@@ -90,6 +127,7 @@ delib.module {
           "denols"
           "hls"
           "moonbit-lsp"
+          "nixd"
           "taplo"
           "zls"
         ];
