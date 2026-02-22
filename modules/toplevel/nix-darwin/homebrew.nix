@@ -15,18 +15,14 @@ delib.module {
       };
 
       taps = [
-        "homebrew/services"
       ];
 
       # `brew install`
       brews = [
-        "mas"
       ];
 
       # `brew install --cask`
       casks = [
-        "arc"
-        "karabiner-elements"
       ];
 
       masApps = {

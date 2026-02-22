@@ -177,6 +177,7 @@
     llm-agents = {
       url = "github:numtide/llm-agents.nix";
     };
+    kanata-darwin-nix.url = "github:ryoppippi/kanata-darwin-nix";
     various-wallpapers = {
       url = "github:andrewzn69/wallpapers";
       flake = false;
