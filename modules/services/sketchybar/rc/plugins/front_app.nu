@@ -32,18 +32,18 @@ export def item () {
       # --set $"($popup_name).2"
       #   label=2
   )
-  # utils set_item_unit $"($popup_name).1" $crust $overlay0
-  # utils set_item_unit $"($popup_name).2" $crust $overlay0
+  # utils set_item_unit $"($popup_name).1" $surface_background $popup_border
+  # utils set_item_unit $"($popup_name).2" $surface_background $popup_border
   (
     sketchybar
       --add item $list_name left
       --set $list_name
         label.drawing=off
         icon.font="sketchybar-app-font:Regular:18.0"
-        icon.color=$"($colors.text)"
+        icon.color=$"($colors.text_primary)"
         icon.padding_right=12
         icon.width=0
-        background.color=$"($colors.surface0)"
+        background.color=$"($colors.surface_background)"
         background.corner_radius=30
         background.height=32
         background.y_offset=2
@@ -57,7 +57,7 @@ def get_icon (): string -> string {
 }
 
 def switch_front_app (app_name: string) {
-  let icon = match $app_name { 
+  let icon = match $app_name {
     "kitty-quick-access" => {"kitty" | get_icon},
     _ => {$app_name | get_icon}
   }

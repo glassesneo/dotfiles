@@ -18,8 +18,8 @@ export def item () {
         icon.padding_left=5
         icon=""
         popup.align=center
-        popup.background.color=$"($colors.mantle)"
-        popup.background.border_color=$"($colors.overlay2)"
+        popup.background.color=$"($colors.popup_background)"
+        popup.background.border_color=$"($colors.popup_border)"
         popup.background.border_width=1
         popup.background.corner_radius=5
         popup.background.height=25

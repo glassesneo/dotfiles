@@ -16,13 +16,13 @@ def create_workspace (space_id: string, display: int) {
         padding_left=0
         padding_right=0
         label=$"($space_id)"
-        label.color=$"($colors.text)"
+        label.color=$"($colors.text_primary)"
         label.font.size=17
         label.padding_left=8
         label.padding_right=8
         label.highlight=off
         label.background.color="0x00000000"
-        label.highlight_color=$"($colors.red)"
+        label.highlight_color=$"($colors.workspace_active)"
         label.background.corner_radius=6
         label.background.height=24
         label.background.y_offset=0
@@ -60,7 +60,7 @@ export def item () {
       --add bracket workspaces '/workspace\..*/'
       --set workspaces
         padding_left=0
-        background.color=$"($colors.base)"
+        background.color=$"($colors.surface_background)"
         background.corner_radius=8
         background.height=28
         script=$"($nu.current-exe) ($current_path) update-display"
@@ -75,7 +75,7 @@ export def item () {
   (
     sketchybar --set $space
       label.highlight=on
-      # label.background.color=$"($colors.surface0)
+      # label.background.color=$"($colors.surface_background)
   )
 }
 
@@ -84,7 +84,7 @@ def toggle_highlight (space_id: string) {
   (
     sketchybar
       --set $env.NAME
-        # label.background.color=$"(if $state {$colors.surface0} else {'0x00000000'})
+        # label.background.color=$"(if $state {$colors.surface_background} else {'0x00000000'})
         label.highlight=$"($state)"
   )
 }

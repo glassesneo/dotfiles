@@ -9,23 +9,7 @@ delib.module {
 
   options = delib.singleEnableOption true;
 
-  home.ifEnabled = let
-    # SketchyBar integration hook scripts
-    sketchybarActiveScript =
-      pkgs.writeShellScript "sketchybar-claude-active"
-      (builtins.readFile
-        (pkgs.replaceVars ./sketchybar-active.sh {
-          jq = pkgs.lib.getExe pkgs.jq;
-          sketchybar = pkgs.lib.getExe pkgs.sketchybar;
-        }));
-
-    sketchybarInactiveScript =
-      pkgs.writeShellScript "sketchybar-claude-inactive"
-      (builtins.readFile
-        (pkgs.replaceVars ./sketchybar-inactive.sh {
-          sketchybar = pkgs.lib.getExe pkgs.sketchybar;
-        }));
-  in {
+  home.ifEnabled = {
     programs.claude-code = {
       enable = true;
       package = llm-agents.claude-code;
@@ -48,29 +32,6 @@ delib.module {
           ENABLE_TOOL_SEARCH = true;
           ENABLE_LSP_TOOL = true;
           CLAUDE_CODE_ENABLE_TASKS = true;
-        };
-        # SketchyBar integration hooks - triggers status updates on prompt submit and stop
-        hooks = {
-          UserPromptSubmit = [
-            {
-              hooks = [
-                {
-                  type = "command";
-                  command = toString sketchybarActiveScript;
-                }
-              ];
-            }
-          ];
-          Stop = [
-            {
-              hooks = [
-                {
-                  type = "command";
-                  command = toString sketchybarInactiveScript;
-                }
-              ];
-            }
-          ];
         };
       };
       agents = {

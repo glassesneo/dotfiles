@@ -23,7 +23,7 @@ export def item () {
       --subscribe $name system_woke power_source_change
   )
 
-  # utils set_item_unit $name $crust $overlay0
+  # utils set_item_unit $name $surface_background $popup_border
 }
 
 def main () {
@@ -40,17 +40,17 @@ def main () {
       sketchybar
         --set $name
           label=""
-          label.color=$"($colors.electricity)"
+          label.color=$"($colors.status_charging)"
           icon=$"($percentage)%"
     )
     return
   }
   let icon: record<kind: string, color: string> = match $percentage {
-    91..100 => {kind: $"\u{f240}", color: $"($colors.teal)"}
-    61..90 => {kind: $"\u{f241}", color: $"($colors.green)"}
-    31..60 => {kind: $"\u{f242}", color: $"($colors.yellow)"}
-    11..30 => {kind: $"\u{f243}", color: $"($colors.peach)"}
-    _ => {kind: $"\u{f244}", color: $"($colors.red)"}
+    91..100 => {kind: $"\u{f240}", color: $"($colors.status_success)"}
+    61..90 => {kind: $"\u{f241}", color: $"($colors.status_success)"}
+    31..60 => {kind: $"\u{f242}", color: $"($colors.status_warning)"}
+    11..30 => {kind: $"\u{f243}", color: $"($colors.status_caution)"}
+    _ => {kind: $"\u{f244}", color: $"($colors.status_error)"}
   }
 
   (

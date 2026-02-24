@@ -35,77 +35,93 @@ in
 
     myconfig.services.sketchybar = {
       colors = {
-        # Monochrome palette - only app icons, battery, CPU use actual colors
-        # All "accent" colors are gray for monochrome look
-        rosewater = toSketchybar colors.base05;
-        flamingo = toSketchybar colors.base05;
-        pink = toSketchybar colors.base08; # Keep pink for special accents
-        mauve = toSketchybar colors.base05;
-        red = toSketchybar colors.base08; # Keep for battery/CPU warnings
-        maroon = toSketchybar colors.base05;
-        peach = toSketchybar colors.base05;
-        yellow = toSketchybar colors.base05; # Keep for battery/CPU warnings
-        green = toSketchybar colors.base05; # Keep for battery/CPU good status
-        teal = toSketchybar colors.base05;
-        sky = toSketchybar colors.base05;
-        sapphire = toSketchybar colors.base05;
-        blue = toSketchybar colors.base05;
-        lavender = toSketchybar colors.base05;
-        # Text hierarchy - muted for monochrome aesthetic
-        text = toSketchybar colors.base05; # Reduced from base07 for less vividness
-        subtext1 = toSketchybar colors.base04;
-        subtext0 = toSketchybar colors.base03;
-        # Overlay/muted elements
-        overlay2 = toSketchybar colors.base04;
-        overlay1 = toSketchybar colors.base03;
-        overlay0 = toSketchybar colors.base02;
-        # Surface hierarchy (backgrounds)
-        surface2 = toSketchybar colors.base02;
-        surface1 = toSketchybar colors.base01;
-        surface0 = toSketchybar colors.base01;
-        # Base backgrounds
-        base = toSketchybar colors.base00;
-        mantle = toSketchybar colors.base00;
-        crust = toSketchybar colors.base00;
-      };
-      # App-specific icon colors - these stay colorful even in monochrome
-      appColors = {
-        arc = "0xfff5bde6"; # Pink
-        ghostty = "0xff8aadf4"; # Blue
-        obsidian = "0xffc6a0f6"; # Purple/Mauve
-        kitty = "0xfff0c6c6"; # Flamingo/Coral
-      };
-      electricity = "0xffd4a020"; # Darker gold - electricity
-      # Monochrome CPU colors - grayscale gradient from light to dark
-      cpuColors = {
-        low = "0xff606060"; # Dark gray
-        medium = "0xff808080"; # Medium gray
-        high = "0xffa0a0a0"; # Light gray
-        critical = "0xffe06c75"; # Pink accent for critical
+        # Bar and text colors
+        bar_background = "0xff1a1a1a"; # base00 - Background
+        text_primary = "0xffabb2bf"; # base05 - Default foreground
+        text_muted = "0xff6c7891"; # base04 - Dark foreground
+
+        # Workspace colors
+        workspace_active = "0xffe06c75"; # base08 - Pink accent
+
+        # Surface and popup colors
+        surface_background = "0xff252525"; # base01 - Lighter background
+        popup_background = "0xff303030"; # base02 - Selection background
+        popup_border = "0xffabb2bf"; # base05 - Default foreground
+
+        # Accent colors
+        accent_datetime = "0xffabb2bf"; # base05 - Default foreground
+
+        # Status colors
+        status_error = "0xffe06c75"; # base08 - Pink
+        status_warning = "0xffabb2bf"; # base05 - Light gray
+        status_caution = "0xffa0a0a0"; # base09 - Medium gray
+        status_success = "0xffabb2bf"; # base05 - Light gray
+        status_charging = "0xffd4a020"; # Darker gold
+
+        # App-specific icon colors - these stay colorful even in monochrome
+        app_arc = "0xfff5bde6"; # Pink
+        app_ghostty = "0xff8aadf4"; # Blue
+        app_obsidian = "0xffc6a0f6"; # Purple/Mauve
+        app_kitty = "0xfff0c6c6"; # Flamingo/Coral
+
+        # CPU graph colors - grayscale gradient from dark to light
+        cpu_low = "0xff606060"; # Dark gray
+        cpu_medium = "0xff808080"; # Medium gray
+        cpu_high = "0xffa0a0a0"; # Light gray
+        cpu_critical = "0xffe06c75"; # Pink accent for critical
       };
       # Transparent outer bar background
       bar.color = "0x00000000"; # Fully transparent
-      # Red-bordered right bracket grouping (solid border with good spacing)
-      rightBracket = {
-        enable = true;
-        backgroundColor = "0x33000000";
-        blurRadius = "16";
-        borderWidth = "1.5";
-        borderColor = toSketchybar colors.base05; # Light gray
-        cornerRadius = "4";
-        height = "36";
-        paddingLeft = "16";
-        paddingRight = "16";
-      };
-      leftBracket = {
-        enable = true;
-        backgroundColor = "0x00000000";
-        borderWidth = "1.5";
-        borderColor = toSketchybar colors.base05; # Light gray
-        cornerRadius = "4";
-        height = "32";
-        paddingLeft = "12";
-        paddingRight = "12";
+      # Layout configuration with bracket styling
+      layout = {
+        zones = {
+          left = [
+            {
+              id = "primary";
+              priority = 1;
+              items = [
+                "workspaces"
+                "front_app"
+                "front_app.app_list"
+              ];
+              bracket = {
+                enable = true;
+                backgroundColor = "0x00000000";
+                blurRadius = "0";
+                borderWidth = "1.5";
+                borderColor = toSketchybar colors.base05; # Light gray
+                cornerRadius = "4";
+                height = "32";
+                paddingLeft = "12";
+                paddingRight = "12";
+              };
+            }
+          ];
+          center = [];
+          right = [
+            {
+              id = "primary";
+              priority = 1;
+              items = [
+                "datetime"
+                "battery"
+                "cpu"
+                "volume"
+              ];
+              bracket = {
+                enable = true;
+                backgroundColor = "0x33000000";
+                blurRadius = "16";
+                borderWidth = "1.5";
+                borderColor = toSketchybar colors.base05; # Light gray
+                cornerRadius = "4";
+                height = "36";
+                paddingLeft = "16";
+                paddingRight = "16";
+              };
+            }
+          ];
+        };
       };
     };
 

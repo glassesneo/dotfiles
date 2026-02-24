@@ -1084,10 +1084,9 @@ delib.module {
         };
         experimental = {
           plan_mode = true;
-          mcp_timeout = 1200000; # 20 minutes for Codex MCP
+          mcp_timeout = 1200000;
         };
-        plugin = [
-        ];
+        plugin = [ ];
       };
       rules =
         homeConfig.programs.claude-code.memory.text
@@ -1104,8 +1103,5 @@ delib.module {
           - Read detail sections only when implementation-level context is needed for delegation.
         '';
     };
-
-    # Deploy SketchyBar integration plugin
-    xdg.configFile."opencode/plugin/sketchybar.ts".source = ./plugins/sketchybar.ts;
   };
 }

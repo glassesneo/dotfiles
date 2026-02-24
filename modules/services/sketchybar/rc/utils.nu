@@ -9,7 +9,7 @@ export const item_unit = {
   }
 }
 
-export def set_item_unit [name: string, bg: string, border: string = $colors.text] {
+export def set_item_unit [name: string, bg: string, border: string = $colors.text_primary] {
   (
     sketchybar
       --set $name
@@ -37,7 +37,7 @@ export def icon_color (): string -> string {
     "Ghostty" => $colors.app_ghostty
     "Obsidian" => $colors.app_obsidian
     "Kitty" => $colors.app_kitty
-    _ => $colors.text
+    _ => $colors.text_primary
   }
 }
 

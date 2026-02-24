@@ -10,25 +10,38 @@ delib.module {
 
   options.services.sketchybar = with delib; {
     enable = boolOption host.windowManagementFeatured;
-    # Theme colors (Catppuccin naming) - all values use 0xAARRGGBB format
+    # Semantic color palette - typed submodule with strict validation
     colors = lib.mkOption {
-      type = lib.types.attrsOf lib.types.str;
+      type = let
+        colorType = lib.types.strMatching "0x[0-9a-fA-F]{8}";
+      in
+        lib.types.submodule {
+          options = {
+            bar_background = lib.mkOption { type = colorType; };
+            text_primary = lib.mkOption { type = colorType; };
+            text_muted = lib.mkOption { type = colorType; };
+            workspace_active = lib.mkOption { type = colorType; };
+            surface_background = lib.mkOption { type = colorType; };
+            popup_background = lib.mkOption { type = colorType; };
+            popup_border = lib.mkOption { type = colorType; };
+            accent_datetime = lib.mkOption { type = colorType; };
+            status_error = lib.mkOption { type = colorType; };
+            status_warning = lib.mkOption { type = colorType; };
+            status_caution = lib.mkOption { type = colorType; };
+            status_success = lib.mkOption { type = colorType; };
+            status_charging = lib.mkOption { type = colorType; };
+            app_arc = lib.mkOption { type = colorType; };
+            app_ghostty = lib.mkOption { type = colorType; };
+            app_obsidian = lib.mkOption { type = colorType; };
+            app_kitty = lib.mkOption { type = colorType; };
+            cpu_low = lib.mkOption { type = colorType; };
+            cpu_medium = lib.mkOption { type = colorType; };
+            cpu_high = lib.mkOption { type = colorType; };
+            cpu_critical = lib.mkOption { type = colorType; };
+          };
+        };
       default = {};
-      description = "Theme color palette (rosewater, flamingo, pink, mauve, red, maroon, peach, yellow, green, teal, sky, sapphire, blue, lavender, text, subtext1, subtext0, overlay2, overlay1, overlay0, surface2, surface1, surface0, base, mantle, crust)";
-    };
-    # App-specific icon colors (separate from theme colors)
-    appColors = lib.mkOption {
-      type = lib.types.attrsOf lib.types.str;
-      default = {};
-      description = "App-specific icon colors (arc, ghostty, obsidian, kitty)";
-    };
-    # Semantic colors for specific UI elements
-    electricity = strOption ""; # AC power indicator
-    # CPU graph colors by usage level
-    cpuColors = lib.mkOption {
-      type = lib.types.attrsOf lib.types.str;
-      default = {};
-      description = "CPU graph colors by usage level (low, medium, high, critical)";
+      description = "Semantic color palette for SketchyBar items and UI elements";
     };
     # Bar appearance
     bar = {
@@ -38,28 +51,90 @@ delib.module {
       borderWidth = strOption "0";
       borderColor = strOption "";
     };
-    # Right item grouping/bracket
-    rightBracket = {
-      enable = boolOption false;
-      backgroundColor = strOption "";
-      blurRadius = strOption "0";
-      borderWidth = strOption "0";
-      borderColor = strOption "";
-      cornerRadius = strOption "8";
-      height = strOption "28";
-      paddingLeft = strOption "0";
-      paddingRight = strOption "0";
-    };
-    # Left item grouping/bracket
-    leftBracket = {
-      enable = boolOption false;
-      backgroundColor = strOption "";
-      borderWidth = strOption "0";
-      borderColor = strOption "";
-      cornerRadius = strOption "8";
-      height = strOption "28";
-      paddingLeft = strOption "0";
-      paddingRight = strOption "0";
+    # Typed layout abstraction with zones and groups
+    layout = {
+      zones = {
+        left = lib.mkOption {
+          type = lib.types.listOf (lib.types.submodule {
+            options = {
+              id = lib.mkOption { type = lib.types.str; };
+              priority = lib.mkOption { type = lib.types.int; };
+              items = lib.mkOption { type = lib.types.listOf lib.types.str; };
+              bracket = {
+                enable = boolOption false;
+                backgroundColor = strOption "";
+                blurRadius = strOption "0";
+                borderWidth = strOption "0";
+                borderColor = strOption "";
+                cornerRadius = strOption "8";
+                height = strOption "28";
+                paddingLeft = strOption "0";
+                paddingRight = strOption "0";
+              };
+            };
+          });
+          default = [
+            {
+              id = "primary";
+              priority = 1;
+              items = ["workspaces" "front_app" "front_app.app_list"];
+              bracket.enable = false;
+            }
+          ];
+          description = "Left zone groups with deterministic ordering by priority";
+        };
+        center = lib.mkOption {
+          type = lib.types.listOf (lib.types.submodule {
+            options = {
+              id = lib.mkOption { type = lib.types.str; };
+              priority = lib.mkOption { type = lib.types.int; };
+              items = lib.mkOption { type = lib.types.listOf lib.types.str; };
+              bracket = {
+                enable = boolOption false;
+                backgroundColor = strOption "";
+                blurRadius = strOption "0";
+                borderWidth = strOption "0";
+                borderColor = strOption "";
+                cornerRadius = strOption "8";
+                height = strOption "28";
+                paddingLeft = strOption "0";
+                paddingRight = strOption "0";
+              };
+            };
+          });
+          default = [];
+          description = "Center zone groups with deterministic ordering by priority";
+        };
+        right = lib.mkOption {
+          type = lib.types.listOf (lib.types.submodule {
+            options = {
+              id = lib.mkOption { type = lib.types.str; };
+              priority = lib.mkOption { type = lib.types.int; };
+              items = lib.mkOption { type = lib.types.listOf lib.types.str; };
+              bracket = {
+                enable = boolOption false;
+                backgroundColor = strOption "";
+                blurRadius = strOption "0";
+                borderWidth = strOption "0";
+                borderColor = strOption "";
+                cornerRadius = strOption "8";
+                height = strOption "28";
+                paddingLeft = strOption "0";
+                paddingRight = strOption "0";
+              };
+            };
+          });
+          default = [
+            {
+              id = "primary";
+              priority = 1;
+              items = ["datetime" "battery" "cpu" "volume"];
+              bracket.enable = false;
+            }
+          ];
+          description = "Right zone groups with deterministic ordering by priority";
+        };
+      };
     };
   };
 
@@ -71,58 +146,51 @@ delib.module {
   };
 
   home.ifEnabled = {cfg, ...}: let
-    # Build replaceVars arguments from attrsets
-    # Theme colors use their names directly (e.g., rosewater -> @rosewater@)
-    # App colors get prefixed with "app_" (e.g., arc -> @app_arc@)
-    # CPU colors get prefixed with "cpu_" (e.g., low -> @cpu_low@)
-    colorsNu = pkgs.replaceVars ./rc/colors.nu (
-      cfg.colors
-      // lib.mapAttrs' (name: value: lib.nameValuePair "app_${name}" value) cfg.appColors
-      // lib.mapAttrs' (name: value: lib.nameValuePair "cpu_${name}" value) cfg.cpuColors
-      // {electricity = cfg.electricity;}
-    );
+    # Build replaceVars arguments from semantic color map
+    colorsNu = pkgs.replaceVars ./rc/colors.nu cfg.colors;
 
-    # Generate right bracket code if enabled
-    rightBracketCode =
-      if cfg.rightBracket.enable
-      then ''
-        (
-          sketchybar --add bracket right_bracket datetime battery cpu volume ai
-            --set right_bracket
-              background.color="${cfg.rightBracket.backgroundColor}"
-              background.blur_radius=${cfg.rightBracket.blurRadius}
-              background.border_width=${cfg.rightBracket.borderWidth}
-              background.border_color="${cfg.rightBracket.borderColor}"
-              background.corner_radius=${cfg.rightBracket.cornerRadius}
-              background.height=${cfg.rightBracket.height}
-              background.padding_left=${cfg.rightBracket.paddingLeft}
-              background.padding_right=${cfg.rightBracket.paddingRight}
-        )
-      ''
-      else "# Right bracket disabled";
+    # Generate bracket code for a group
+    generateBracketCode = zone: group: ''
+      (
+        sketchybar --add bracket "group.${zone}.${group.id}" ${lib.concatStringsSep " " (map lib.escapeShellArg group.items)}
+          --set "group.${zone}.${group.id}"
+            background.color="${group.bracket.backgroundColor}"
+            background.blur_radius=${group.bracket.blurRadius}
+            background.border_width=${group.bracket.borderWidth}
+            background.border_color="${group.bracket.borderColor}"
+            background.corner_radius=${group.bracket.cornerRadius}
+            background.height=${group.bracket.height}
+            background.padding_left=${group.bracket.paddingLeft}
+            background.padding_right=${group.bracket.paddingRight}
+      )
+    '';
 
-    leftBracketCode =
-      if cfg.leftBracket.enable
+    # Generate all layout code (brackets and reorder)
+    generateLayoutCode = zone: groups:
+      let
+        sortedGroups = lib.sort (a: b: a.priority < b.priority) groups;
+        bracketCodes = lib.concatMapStrings (g: if g.bracket.enable then generateBracketCode zone g else "# Bracket disabled for ${g.id}") sortedGroups;
+        allItems = lib.concatMap (g: g.items) sortedGroups;
+        itemString = lib.concatStringsSep " " (map lib.escapeShellArg allItems);
+      in
+      if allItems != []
       then ''
-        (
-          sketchybar --add bracket left_bracket workspaces front_app front_app.app_list
-            --set left_bracket
-              background.color="${cfg.leftBracket.backgroundColor}"
-              background.border_width=${cfg.leftBracket.borderWidth}
-              background.border_color="${cfg.leftBracket.borderColor}"
-              background.corner_radius=${cfg.leftBracket.cornerRadius}
-              background.height=${cfg.leftBracket.height}
-              background.padding_left=${cfg.leftBracket.paddingLeft}
-              background.padding_right=${cfg.leftBracket.paddingRight}
-        )
+        ${bracketCodes}
+        sketchybar --reorder ${itemString}
       ''
-      else "# Left bracket disabled";
+      else "# No items in ${zone} zone";
+
+    layoutCode = ''
+      ${generateLayoutCode "left" cfg.layout.zones.left}
+      ${generateLayoutCode "center" cfg.layout.zones.center}
+      ${generateLayoutCode "right" cfg.layout.zones.right}
+    '';
 
     sketchybarrc = pkgs.replaceVars ./rc/sketchybarrc {
       bar_color =
         if cfg.bar.color != ""
         then cfg.bar.color
-        else "$\"($colors.crust)\"";
+        else "$\"($colors.bar_background)\"";
       bar_corner_radius = cfg.bar.cornerRadius;
       bar_blur_radius = cfg.bar.blurRadius;
       bar_border_width = cfg.bar.borderWidth;
@@ -130,8 +198,7 @@ delib.module {
         if cfg.bar.borderColor != ""
         then cfg.bar.borderColor
         else "0x00000000";
-      left_bracket_code = leftBracketCode;
-      right_bracket_code = rightBracketCode;
+      layout_code = layoutCode;
     };
 
     sketchybarConfig = pkgs.runCommand "sketchybar-config" {} ''
@@ -142,6 +209,37 @@ delib.module {
       cp ${sketchybarrc} $out/sketchybarrc
     '';
   in {
+    assertions = let
+      priorityAssertions = lib.mapAttrsToList (zone: groups: {
+        assertion = let priorities = map (g: g.priority) groups;
+        in lib.length priorities == lib.length (lib.unique priorities);
+        message = "services.sketchybar.layout.zones.${zone}: group priorities must be unique";
+      }) cfg.layout.zones;
+
+      idAssertions = lib.mapAttrsToList (zone: groups: {
+        assertion = let ids = map (g: g.id) groups;
+        in lib.length ids == lib.length (lib.unique ids);
+        message = "services.sketchybar.layout.zones.${zone}: group IDs must be unique";
+      }) cfg.layout.zones;
+
+      itemAssertions = let
+        allItems = lib.concatLists (lib.mapAttrsToList (_: groups:
+          lib.concatMap (g: g.items) groups
+        ) cfg.layout.zones);
+      in [{
+        assertion = lib.length allItems == lib.length (lib.unique allItems);
+        message = "services.sketchybar.layout: all item names across all zones must be unique";
+      }];
+
+      bracketAssertions = lib.mapAttrsToList (zone: groups:
+        lib.concatMap (g: [{
+          assertion = !g.bracket.enable || g.items != [];
+          message = "services.sketchybar.layout.zones.${zone}.${g.id}: bracket.enable is true but group has no items";
+        }]) groups
+      ) cfg.layout.zones;
+    in
+      lib.flatten (priorityAssertions ++ idAssertions ++ itemAssertions ++ bracketAssertions);
+
     home.file = {
       ".config/sketchybar" = {
         source = sketchybarConfig;

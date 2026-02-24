@@ -19,7 +19,7 @@ Denix auto-discovers all =.nix= files under =hosts/= and =modules/=, so new file
 - *Modular architecture* with Denix auto-discovery from =hosts/= and =modules/=
 - *Secret management* via [[https://github.com/ryantm/agenix][agenix]] and =config.age.secrets.<key>.path=
 - *Homebrew integration* via [[https://github.com/BatteredBunny/brew-nix][brew-nix]]
-- *AI tooling* with MCP servers and SketchyBar status integrations
+- *AI tooling* with MCP servers
 - *Desktop environment* with AeroSpace, SketchyBar, and Borders
 - *Editor and CLI tooling* via nixvim, ripgrep, fd, and more
 - *Reproducible builds* through flake-based configuration
@@ -180,11 +180,6 @@ Kiri MCP is wrapped in =modules/config/node-packages.nix= to avoid tree-sitter d
 ** Rices (Theme Variants)
 
 Rices define theme variants under =rices/= and should only set pure data (no =pkgs= references). Modules resolve packages using their own =pkgs= to avoid cross-compilation issues. Select a rice per host in =hosts/<name>/default.nix=.
-
-** SketchyBar Integrations
-
-- *Claude Code*: hooks are defined in =modules/programs/claude-code/default.nix= and send status events to SketchyBar via =modules/services/sketchybar/rc/plugins/ai.nu=.
-- *OpenCode*: the SketchyBar plugin lives in =modules/programs/opencode/plugins/sketchybar.ts= and shares the same SketchyBar plugin entry point.
 
 * Documentation
 
