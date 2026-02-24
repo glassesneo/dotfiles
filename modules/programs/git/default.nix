@@ -70,9 +70,12 @@ delib.module {
     home.packages = [
       pkgs.ghq
     ];
-    programs.delta = {
+    programs.difftastic = {
       enable = true;
-      enableGitIntegration = true;
+      git = {
+        enable = true;
+        diffToolMode = true;
+      };
     };
   };
 }
