@@ -137,10 +137,6 @@
       url = "github:BatteredBunny/brew-api";
       flake = false;
     };
-    charmbracelet = {
-      url = "github:charmbracelet/nur";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
     agenix = {
       url = "github:ryantm/agenix";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -176,7 +172,7 @@
     llm-agents = {
       url = "github:numtide/llm-agents.nix";
     };
-    kanata-darwin-nix.url = "github:ryoppippi/kanata-darwin-nix";
+    # kanata-darwin-nix.url = "github:ryoppippi/kanata-darwin-nix";
     various-wallpapers = {
       url = "github:andrewzn69/wallpapers";
       flake = false;
