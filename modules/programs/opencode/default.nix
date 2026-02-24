@@ -20,9 +20,11 @@ delib.module {
 
     allow = mkRules "allow";
     deny = mkRules "deny";
+    ask = mkRules "ask";
 
     denyAll = deny ["*"];
     allowAll = allow ["*"];
+    askAll = ask ["*"];
 
     merge = a: b: recursiveUpdate a b;
 
@@ -577,10 +579,11 @@ delib.module {
                 You are the `orchestrator` primary implementation agent.
 
                 Role boundaries (strict):
-                - You are a coordinator, not a direct editor.
-                - You MUST NOT write or edit files directly.
-                - Delegate implementation work to subagents.
+                - You are a coordinator-first implementation agent.
+                - Delegate implementation work to subagents by default.
                 - Utilize multiple sub-agents in parallel as proactively as possible.
+                - You MAY read, write/edit files, and run commands directly when needed to unblock progress or when direct execution is the most efficient path.
+                - Keep direct execution scoped and prefer delegation for independent or parallelizable work.
 
               ''
               + orchestratorExecutionProtocol
@@ -592,7 +595,11 @@ delib.module {
                 - Provide concise progress synthesis by task ID.
                 - Record delegated task outcomes, blockers, and validation status.
               '';
-            permission = readOnlyPermission;
+            permission = merge readOnlyPermission {
+              edit = askAll;
+              write = askAll;
+              bash = "ask";
+            };
           };
           spec = {
             mode = "primary";
@@ -716,6 +723,29 @@ delib.module {
 
               Scope (strict):
               - Execute delegated implementation tasks end-to-end.
+              - Edit delegated target files and directly related files required to satisfy delegated criteria.
+              - Explore only paths directly related to delegated tasks.
+              - Avoid broad or open-ended codebase exploration.
+              - Do NOT run commands.
+
+              Required output:
+              - explored paths and why each was needed
+              - list edited files
+              - what changed per file
+              - completion status vs delegated criteria
+            '';
+            permission = boundedEditPermission;
+          };
+          general_high = {
+            mode = "subagent";
+            model = "github-copilot/claude-sonnet-4.6";
+            description = "High-capability general implementation subagent for large or complex delegated read/edit tasks with targeted path exploration.";
+            prompt = ''
+              You are the `general_high` implementation subagent.
+
+              Scope (strict):
+              - Execute delegated implementation tasks end-to-end.
+              - Prefer this agent for larger or more complex delegated tasks that still require targeted exploration and file edits.
               - Edit delegated target files and directly related files required to satisfy delegated criteria.
               - Explore only paths directly related to delegated tasks.
               - Avoid broad or open-ended codebase exploration.
@@ -1043,7 +1073,8 @@ delib.module {
           };
           tester = {
             mode = "subagent";
-            model = "zai-coding-plan/glm-4.7";
+            model = "openai/gpt-5.3-codex";
+            reasoningEffort = "high";
             description = "Read-only test runner that triages failures and writes failure-report files when suites fail.";
             prompt =
               ''
@@ -1079,14 +1110,17 @@ delib.module {
                 - Include flaky determination in the required `**Flaky check**` field for each failure.
               ''
               + reportFilenamePolicy;
-            permission = tempWorkspaceWithReportsPermission;
+            permission = merge tempWorkspaceWithReportsPermission {
+              edit = askAll;
+              write = askAll;
+            };
           };
         };
         experimental = {
           plan_mode = true;
           mcp_timeout = 1200000;
         };
-        plugin = [ ];
+        plugin = [];
       };
       rules =
         homeConfig.programs.claude-code.memory.text
