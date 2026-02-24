@@ -77,7 +77,7 @@ delib.module {
             {
               id = "primary";
               priority = 1;
-              items = ["workspaces" "front_app" "front_app.app_list"];
+              items = ["workspaces" "front_app"];
               bracket.enable = false;
             }
           ];

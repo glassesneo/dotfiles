@@ -25,9 +25,6 @@
     base0E = "#e06c75"; # Pink - Keywords, Storage, Selector
     base0F = "#a0a0a0"; # Gray - Deprecated, Embedded
   };
-
-  # Convert hex to sketchybar format (0xffRRGGBB)
-  toSketchybar = hex: "0xff${builtins.substring 1 6 hex}";
 in
   delib.rice {
     name = "monochrome";
@@ -72,57 +69,6 @@ in
       };
       # Transparent outer bar background
       bar.color = "0x00000000"; # Fully transparent
-      # Layout configuration with bracket styling
-      layout = {
-        zones = {
-          left = [
-            {
-              id = "primary";
-              priority = 1;
-              items = [
-                "workspaces"
-                "front_app"
-                "front_app.app_list"
-              ];
-              bracket = {
-                enable = true;
-                backgroundColor = "0x00000000";
-                blurRadius = "0";
-                borderWidth = "1.5";
-                borderColor = toSketchybar colors.base05; # Light gray
-                cornerRadius = "4";
-                height = "32";
-                paddingLeft = "12";
-                paddingRight = "12";
-              };
-            }
-          ];
-          center = [];
-          right = [
-            {
-              id = "primary";
-              priority = 1;
-              items = [
-                "datetime"
-                "battery"
-                "cpu"
-                "volume"
-              ];
-              bracket = {
-                enable = true;
-                backgroundColor = "0x33000000";
-                blurRadius = "16";
-                borderWidth = "1.5";
-                borderColor = toSketchybar colors.base05; # Light gray
-                cornerRadius = "4";
-                height = "36";
-                paddingLeft = "16";
-                paddingRight = "16";
-              };
-            }
-          ];
-        };
-      };
     };
 
     # myconfig.services.jankyborders = {
