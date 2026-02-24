@@ -138,6 +138,6 @@ delib.module {
     # - vim.lsp.config overrides requiring Lua-only APIs (workspace library paths, init_options)
     # - efm language/formatter definitions
     extraConfigLuaPost = builtins.readFile ./extra.lua;
-    extraPackages = [pkgs.efm-langserver pkgs.nls pkgs.nickel];
+    extraPackages = [pkgs.efm-langserver pkgs.nls pkgs.nickel pkgs.copilot-language-server];
   };
 }

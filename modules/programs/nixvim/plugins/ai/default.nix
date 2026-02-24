@@ -6,19 +6,6 @@ delib.module {
 
   home.ifEnabled.programs.nixvim = {
     plugins = {
-      copilot-lua = {
-        enable = true;
-        settings = {
-          panel.enabled = false;
-          suggestion.enabled = false;
-        };
-        lazyLoad = {
-          enable = true;
-          settings = {
-            cmd = ["InsertEnter"];
-          };
-        };
-      };
       codecompanion = {
         enable = false;
         lazyLoad = {
