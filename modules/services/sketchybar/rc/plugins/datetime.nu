@@ -21,8 +21,7 @@ export def item () {
         padding_right=0
         label=$"($output)"
         label.color=$"($colors.accent_datetime)"
-        label.font.style="Bold Italic"
-        label.font.size=16
+        @datetime_font_lines@
         label.padding_right=8
         icon.drawing=off
         script=$"($nu.current-exe) ($current_path)"

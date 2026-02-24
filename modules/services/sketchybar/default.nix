@@ -51,6 +51,8 @@ delib.module {
       borderWidth = strOption "0";
       borderColor = strOption "";
     };
+    # Datetime font override (Family:Style:Size). When empty, uses Bold Italic default.
+    datetimeFontOverride = strOption "";
     # Typed layout abstraction with zones and groups
     layout = {
       zones = {
@@ -149,6 +151,13 @@ delib.module {
     # Build replaceVars arguments from semantic color map
     colorsNu = pkgs.replaceVars ./rc/colors.nu cfg.colors;
 
+    datetimeNu = pkgs.replaceVars ./rc/plugins/datetime.nu {
+      datetime_font_lines =
+        if cfg.datetimeFontOverride != ""
+        then ''label.font="${cfg.datetimeFontOverride}"''
+        else "label.font.style=\"Bold Italic\"\n        label.font.size=16";
+    };
+
     # Generate bracket code for a group
     generateBracketCode = zone: group: ''
       (
@@ -207,6 +216,7 @@ delib.module {
       chmod -R +w $out
       cp ${colorsNu} $out/colors.nu
       cp ${sketchybarrc} $out/sketchybarrc
+      cp ${datetimeNu} $out/plugins/datetime.nu
     '';
   in {
     assertions = let

@@ -31,6 +31,7 @@ in
     inherits = ["laptop"];
 
     myconfig.services.sketchybar = {
+      # datetimeFontOverride = "Iosevka:Regular:16";
       colors = {
         # Bar and text colors
         bar_background = "0xff1a1a1a"; # base00 - Background
@@ -71,14 +72,12 @@ in
       bar.color = "0x00000000"; # Fully transparent
     };
 
-    # myconfig.services.jankyborders = {
-    # enable = true;
-    # active_color = colors.base05;
-    # inactive_color = colors.base03;
-    # style = "round";
-    # width = 4.0;
-    # hidpi = true;
-    # };
+    myconfig.services.jankyborders = {
+      active_color = colors.base05;
+      inactive_color = colors.base03;
+      style = "round";
+      width = 4.0;
+    };
 
     # Use rice-aware options for vim and tmux
     myconfig.programs.vim.colorscheme = {

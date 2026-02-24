@@ -73,45 +73,54 @@ in
       };
     };
     myconfig = {
-      services.sketchybar = {
-        colors = {
-          # Bar and text colors
-          bar_background = "0xff181926"; # crust
-          text_primary = "0xffcad3f5"; # text
-          text_muted = "0xff939ab7"; # overlay2
-
-          # Workspace colors
-          workspace_active = "0xffed8796"; # red
-
-          # Surface and popup colors
-          surface_background = "0xff363a4f"; # surface0
-          popup_background = "0xff1e2030"; # mantle
-          popup_border = "0xff939ab7"; # overlay2
-
-          # Accent colors
-          accent_datetime = "0xff91d7e3"; # sky
-
-          # Status colors
-          status_error = "0xffed8796"; # red
-          status_warning = "0xffeed49f"; # yellow
-          status_caution = "0xfff5a97f"; # peach
-          status_success = "0xffa6da95"; # green
-          status_charging = "0xffd4a84a"; # darker golden yellow
-
-          # App-specific icon colors
-          app_arc = "0xfff5bde6"; # pink
-          app_ghostty = "0xff8aadf4"; # blue
-          app_obsidian = "0xffc6a0f6"; # mauve
-          app_kitty = "0xfff0c6c6"; # flamingo
-
-          # CPU graph colors by usage level
-          cpu_low = "0xffa6da95"; # green
-          cpu_medium = "0xffeed49f"; # yellow
-          cpu_high = "0xfff5a97f"; # peach
-          cpu_critical = "0xffed8796"; # red
+      services = {
+        jankyborders = {
+          active_color = "0xffc6a0f6"; # mauve
+          inactive_color = "0x00000000"; # transparent
+          style = "square";
+          width = 10.0;
         };
-        # Bar appearance - uses default bar_background color
-        bar.color = "";
+
+        sketchybar = {
+          colors = {
+            # Bar and text colors
+            bar_background = "0xff181926"; # crust
+            text_primary = "0xffcad3f5"; # text
+            text_muted = "0xff939ab7"; # overlay2
+
+            # Workspace colors
+            workspace_active = "0xffed8796"; # red
+
+            # Surface and popup colors
+            surface_background = "0xff363a4f"; # surface0
+            popup_background = "0xff1e2030"; # mantle
+            popup_border = "0xff939ab7"; # overlay2
+
+            # Accent colors
+            accent_datetime = "0xff91d7e3"; # sky
+
+            # Status colors
+            status_error = "0xffed8796"; # red
+            status_warning = "0xffeed49f"; # yellow
+            status_caution = "0xfff5a97f"; # peach
+            status_success = "0xffa6da95"; # green
+            status_charging = "0xffd4a84a"; # darker golden yellow
+
+            # App-specific icon colors
+            app_arc = "0xfff5bde6"; # pink
+            app_ghostty = "0xff8aadf4"; # blue
+            app_obsidian = "0xffc6a0f6"; # mauve
+            app_kitty = "0xfff0c6c6"; # flamingo
+
+            # CPU graph colors by usage level
+            cpu_low = "0xffa6da95"; # green
+            cpu_medium = "0xffeed49f"; # yellow
+            cpu_high = "0xfff5a97f"; # peach
+            cpu_critical = "0xffed8796"; # red
+          };
+          # Bar appearance - uses default bar_background color
+          bar.color = "";
+        };
       };
 
       # Use rice-aware options for vim and tmux
@@ -128,7 +137,7 @@ in
         plugin = "catppuccin";
         pluginConfig = ''
           set -g @catppuccin_flavor '${flavor}'
-          set -g @catppuccin_window_status_style 'rounded'
+          set -g @catppuccin_window_status_style 'basic'
           set -g @catppuccin_status_background 'none'
         '';
         # Status line modules must be set AFTER the plugin loads
