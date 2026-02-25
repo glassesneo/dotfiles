@@ -5,7 +5,7 @@
   ...
 }:
 delib.module {
-  name = "jankyborders";
+  name = "services.jankyborders";
 
   options.services.jankyborders = with delib; {
     enable = boolOption host.windowManagementFeatured;
