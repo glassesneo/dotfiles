@@ -69,6 +69,40 @@ in
               };
             };
           };
+          autoCmd = [
+            {
+              event = ["ColorScheme" "VimEnter"];
+              pattern = ["*"];
+              once = false;
+              callback.__raw = ''
+                function()
+                  local groups = {
+                    "Normal", "NormalNC", "NormalFloat",
+                    "SignColumn", "EndOfBuffer", "LineNr", "CursorLineNr",
+                    "Folded", "FoldColumn", "VertSplit", "StatusLine", "StatusLineNC",
+                  }
+                  for _, g in ipairs(groups) do
+                    vim.api.nvim_set_hl(0, g, { bg = "none" })
+                  end
+                end
+              '';
+            }
+          ];
+          highlight = {
+            # Transparent background guards - override catppuccin plugin post-load
+            # Normal.bg = "none";
+            # NormalNC.bg = "none";
+            # NormalFloat.bg = "none";
+            # SignColumn.bg = "none";
+            # EndOfBuffer.bg = "none";
+            # LineNr.bg = "none";
+            # CursorLineNr.bg = "none";
+            # Folded.bg = "none";
+            # FoldColumn.bg = "none";
+            # VertSplit.bg = "none";
+            # StatusLine.bg = "none";
+            # StatusLineNC.bg = "none";
+          };
         };
       };
     };
