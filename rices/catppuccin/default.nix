@@ -29,6 +29,7 @@ in
           settings = {
             background-opacity = 0.4;
             background-blur = 5;
+            window-padding-x = 6;
           };
         };
         nixvim = {

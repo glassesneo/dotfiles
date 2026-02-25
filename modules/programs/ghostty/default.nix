@@ -39,8 +39,6 @@ delib.module {
         quick-terminal-autohide = false;
         auto-update = "off";
         font-feature = "-dlig";
-        # background-opacity = 0.7;
-        # background-blur = 5;
         window-inherit-working-directory = false;
         macos-titlebar-style = "hidden";
         # cursor-style = "block";

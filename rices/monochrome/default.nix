@@ -116,7 +116,7 @@ in
       pluginConfig = "";
       extraConfig = ''
         # Monochrome tmux status bar
-        set -g status-style 'bg=${colors.base01},fg=${colors.base05}'
+        set -g status-style 'bg=default,fg=${colors.base05}'
         set -g status-left '#[fg=${colors.base08},bold][#S] '
         set -g status-left-length 20
         set -g status-right ""
@@ -125,7 +125,7 @@ in
         set -g window-status-separator ""
         set -g pane-border-style 'fg=${colors.base02}'
         set -g pane-active-border-style 'fg=${colors.base08}'
-        set -g message-style 'fg=${colors.base05},bg=${colors.base01}'
+        set -g message-style 'fg=${colors.base05},bg=default'
       '';
     };
 
@@ -242,38 +242,6 @@ in
             VertSplit.bg = "none";
             StatusLine.bg = "none";
             StatusLineNC.bg = "none";
-            # Bufferline transparency
-            BufferLineFill.bg = "none";
-            BufferLineBackground.bg = "none";
-            BufferLineBuffer.bg = "none";
-            BufferLineBufferVisible.bg = "none";
-            BufferLineBufferSelected.bg = "none";
-            BufferLineTab.bg = "none";
-            BufferLineTabSelected.bg = "none";
-            BufferLineTabClose.bg = "none";
-            BufferLineSeparator.bg = "none";
-            BufferLineSeparatorVisible.bg = "none";
-            BufferLineSeparatorSelected.bg = "none";
-            BufferLineIndicatorSelected.bg = "none";
-            BufferLineIndicatorVisible.bg = "none";
-            BufferLineCloseButton.bg = "none";
-            BufferLineCloseButtonVisible.bg = "none";
-            BufferLineCloseButtonSelected.bg = "none";
-            BufferLineModified.bg = "none";
-            BufferLineModifiedVisible.bg = "none";
-            BufferLineModifiedSelected.bg = "none";
-            BufferLineDuplicate.bg = "none";
-            BufferLineDuplicateVisible.bg = "none";
-            BufferLineDuplicateSelected.bg = "none";
-            BufferLineNumbers.bg = "none";
-            BufferLineNumbersVisible.bg = "none";
-            BufferLineNumbersSelected.bg = "none";
-            BufferLinePick.bg = "none";
-            BufferLinePickVisible.bg = "none";
-            BufferLinePickSelected.bg = "none";
-            BufferLineOffsetSeparator.bg = "none";
-            BufferLineTabSeparator.bg = "none";
-            BufferLineTabSeparatorSelected.bg = "none";
           };
         };
         ghostty = {
