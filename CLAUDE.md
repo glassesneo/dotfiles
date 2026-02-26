@@ -26,7 +26,7 @@ nix develop                           # Enter development shell
 - Hosts: @hosts/
 - Config core: @modules/config/
 - MCP Node packages: @node-packages/
-- Secrets: @secrets/
+- Host secrets: @hosts/kurogane/secrets.yaml
 - Rices: @rices/
 - Var artifacts: @var/
 
@@ -40,7 +40,7 @@ nh clean all --keep 5
 ```
 
 ## Secrets Management (sops-nix)
-- All secrets are encrypted via `sops` and stored in host files (currently `@secrets/kurogane.yaml`)
+- All secrets are encrypted via `sops` and stored in host files (currently `@hosts/kurogane/secrets.yaml`)
 - Shared declarations live in `@modules/toplevel/secrets.nix`
 - Host binding lives in `@hosts/kurogane/secrets.nix`
 - Dedicated single-owner secrets are declared in their owning module

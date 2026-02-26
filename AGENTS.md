@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 - `flake.nix`, `flake.lock`, and `modules/` form the declarative backbone. `modules/programs` hosts reusable program configs, `modules/toplevel` covers system-wide options, and `modules/config` wires together host-specific overlays.
-- `var/`, `hosts/`, and `secrets/` hold target-specific data: `hosts/` defines machine metadata, `secrets/` stores sops-encrypted host files referenced via `config.sops.secrets`, and `var/` keeps generated artifacts.
+- `var/` and `hosts/` hold target-specific data: `hosts/` defines machine metadata and host-local sops files (for example `hosts/<hostname>/secrets.yaml`) referenced via `config.sops.secrets`, and `var/` keeps generated artifacts.
 - `node-packages/` manages MCP server npm packages via bun2nix; update `node-packages/package.json`, run `bun install && bun2nix -o bun.nix`, then rebuild.
 
 ## Build, Test, and Development Commands
@@ -28,5 +28,5 @@
 - Pull requests should include a brief summary, testing steps (or `nix flake check` status), any relevant issue links, and screenshots only when the change affects user-visible UI.
 
 ## Secrets & Configuration Tips
-- Modify host secret files with `sops` (for example `secrets/kurogane.yaml`) and commit only encrypted blobs; avoid plaintext keys.
-- Keep MCP server credentials in `secrets/` and reference them through environment variables defined in `modules/toplevel/secrets.nix`.
+- Modify host secret files with `sops` (for example `hosts/kurogane/secrets.yaml`) and commit only encrypted blobs; avoid plaintext keys.
+- Keep MCP server credentials in host secret files and reference them through environment variables defined in `modules/toplevel/secrets.nix`.

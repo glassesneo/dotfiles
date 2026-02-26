@@ -132,7 +132,7 @@ nh clean profile <profile-path> --keep 5
 │   └── toplevel/          # System-wide settings
 ├── node2nix/              # Node.js package definitions
 ├── org_spec.org           # Org-mode spec notes
-└── secrets/               # Encrypted secrets (sops)
+└── var/                   # Generated artifacts
 #+end_example
 
 ** Key Directories
@@ -143,7 +143,7 @@ nh clean profile <profile-path> --keep 5
   - =services/= :: Service configurations (aerospace, sketchybar, etc.)
   - =config/= :: Shared configuration and constants
   - =toplevel/= :: System-level settings and wiring
-- =secrets/= :: Age-encrypted secrets
+
 
 * Architecture Notes
 
@@ -169,7 +169,28 @@ User metadata is centralized in =modules/config/constants.nix= and referenced as
 
 ** Secrets
 
-Secrets are defined via sops-nix and referenced as =config.sops.secrets.<key>.path=. Shared declarations live in =modules/toplevel/secrets.nix=, with host binding in =hosts/kurogane/secrets.nix=.
+Secrets are defined via sops-nix and referenced as =config.sops.secrets.<key>.path=. Shared declarations live in =modules/toplevel/secrets.nix=, with host binding in =hosts/kurogane/secrets.nix= and encrypted source at =hosts/kurogane/secrets.yaml=.
+
+Bootstrap once per machine:
+
+#+begin_src sh
+mkdir -p "$HOME/Library/Application Support/sops/age"
+ssh-to-age -private-key -i ~/.ssh/id_agenix -o "$HOME/Library/Application Support/sops/age/keys.txt"
+#+end_src
+
+Edit secrets:
+
+#+begin_src sh
+SOPS_AGE_KEY_FILE="$HOME/Library/Application Support/sops/age/keys.txt" \
+  sops edit hosts/kurogane/secrets.yaml
+#+end_src
+
+Validate decryption:
+
+#+begin_src sh
+SOPS_AGE_KEY_FILE="$HOME/Library/Application Support/sops/age/keys.txt" \
+  sops decrypt --extract '["brave-api-key"]' hosts/kurogane/secrets.yaml
+#+end_src
 
 ** MCP Server Architecture
 
