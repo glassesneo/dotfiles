@@ -39,9 +39,9 @@ nix flake update
 nh clean all --keep 5
 ```
 
-## Secrets Management (Agenix)
-- All secrets encrypted via agenix, centrally managed in @secrets/
-- **Adding new host**: See @secrets/README.md#adding-a-new-host
-- **Adding new secret**: See @secrets/README.md#adding-a-new-secret
-- **Per-host config**: Each host explicitly declares which secrets to export in `hosts/<hostname>/agenix.nix`
-- All hosts can decrypt all secrets; export selection provides granular control
+## Secrets Management (sops-nix)
+- All secrets are encrypted via `sops` and stored in host files (currently `@secrets/kurogane.yaml`)
+- Shared declarations live in `@modules/toplevel/secrets.nix`
+- Host binding lives in `@hosts/kurogane/secrets.nix`
+- Dedicated single-owner secrets are declared in their owning module
+- Consume secrets via `config.sops.secrets.<key>.path`; use per-tool wrappers for env-var-only tools

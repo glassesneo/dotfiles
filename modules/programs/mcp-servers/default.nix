@@ -7,6 +7,7 @@
   nickelLib,
   nodePkgs,
   pkgs,
+  sopsSecretPaths,
   ...
 }:
 delib.module {
@@ -23,16 +24,61 @@ delib.module {
     # Command resolution map: command_id -> executable path
     # Nix handles all path resolution
     nodejs = pkgs.lib.getExe pkgs.nodejs;
+    cat = pkgs.lib.getExe' pkgs.coreutils "cat";
+
+    secretPath = name: sopsSecretPaths.${name} or "/run/secrets/${name}";
+
+    wrappers = {
+      brave-search-mcp = pkgs.writeShellScriptBin "brave-search-mcp-server-wrapped" ''
+        secret_file="${secretPath "brave-api-key"}"
+        if [ ! -r "$secret_file" ]; then
+          echo "Missing readable secret file: $secret_file" >&2
+          exit 1
+        fi
+
+        export BRAVE_API_KEY="$(${cat} "$secret_file")"
+        exec "${nodePackages}/bin/brave-search-mcp-server" "$@"
+      '';
+
+      tavily-mcp = pkgs.writeShellScriptBin "tavily-mcp-wrapped" ''
+        secret_file="${secretPath "tavily-api-key"}"
+        if [ ! -r "$secret_file" ]; then
+          echo "Missing readable secret file: $secret_file" >&2
+          exit 1
+        fi
+
+        export TAVILY_API_KEY="$(${cat} "$secret_file")"
+        exec "${nodePackages}/bin/tavily-mcp" "$@"
+      '';
+
+      morph-fast-apply-mcp = pkgs.writeShellScriptBin "morph-fast-apply-mcp-wrapped" ''
+        secret_file="${secretPath "morph-fast-apply-api-key"}"
+        if [ ! -r "$secret_file" ]; then
+          echo "Missing readable secret file: $secret_file" >&2
+          exit 1
+        fi
+
+        export MORPH_API_KEY="$(${cat} "$secret_file")"
+        exec "${nodePackages}/bin/mcp-server-filesystem" "$@"
+      '';
+    };
+
+    wrapperManagedCommandIds = builtins.attrNames wrappers;
 
     commands = {
-      "brave-search-mcp" = "${nodePackages}/bin/brave-search-mcp-server";
+      "brave-search-mcp" = lib.getExe wrappers."brave-search-mcp";
       "readability-mcp" = "${nodePackages}/lib/node_modules/@mizchi/readability/dist/mcp.js";
-      "tavily-mcp" = "${nodePackages}/bin/tavily-mcp";
+      "tavily-mcp" = lib.getExe wrappers."tavily-mcp";
       "chrome-devtools-mcp" = "${nodePackages}/bin/chrome-devtools-mcp";
-      "morph-fast-apply-mcp" = "${nodePackages}/bin/mcp-server-filesystem";
+      "morph-fast-apply-mcp" = lib.getExe wrappers."morph-fast-apply-mcp";
       "kiri-mcp" = pkgs.lib.getExe' nodePkgs."kiri-mcp-server" "kiri-mcp-server";
       "context7-mcp" = pkgs.lib.getExe inputs.mcp-servers-nix.packages.${host.homeManagerSystem}.context7-mcp;
     };
+
+    withWrapperManagedEnv = server:
+      if builtins.elem (server.command_id or "") wrapperManagedCommandIds
+      then server // {env_keys = {};}
+      else server;
 
     # Command token resolved from commands map, fallback to command_id token
     resolveCommandToken = server: commands.${server.command_id} or server.command_id or "";
@@ -137,7 +183,7 @@ delib.module {
       targetMeta = serverData.targets_meta.${target};
     in
       lib.filterAttrs (name: _: builtins.elem name serverData.enabled.${target})
-      (lib.mapAttrs (mkServer targetMeta) serverData.servers);
+      (lib.mapAttrs (name: server: mkServer targetMeta name (withWrapperManagedEnv server)) serverData.servers);
 
     # Targets that require the context7 side-effect
     # See https://docs.claude.com/en/docs/claude-code/mcp and https://opencode.ai/docs/mcp-servers

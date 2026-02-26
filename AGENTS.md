@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 - `flake.nix`, `flake.lock`, and `modules/` form the declarative backbone. `modules/programs` hosts reusable program configs, `modules/toplevel` covers system-wide options, and `modules/config` wires together host-specific overlays.
-- `var/`, `hosts/`, and `secrets/` hold target-specific data: `hosts/` defines machine metadata, `secrets/` stores age-encrypted keys referenced via `config.age.secrets`, and `var/` keeps generated artifacts.
+- `var/`, `hosts/`, and `secrets/` hold target-specific data: `hosts/` defines machine metadata, `secrets/` stores sops-encrypted host files referenced via `config.sops.secrets`, and `var/` keeps generated artifacts.
 - `node-packages/` manages MCP server npm packages via bun2nix; update `node-packages/package.json`, run `bun install && bun2nix -o bun.nix`, then rebuild.
 
 ## Build, Test, and Development Commands
@@ -16,7 +16,7 @@
 ## Coding Style & Naming Conventions
 - Nix modules use two-space indentation and multi-line attribute sets with `name = value;` blocks. Keep `delib.module` options grouped by category and guard with `ifEnabled` helpers (`home.ifEnabled`, `darwin.ifEnabled`).
 - File names mirror their purpose: `modules/programs/<program>/default.nix` for program modules, `modules/toplevel/<topic>.nix` for cross-cutting concerns, and `hosts/<hostname>.nix` for host-specific overrides.
-- When referencing secrets, use `config.age.secrets.<key>.path` rather than hard-coded values; keep comments concise and functional.
+- When referencing secrets, use `config.sops.secrets.<key>.path` rather than hard-coded values; keep comments concise and functional.
 
 ## Testing Guidelines
 - Primary framework is the Nix flake check suite (`nix flake check`). Run locally after modifying modules or dependencies.
@@ -28,5 +28,5 @@
 - Pull requests should include a brief summary, testing steps (or `nix flake check` status), any relevant issue links, and screenshots only when the change affects user-visible UI.
 
 ## Secrets & Configuration Tips
-- Modify `secrets/*.age` with `agenix` and commit only the encrypted blobs; avoid plaintext keys.
+- Modify host secret files with `sops` (for example `secrets/kurogane.yaml`) and commit only encrypted blobs; avoid plaintext keys.
 - Keep MCP server credentials in `secrets/` and reference them through environment variables defined in `modules/toplevel/secrets.nix`.

@@ -2,6 +2,7 @@
   delib,
   llm-agents,
   pkgs,
+  sopsSecretPaths,
   ...
 }:
 delib.module {
@@ -9,10 +10,28 @@ delib.module {
 
   options = delib.singleEnableOption true;
 
-  home.ifEnabled = {
+  home.ifEnabled = let
+    cat = pkgs.lib.getExe' pkgs.coreutils "cat";
+    secretPath = name: sopsSecretPaths.${name} or "/run/secrets/${name}";
+
+    claudeCodeWrapped = pkgs.symlinkJoin {
+      name = "claude-code-wrapped";
+      paths = [llm-agents.claude-code];
+      nativeBuildInputs = [pkgs.makeWrapper];
+      postBuild = ''
+        for bin in "$out/bin/claude" "$out/bin/claude-code"; do
+          if [ -f "$bin" ]; then
+            wrapProgram "$bin" \
+              --run 'if [ ! -r "${secretPath "claude-code-oauth-token"}" ]; then echo "Missing readable secret file: ${secretPath "claude-code-oauth-token"}" >&2; exit 1; fi' \
+              --run 'export CLAUDE_CODE_OAUTH_TOKEN="$(${cat} "${secretPath "claude-code-oauth-token"}")"'
+          fi
+        done
+      '';
+    };
+  in {
     programs.claude-code = {
       enable = true;
-      package = llm-agents.claude-code;
+      package = claudeCodeWrapped;
       settings = {
         permissions = {
           allow = [

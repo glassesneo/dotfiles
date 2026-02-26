@@ -2,6 +2,7 @@
 
 ## Secrets Management
 
-- All secrets are encrypted via agenix and referenced as `config.age.secrets.<key>.path`.
-- **NEVER** hardcode secrets anywhere; wire secrets in @hosts/kurogane/agenix.nix.
-- Encrypted blobs live in: @secrets/
+- All shared secrets are declared in @modules/toplevel/secrets.nix and referenced as `config.sops.secrets.<key>.path`.
+- Host default secret files are bound in @hosts/kurogane/secrets.nix.
+- **NEVER** hardcode secrets or plaintext values.
+- Encrypted blobs live in @secrets/ (currently `secrets/kurogane.yaml`).

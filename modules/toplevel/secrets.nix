@@ -1,0 +1,45 @@
+{
+  config,
+  delib,
+  inputs,
+  lib,
+  moduleSystem,
+  ...
+}:
+delib.module {
+  name = "toplevel.secrets";
+
+  myconfig.always.args.shared.sopsSecretPaths =
+    if moduleSystem == "darwin"
+    then lib.mapAttrs (_: secret: secret.path) config.sops.secrets
+    else {};
+
+  darwin.always = {myconfig, ...}: let
+    username = myconfig.constants.username;
+    userSecrets = [
+      "claude-code-oauth-token"
+      "gemini-api-key"
+      "ai-mop-api-key"
+      "brave-api-key"
+      "openrouter-api-key"
+      "tavily-api-key"
+      "hf-inference-api-key"
+      "cerebras-api-key"
+      "morph-fast-apply-api-key"
+      "io-intelligence-api-key"
+      "google-cloud-api-key"
+    ];
+
+    mkUserSecret = _: {
+      owner = username;
+      mode = "0400";
+    };
+  in {
+    imports = [inputs.sops-nix.darwinModules.sops];
+
+    sops = {
+      age.keyFile = "/Users/${username}/Library/Application Support/sops/age/keys.txt";
+      secrets = lib.genAttrs userSecrets mkUserSecret;
+    };
+  };
+}

@@ -2,6 +2,7 @@
   delib,
   llm-agents,
   pkgs,
+  sopsSecretPaths,
   ...
 }:
 delib.module {
@@ -9,10 +10,28 @@ delib.module {
 
   options = delib.singleEnableOption true;
 
-  home.ifEnabled = {
+  home.ifEnabled = let
+    cat = pkgs.lib.getExe' pkgs.coreutils "cat";
+    secretPath = name: sopsSecretPaths.${name} or "/run/secrets/${name}";
+
+    codexWrapped = pkgs.symlinkJoin {
+      name = "codex-wrapped";
+      paths = [llm-agents.codex];
+      nativeBuildInputs = [pkgs.makeWrapper];
+      postBuild = ''
+        wrapProgram $out/bin/codex \
+          --run 'if [ ! -r "${secretPath "openrouter-api-key"}" ]; then echo "Missing readable secret file: ${secretPath "openrouter-api-key"}" >&2; exit 1; fi' \
+          --run 'if [ ! -r "${secretPath "cerebras-api-key"}" ]; then echo "Missing readable secret file: ${secretPath "cerebras-api-key"}" >&2; exit 1; fi' \
+          --run 'if [ ! -r "${secretPath "ai-mop-api-key"}" ]; then echo "Missing readable secret file: ${secretPath "ai-mop-api-key"}" >&2; exit 1; fi' \
+          --run 'export OPENROUTER_API_KEY="$(${cat} "${secretPath "openrouter-api-key"}")"' \
+          --run 'export CEREBRAS_API_KEY="$(${cat} "${secretPath "cerebras-api-key"}")"' \
+          --run 'export AI_MOP_API_KEY="$(${cat} "${secretPath "ai-mop-api-key"}")"'
+      '';
+    };
+  in {
     programs.codex = {
       enable = true;
-      package = llm-agents.codex;
+      package = codexWrapped;
       custom-instructions = builtins.readFile ./INSTRUCTIONS.md;
       settings = {
         model_providers = {

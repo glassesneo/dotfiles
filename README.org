@@ -17,7 +17,7 @@ Denix auto-discovers all =.nix= files under =hosts/= and =modules/=, so new file
 
 - *System configuration* via nix-darwin and Home Manager
 - *Modular architecture* with Denix auto-discovery from =hosts/= and =modules/=
-- *Secret management* via [[https://github.com/ryantm/agenix][agenix]] and =config.age.secrets.<key>.path=
+- *Secret management* via [[https://github.com/Mic92/sops-nix][sops-nix]] and =config.sops.secrets.<key>.path=
 - *Homebrew integration* via [[https://github.com/BatteredBunny/brew-nix][brew-nix]]
 - *AI tooling* with MCP servers
 - *Desktop environment* with AeroSpace, SketchyBar, and Borders
@@ -132,7 +132,7 @@ nh clean profile <profile-path> --keep 5
 │   └── toplevel/          # System-wide settings
 ├── node2nix/              # Node.js package definitions
 ├── org_spec.org           # Org-mode spec notes
-└── secrets/               # Encrypted secrets (agenix)
+└── secrets/               # Encrypted secrets (sops)
 #+end_example
 
 ** Key Directories
@@ -169,7 +169,7 @@ User metadata is centralized in =modules/config/constants.nix= and referenced as
 
 ** Secrets
 
-Secrets are defined via agenix and referenced as =config.age.secrets.<key>.path=. Environment wiring is handled in =modules/toplevel/secrets.nix=.
+Secrets are defined via sops-nix and referenced as =config.sops.secrets.<key>.path=. Shared declarations live in =modules/toplevel/secrets.nix=, with host binding in =hosts/kurogane/secrets.nix=.
 
 ** MCP Server Architecture
 

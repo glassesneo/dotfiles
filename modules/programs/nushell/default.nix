@@ -2,6 +2,7 @@
   delib,
   lib,
   pkgs,
+  sopsSecretPaths,
   ...
 }:
 delib.module {
@@ -16,6 +17,8 @@ delib.module {
       # "skim"
       "query"
     ];
+
+    secretPath = name: sopsSecretPaths.${name} or "/run/secrets/${name}";
   in {
     xdg.configFile = {
       "nushell/completions" = {
@@ -46,12 +49,37 @@ delib.module {
         $env.PATH ++= [
           ${lib.strings.concatMapStrings plugin_dir plugin_names}
         ]
+
+        if ("${secretPath "ai-mop-api-key"}" | path exists) {
+          $env.AI_MOP_API_KEY = (open "${secretPath "ai-mop-api-key"}" | str trim)
+        }
+
+        if ("${secretPath "iniad-id"}" | path exists) {
+          $env.INIAD_ID = (open "${secretPath "iniad-id"}" | str trim)
+        }
+
+        if ("${secretPath "iniad-password"}" | path exists) {
+          $env.INIAD_PASSWORD = (open "${secretPath "iniad-password"}" | str trim)
+        }
       '';
       settings = {
         show_banner = false;
         completions = {
           case_sensitive = true;
         };
+      };
+    };
+  };
+
+  darwin.ifEnabled = {myconfig, ...}: {
+    sops.secrets = {
+      iniad-id = {
+        owner = myconfig.constants.username;
+        mode = "0400";
+      };
+      iniad-password = {
+        owner = myconfig.constants.username;
+        mode = "0400";
       };
     };
   };
