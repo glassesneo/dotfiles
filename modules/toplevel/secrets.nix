@@ -22,12 +22,10 @@ delib.module {
       "ai-mop-api-key"
       "brave-api-key"
       "openrouter-api-key"
-      "tavily-api-key"
-      "hf-inference-api-key"
       "cerebras-api-key"
       "morph-fast-apply-api-key"
-      "io-intelligence-api-key"
       "google-cloud-api-key"
+      "zai-api-key"
     ];
 
     mkUserSecret = _: {
