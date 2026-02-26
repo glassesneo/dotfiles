@@ -2,12 +2,10 @@
   delib,
   host,
   homeConfig,
+  lib,
   ...
 }:
 # desktoppr: macOS wallpaper utility
-# Note: Wallpaper support via fetchurl in rice options causes infinite recursion.
-# Use flake inputs, local files, or direct home.file config in rices instead.
-#
 # WORKAROUND: home-manager's desktoppr module writes to the wrong preference domain
 # ("desktoppr" instead of "com.scriptingosx.desktoppr"). We fix this by copying
 # the settings to the correct domain.
@@ -18,14 +16,27 @@ delib.module {
   options = delib.singleEnableOption host.guiShellFeatured;
 
   home.ifEnabled = {
+    myconfig,
+    cfg,
+    ...
+  }: let
+    wallpaperSet = myconfig.wallpaper != null;
+    moduleEnabled = cfg.enable && wallpaperSet;
+  in {
     programs.desktoppr = {
-      enable = true;
-      settings.setOnlyOnce = false;
+      enable = moduleEnabled;
+      settings = {
+        setOnlyOnce = false;
+      }
+        // lib.optionalAttrs wallpaperSet {
+          picture = myconfig.wallpaper;
+        };
     };
 
     # Fix: home-manager writes to "desktoppr" but the tool reads from
     # "com.scriptingosx.desktoppr". Mirror the settings to the correct domain.
-    targets.darwin.defaults."com.scriptingosx.desktoppr" =
-      homeConfig.programs.desktoppr.settings;
+    targets.darwin.defaults = lib.optionalAttrs moduleEnabled {
+      "com.scriptingosx.desktoppr" = homeConfig.programs.desktoppr.settings;
+    };
   };
 }

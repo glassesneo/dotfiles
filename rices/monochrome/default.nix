@@ -1,72 +1,57 @@
 {
+  config,
   delib,
   inputs,
   ...
 }: let
-  # Monochrome palette with pink accent (based on image)
-  colors = {
-    # Base backgrounds
-    base00 = "#1a1a1a"; # Background
-    base01 = "#252525"; # Lighter background (status bars)
-    base02 = "#303030"; # Selection background
-    base03 = "#505050"; # Comments, invisibles
-    base04 = "#6c7891"; # Dark foreground (status bars)
-    base05 = "#abb2bf"; # Default foreground
-    base06 = "#c0c0c0"; # Light foreground
-    base07 = "#e0e0e0"; # Lightest foreground
-
-    # Accent colors - pink/magenta for keywords, rest monochrome
-    base08 = "#e06c75"; # Pink - Variables, XML Tags, Markup Link Text
-    base09 = "#a0a0a0"; # Gray - Integers, Boolean, Constants
-    base0A = "#a0a0a0"; # Gray - Classes, Markup Bold
-    base0B = "#a0a0a0"; # Gray - Strings, Inherited Class
-    base0C = "#a0a0a0"; # Gray - Support, Regular Expressions
-    base0D = "#a0a0a0"; # Gray - Functions, Methods
-    base0E = "#e06c75"; # Pink - Keywords, Storage, Selector
-    base0F = "#a0a0a0"; # Gray - Deprecated, Embedded
-  };
+  colors = config.myconfig.colorschemes.monochrome;
+  colorschemeLib = config.myconfig.args.shared.colorschemeLib;
+  argb = colorschemeLib.toArgb "ff";
 in
   delib.rice {
     name = "monochrome";
     inherits = ["laptop"];
 
+    myconfig.colorscheme = config.myconfig.colorschemes.monochrome;
+    myconfig.wallpaper = inputs.various-wallpapers + "/onedark/J0FZ3V.jpg";
+
     myconfig.services.sketchybar = {
       # datetimeFontOverride = "Iosevka:Regular:16";
       colors = {
         # Bar and text colors
-        bar_background = "0xff1a1a1a"; # base00 - Background
-        text_primary = "0xffabb2bf"; # base05 - Default foreground
-        text_muted = "0xff6c7891"; # base04 - Dark foreground
+        bar_background = argb colors.base00;
+        text_primary = argb colors.base05;
+        text_muted = argb colors.base04;
 
         # Workspace colors
-        workspace_active = "0xffe06c75"; # base08 - Pink accent
+        workspace_active = argb colors.base08;
 
         # Surface and popup colors
-        surface_background = "0xff252525"; # base01 - Lighter background
-        popup_background = "0xff303030"; # base02 - Selection background
-        popup_border = "0xffabb2bf"; # base05 - Default foreground
+        surface_background = argb colors.base01;
+        popup_background = argb colors.base02;
+        popup_border = argb colors.base05;
 
         # Accent colors
-        accent_datetime = "0xffabb2bf"; # base05 - Default foreground
+        accent_datetime = argb colors.base05;
 
         # Status colors
-        status_error = "0xffe06c75"; # base08 - Pink
-        status_warning = "0xffabb2bf"; # base05 - Light gray
-        status_caution = "0xffa0a0a0"; # base09 - Medium gray
-        status_success = "0xffabb2bf"; # base05 - Light gray
-        status_charging = "0xffd4a020"; # Darker gold
+        status_error = argb colors.base08;
+        status_warning = argb colors.base05;
+        status_caution = argb colors.base09;
+        status_success = argb colors.base05;
+        status_charging = argb colors.base0A;
 
         # App-specific icon colors - these stay colorful even in monochrome
-        app_arc = "0xfff5bde6"; # Pink
-        app_ghostty = "0xff8aadf4"; # Blue
-        app_obsidian = "0xffc6a0f6"; # Purple/Mauve
-        app_kitty = "0xfff0c6c6"; # Flamingo/Coral
+        app_arc = argb colors.base08;
+        app_ghostty = argb colors.base0D;
+        app_obsidian = argb colors.base0E;
+        app_kitty = argb colors.base0F;
 
         # CPU graph colors - grayscale gradient from dark to light
-        cpu_low = "0xff606060"; # Dark gray
-        cpu_medium = "0xff808080"; # Medium gray
-        cpu_high = "0xffa0a0a0"; # Light gray
-        cpu_critical = "0xffe06c75"; # Pink accent for critical
+        cpu_low = argb colors.base03;
+        cpu_medium = argb colors.base04;
+        cpu_high = argb colors.base09;
+        cpu_critical = argb colors.base08;
       };
       # Transparent outer bar background
       bar.color = "0x00000000"; # Fully transparent
@@ -131,11 +116,6 @@ in
 
     home = {
       programs = {
-        desktoppr = {
-          settings = {
-            picture = "${inputs.various-wallpapers}/onedark/J0FZ3V.jpg";
-          };
-        };
         nixvim = {
           colorschemes.base16 = {
             enable = true;

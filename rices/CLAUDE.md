@@ -31,3 +31,11 @@ myconfig.programs.vim.colorscheme = {
 **Key files**: `modules/programs/vim/default.nix`, `modules/programs/tmux/default.nix`, `rices/*.nix`
 
 **Validation**: Modules assert plugin names exist in `pkgs.*Plugins` with helpful error messages.
+
+## Theme Selection Responsibilities
+
+Rices now select theme data instead of owning palette definitions:
+
+- Set active scheme with `myconfig.colorscheme = config.myconfig.colorschemes.<name>`.
+- Set wallpaper with `myconfig.wallpaper = <path>;`.
+- Do not write `home.programs.desktoppr.settings.picture` in rice files; `modules/programs/desktoppr/default.nix` owns that wiring.

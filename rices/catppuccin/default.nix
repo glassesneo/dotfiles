@@ -1,9 +1,13 @@
 {
+  config,
   delib,
   inputs,
   ...
 }: let
   flavor = "macchiato";
+  colors = config.myconfig.colorschemes.catppuccin;
+  colorschemeLib = config.myconfig.args.shared.colorschemeLib;
+  argb = colorschemeLib.toArgb "ff";
 in
   delib.rice {
     name = "catppuccin";
@@ -20,11 +24,6 @@ in
         tmux.enable = false;
       };
       programs = {
-        desktoppr = {
-          settings = {
-            picture = ./catppuccin.png;
-          };
-        };
         ghostty = {
           settings = {
             background-opacity = 0.4;
@@ -108,9 +107,12 @@ in
       };
     };
     myconfig = {
+      colorscheme = colors;
+      wallpaper = ./catppuccin.png;
+
       services = {
         jankyborders = {
-          active_color = "0xffc6a0f6"; # mauve
+          active_color = argb colors.base0E;
           inactive_color = "0x00000000"; # transparent
           style = "square";
           width = 10.0;
@@ -119,39 +121,39 @@ in
         sketchybar = {
           colors = {
             # Bar and text colors
-            bar_background = "0xff181926"; # crust
-            text_primary = "0xffcad3f5"; # text
-            text_muted = "0xff939ab7"; # overlay2
+            bar_background = argb colors.base00;
+            text_primary = argb colors.base05;
+            text_muted = argb colors.base04;
 
             # Workspace colors
-            workspace_active = "0xffed8796"; # red
+            workspace_active = argb colors.base08;
 
             # Surface and popup colors
-            surface_background = "0xff363a4f"; # surface0
-            popup_background = "0xff1e2030"; # mantle
-            popup_border = "0xff939ab7"; # overlay2
+            surface_background = argb colors.base02;
+            popup_background = argb colors.base01;
+            popup_border = argb colors.base04;
 
             # Accent colors
-            accent_datetime = "0xff91d7e3"; # sky
+            accent_datetime = argb colors.base0C;
 
             # Status colors
-            status_error = "0xffed8796"; # red
-            status_warning = "0xffeed49f"; # yellow
-            status_caution = "0xfff5a97f"; # peach
-            status_success = "0xffa6da95"; # green
-            status_charging = "0xffd4a84a"; # darker golden yellow
+            status_error = argb colors.base08;
+            status_warning = argb colors.base0A;
+            status_caution = argb colors.base09;
+            status_success = argb colors.base0B;
+            status_charging = argb colors.base09;
 
             # App-specific icon colors
-            app_arc = "0xfff5bde6"; # pink
-            app_ghostty = "0xff8aadf4"; # blue
-            app_obsidian = "0xffc6a0f6"; # mauve
-            app_kitty = "0xfff0c6c6"; # flamingo
+            app_arc = argb colors.base06;
+            app_ghostty = argb colors.base0D;
+            app_obsidian = argb colors.base0E;
+            app_kitty = argb colors.base0F;
 
             # CPU graph colors by usage level
-            cpu_low = "0xffa6da95"; # green
-            cpu_medium = "0xffeed49f"; # yellow
-            cpu_high = "0xfff5a97f"; # peach
-            cpu_critical = "0xffed8796"; # red
+            cpu_low = argb colors.base0B;
+            cpu_medium = argb colors.base0A;
+            cpu_high = argb colors.base09;
+            cpu_critical = argb colors.base08;
           };
           # Bar appearance - uses default bar_background color
           bar.color = "";
@@ -181,8 +183,8 @@ in
           set -g status-left-length 100
           set -g status-left ""
           set -g status-right "#{E:@catppuccin_status_session}"
-          set -g popup-style "bg=default,fg=#cad3f5"
-          set -g popup-border-style "fg=#c6a0f6"
+          set -g popup-style "bg=default,fg=${colors.base05}"
+          set -g popup-border-style "fg=${colors.base0E}"
         '';
       };
     };

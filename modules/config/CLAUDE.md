@@ -5,6 +5,18 @@
 User metadata is centralized in @modules/config/constants.nix.
 Use `constants.username`, `constants.userfullname`, `constants.useremail` instead of literals.
 
+## Colorscheme Registry
+
+Theme palettes are owned by `@modules/config/colorschemes/`.
+
+- Registry option: `myconfig.colorschemes`
+- Active selection: `myconfig.colorscheme`
+- Shared export for consumers: `myconfig.always.args.shared.colorscheme`
+- Wallpaper handoff: `myconfig.wallpaper` (consumed by `modules/programs/desktoppr`)
+
+Add/update palette files under `@modules/config/colorschemes/schemes/*.nix`.
+Keep values as pure data (`#RRGGBB` + `polarity`), and keep cross-module package logic out of this directory.
+
 ## Kiri Wrapper
 
 Kiri MCP uses a wrapper to avoid tree-sitter download issues, implemented in:
