@@ -15,9 +15,7 @@ Full Neovim configuration via nixvim. Module name: `programs.nixvim`.
 ## Shared Conventions (helpers.nix)
 
 - `nixvimConventions` is exposed via `myconfig.always.args.shared.nixvimConventions` and available as a function arg in all modules.
-- **Keymap ownership matrix** (`keymapOwnership.smartPicker`, `.grep`, `.explorer`): Resolves contested keys (`<Space><Space>`, `<Space>g`, `<Space>f`) to a single owner based on enabled plugins. Priority: snacks > fzf-lua/oil > null.
 - **Capability contracts** (`capabilities.hasIncRename`, `.hasCodeCompanion`): Boolean flags consumed by `ui.nix` and `img-clip.nix` instead of direct cross-plugin option reads.
-- **IMPORTANT**: When adding new contested keymaps or cross-plugin dependencies, extend `helpers.nix` rather than reading `homeConfig.programs.nixvim.plugins.*` directly.
 
 ## Plugin Organization
 
@@ -48,7 +46,7 @@ Full Neovim configuration via nixvim. Module name: `programs.nixvim`.
 ## Key Keymaps
 
 - Leader: `<Space>`
-- `<Space><Space>` smart picker, `<Space>g` grep, `<Space>f` explorer — ownership determined by `nixvimConventions.keymapOwnership`
+- `<Space><Space>` smart picker, `<Space>g` grep, `<Space>f` explorer — provided by snacks.nvim
 - `jj` escape in insert mode
 - `<C-j>` SKK (Japanese input) enable
 

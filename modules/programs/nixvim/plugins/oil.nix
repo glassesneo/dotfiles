@@ -1,11 +1,4 @@
-{
-  delib,
-  nixvimConventions,
-  ...
-}:
-let
-  owns = nixvimConventions.keymapOwnership;
-in
+{delib, ...}:
 delib.module {
   name = "programs.nixvim.plugins.oil";
 
@@ -47,23 +40,5 @@ delib.module {
         };
       };
     };
-    keymaps = if owns.explorer == "oil" then [
-      {
-        # action = "<Cmd>Oil<CR>";
-        action.__raw = ''
-          function()
-            local oil = require("oil")
-            local util = require("oil.util")
-            oil.open()
-            util.run_after_load(0, function()
-              oil.open_preview({
-                split = "botright",
-              })
-            end)
-          end
-        '';
-        key = "<Space>f";
-      }
-    ] else [];
   };
 }

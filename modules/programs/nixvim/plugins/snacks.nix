@@ -1,11 +1,4 @@
-{
-  delib,
-  nixvimConventions,
-  ...
-}:
-let
-  owns = nixvimConventions.keymapOwnership;
-in
+{delib, ...}:
 delib.module {
   name = "programs.nixvim.plugins.snacks";
 
@@ -101,20 +94,22 @@ delib.module {
         };
       };
     };
-    keymaps = [
+    keymaps =
+      [
       {
         action.__raw = "Snacks.bufdelete.delete";
         key = "<Space><CR>";
       }
-    ] ++ (if owns.smartPicker == "snacks" then [{
+      {
         action.__raw = "Snacks.picker.smart";
         key = "<Space><Space>";
-      }] else [])
-    ++ (if owns.grep == "snacks" then [{
+      }
+      {
         action.__raw = "Snacks.picker.grep";
         key = "<Space>g";
-      }] else [])
-    ++ [
+      }
+      ]
+      ++ [
       {
         action.__raw = "Snacks.picker.pickers";
         key = "<Space><C-p>";
@@ -127,9 +122,10 @@ delib.module {
         action.__raw = "Snacks.picker.lsp_symbols";
         key = "<Space><C-l>";
       }
-    ] ++ (if owns.explorer == "snacks" then [{
+      {
         action.__raw = "Snacks.picker.explorer";
         key = "<Space>f";
-      }] else []);
+      }
+      ];
   };
 }
