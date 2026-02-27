@@ -26,7 +26,7 @@ options.programs.vim.colorscheme = {
   - Builds shared plugin packages (`dppShared.dppPluginPkgs`)
   - Compiles generated TOMLs (`dppShared.pluginTomls`)
   - Exposes shared hook sources (`dppShared.sharedHookSources.skkVim`)
-- Plugin definitions come from shared Nickel specs in `modules/programs/nixvim/plugins/dpp/plugins/`, with editor/host guards (for example `if = "has('nvim')"`) so one spec set can serve Vim and Neovim.
+- Plugin definitions are Nix attrsets in `modules/config/dpp-shared.nix` (`editingPlugins`, `motionPlugins`, `skkPlugins`, `ddcPlugins`), with editor guards (e.g., `"if" = "has('nvim')"`) so one data set serves both Vim and Neovim.
 - **Vim-specific bootstrap**: `modules/programs/vim/default.nix`
   - Owns Vim loader setup (`setup-dpp.vim`)
   - Owns Vim environment wiring (`$DPP_HOOK_DIR`) and runtimepath wiring

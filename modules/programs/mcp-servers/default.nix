@@ -4,7 +4,6 @@
   inputs,
   lib,
   nodePackages,
-  nickelLib,
   nodePkgs,
   pkgs,
   sopsSecretPaths,
@@ -18,8 +17,181 @@ delib.module {
   };
 
   home.ifEnabled = let
-    # Import server data from Nickel (single source of truth)
-    serverData = nickelLib.importNickel "mcp-servers/main.ncl";
+    # Nix-native server data (migrated from nickel/mcp-servers/servers.ncl)
+    servers = {
+      brave-search = {
+        command_id = "brave-search-mcp";
+        args = [];
+        env_keys = {BRAVE_API_KEY = "BRAVE_API_KEY";};
+        env_static = {};
+        needs_node = false;
+      };
+      deepwiki = {
+        url = "https://mcp.deepwiki.com/mcp";
+        args = [];
+        env_keys = {};
+        env_static = {};
+        needs_node = false;
+      };
+      readability = {
+        command_id = "readability-mcp";
+        args = [];
+        env_keys = {};
+        env_static = {};
+        needs_node = true;
+      };
+      tavily = {
+        command_id = "tavily-mcp";
+        args = [];
+        env_keys = {TAVILY_API_KEY = "TAVILY_API_KEY";};
+        env_static = {};
+        needs_node = false;
+      };
+      chrome-devtools = {
+        command_id = "chrome-devtools-mcp";
+        args = [];
+        env_keys = {};
+        env_static = {};
+        needs_node = false;
+      };
+      morph-fast-apply = {
+        command_id = "morph-fast-apply-mcp";
+        args = [];
+        env_keys = {MORPH_API_KEY = "MORPH_API_KEY";};
+        env_static = {ALL_TOOLS = "false";};
+        needs_node = false;
+      };
+      kiri = {
+        command_id = "kiri-mcp";
+        args = ["--repo" "." "--db" ".kiri/index.duckdb" "--watch"];
+        env_keys = {};
+        env_static = {};
+        needs_node = false;
+      };
+      codex = {
+        command_id = "codex-mcp";
+        args = ["mcp-server"];
+        env_keys = {};
+        env_static = {};
+        needs_node = false;
+      };
+      context7 = {
+        command_id = "context7-mcp";
+        args = [];
+        env_keys = {};
+        env_static = {};
+        needs_node = false;
+      };
+    };
+
+    # Which servers are enabled per target (migrated from nickel/mcp-servers/servers.ncl)
+    enabled = {
+      claude_code = [
+        "brave-search"
+        "deepwiki"
+        "readability"
+        "morph-fast-apply"
+        "kiri"
+        "codex"
+        "context7"
+      ];
+      claude_desktop = [
+        "brave-search"
+        "readability"
+        "chrome-devtools"
+        "context7"
+      ];
+      codex = [
+        "brave-search"
+        "deepwiki"
+        "readability"
+        "chrome-devtools"
+        "morph-fast-apply"
+        "kiri"
+        "context7"
+      ];
+      opencode = [
+        "brave-search"
+        "deepwiki"
+        "readability"
+        "kiri"
+        "context7"
+      ];
+    };
+
+    # Target adapter metadata (migrated from nickel/mcp-servers/targets.ncl)
+    claudeMeta = {
+      env_syntax_mode = "dollar_braces";
+      env_field_name = "env";
+      static_env_field_name = "env";
+      url_type_policy = "sse";
+      local_type_policy = null;
+      command_list_behavior = false;
+    };
+
+    targetsMeta = {
+      claude_code = claudeMeta;
+      claude_desktop = claudeMeta;
+      codex = {
+        env_syntax_mode = "raw";
+        env_field_name = "env_vars";
+        static_env_field_name = "env";
+        url_type_policy = null;
+        local_type_policy = null;
+        command_list_behavior = false;
+      };
+      opencode = {
+        env_syntax_mode = "braces_env_colon";
+        env_field_name = "environment";
+        static_env_field_name = "environment";
+        url_type_policy = "remote";
+        local_type_policy = "local";
+        command_list_behavior = true;
+      };
+    };
+
+    # Nix assertions replacing nickel/mcp-servers/schema.ncl + validate.ncl
+    requiredTargets = ["claude_code" "claude_desktop" "codex" "opencode"];
+    serverNames = builtins.attrNames servers;
+
+    serverValidationAssertions = lib.flatten [
+      # Each server must define exactly one of url or command_id
+      (lib.mapAttrsToList (name: server: {
+        assertion = (server ? url) != (server ? command_id);
+        message = "MCP server `${name}` must define exactly one of `url` or `command_id` (found ${
+          if (server ? url) && (server ? command_id)
+          then "both"
+          else "neither"
+        }).";
+      })
+      servers)
+
+      # All required targets must be present in enabled
+      (map (target: {
+        assertion = builtins.hasAttr target enabled;
+        message = "MCP enabled is missing required target key `${target}`.";
+      })
+      requiredTargets)
+
+      # Enabled server references must point to known servers
+      (lib.flatten (map (target:
+          lib.optional (builtins.hasAttr target enabled) (
+            map (serverName: {
+              assertion = builtins.elem serverName serverNames;
+              message = "MCP enabled.${target} references unknown server `${serverName}`.";
+            })
+            enabled.${target}
+          ))
+        requiredTargets))
+
+      # needs_node = true requires command_id
+      (lib.flatten (lib.mapAttrsToList (name: server:
+          lib.optional server.needs_node {
+            assertion = server ? command_id;
+            message = "MCP server `${name}` has needs_node = true but does not define `command_id`.";
+          })
+        servers))
+    ];
 
     # Command resolution map: command_id -> executable path
     # Nix handles all path resolution
@@ -95,7 +267,7 @@ delib.module {
       then [(resolveCommandToken server)] ++ server.args
       else server.args;
 
-    commandBasedServers = lib.filterAttrs (_: server: server ? command_id) serverData.servers;
+    commandBasedServers = lib.filterAttrs (_: server: server ? command_id) servers;
 
     commandAssertions = lib.flatten (
       lib.mapAttrsToList (
@@ -180,10 +352,10 @@ delib.module {
         // mkEnvFields targetMeta server;
 
     mkServersForTarget = target: let
-      targetMeta = serverData.targets_meta.${target};
+      targetMeta = targetsMeta.${target};
     in
-      lib.filterAttrs (name: _: builtins.elem name serverData.enabled.${target})
-      (lib.mapAttrs (name: server: mkServer targetMeta name (withWrapperManagedEnv server)) serverData.servers);
+      lib.filterAttrs (name: _: builtins.elem name enabled.${target})
+      (lib.mapAttrs (name: server: mkServer targetMeta name (withWrapperManagedEnv server)) servers);
 
     # Targets that require the context7 side-effect
     # See https://docs.claude.com/en/docs/claude-code/mcp and https://opencode.ai/docs/mcp-servers
@@ -203,7 +375,7 @@ delib.module {
     codex-servers = mkTargetConfig "codex";
     opencode-servers = mkTargetConfig "opencode";
   in {
-    assertions = commandAssertions;
+    assertions = commandAssertions ++ serverValidationAssertions;
     home.file = {
       # "${homeConfig.xdg.configHome}/mcphub/servers.json".source = inputs.mcp-servers-nix.lib.mkConfig pkgs mcphub-servers;
       "Library/Application Support/Claude/claude_desktop_config.json".source = inputs.mcp-servers-nix.lib.mkConfig pkgs claude-desktop-servers;

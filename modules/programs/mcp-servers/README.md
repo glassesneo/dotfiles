@@ -1,24 +1,21 @@
 # MCP servers ownership boundaries
 
-This module splits MCP responsibilities between Nickel data modeling and Nix runtime wiring.
+This module keeps MCP server data and runtime wiring in a single Nix file.
 
 ## Ownership model
 
-- Nickel owns validated MCP server data and target metadata:
-  - `nickel/mcp-servers/servers.ncl`
-  - `nickel/mcp-servers/targets.ncl`
-  - `nickel/mcp-servers/schema.ncl`
-  - `nickel/mcp-servers/validate.ncl`
-  - `nickel/mcp-servers/main.ncl`
-- Nix owns command resolution, executable paths, env interpolation, and final module wiring:
+- Nix owns all MCP server data, target metadata, validation assertions, and runtime wiring:
   - `modules/programs/mcp-servers/default.nix`
 
 ## Practical rule
 
-- Add or adjust server/target metadata in Nickel first.
-- Keep path resolution and per-host executable details in Nix.
-- Do not move command resolution logic into Nickel.
+- Add or adjust server/target metadata directly in `modules/programs/mcp-servers/default.nix`:
+  - `servers` attrset: per-server config (command_id/url, args, env_keys, env_static, needs_node)
+  - `enabled` attrset: list of enabled server names per target
+  - `targetsMeta` attrset: per-target adapter config (env format, type policies, command behavior)
+- Keep path resolution and per-host executable details in the same file.
 
 ## Notes
 
-- `nickel/packages/node.ncl` is informational only and is not part of the active Node packaging pipeline (`node-packages/` via bun2nix).
+- Validation assertions (url xor command_id, required targets, enabled-server references, needs_node rules) are enforced as Nix assertions in the same file.
+- `nickel/packages/node.ncl` is informational only and is not part of any active pipeline.

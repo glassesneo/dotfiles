@@ -23,8 +23,7 @@ Full Neovim configuration via nixvim. Module name: `programs.nixvim`.
 - **DPP (Denops plugin manager)**: keeps plugin declaration, compile, and runtime loading concerns intentionally separated.
   - Shared core layer: `modules/config/dpp-shared.nix` provides shared plugin packages (`dppShared.dppPluginPkgs`), generated TOMLs (`dppShared.pluginTomls`), and shared hook sources (`dppShared.sharedHookSources.skkVim`).
   - Neovim bootstrap ownership: `modules/programs/nixvim/plugins/dpp/default.nix` owns Neovim setup (`setup-dpp.lua`), environment wiring, and Neovim cache/state paths.
-  - Plugin definitions come from shared Nickel specs in `modules/programs/nixvim/plugins/dpp/plugins/` (`{editing,motion,skk}.ncl`) with contract validation in `plugins_contract.ncl`.
-  - Regenerate helper (optional/manual): `nix develop -c bash plugins/dpp/regenerate-toml.sh`
+  - Plugin definitions are Nix attrsets in `modules/config/dpp-shared.nix` (`editingPlugins`, `motionPlugins`, `skkPlugins`, `ddcPlugins`).
   - SKK hook source is shared from `dppShared.sharedHookSources.skkVim`; Neovim-specific Lua behavior stays in Neovim-owned hooks or inline Lua blocks.
   - Cache/state path remains `~/.cache/dpp` (separate from Vim `~/.cache/vim-dpp`). Commands: `:DppInstall`, `:DppUpdate`, `:DppClearState`.
 - **Completion**: blink-cmp with LSP, path, buffer, ripgrep, copilot, snippets, git sources.

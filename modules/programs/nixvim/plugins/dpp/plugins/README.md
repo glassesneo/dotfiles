@@ -1,22 +1,24 @@
-# DPP plugin file discovery
+# DPP plugin data
 
-This directory is auto-discovered by both Nix generation and DPP TypeScript loading.
+Plugin data for DPP lives in `modules/config/dpp-shared.nix` as Nix attrsets.
+
+## Plugin lists
+
+- `editingPlugins` — editing utility plugins (nvim-only)
+- `motionPlugins` — motion/search plugins (nvim-only)
+- `skkPlugins` — SKK Japanese input plugins (nvim + vim)
+- `ddcPlugins` — ddc.vim completion stack (vim-only)
+
+## TOML generation
+
+Each list is serialized to a TOML file (`editing.toml`, `motion.toml`, `skk.toml`, `ddc.toml`) using `pkgs.formats.toml.generate`. Nvim excludes `ddc.toml`; Vim includes all.
 
 ## Naming convention
 
-- Source Nickel files must match `^[a-z0-9-]+\.ncl$` to be exported.
-- Generated TOML files must match `^[a-z0-9-]+\.toml$` to be loaded.
-- The generated TOML name is derived from the source Nickel name (`<name>.ncl -> <name>.toml`).
-- TOML files are generated artifacts from Nickel and can be local/untracked.
+- TOML files must match `^[a-z0-9-]+\.toml$` to be loaded by `dpp.ts`.
+- The generated TOML name corresponds to the plugin list name in `dpp-shared.nix`.
 
-## Explicit exclusions
+## Exclusion/inclusion rules
 
-- `plugins_contract.ncl` is always excluded from plugin export.
-- Add non-plugin fixtures/scratch files to explicit exclusion lists in:
-  - `modules/programs/nixvim/plugins/dpp/default.nix`
-  - `modules/programs/nixvim/plugins/dpp/regenerate-toml.sh`
-  - `modules/programs/nixvim/plugins/dpp/dpp.ts` (for TOML loading)
-
-## Warning
-
-If a scratch or temporary file matches the discovery regex, it is treated as a real plugin definition and will be exported/loaded automatically.
+- `nvim`: excludes ddc (controlled in `dpp-shared.nix` — `pluginTomlsNvim` omits `ddcToml`)
+- `vim`: includes all (controlled in `dpp-shared.nix` — `pluginTomlsVim` includes `ddcToml`)

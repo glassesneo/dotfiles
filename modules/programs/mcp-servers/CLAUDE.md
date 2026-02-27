@@ -2,13 +2,12 @@
 
 ## MCP Architecture
 
-Centralized MCP server definitions live in:
-- @modules/programs/mcp-servers/default.nix (Nix glue)
-- @nickel/mcp-servers/servers.ncl (single source of truth for server configs)
+Centralized MCP server definitions live in a single Nix file:
+- @modules/programs/mcp-servers/default.nix (server data, target metadata, validation, and runtime wiring)
 
 Each AI tool uses a separate memory file under `$XDG_DATA_HOME` to prevent conflicts (e.g., `claudecode_memory.json`, `opencode_memory.json`, `crush_memory.json`).
 
-**IMPORTANT**: When adding a new MCP server, add it to `nickel/mcp-servers/servers.ncl`. Do not scatter MCP configs across individual tool modules.
+**IMPORTANT**: When adding a new MCP server, edit `servers` and `enabled` in `modules/programs/mcp-servers/default.nix`. Do not scatter MCP configs across individual tool modules.
 
 ## Secrets
 
