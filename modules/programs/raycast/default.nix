@@ -20,9 +20,10 @@ delib.module {
       config = {
         Label = "com.${host.name}.raycast";
         ProgramArguments = [
-          "/usr/bin/osascript"
-          "-e"
-          "tell application id \"com.raycast.macos\" to launch"
+          "/usr/bin/open"
+          "-g"
+          "-a"
+          "${pkgs.raycast}/Applications/Raycast.app"
         ];
         RunAtLoad = true;
       };
