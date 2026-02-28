@@ -56,6 +56,23 @@ delib.module {
                 icon = "https://nixos.org/favicon.ico";
                 definedAliases = ["@hm"];
               };
+              "zenn" = {
+                urls = [
+                  {
+                    template = "https://zenn.dev/search?q={searchTerms}";
+                  }
+                ];
+                icon = "https://zenn.dev/favicon.ico";
+                definedAliases = ["@zenn"];
+              };
+              "noogle" = {
+                urls = [
+                  {
+                    template = "https://noogle.dev/q?term={searchTerms}";
+                  }
+                ];
+                icon = "https://noogle.dev/favicon.ico";
+              };
               "bing".metaData.hidden = true;
               "ddg".metaData.hidden = true;
             };
