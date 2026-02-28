@@ -53,6 +53,9 @@ delib.module {
         marksman = mkServer {
           filetypes = ["markdown"];
         };
+        # Enable the built-in Copilot LSP server entry.
+        # Runtime behavior (root_dir filters, keymaps, inline completion) lives in extra.lua.
+        copilot.enable = true;
         nixd = mkServer {
           package = pkgs.nixd;
           activate = true;
