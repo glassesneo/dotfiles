@@ -174,23 +174,52 @@ Secrets are defined via sops-nix and referenced as =config.sops.secrets.<key>.pa
 Bootstrap once per machine:
 
 #+begin_src sh
-mkdir -p "$HOME/Library/Application Support/sops/age"
-ssh-to-age -private-key -i ~/.ssh/id_agenix -o "$HOME/Library/Application Support/sops/age/keys.txt"
+mkdir -p "$HOME/.config/sops/age"
+chmod 700 "$HOME/.config/sops/age"
+age-keygen -o "$HOME/.config/sops/age/keys.txt"
+chmod 600 "$HOME/.config/sops/age/keys.txt"
+age-keygen -y "$HOME/.config/sops/age/keys.txt"
 #+end_src
 
 Edit secrets:
 
 #+begin_src sh
-SOPS_AGE_KEY_FILE="$HOME/Library/Application Support/sops/age/keys.txt" \
+SOPS_AGE_KEY_FILE="$HOME/.config/sops/age/keys.txt" \
   sops edit hosts/kurogane/secrets.yaml
 #+end_src
 
 Validate decryption:
 
 #+begin_src sh
-SOPS_AGE_KEY_FILE="$HOME/Library/Application Support/sops/age/keys.txt" \
+SOPS_AGE_KEY_FILE="$HOME/.config/sops/age/keys.txt" \
   sops decrypt --extract '["brave-api-key"]' hosts/kurogane/secrets.yaml
 #+end_src
+
+Immediate key replacement (single-cutover, no dual-recipient period):
+
+#+begin_src sh
+NEW_KEY_FILE="$HOME/.config/sops/age/keys.txt"
+OLD_KEY_FILE="<legacy-key-file-path>"
+NEW_RECIPIENT="$(age-keygen -y "$NEW_KEY_FILE")"
+BACKUP_FILE="$HOME/.config/sops/age/legacy-keys-$(date +%Y%m%d).txt.age"
+
+# 1) Backup legacy key encrypted to the new recipient.
+age -r "$NEW_RECIPIENT" -o "$BACKUP_FILE" "$OLD_KEY_FILE"
+
+# 2) Update .sops.yaml recipient to $NEW_RECIPIENT, then rewrap.
+COMBINED_KEY_FILE="/tmp/sops-age-keys-combined.txt"
+cat "$OLD_KEY_FILE" "$NEW_KEY_FILE" > "$COMBINED_KEY_FILE"
+chmod 600 "$COMBINED_KEY_FILE"
+SOPS_AGE_KEY_FILE="$COMBINED_KEY_FILE" sops updatekeys -y hosts/kurogane/secrets.yaml
+SOPS_AGE_KEY_FILE="$COMBINED_KEY_FILE" sops rotate -i hosts/kurogane/secrets.yaml
+rm "$COMBINED_KEY_FILE"
+
+# 3) Verify new key-only decrypt, then remove legacy key file.
+SOPS_AGE_KEY_FILE="$NEW_KEY_FILE" sops decrypt --extract '["brave-api-key"]' hosts/kurogane/secrets.yaml
+rm "$OLD_KEY_FILE"
+#+end_src
+
+See =docs/secrets-key-rotation.md= for the full runbook (including validation and rollback).
 
 ** MCP Server Architecture
 

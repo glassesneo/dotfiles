@@ -2,4 +2,4 @@ creation_rules:
   - path_regex: ^hosts/kurogane/secrets\.yaml$
     key_groups:
       - age:
-          - age19nytrhuej293435k24j3gt44mfqm85fn5zwhyvk2g5hj2wtgdpyqkhmceu
+          - age1r990kv2jq2vd4fxhf6znzmqqg6w2wfhllw9s9uzjun6tvcd43e3san06yu

@@ -36,7 +36,7 @@ delib.module {
     imports = [inputs.sops-nix.darwinModules.sops];
 
     sops = {
-      age.keyFile = "/Users/${username}/Library/Application Support/sops/age/keys.txt";
+      age.keyFile = "/Users/${username}/.config/sops/age/keys.txt";
       secrets = lib.genAttrs userSecrets mkUserSecret;
     };
   };

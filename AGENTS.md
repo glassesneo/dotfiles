@@ -29,4 +29,5 @@
 
 ## Secrets & Configuration Tips
 - Modify host secret files with `sops` (for example `hosts/kurogane/secrets.yaml`) and commit only encrypted blobs; avoid plaintext keys.
+- Use dedicated SOPS age keys; do not reuse SSH keys or unrelated keys.
 - Keep MCP server credentials in host secret files and reference them through environment variables defined in `modules/toplevel/secrets.nix`.
