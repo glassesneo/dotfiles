@@ -131,6 +131,18 @@ delib.module {
       lspconfig.enable = true;
       lsp-format = {
         enable = true;
+        # Patch deprecated client.method() dot-syntax calls to client:method()
+        # colon-syntax for Neovim nightly compatibility.
+        package = pkgs.vimPlugins.lsp-format-nvim.overrideAttrs (old: {
+          postPatch =
+            (old.postPatch or "")
+            + ''
+              substituteInPlace lua/lsp-format/init.lua \
+                --replace-fail 'client.supports_method(' 'client:supports_method(' \
+                --replace-fail 'client.request_sync(' 'client:request_sync(' \
+                --replace-fail 'client.request(' 'client:request('
+            '';
+        });
         lspServersToEnable = [
           "efm"
           "denols"
