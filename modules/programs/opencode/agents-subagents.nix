@@ -1,4 +1,8 @@
-{delib, lib, ...}:
+{
+  delib,
+  lib,
+  ...
+}:
 delib.module {
   name = "programs.opencode";
 
