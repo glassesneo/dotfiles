@@ -31,6 +31,12 @@ delib.module {
       defaultServer // serverAttrs // lib.optionalAttrs (configAttrs != {}) {config = configAttrs;};
     inherit (homeConfig.home) stateVersion;
     _pkgs = "import ${pkgs.path} {}";
+    # copilot-language-server is unfree; import an unfree-enabled package set
+    # here so Home Manager evaluation does not depend on process env vars.
+    copilotPkgs = import pkgs.path {
+      inherit (pkgs.stdenv.hostPlatform) system;
+      config.allowUnfree = true;
+    };
   in {
     lsp = {
       inlayHints.enable = true;
@@ -53,9 +59,9 @@ delib.module {
         marksman = mkServer {
           filetypes = ["markdown"];
         };
-        # Enable the built-in Copilot LSP server entry.
-        # Runtime behavior (root_dir filters, keymaps, inline completion) lives in extra.lua.
-        copilot.enable = true;
+        # Keep copilot server config in nixvim, but avoid nixvim's default
+        # package (unfree) resolution path.
+        copilot = mkServer {};
         nixd = mkServer {
           package = pkgs.nixd;
           activate = true;
@@ -141,6 +147,6 @@ delib.module {
     # - vim.lsp.config overrides requiring Lua-only APIs (workspace library paths, init_options)
     # - efm language/formatter definitions
     extraConfigLuaPost = builtins.readFile ./extra.lua;
-    extraPackages = [pkgs.efm-langserver pkgs.nls pkgs.nickel pkgs.copilot-language-server];
+    extraPackages = [pkgs.efm-langserver pkgs.nls pkgs.nickel copilotPkgs.copilot-language-server];
   };
 }
