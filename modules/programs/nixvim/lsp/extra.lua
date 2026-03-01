@@ -333,20 +333,6 @@ vim.lsp.config.copilot = {
   end,
   on_attach = function(_client, bufnr)
     vim.lsp.inline_completion.enable(true, { bufnr = bufnr })
-    -- Trigger inline suggestion (closes blink popup if open)
-    vim.keymap.set("i", "<C-\\>", function()
-      vim.lsp.inline_completion.get()
-      if vim.fn.pumvisible() == 1 then
-        return "<C-e>"
-      end
-    end, { silent = true, expr = true, buffer = bufnr })
-    -- Cycle suggestions
-    vim.keymap.set("i", "<C-]>", function()
-      vim.lsp.inline_completion.select()
-    end, { silent = true, buffer = bufnr })
-    vim.keymap.set("i", "<C-[>", function()
-      vim.lsp.inline_completion.select({ count = -1 })
-    end, { silent = true, buffer = bufnr })
   end,
 }
 

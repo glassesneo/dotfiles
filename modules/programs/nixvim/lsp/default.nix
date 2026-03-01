@@ -61,7 +61,7 @@ delib.module {
         };
         # Keep copilot server config in nixvim, but avoid nixvim's default
         # package (unfree) resolution path.
-        copilot = mkServer {};
+        copilot = mkServer {activate = true;};
         nixd = mkServer {
           package = pkgs.nixd;
           activate = true;

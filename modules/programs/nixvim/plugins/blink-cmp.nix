@@ -154,6 +154,19 @@ delib.module {
             };
             keymap = {
               preset = "super-tab";
+              "<C-e>" = [
+                {
+                  __raw = ''
+                    function(cmp)
+                      cmp.hide()
+                      if vim.lsp.inline_completion.get() then
+                        return true
+                      end
+                    end
+                  '';
+                }
+                "fallback"
+              ];
               "<C-b>" = [
                 "scroll_documentation_up"
                 "fallback"

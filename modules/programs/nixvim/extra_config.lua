@@ -17,7 +17,26 @@ vim.keymap.set("x", "<Space>r", 'y:%s/<C-r><C-r>"//g<Left><Left>', { silent = tr
 vim.keymap.set("n", "<S-r>", vim.lsp.buf.rename)
 -- emacs keybind for insert mode
 vim.keymap.set("i", "<C-a>", "<C-o>^", { silent = true })
-vim.keymap.set("i", "<C-e>", "<C-o>$", { silent = true })
+vim.keymap.set("i", "<C-e>", function()
+  if vim.lsp.inline_completion.get() then
+    return ""
+  end
+  return "<C-o>$"
+end, { expr = true, silent = true })
+-- Accept inline suggestion and close popup if open
+-- vim.keymap.set("i", "<C-\\>", function()
+-- vim.lsp.inline_completion.get()
+-- if vim.fn.pumvisible() == 1 then
+-- return "<C-e>"
+-- end
+-- end, { expr = true, silent = true })
+-- Cycle inline suggestions
+vim.keymap.set("i", "<C-.>", function()
+  vim.lsp.inline_completion.select()
+end, { silent = true })
+vim.keymap.set("i", "<C-,>", function()
+  vim.lsp.inline_completion.select({ count = -1 })
+end, { silent = true })
 vim.keymap.set("i", "<C-b>", "<Left>", { silent = true })
 vim.keymap.set("i", "<C-f>", "<Right>", { silent = true })
 vim.keymap.set({ "n", "x", "o" }, "<Space>h", [[^]], { silent = true })
