@@ -4,8 +4,8 @@
   inputs,
   ...
 }: let
-  flavor = "macchiato";
-  colors = config.myconfig.colorschemes.catppuccin;
+  flavor = "frappe";
+  colors = config.myconfig.colorschemes.catppuccin.${flavor};
   colorschemeLib = config.myconfig.args.shared.colorschemeLib;
   argb = colorschemeLib.toArgb "ff";
 in
@@ -166,7 +166,7 @@ in
         plugin = "catppuccin-vim";
         config = ''
           " Catppuccin colorscheme configuration
-          let g:catppuccin_flavour = "macchiato"
+          let g:catppuccin_flavour = "${flavor}"
           silent! colorscheme catppuccin_macchiato
         '';
       };

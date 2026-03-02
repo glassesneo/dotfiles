@@ -36,6 +36,6 @@ myconfig.programs.vim.colorscheme = {
 
 Rices now select theme data instead of owning palette definitions:
 
-- Set active scheme with `myconfig.colorscheme = config.myconfig.colorschemes.<name>`.
+- Set active scheme with `myconfig.colorscheme = config.myconfig.colorschemes.<scheme>.<variant>` (e.g., `colorschemes.catppuccin.macchiato`).
 - Set wallpaper with `myconfig.wallpaper = <path>;`.
 - Do not write `home.programs.desktoppr.settings.picture` in rice files; `modules/programs/desktoppr/default.nix` owns that wiring.

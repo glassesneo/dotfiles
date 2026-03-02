@@ -64,9 +64,9 @@ in
 
     options = {
       colorschemes = lib.mkOption {
-        type = lib.types.attrsOf paletteType;
+        type = lib.types.attrsOf (lib.types.attrsOf paletteType);
         default = {};
-        description = "Colorscheme registry keyed by scheme name.";
+        description = "Colorscheme registry keyed by scheme name and variant.";
       };
 
       colorscheme = lib.mkOption {

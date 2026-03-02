@@ -2,7 +2,7 @@
 delib.module {
   name = "config.colorschemes.schemes.monochrome";
 
-  myconfig.always.colorschemes.monochrome = {
+  myconfig.always.colorschemes.monochrome.default = {
     polarity = "dark";
     base00 = "#1a1a1a";
     base01 = "#252525";

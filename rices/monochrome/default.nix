@@ -4,7 +4,7 @@
   inputs,
   ...
 }: let
-  colors = config.myconfig.colorschemes.monochrome;
+  colors = config.myconfig.colorschemes.monochrome.default;
   colorschemeLib = config.myconfig.args.shared.colorschemeLib;
   argb = colorschemeLib.toArgb "ff";
 in
@@ -12,7 +12,7 @@ in
     name = "monochrome";
     inherits = ["laptop"];
 
-    myconfig.colorscheme = config.myconfig.colorschemes.monochrome;
+    myconfig.colorscheme = config.myconfig.colorschemes.monochrome.default;
     myconfig.wallpaper = inputs.various-wallpapers + "/onedark/J0FZ3V.jpg";
 
     myconfig.services.sketchybar = {

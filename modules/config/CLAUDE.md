@@ -9,8 +9,9 @@ Use `constants.username`, `constants.userfullname`, `constants.useremail` instea
 
 Theme palettes are owned by `@modules/config/colorschemes/`.
 
-- Registry option: `myconfig.colorschemes`
-- Active selection: `myconfig.colorscheme`
+- Registry option: `myconfig.colorschemes` — nested `attrsOf (attrsOf paletteType)`, keyed by `<scheme>.<variant>`.
+- Access a palette: `config.myconfig.colorschemes.<scheme>.<variant>` (e.g., `colorschemes.catppuccin.macchiato`, `colorschemes.everforest."dark-medium"`, `colorschemes.monochrome.default`).
+- Active selection: `myconfig.colorscheme` — a resolved `paletteType` object set by the active rice.
 - Shared export for consumers: `myconfig.always.args.shared.colorscheme`
 - Wallpaper handoff: `myconfig.wallpaper` (consumed by `modules/programs/desktoppr`)
 

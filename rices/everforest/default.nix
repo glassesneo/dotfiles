@@ -3,7 +3,7 @@
   delib,
   ...
 }: let
-  colors = config.myconfig.colorschemes.everforest;
+  colors = config.myconfig.colorschemes.everforest."dark-hard";
   colorschemeLib = config.myconfig.args.shared.colorschemeLib;
   argb = colorschemeLib.toArgb "ff";
 in
