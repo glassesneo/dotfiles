@@ -48,6 +48,7 @@ delib.module {
           stat = "status";
         };
         commit = {
+          verbose = true;
           template = "${homeConfig.xdg.configHome}/git/.gitmsg";
         };
         core = {
