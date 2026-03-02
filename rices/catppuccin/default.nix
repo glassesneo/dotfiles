@@ -116,6 +116,7 @@ in
           inactive_color = "0x00000000"; # transparent
           style = "square";
           width = 10.0;
+          order = "above";
         };
 
         sketchybar = {

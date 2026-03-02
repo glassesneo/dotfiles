@@ -25,13 +25,20 @@ delib.module {
       description = "JankyBorders inactive border color in ARGB hex (e.g. 0xffRRGGBB)";
     };
     width = floatOption 5.0;
+    order = lib.mkOption {
+      type = lib.types.enum ["below" "above"];
+      default = "below";
+      description = "Whether JankyBorders should be rendered below or above window content";
+    };
   };
 
   darwin.ifEnabled = {cfg, ...}: {
     services.jankyborders = {
       enable = true;
-      inherit (cfg) style active_color inactive_color width;
-      order = "above";
+      inherit (cfg) style active_color inactive_color width order;
+      whitelist = [
+        "ghostty"
+      ];
       hidpi = false;
     };
   };

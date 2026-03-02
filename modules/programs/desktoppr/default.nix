@@ -2,7 +2,6 @@
   delib,
   host,
   homeConfig,
-  lib,
   ...
 }:
 # desktoppr: macOS wallpaper utility
@@ -13,29 +12,29 @@
 delib.module {
   name = "programs.desktoppr";
 
-  options = delib.singleEnableOption host.guiShellFeatured;
+  options.programs.desktoppr = with delib; {
+    enable = boolOption host.guiShellFeatured;
+    wallpaper = lib.mkOption {
+      type = lib.types.path;
+      default = null;
+      description = "Path to the wallpaper image to set with desktoppr.";
+    };
+  };
 
-  home.ifEnabled = {
-    myconfig,
-    cfg,
-    ...
-  }: let
+  home.ifEnabled = {myconfig, ...}: let
     wallpaperSet = myconfig.wallpaper != null;
-    moduleEnabled = cfg.enable && wallpaperSet;
   in {
     programs.desktoppr = {
-      enable = moduleEnabled;
+      enable = wallpaperSet;
       settings = {
         setOnlyOnce = false;
-      }
-        // lib.optionalAttrs wallpaperSet {
-          picture = myconfig.wallpaper;
-        };
+        picture = myconfig.wallpaper;
+      };
     };
 
     # Fix: home-manager writes to "desktoppr" but the tool reads from
     # "com.scriptingosx.desktoppr". Mirror the settings to the correct domain.
-    targets.darwin.defaults = lib.optionalAttrs moduleEnabled {
+    targets.darwin.defaults = {
       "com.scriptingosx.desktoppr" = homeConfig.programs.desktoppr.settings;
     };
   };
