@@ -33,6 +33,7 @@ delib.module {
       enable = true;
       package = claudeCodeWrapped;
       settings = {
+        model = "opus";
         permissions = {
           allow = [
             "Skill(tmux-runner)"

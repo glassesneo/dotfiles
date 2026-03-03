@@ -429,7 +429,8 @@ delib.module {
 
       internet_research = {
         mode = "subagent";
-        model = "zai-coding-plan/glm-4.7";
+        model = "openai/gpt-5.3-codex";
+        reasoningEffort = "medium";
         description = "Performs targeted internet research when primary planning agents have material knowledge uncertainty.";
         prompt =
           ''
