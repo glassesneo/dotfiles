@@ -12,13 +12,9 @@ delib.module {
     enable = boolOption host.guiShellFeatured;
   };
 
-  home.ifEnabled = {
-    myconfig,
-    cfg,
-    ...
-  }: {
+  home.ifEnabled = {myconfig, ...}: {
     programs.ghostty = {
-      enable = cfg.enable;
+      enable = true;
       package =
         if myconfig.brew-nix.enable
         then brewCasks.ghostty
@@ -32,6 +28,7 @@ delib.module {
           "cmd+c=copy_to_clipboard"
           "cmd+shift+c=copy_url_to_clipboard"
           "cmd+v=paste_from_clipboard"
+          "cmd+shift+p=toggle_command_palette"
           "global:cmd+backquote=toggle_quick_terminal"
         ];
         quick-terminal-position = "right";
