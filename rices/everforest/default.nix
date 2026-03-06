@@ -1,6 +1,7 @@
 {
   config,
   delib,
+  inputs,
   ...
 }: let
   colors = config.myconfig.colorschemes.everforest."dark-medium";
@@ -13,7 +14,7 @@ in
 
     myconfig = {
       colorscheme = colors;
-      wallpaper = ./everforest.png;
+      wallpaper = "${inputs.wallpapers}/os/arch-btw-moon.png";
 
       services = {
         jankyborders = {

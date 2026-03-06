@@ -811,7 +811,8 @@
         "skills-deployer": "skills-deployer",
         "sops-nix": "sops-nix",
         "tree-sitter-moonbit": "tree-sitter-moonbit",
-        "various-wallpapers": "various-wallpapers"
+        "various-wallpapers": "various-wallpapers",
+        "wallpapers": "wallpapers"
       }
     },
     "skills-deployer": {
@@ -970,6 +971,22 @@
       },
       "original": {
         "owner": "andrewzn69",
+        "repo": "wallpapers",
+        "type": "github"
+      }
+    },
+    "wallpapers": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1772732203,
+        "narHash": "sha256-X8XtAaM2nNpemS4MFjr6fpo9DcGrpf7CCnddZlmMbC4=",
+        "owner": "rose-pine",
+        "repo": "wallpapers",
+        "rev": "41435f4cdbcd4ae73db971cb2a3bf36d9ba85c26",
+        "type": "github"
+      },
+      "original": {
+        "owner": "rose-pine",
         "repo": "wallpapers",
         "type": "github"
       }

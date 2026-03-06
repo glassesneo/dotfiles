@@ -177,6 +177,10 @@
       url = "github:andrewzn69/wallpapers";
       flake = false;
     };
+    wallpapers = {
+      url = "github:rose-pine/wallpapers";
+      flake = false;
+    };
     bun2nix = {
       url = "github:nix-community/bun2nix";
       inputs.nixpkgs.follows = "nixpkgs";
