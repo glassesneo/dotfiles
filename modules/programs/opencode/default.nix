@@ -42,9 +42,10 @@ delib.module {
           - Make sure to terminate your nohup process.
 
           ### Agent Switching
-          - Primary agents `orchestrator`, `spec`, `debugger`, `test_designer`, and `build` should proactively delegate to appropriate subagents on a best-effort basis.
+          - Primary agents `orchestrator`, `spec`, `respec`, `debugger`, `test_designer`, and `build` should proactively delegate to appropriate subagents on a best-effort basis.
           - After implementation, run review with `code_reviewer`.
           - `spec` must complete specification elicitation and resolve/default material ambiguities before draft planning.
+          - `respec` must validate inferred specifications with the user before delegating confirmed discrepancies to `spec`.
           - Ignore backward compatibility unless explicitly specified.
           - When reading `test-spec`, `failure-report`, or `bug-report` files, read the `## Summary` block first.
           - Read detail sections only when implementation-level context is needed for delegation.

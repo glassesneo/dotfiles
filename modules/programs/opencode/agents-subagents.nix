@@ -152,33 +152,6 @@ delib.module {
       - <one specific action, e.g. "fix assertion in X" or "investigate regression in Y">
     '';
 
-    docAuditorReportFormatContract = ''
-      `doc-update-instruction` output format (strict, exact):
-
-      # Documentation Drift Report: <title>
-
-      ## Summary
-      - **Scope**: <what code/docs were compared>
-      - **Result**: <X drift findings>
-
-      ## Drift Findings
-
-      ### D1: <short drift label>
-      - **Documentation file**: <path>
-      - **Source code file**: <path>
-      - **Outdated detail**: <what is stale: renamed function, changed args, removed module reference, etc.>
-      - **Update direction**: rewrite | delete | add
-
-      ### D2: <short drift label>
-      - **Documentation file**: <path>
-      - **Source code file**: <path>
-      - **Outdated detail**: <what is stale>
-      - **Update direction**: rewrite | delete | add
-
-      ## Notes
-      - Do not apply doc edits directly; this file is a one-shot update instruction prompt for Claude Code.
-    '';
-
     draftFilenamePolicy = ''
       Filename policy (strict):
       - Create a NEW timestamped file:
@@ -318,7 +291,7 @@ delib.module {
       };
 
       explore = {
-        model = "openai/gpt-5.3-codex";
+        model = "openai/gpt-5.4";
         reasoningEffort = "medium";
         description = "Read-only exploration agent that uses relevant skills provided by primary-agent delegation context.";
         prompt = ''
@@ -333,7 +306,7 @@ delib.module {
 
       plan_reviewer = {
         mode = "subagent";
-        model = "openai/gpt-5.3-codex";
+        model = "openai/gpt-5.4";
         description = "Performs strict read-only review of final plan and test-spec files (`*.md`) with actionable revisions.";
         reasoningEffort = "high";
         prompt = ''
@@ -367,7 +340,7 @@ delib.module {
 
       code_reviewer = {
         mode = "subagent";
-        model = "openai/gpt-5.3-codex";
+        model = "openai/gpt-5.4";
         description = "Performs strict read-only code review with severity-ordered findings and concrete file/line evidence.";
         reasoningEffort = "high";
         prompt = ''
@@ -394,42 +367,9 @@ delib.module {
         permission = readOnlyPermission;
       };
 
-      doc_auditor = {
-        mode = "all";
-        model = "openai/gpt-5.3-codex";
-        description = "Detects documentation drift against source code and writes update-instruction reports for Claude Code.";
-        reasoningEffort = "high";
-        prompt =
-          ''
-            You are the `doc_auditor` agent. Your sole responsibility is detecting drift between documentation and source code.
-
-            Operating constraints (strict):
-            - Read-only analysis only.
-            - NEVER modify files, apply patches, run write/edit operations, or make commits.
-            - Focus on documentation/code consistency, stale references, API signature drift, and removed symbol/module mentions.
-
-            Scope and constraints (strict):
-            - Analyze docs vs source and identify concrete drift.
-            - NEVER edit documentation files directly.
-            - Write ONLY a drift report under `.agents/reports/` as a one-shot update-instruction prompt for Claude Code.
-
-            Skill usage policy:
-            - Use delegated skills when they improve drift detection quality for language/ecosystem-specific docs.
-            - If no delegated skill applies, continue with normal documentation drift analysis.
-
-            Output requirements:
-            - Use the exact `doc-update-instruction` format below.
-            - Include only concrete, source-backed drift findings.
-            - If no drift is found, keep `## Drift Findings` empty and set `**Result**` to `0 drift findings`.
-          ''
-          + docAuditorReportFormatContract
-          + reportFilenamePolicy;
-        permission = reportsOnlyPermission;
-      };
-
       internet_research = {
         mode = "subagent";
-        model = "openai/gpt-5.3-codex";
+        model = "openai/gpt-5.4";
         reasoningEffort = "medium";
         description = "Performs targeted internet research when primary planning agents have material knowledge uncertainty.";
         prompt =
@@ -471,7 +411,7 @@ delib.module {
 
       tester = {
         mode = "subagent";
-        model = "openai/gpt-5.3-codex";
+        model = "openai/gpt-5.4";
         reasoningEffort = "high";
         description = "Read-only test runner that triages failures and writes failure-report files when suites fail.";
         prompt =

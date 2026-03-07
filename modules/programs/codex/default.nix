@@ -32,7 +32,7 @@ delib.module {
     programs.codex = {
       enable = true;
       package = codexWrapped;
-      custom-instructions = builtins.readFile ./INSTRUCTIONS.md;
+      # custom-instructions = builtins.readFile ./INSTRUCTIONS.md;
       settings = {
         model_providers = {
           openrouter = {
