@@ -1,7 +1,6 @@
 {
   config,
   delib,
-  inputs,
   ...
 }: let
   colors = config.myconfig.colorschemes.monochrome.default;
@@ -13,7 +12,7 @@ in
     inherits = ["laptop"];
 
     myconfig.colorscheme = config.myconfig.colorschemes.monochrome.default;
-    myconfig.wallpaper = inputs.various-wallpapers + "/onedark/J0FZ3V.jpg";
+    myconfig.wallpaper = "roses";
 
     myconfig.services.sketchybar = {
       # datetimeFontOverride = "Iosevka:Regular:16";

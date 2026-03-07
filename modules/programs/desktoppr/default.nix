@@ -14,11 +14,6 @@ delib.module {
 
   options.programs.desktoppr = with delib; {
     enable = boolOption host.guiShellFeatured;
-    wallpaper = lib.mkOption {
-      type = lib.types.path;
-      default = null;
-      description = "Path to the wallpaper image to set with desktoppr.";
-    };
   };
 
   home.ifEnabled = {myconfig, ...}: let
@@ -28,7 +23,6 @@ delib.module {
       enable = wallpaperSet;
       settings = {
         setOnlyOnce = false;
-        picture = myconfig.wallpaper;
       };
     };
 

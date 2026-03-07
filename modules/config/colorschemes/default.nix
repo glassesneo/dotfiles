@@ -74,12 +74,6 @@ in
         default = null;
         description = "Active colorscheme selected by the current rice.";
       };
-
-      wallpaper = lib.mkOption {
-        type = lib.types.nullOr lib.types.path;
-        default = null;
-        description = "Wallpaper path consumed by the desktoppr module.";
-      };
     };
 
     myconfig.always = {myconfig, ...}: {
