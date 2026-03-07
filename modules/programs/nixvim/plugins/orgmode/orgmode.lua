@@ -71,7 +71,8 @@ end, {
 -- :Today command — daily journal with Top3 carryover from yesterday
 
 --- Extract Top3 task text from a daily file (journal/daily/YYYY-MM-DD.org).
---- Looks for `* Today's Plan` heading and collects up to 3 checkbox items.
+--- Looks for `* Today's Plan` heading and collects up to 3 unfinished checkbox items.
+--- Skips completed items (`[X]`/`[x]`/`[-]`).
 --- Returns list of text strings (without checkbox prefix).
 local function extract_top3_from_daily(content)
   local items = {}
@@ -81,12 +82,14 @@ local function extract_top3_from_daily(content)
       if line:match("^%*") then
         break
       end
-      local text = line:match("^%s*%- %[[ Xx%-]%] (.+)$")
+      local text = line:match("^%s*%- %[ %] (.+)$")  -- unfinished only
       if text then
         items[#items + 1] = text
         if #items >= 3 then
           break
         end
+      elseif line:match("^%s*%- %[[Xx%-]%]") then  -- completed checkbox, skip
+        -- do nothing
       elseif line:match("^%s*$") then
         -- skip blank lines
       else
@@ -102,6 +105,7 @@ end
 --- Extract Top3 task text from a monthly datetree file (journal/YYYY-MM.org),
 --- scoped to yesterday's subtree only. Uses the last occurrence of `明日のTop3`
 --- within the subtree (tie-breaker for multiple diary entries).
+--- Skips completed items (`[X]`/`[x]`/`[-]`); collects up to 3 unfinished ones.
 --- @param content string[] file lines
 --- @param yesterday_date string "YYYY-MM-DD" format
 --- Returns list of text strings (without checkbox prefix).
@@ -146,16 +150,18 @@ local function extract_top3_from_monthly(content, yesterday_date)
     return {}
   end
 
-  -- Step 4: Collect up to 3 checkbox items after that label
+  -- Step 4: Collect up to 3 unfinished checkbox items after that label
   local items = {}
   for i = last_top3_line + 1, subtree_end do
     local line = content[i]
-    local text = line:match("^%s*%- %[[ Xx%-]%]%s+(.+)$")
+    local text = line:match("^%s*%- %[ %]%s+(.+)$")  -- unfinished only
     if text then
       items[#items + 1] = text
       if #items >= 3 then
         break
       end
+    elseif line:match("^%s*%- %[[Xx%-]%]") then  -- completed checkbox, skip
+      -- do nothing
     elseif line:match("^%s*$") then
       -- skip blank lines
     elseif line:match("^%s*%- .+ ::%s*$") then
