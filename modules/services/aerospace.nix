@@ -61,12 +61,12 @@ delib.module {
         on-focused-monitor-changed = ["move-mouse monitor-lazy-center"];
 
         gaps = {
-          inner.horizontal = 10;
-          inner.vertical = 10;
-          outer.left = 8;
-          outer.bottom = 48;
-          outer.top = 8;
-          outer.right = 8;
+          inner.horizontal = 5;
+          inner.vertical = 5;
+          outer.left = 4;
+          outer.right = 4;
+          outer.bottom = 42;
+          outer.top = 4;
         };
 
         workspace-to-monitor-force-assignment = {

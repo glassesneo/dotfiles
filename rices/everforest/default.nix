@@ -17,7 +17,7 @@ in
 
       services = {
         jankyborders = {
-          active_color = argb colors.base0B;
+          active_color = "0xff8ec07c";
           inactive_color = "0x00000000";
           style = "square";
           width = 10.0;
