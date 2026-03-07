@@ -26,8 +26,8 @@ in
       programs = {
         ghostty = {
           settings = {
-            background-opacity = 0.4;
-            background-blur = 5;
+            background-opacity = 0.2;
+            background-blur = 3;
             window-padding-x = 6;
           };
         };
@@ -93,14 +93,14 @@ in
     };
     myconfig = {
       colorscheme = colors;
-      wallpaper = "shape";
+      wallpaper = "sakura";
 
       services = {
         jankyborders = {
-          active_color = argb colors.base0E;
+          active_color = argb colors.base0F;
           inactive_color = "0x00000000"; # transparent
-          style = "square";
-          width = 10.0;
+          style = "round";
+          width = 5.0;
           order = "above";
         };
 

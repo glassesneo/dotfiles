@@ -13,14 +13,14 @@ in
 
     myconfig = {
       colorscheme = colors;
-      wallpaper = "cave-sunset-view";
+      wallpaper = "forest";
 
       services = {
         jankyborders = {
           active_color = "0xff8ec07c";
           inactive_color = "0x00000000";
-          style = "square";
-          width = 10.0;
+          style = "round";
+          width = 5.0;
           order = "above";
         };
 
