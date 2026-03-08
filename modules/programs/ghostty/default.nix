@@ -31,9 +31,9 @@ delib.module {
           "cmd+shift+p=toggle_command_palette"
           "global:cmd+backquote=toggle_quick_terminal"
         ];
-        quick-terminal-position = "right";
-        quick-terminal-size = "35%";
-        quick-terminal-autohide = false;
+        quick-terminal-position = "center";
+        quick-terminal-size = "45%";
+        quick-terminal-autohide = true;
         auto-update = "off";
         font-feature = "-dlig";
         window-inherit-working-directory = false;
