@@ -6,6 +6,24 @@ delib.module {
 
   home.ifEnabled.programs.nixvim = {
     plugins = {
+      ccc = {
+        enable = true;
+        lazyLoad = {
+          enable = true;
+          settings = {
+            event = [
+              "BufRead"
+              "BufNewFile"
+            ];
+          };
+        };
+        settings = {
+          highlighter = {
+            auto_enable = true;
+            lsp = true;
+          };
+        };
+      };
       inc-rename = {
         enable = false;
         lazyLoad = {
