@@ -30,6 +30,7 @@ delib.module {
             replace_netrw = true;
           };
           words.enabled = false;
+          zen.enabled = true;
           input = {
             enabled = true;
             win = {
@@ -119,6 +120,10 @@ delib.module {
           }
         ]
         ++ [
+          {
+            action.__raw = "function() Snacks.zen() end";
+            key = "<Space>z";
+          }
           {
             action.__raw = "Snacks.picker.pickers";
             key = "<Space><C-p>";

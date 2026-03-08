@@ -45,7 +45,7 @@ Full Neovim configuration via nixvim. Module name: `programs.nixvim`.
 ## Key Keymaps
 
 - Leader: `<Space>`
-- `<Space><Space>` smart picker, `<Space>g` grep, `<Space>f` explorer — provided by snacks.nvim
+- `<Space><Space>` smart picker, `<Space>g` grep, `<Space>f` explorer, `<Space>z` zen mode — provided by snacks.nvim
 - `jj` escape in insert mode
 - `<C-j>` SKK (Japanese input) enable
 
