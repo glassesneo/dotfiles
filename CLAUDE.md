@@ -1,47 +1,26 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file is the Claude Code entry point for this repository. Keep it short and pointer-oriented.
 
-## Repository Overview
-Denix-based Nix dotfiles for macOS + Home Manager, declarative and modular.
-Host: `kurogane` (desktop), user: `neo`.
-Key paths: `hosts/`, `modules/`, and `rices/` drive configuration discovery.
+## Critical Rules
 
-## Quick Commands
+- **CRITICAL**: Denix auto-discovers `.nix` files under `hosts/`, `modules/`, and `rices/`. Do not wire modules together with manual imports between those trees.
+- **CRITICAL**: Flakes only see git-tracked files. `git add` new files before builds or evaluation.
+- Prefer local guidance over root guidance when a nearer `CLAUDE.md` exists.
+
+## Fast Path
+
 ```bash
-nh home switch                        # Home Manager only (FASTEST for userland)
-nh darwin switch . -H kurogane -Lt    # Full system (darwin + home-manager)
-nix flake check                       # Validate flake structure
-nix develop                           # Enter development shell
-```
-
-## Critical Denix Rules
-- **CRITICAL**: Denix auto-loads ALL .nix files in `paths` — NO imports/exports allowed between modules.
-- **CRITICAL**: Nix flakes only read git-tracked files — ALWAYS `git add` new files before building.
-
-## Codebase Organization
-- Programs: @modules/programs/
-- Services: @modules/services/
-- System: @modules/toplevel/
-- Hosts: @hosts/
-- Config core: @modules/config/
-- MCP Node packages: @node-packages/
-- Host secrets: @hosts/kurogane/secrets.yaml
-- Rices: @rices/
-- Var artifacts: @var/
-
-## Essential Commands
-```bash
-nh darwin switch . -H kurogane -Lt --update           # Build with flake update
-nh darwin switch . -H kurogane -Lt --update-input nixpkgs
+nh home switch
+nh darwin switch . -H kurogane -Lt
 nix flake check
-nix flake update
-nh clean all --keep 5
+nix develop
 ```
 
-## Secrets Management (sops-nix)
-- All secrets are encrypted via `sops` and stored in host files (currently `@hosts/kurogane/secrets.yaml`)
-- Shared declarations live in `@modules/toplevel/secrets.nix`
-- Host binding lives in `@hosts/kurogane/secrets.nix`
-- Dedicated single-owner secrets are declared in their owning module
-- Consume secrets via `config.sops.secrets.<key>.path`; use per-tool wrappers for env-var-only tools
+## Canonical Docs
+
+- Documentation policy: @docs/documentation-policy.md
+- Human overview: @README.org
+- Module tree guidance: @modules/CLAUDE.md
+- Config-specific guidance: @modules/config/CLAUDE.md
+- Secrets guidance: @modules/toplevel/CLAUDE.md

@@ -26,7 +26,7 @@ Denix auto-discovers all =.nix= files under =hosts/= and =modules/=, so new file
 
 * Quickstart
 
-Apply user environment only (fastest):
+Apply user environment only:
 
 #+begin_src sh
 nh home switch
@@ -38,57 +38,17 @@ Apply system + Home Manager configuration:
 nh darwin switch . -H kurogane -Lt
 #+end_src
 
-Common flags:
-
-- =-L=: Print build logs
-- =-t=: Show trace on errors
-- =-H=: Specify hostname
-
-Common variations:
-
-#+begin_src sh
-# Dry run (preview changes without applying)
-nh darwin switch . -H kurogane -Lt --dry
-
-# Ask for confirmation before applying
-nh darwin switch . -H kurogane -Lt --ask
-
-# Update all flake inputs before building
-nh darwin switch . -H kurogane -Lt --update
-
-# Update specific flake input(s)
-nh darwin switch . -H kurogane -Lt --update-input nixpkgs
-
-# Build without activation
-nh darwin build
-nh home build
-#+end_src
-
 * Development and Validation
 
 #+begin_src sh
-# Enter development shell (deno, LSP tooling, stylua)
 nix develop
-
-# Validate flake structure
 nix flake check
-
-# Show available outputs
-nix flake show
-
-# Launch REPLs with configuration loaded
-nh darwin repl
-nh home repl
 #+end_src
 
 ** Updating Dependencies
 
 #+begin_src sh
-# Update all flake inputs
 nix flake update
-
-# Update a specific input
-nix flake lock --update-input nixpkgs
 #+end_src
 
 * Node Package Management
@@ -98,30 +58,20 @@ Active Node packages for MCP server wiring are managed via =node-packages/= and 
 When modifying Node package dependencies, regenerate the Nix expressions from repository root:
 
 #+begin_src sh
-cd node-packages && bun install && cd .. && bun2nix node-packages node-packages
-#+end_src
-
-* Cleanup
-
-#+begin_src sh
-# Clean old generations and garbage collect
-nh clean all --keep 5
-
-# Clean current user's profiles only
-nh clean user --keep 3
-
-# Clean specific profile
-nh clean profile <profile-path> --keep 5
+cd node-packages
+bun install
+bun2nix -o bun.nix
 #+end_src
 
 * Repository Structure
 
 #+begin_example
 .
-├── AGENTS.md              # AI agents documentation
-├── CLAUDE.md              # Claude Code project instructions
+├── AGENTS.md              # Non-Claude agent entry guidance
+├── CLAUDE.md              # Claude Code entry guidance
 ├── deno.json              # Deno tooling configuration
 ├── deno.lock              # Deno dependency lockfile
+├── docs/                  # Policy docs and runbooks
 ├── flake.nix              # Flake configuration and inputs
 ├── flake.lock             # Locked dependency versions
 ├── hosts/                 # Host-specific configurations
@@ -130,8 +80,8 @@ nh clean profile <profile-path> --keep 5
 │   ├── programs/          # Program configurations
 │   ├── services/          # Service configurations
 │   └── toplevel/          # System-wide settings
-├── node2nix/              # Node.js package definitions
-├── org_spec.org           # Org-mode spec notes
+├── node-packages/         # bun2nix-managed MCP server packages
+├── rices/                 # Theme variants
 └── var/                   # Generated artifacts
 #+end_example
 
@@ -143,7 +93,6 @@ nh clean profile <profile-path> --keep 5
   - =services/= :: Service configurations (aerospace, sketchybar, etc.)
   - =config/= :: Shared configuration and constants
   - =toplevel/= :: System-level settings and wiring
-
 
 * Architecture Notes
 
@@ -169,57 +118,7 @@ User metadata is centralized in =modules/config/constants.nix= and referenced as
 
 ** Secrets
 
-Secrets are defined via sops-nix and referenced as =config.sops.secrets.<key>.path=. Shared declarations live in =modules/toplevel/secrets.nix=, with host binding in =hosts/kurogane/secrets.nix= and encrypted source at =hosts/kurogane/secrets.yaml=.
-
-Bootstrap once per machine:
-
-#+begin_src sh
-mkdir -p "$HOME/.config/sops/age"
-chmod 700 "$HOME/.config/sops/age"
-age-keygen -o "$HOME/.config/sops/age/keys.txt"
-chmod 600 "$HOME/.config/sops/age/keys.txt"
-age-keygen -y "$HOME/.config/sops/age/keys.txt"
-#+end_src
-
-Edit secrets:
-
-#+begin_src sh
-SOPS_AGE_KEY_FILE="$HOME/.config/sops/age/keys.txt" \
-  sops edit hosts/kurogane/secrets.yaml
-#+end_src
-
-Validate decryption:
-
-#+begin_src sh
-SOPS_AGE_KEY_FILE="$HOME/.config/sops/age/keys.txt" \
-  sops decrypt --extract '["brave-api-key"]' hosts/kurogane/secrets.yaml
-#+end_src
-
-Immediate key replacement (single-cutover, no dual-recipient period):
-
-#+begin_src sh
-NEW_KEY_FILE="$HOME/.config/sops/age/keys.txt"
-OLD_KEY_FILE="<legacy-key-file-path>"
-NEW_RECIPIENT="$(age-keygen -y "$NEW_KEY_FILE")"
-BACKUP_FILE="$HOME/.config/sops/age/legacy-keys-$(date +%Y%m%d).txt.age"
-
-# 1) Backup legacy key encrypted to the new recipient.
-age -r "$NEW_RECIPIENT" -o "$BACKUP_FILE" "$OLD_KEY_FILE"
-
-# 2) Update .sops.yaml recipient to $NEW_RECIPIENT, then rewrap.
-COMBINED_KEY_FILE="/tmp/sops-age-keys-combined.txt"
-cat "$OLD_KEY_FILE" "$NEW_KEY_FILE" > "$COMBINED_KEY_FILE"
-chmod 600 "$COMBINED_KEY_FILE"
-SOPS_AGE_KEY_FILE="$COMBINED_KEY_FILE" sops updatekeys -y hosts/kurogane/secrets.yaml
-SOPS_AGE_KEY_FILE="$COMBINED_KEY_FILE" sops rotate -i hosts/kurogane/secrets.yaml
-rm "$COMBINED_KEY_FILE"
-
-# 3) Verify new key-only decrypt, then remove legacy key file.
-SOPS_AGE_KEY_FILE="$NEW_KEY_FILE" sops decrypt --extract '["brave-api-key"]' hosts/kurogane/secrets.yaml
-rm "$OLD_KEY_FILE"
-#+end_src
-
-See =docs/secrets-key-rotation.md= for the full runbook (including validation and rollback).
+Secrets are defined via sops-nix and referenced as =config.sops.secrets.<key>.path=. Shared declarations live in =modules/toplevel/secrets.nix=, with host binding in =hosts/kurogane/secrets.nix= and encrypted source at =hosts/kurogane/secrets.yaml=. For rotation and validation steps, use =docs/secrets-key-rotation.md=.
 
 ** MCP Server Architecture
 
@@ -233,9 +132,10 @@ Rices define theme variants under =rices/= and should only set pure data (no =pk
 
 * Documentation
 
-- =CLAUDE.md= :: Project instructions for Claude Code
-- =AGENTS.md= :: AI agent workflow instructions
-- Module examples: =modules/programs/fd.nix=, =modules/programs/git/default.nix=, =modules/services/aerospace.nix=
+- =docs/documentation-policy.md= :: Canonical documentation ownership and maintenance rules
+- =CLAUDE.md= :: Claude Code entry guidance
+- =AGENTS.md= :: Non-Claude agent entry guidance
+- Local examples: =modules/CLAUDE.md=, =modules/config/CLAUDE.md=, =modules/toplevel/CLAUDE.md=
 
 * License
 

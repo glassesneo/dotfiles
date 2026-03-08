@@ -31,9 +31,7 @@ delib.module {
         };
         plugin = [];
       };
-      rules =
-        builtins.readFile ../../../docs/agents/shared-methodology.md
-        + ''
+      rules = ''
 
           ## OpenCode-Specific Guidance
 

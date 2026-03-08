@@ -84,7 +84,7 @@ delib.module {
           - Recommended default assumptions for the caller when evidence is incomplete
         '';
       };
-      memory.text = builtins.readFile ./GLOBAL_CLAUDE.md + "\n" + builtins.readFile ../../../docs/agents/shared-methodology.md;
+      memory.text = builtins.readFile ./GLOBAL_CLAUDE.md;
     };
   };
 }
