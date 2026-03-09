@@ -34,6 +34,8 @@ delib.module {
       package = codexWrapped;
       # custom-instructions = builtins.readFile ./INSTRUCTIONS.md;
       settings = {
+        multi-agent = true;
+        search_tool = true;
         model_providers = {
           openrouter = {
             name = "OpenRouter";
