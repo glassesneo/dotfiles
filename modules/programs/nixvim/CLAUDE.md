@@ -36,11 +36,9 @@ Full Neovim configuration via nixvim. Module name: `programs.nixvim`.
 
 ## LSP Configuration
 
-- **Nix-managed servers** (`lsp/default.nix`): Use `defaultServer` / `mkServer` helpers. Add new servers here if nixvim has schema support.
-- **Lua-managed servers** (`lsp/extra.lua`): Servers without nixvim schema (emmylua_ls, sourcekit, denols, ts_ls, efm, moonbit-lsp). Also: settings requiring Lua-only APIs.
-- **Executable gating**: PATH-based servers are only enabled when their executables are present at Neovim startup (via `guarded_enable` in extra.lua). This prevents health check warnings for missing project-local servers. Store-pinned servers (bashls, nixd, nickel_ls) have `activate = true` and are always available.
-- **Workflow**: Open Neovim from an activated project environment (direnv/nix-direnv) when project-local LSP servers are required. Servers will attach automatically when executables are in PATH.
-- **lsp-format server list**: efm, denols, hls, moonbit-lsp, taplo, zls.
+- LSP ownership now lives in `modules/programs/nixvim/lsp/CLAUDE.md`; read that file before adding or moving a server.
+- `modules/programs/nixvim/lsp/default.nix` is the shared contract and Lua assembly root, not the place for every server definition.
+- PATH-gated schema-backed servers keep their executable manifest in Nix and runtime activation in `modules/programs/nixvim/lsp/activation.lua`.
 
 ## Key Keymaps
 
@@ -56,8 +54,8 @@ Full Neovim configuration via nixvim. Module name: `programs.nixvim`.
 - Editor options: @modules/programs/nixvim/config.nix
 - Filetypes: @modules/programs/nixvim/filetype.nix
 - Custom keymaps: @modules/programs/nixvim/extra_config.lua
-- LSP (Nix): @modules/programs/nixvim/lsp/default.nix
-- LSP (Lua): @modules/programs/nixvim/lsp/extra.lua
+- LSP guide: @modules/programs/nixvim/lsp/CLAUDE.md
+- LSP root: @modules/programs/nixvim/lsp/default.nix
 - AI workflows: @modules/programs/nixvim/plugins/ai/
 - DPP regen: @modules/programs/nixvim/plugins/dpp/regenerate-toml.sh
 - Orgmode: @modules/programs/nixvim/plugins/orgmode/default.nix

@@ -1,9 +1,7 @@
 {
+  config,
   delib,
-  homeConfig,
-  inputs,
   lib,
-  pkgs,
   ...
 }:
 delib.module {
@@ -11,13 +9,7 @@ delib.module {
 
   options = delib.singleEnableOption true;
 
-  home.ifEnabled.programs.nixvim = let
-    # Shared defaults for all LSP servers managed by Nix.
-    # All servers use package = null (PATH-based binary resolution).
-    # Servers needing custom config override via `mkServer config`.
-    # activate = false: PATH-based servers are disabled by default and
-    #   enabled conditionally by guarded_enable in extra.lua when executable is available.
-    # activate = true: Store-pinned servers (via explicit cmd) are always available.
+  myconfig.always.args.shared.nixvimLsp = let
     defaultServer = {
       enable = true;
       package = null;
@@ -25,140 +17,48 @@ delib.module {
     };
     serverLevelKeys = ["activate" "package"];
     mkServer = args: let
-      serverAttrs = lib.filterAttrs (n: _: builtins.elem n serverLevelKeys) args;
-      configAttrs = removeAttrs args serverLevelKeys;
+      serverAttrs = lib.filterAttrs (name: _: builtins.elem name serverLevelKeys) args;
+      configAttrs = builtins.removeAttrs args serverLevelKeys;
     in
-      defaultServer // serverAttrs // lib.optionalAttrs (configAttrs != {}) {config = configAttrs;};
-    inherit (homeConfig.home) stateVersion;
-    _pkgs = "import ${pkgs.path} {}";
-    # copilot-language-server is unfree; import an unfree-enabled package set
-    # here so Home Manager evaluation does not depend on process env vars.
-    copilotPkgs = import pkgs.path {
-      inherit (pkgs.stdenv.hostPlatform) system;
-      config.allowUnfree = true;
+      defaultServer
+      // serverAttrs
+      // lib.optionalAttrs (configAttrs != {}) {config = configAttrs;};
+    pathGatedExecutables = {
+      basedpyright = "basedpyright-langserver";
+      biome = "biome";
+      elmls = "elm-language-server";
+      gopls = "gopls";
+      hls = "haskell-language-server-wrapper";
+      kotlin_language_server = "kotlin-language-server";
+      marksman = "marksman";
+      nim_langserver = "nimlangserver";
+      nushell = "nu";
+      prismals = "prisma-language-server";
+      taplo = "taplo";
+      tinymist = "tinymist";
+      zls = "zls";
     };
+  in {
+    inherit defaultServer mkServer pathGatedExecutables;
+  };
+
+  home.ifEnabled.programs.nixvim = let
+    pathGatedExecutables = config.myconfig.args.shared.nixvimLsp.pathGatedExecutables;
+    luaPayload = [
+      ''
+        local path_gated_executables = vim.json.decode([[${builtins.toJSON pathGatedExecutables}]])
+      ''
+      (builtins.readFile ./servers-lua-only.lua)
+      (builtins.readFile ./exceptions.lua)
+      (builtins.readFile ./activation.lua)
+    ];
   in {
     lsp = {
       inlayHints.enable = true;
-      servers = {
-        # --- Servers with custom config ---
-
-        bashls = mkServer {
-          cmd = ["${lib.getExe pkgs.bash-language-server}"];
-          activate = true; # Store-pinned, always available
-        };
-        elmls = mkServer {
-          root_markers = ["elm.json"];
-        };
-        hls = mkServer {
-          haskell.formattingProvider = "fourmolu";
-        };
-        kotlin_language_server = mkServer {
-          root_markers = [];
-        };
-        marksman = mkServer {
-          filetypes = ["markdown"];
-        };
-        # Keep copilot server config in nixvim, but avoid nixvim's default
-        # package (unfree) resolution path.
-        copilot = mkServer {activate = true;};
-        nixd = mkServer {
-          package = pkgs.nixd;
-          activate = true;
-          settings.nixd = {
-            formatting.command = ["${pkgs.alejandra}/bin/alejandra"];
-            nixpkgs.expr = _pkgs;
-            options.home-manager.expr = ''
-              let
-                hmFlake = builtins.getFlake "${inputs.home-manager.outPath}";
-                nixvimFlake = builtins.getFlake "${inputs.nixvim.outPath}";
-                pkgs = ${_pkgs};
-              in
-                (hmFlake.lib.homeManagerConfiguration {
-                  inherit pkgs;
-                  modules = [
-                    nixvimFlake.homeModules.nixvim
-                    {
-                      home = {
-                        username = "neo";
-                        homeDirectory = "/Users/neo";
-                        stateVersion = "${stateVersion}";
-                      };
-                    }
-                  ];
-                }).options
-            '';
-          };
-        };
-        tinymist = mkServer {
-          formatterMode = "typstyle";
-        };
-        zls =
-          defaultServer
-          // {
-            config.zls = {
-              enable_snippets = true;
-              enable_ast_check_diagnostics = true;
-              enable_autofix = true;
-              enable_import_embedfile_argument_completions = true;
-              warn_style = true;
-              enable_semantic_tokens = true;
-              enable_inlay_hints = true;
-              inlay_hints_show_builtin = true;
-              inlay_hints_hide_redundant_param_names = true;
-              inlay_hints_hide_redundant_param_names_last_token = true;
-              operator_completions = true;
-              include_at_in_builtins = true;
-            };
-          };
-
-        # --- Servers with default config (enable + PATH-based binary) ---
-
-        basedpyright = defaultServer;
-        biome = defaultServer;
-        gopls = defaultServer;
-        nickel_ls = mkServer {
-          package = pkgs.nls;
-          activate = true;
-        };
-        nim_langserver = defaultServer;
-        nushell = defaultServer;
-        prismals = defaultServer;
-        taplo = defaultServer;
-      };
     };
     plugins = {
       lspconfig.enable = true;
-      lsp-format = {
-        enable = true;
-        # Patch deprecated client.method() dot-syntax calls to client:method()
-        # colon-syntax for Neovim nightly compatibility.
-        package = pkgs.vimPlugins.lsp-format-nvim.overrideAttrs (old: {
-          postPatch =
-            (old.postPatch or "")
-            + ''
-              substituteInPlace lua/lsp-format/init.lua \
-                --replace-fail 'client.supports_method(' 'client:supports_method(' \
-                --replace-fail 'client.request_sync(' 'client:request_sync(' \
-                --replace-fail 'client.request(' 'client:request('
-            '';
-        });
-        lspServersToEnable = [
-          "efm"
-          "denols"
-          "hls"
-          "moonbit-lsp"
-          "nixd"
-          "taplo"
-          "zls"
-        ];
-      };
     };
-    # Imperative LSP concerns live in extra.lua:
-    # - Servers not in nixvim schema (emmylua_ls, sourcekit, denols, ts_ls, efm, moonbit-lsp)
-    # - vim.lsp.config overrides requiring Lua-only APIs (workspace library paths, init_options)
-    # - efm language/formatter definitions
-    extraConfigLuaPost = builtins.readFile ./extra.lua;
-    extraPackages = [pkgs.efm-langserver pkgs.nls pkgs.nickel copilotPkgs.copilot-language-server];
+    extraConfigLuaPost = lib.concatStringsSep "\n\n" luaPayload;
   };
 }
