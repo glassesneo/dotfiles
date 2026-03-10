@@ -8,13 +8,22 @@
 
 ## Required Tool Usage
 
-### Code Exploration and Editing
-- **MUST** use Kiri MCP (`mcp__kiri__context_bundle`) to explore unfamiliar codebases
-  - Kiri provides intelligent code context and dependency analysis
-- **MUST** use Morph Fast Apply MCP (`mcp__morph-fast-apply__edit_file`) for large-scale edits (multiple changes, complex refactoring)
-- Use normal Edit tool for small, single changes to conserve Morph's API tokens
+### Code Exploration
+- Use `Read`, `Glob`, `Grep`, and the `Explore` subagent for codebase navigation
+- Use `context7` MCP for official library/framework documentation
+- Use `deepwiki` MCP for repository-level architecture details
 
 ### Web Operations
-- **MUST** use Brave Search MCP or Tavily MCP for web searches
+- **MUST** use Brave Search MCP for web searches
 - **MUST** use Readability MCP to fetch web page contents
 - **NEVER** use built-in web search and fetch tools
+
+## Proactive Delegation
+
+### Code Review
+- After implementation work, proactively delegate to the `code_reviewer` subagent to review changes before considering the task complete.
+- The reviewer is read-only and returns severity-ordered findings with evidence and fix direction.
+
+### Testing
+- When a task changes behavior, touches tests, or carries medium/high regression risk, proactively delegate to the `tester` subagent.
+- The tester runs validation commands, classifies failures, and writes failure reports for non-trivial issues.
