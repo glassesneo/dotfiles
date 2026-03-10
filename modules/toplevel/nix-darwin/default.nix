@@ -33,7 +33,16 @@ delib.module {
           Hour = 0;
           Minute = 0;
         };
-        options = "--delete-older-than 7d";
+        options = "--delete-older-than 3d";
+      };
+
+      optimise = {
+        automatic = true;
+        interval = {
+          Weekday = 0;
+          Hour = 1;
+          Minute = 0;
+        };
       };
     };
 
