@@ -811,6 +811,7 @@
         "skills-deployer": "skills-deployer",
         "sops-nix": "sops-nix",
         "tree-sitter-moonbit": "tree-sitter-moonbit",
+        "treefmt-nix": "treefmt-nix_3",
         "various-wallpapers": "various-wallpapers",
         "wallpapers": "wallpapers"
       }
@@ -942,6 +943,26 @@
       "inputs": {
         "nixpkgs": [
           "llm-agents",
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1772660329,
+        "narHash": "sha256-IjU1FxYqm+VDe5qIOxoW+pISBlGvVApRjiw/Y/ttJzY=",
+        "owner": "numtide",
+        "repo": "treefmt-nix",
+        "rev": "3710e0e1218041bbad640352a0440114b1e10428",
+        "type": "github"
+      },
+      "original": {
+        "owner": "numtide",
+        "repo": "treefmt-nix",
+        "type": "github"
+      }
+    },
+    "treefmt-nix_3": {
+      "inputs": {
+        "nixpkgs": [
           "nixpkgs"
         ]
       },
