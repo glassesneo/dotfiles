@@ -39,10 +39,21 @@
       };
 
     homeConfigs = mkConfigurations "home";
+
+    treefmtSystems = ["aarch64-darwin" "x86_64-linux"];
+    treefmtEval = nixpkgs.lib.genAttrs treefmtSystems (
+      system:
+        inputs.treefmt-nix.lib.evalModule nixpkgs.legacyPackages.${system} ./treefmt.nix
+    );
   in {
     # nixosConfigurations = mkConfigurations "nixos";
     homeConfigurations = homeConfigs;
     darwinConfigurations = mkConfigurations "darwin";
+
+    formatter = nixpkgs.lib.genAttrs treefmtSystems (
+      system:
+        treefmtEval.${system}.config.build.wrapper
+    );
 
     checks.aarch64-darwin = let
       pkgs = nixpkgs.legacyPackages.aarch64-darwin;
@@ -64,7 +75,15 @@
           )
           homeConfigs);
     in
-      hmChecks // nixvimChecks;
+      hmChecks
+      // nixvimChecks
+      // {
+        formatting = treefmtEval.aarch64-darwin.config.build.check inputs.self;
+      };
+
+    checks.x86_64-linux = {
+      formatting = treefmtEval.x86_64-linux.config.build.check inputs.self;
+    };
 
     devShells.aarch64-darwin = let
       pkgs = nixpkgs.legacyPackages.aarch64-darwin;
@@ -90,6 +109,10 @@
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixpkgs-unstable";
+    treefmt-nix = {
+      url = "github:numtide/treefmt-nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     nur = {
       url = "github:nix-community/NUR";
       inputs.nixpkgs.follows = "nixpkgs";

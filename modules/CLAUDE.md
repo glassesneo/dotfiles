@@ -46,7 +46,8 @@ nh home build
 
 ```bash
 nix develop                               # Enter dev shell (deno, emmylua-ls, stylua)
-nix flake check                           # Validate flake structure
+nix fmt                                   # Format Nix/Lua/shell files via treefmt
+nix flake check                           # Validate flake structure (includes formatting check)
 nix flake show                            # Show available outputs
 nix flake update                          # Update all flake inputs
 nix flake lock --update-input nixpkgs     # Update specific input

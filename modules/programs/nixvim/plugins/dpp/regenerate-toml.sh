@@ -28,20 +28,20 @@ shopt -s nullglob
 for ncl_file in "$PLUGINS_DIR"/*.ncl; do
   file_name="$(basename "$ncl_file")"
 
-  [[ ! "$file_name" =~ $NCL_PATTERN ]] && continue
+  [[ ! $file_name =~ $NCL_PATTERN ]] && continue
 
   skip_file=false
   for excluded in "${EXCLUDED_NCL_FILES[@]}"; do
-    if [[ "$file_name" == "$excluded" ]]; then
+    if [[ $file_name == "$excluded" ]]; then
       skip_file=true
       break
     fi
   done
-  [[ "$skip_file" == true ]] && continue
+  [[ $skip_file == true ]] && continue
 
   toml_file="${ncl_file%.ncl}.toml"
   echo "Regenerating $(basename "$toml_file") from $(basename "$ncl_file")..."
-  nickel export --format toml "$ncl_file" --apply-contract "$CONTRACT" > "$toml_file"
+  nickel export --format toml "$ncl_file" --apply-contract "$CONTRACT" >"$toml_file"
 done
 
 echo "Done. All TOML files regenerated."

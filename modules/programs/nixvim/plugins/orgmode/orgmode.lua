@@ -82,13 +82,13 @@ local function extract_top3_from_daily(content)
       if line:match("^%*") then
         break
       end
-      local text = line:match("^%s*%- %[ %] (.+)$")  -- unfinished only
+      local text = line:match("^%s*%- %[ %] (.+)$") -- unfinished only
       if text then
         items[#items + 1] = text
         if #items >= 3 then
           break
         end
-      elseif line:match("^%s*%- %[[Xx%-]%]") then  -- completed checkbox, skip
+      elseif line:match("^%s*%- %[[Xx%-]%]") then -- completed checkbox, skip
         -- do nothing
       elseif line:match("^%s*$") then
         -- skip blank lines
@@ -116,8 +116,7 @@ local function extract_top3_from_monthly(content, yesterday_date)
   local day_heading_line = nil
   local day_level = nil
   for i, line in ipairs(content) do
-    local stars = line:match("^(%*+)%s+" .. date_pattern .. "%s")
-      or line:match("^(%*+)%s+" .. date_pattern .. "$")
+    local stars = line:match("^(%*+)%s+" .. date_pattern .. "%s") or line:match("^(%*+)%s+" .. date_pattern .. "$")
     if stars then
       day_heading_line = i
       day_level = #stars
@@ -154,13 +153,13 @@ local function extract_top3_from_monthly(content, yesterday_date)
   local items = {}
   for i = last_top3_line + 1, subtree_end do
     local line = content[i]
-    local text = line:match("^%s*%- %[ %]%s+(.+)$")  -- unfinished only
+    local text = line:match("^%s*%- %[ %]%s+(.+)$") -- unfinished only
     if text then
       items[#items + 1] = text
       if #items >= 3 then
         break
       end
-    elseif line:match("^%s*%- %[[Xx%-]%]") then  -- completed checkbox, skip
+    elseif line:match("^%s*%- %[[Xx%-]%]") then -- completed checkbox, skip
       -- do nothing
     elseif line:match("^%s*$") then
       -- skip blank lines

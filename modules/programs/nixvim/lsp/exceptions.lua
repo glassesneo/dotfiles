@@ -16,6 +16,8 @@ vim.lsp.config.efm = {
     "nix",
     "prisma",
     "python",
+    "sh",
+    "bash",
     "swift",
     "lua",
     "typst",
@@ -50,6 +52,12 @@ vim.lsp.config.efm = {
           formatStdin = true,
         },
       },
+      nix = {
+        {
+          formatCommand = "treefmt --stdin ${INPUT}",
+          formatStdin = true,
+        },
+      },
       nim = {
         {
           formatCommand = "nph -",
@@ -62,6 +70,18 @@ vim.lsp.config.efm = {
           formatStdin = true,
         },
       },
+      sh = {
+        {
+          formatCommand = "treefmt --stdin ${INPUT}",
+          formatStdin = true,
+        },
+      },
+      bash = {
+        {
+          formatCommand = "treefmt --stdin ${INPUT}",
+          formatStdin = true,
+        },
+      },
       swift = {
         {
           formatCommand = "swift-format format",
@@ -70,7 +90,7 @@ vim.lsp.config.efm = {
       },
       lua = {
         {
-          formatCommand = "stylua --indent-type Spaces --indent-width 2 -",
+          formatCommand = "treefmt --stdin ${INPUT}",
           formatStdin = true,
         },
       },

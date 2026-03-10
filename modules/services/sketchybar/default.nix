@@ -17,27 +17,27 @@ delib.module {
       in
         lib.types.submodule {
           options = {
-            bar_background = lib.mkOption { type = colorType; };
-            text_primary = lib.mkOption { type = colorType; };
-            text_muted = lib.mkOption { type = colorType; };
-            workspace_active = lib.mkOption { type = colorType; };
-            surface_background = lib.mkOption { type = colorType; };
-            popup_background = lib.mkOption { type = colorType; };
-            popup_border = lib.mkOption { type = colorType; };
-            accent_datetime = lib.mkOption { type = colorType; };
-            status_error = lib.mkOption { type = colorType; };
-            status_warning = lib.mkOption { type = colorType; };
-            status_caution = lib.mkOption { type = colorType; };
-            status_success = lib.mkOption { type = colorType; };
-            status_charging = lib.mkOption { type = colorType; };
-            app_arc = lib.mkOption { type = colorType; };
-            app_ghostty = lib.mkOption { type = colorType; };
-            app_obsidian = lib.mkOption { type = colorType; };
-            app_kitty = lib.mkOption { type = colorType; };
-            cpu_low = lib.mkOption { type = colorType; };
-            cpu_medium = lib.mkOption { type = colorType; };
-            cpu_high = lib.mkOption { type = colorType; };
-            cpu_critical = lib.mkOption { type = colorType; };
+            bar_background = lib.mkOption {type = colorType;};
+            text_primary = lib.mkOption {type = colorType;};
+            text_muted = lib.mkOption {type = colorType;};
+            workspace_active = lib.mkOption {type = colorType;};
+            surface_background = lib.mkOption {type = colorType;};
+            popup_background = lib.mkOption {type = colorType;};
+            popup_border = lib.mkOption {type = colorType;};
+            accent_datetime = lib.mkOption {type = colorType;};
+            status_error = lib.mkOption {type = colorType;};
+            status_warning = lib.mkOption {type = colorType;};
+            status_caution = lib.mkOption {type = colorType;};
+            status_success = lib.mkOption {type = colorType;};
+            status_charging = lib.mkOption {type = colorType;};
+            app_arc = lib.mkOption {type = colorType;};
+            app_ghostty = lib.mkOption {type = colorType;};
+            app_obsidian = lib.mkOption {type = colorType;};
+            app_kitty = lib.mkOption {type = colorType;};
+            cpu_low = lib.mkOption {type = colorType;};
+            cpu_medium = lib.mkOption {type = colorType;};
+            cpu_high = lib.mkOption {type = colorType;};
+            cpu_critical = lib.mkOption {type = colorType;};
           };
         };
       default = {};
@@ -59,9 +59,9 @@ delib.module {
         left = lib.mkOption {
           type = lib.types.listOf (lib.types.submodule {
             options = {
-              id = lib.mkOption { type = lib.types.str; };
-              priority = lib.mkOption { type = lib.types.int; };
-              items = lib.mkOption { type = lib.types.listOf lib.types.str; };
+              id = lib.mkOption {type = lib.types.str;};
+              priority = lib.mkOption {type = lib.types.int;};
+              items = lib.mkOption {type = lib.types.listOf lib.types.str;};
               bracket = {
                 enable = boolOption false;
                 backgroundColor = strOption "";
@@ -88,9 +88,9 @@ delib.module {
         center = lib.mkOption {
           type = lib.types.listOf (lib.types.submodule {
             options = {
-              id = lib.mkOption { type = lib.types.str; };
-              priority = lib.mkOption { type = lib.types.int; };
-              items = lib.mkOption { type = lib.types.listOf lib.types.str; };
+              id = lib.mkOption {type = lib.types.str;};
+              priority = lib.mkOption {type = lib.types.int;};
+              items = lib.mkOption {type = lib.types.listOf lib.types.str;};
               bracket = {
                 enable = boolOption false;
                 backgroundColor = strOption "";
@@ -110,9 +110,9 @@ delib.module {
         right = lib.mkOption {
           type = lib.types.listOf (lib.types.submodule {
             options = {
-              id = lib.mkOption { type = lib.types.str; };
-              priority = lib.mkOption { type = lib.types.int; };
-              items = lib.mkOption { type = lib.types.listOf lib.types.str; };
+              id = lib.mkOption {type = lib.types.str;};
+              priority = lib.mkOption {type = lib.types.int;};
+              items = lib.mkOption {type = lib.types.listOf lib.types.str;};
               bracket = {
                 enable = boolOption false;
                 backgroundColor = strOption "";
@@ -175,13 +175,16 @@ delib.module {
     '';
 
     # Generate all layout code (brackets and reorder)
-    generateLayoutCode = zone: groups:
-      let
-        sortedGroups = lib.sort (a: b: a.priority < b.priority) groups;
-        bracketCodes = lib.concatMapStrings (g: if g.bracket.enable then generateBracketCode zone g else "# Bracket disabled for ${g.id}") sortedGroups;
-        allItems = lib.concatMap (g: g.items) sortedGroups;
-        itemString = lib.concatStringsSep " " (map lib.escapeShellArg allItems);
-      in
+    generateLayoutCode = zone: groups: let
+      sortedGroups = lib.sort (a: b: a.priority < b.priority) groups;
+      bracketCodes = lib.concatMapStrings (g:
+        if g.bracket.enable
+        then generateBracketCode zone g
+        else "# Bracket disabled for ${g.id}")
+      sortedGroups;
+      allItems = lib.concatMap (g: g.items) sortedGroups;
+      itemString = lib.concatStringsSep " " (map lib.escapeShellArg allItems);
+    in
       if allItems != []
       then ''
         ${bracketCodes}
@@ -220,33 +223,51 @@ delib.module {
     '';
   in {
     assertions = let
-      priorityAssertions = lib.mapAttrsToList (zone: groups: {
-        assertion = let priorities = map (g: g.priority) groups;
-        in lib.length priorities == lib.length (lib.unique priorities);
-        message = "services.sketchybar.layout.zones.${zone}: group priorities must be unique";
-      }) cfg.layout.zones;
+      priorityAssertions =
+        lib.mapAttrsToList (zone: groups: {
+          assertion = let
+            priorities = map (g: g.priority) groups;
+          in
+            lib.length priorities == lib.length (lib.unique priorities);
+          message = "services.sketchybar.layout.zones.${zone}: group priorities must be unique";
+        })
+        cfg.layout.zones;
 
-      idAssertions = lib.mapAttrsToList (zone: groups: {
-        assertion = let ids = map (g: g.id) groups;
-        in lib.length ids == lib.length (lib.unique ids);
-        message = "services.sketchybar.layout.zones.${zone}: group IDs must be unique";
-      }) cfg.layout.zones;
+      idAssertions =
+        lib.mapAttrsToList (zone: groups: {
+          assertion = let
+            ids = map (g: g.id) groups;
+          in
+            lib.length ids == lib.length (lib.unique ids);
+          message = "services.sketchybar.layout.zones.${zone}: group IDs must be unique";
+        })
+        cfg.layout.zones;
 
       itemAssertions = let
-        allItems = lib.concatLists (lib.mapAttrsToList (_: groups:
-          lib.concatMap (g: g.items) groups
-        ) cfg.layout.zones);
-      in [{
-        assertion = lib.length allItems == lib.length (lib.unique allItems);
-        message = "services.sketchybar.layout: all item names across all zones must be unique";
-      }];
+        allItems = lib.concatLists (lib.mapAttrsToList (
+            _: groups:
+              lib.concatMap (g: g.items) groups
+          )
+          cfg.layout.zones);
+      in [
+        {
+          assertion = lib.length allItems == lib.length (lib.unique allItems);
+          message = "services.sketchybar.layout: all item names across all zones must be unique";
+        }
+      ];
 
-      bracketAssertions = lib.mapAttrsToList (zone: groups:
-        lib.concatMap (g: [{
-          assertion = !g.bracket.enable || g.items != [];
-          message = "services.sketchybar.layout.zones.${zone}.${g.id}: bracket.enable is true but group has no items";
-        }]) groups
-      ) cfg.layout.zones;
+      bracketAssertions =
+        lib.mapAttrsToList (
+          zone: groups:
+            lib.concatMap (g: [
+              {
+                assertion = !g.bracket.enable || g.items != [];
+                message = "services.sketchybar.layout.zones.${zone}.${g.id}: bracket.enable is true but group has no items";
+              }
+            ])
+            groups
+        )
+        cfg.layout.zones;
     in
       lib.flatten (priorityAssertions ++ idAssertions ++ itemAssertions ++ bracketAssertions);
 

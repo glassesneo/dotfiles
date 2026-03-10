@@ -1,5 +1,6 @@
 {
   delib,
+  inputs,
   nixvimLsp,
   pkgs,
   ...
@@ -14,6 +15,7 @@ delib.module {
       inherit (pkgs.stdenv.hostPlatform) system;
       config.allowUnfree = true;
     };
+    treefmtEval = inputs.treefmt-nix.lib.evalModule pkgs ../../../../treefmt.nix;
   in {
     lsp.servers.copilot = nixvimLsp.mkServer {
       activate = true;
@@ -24,6 +26,7 @@ delib.module {
       pkgs.nls
       pkgs.nickel
       copilotPkgs.copilot-language-server
+      treefmtEval.config.build.wrapper
     ];
   };
 }

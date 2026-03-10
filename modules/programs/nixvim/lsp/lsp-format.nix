@@ -25,7 +25,6 @@ delib.module {
       "denols"
       "hls"
       "moonbit-lsp"
-      "nixd"
       "taplo"
       "zls"
     ];

@@ -157,40 +157,40 @@ delib.module {
     serverValidationAssertions = lib.flatten [
       # Each server must define exactly one of url or command_id
       (lib.mapAttrsToList (name: server: {
-        assertion = (server ? url) != (server ? command_id);
-        message = "MCP server `${name}` must define exactly one of `url` or `command_id` (found ${
-          if (server ? url) && (server ? command_id)
-          then "both"
-          else "neither"
-        }).";
-      })
-      servers)
+          assertion = (server ? url) != (server ? command_id);
+          message = "MCP server `${name}` must define exactly one of `url` or `command_id` (found ${
+            if (server ? url) && (server ? command_id)
+            then "both"
+            else "neither"
+          }).";
+        })
+        servers)
 
       # All required targets must be present in enabled
       (map (target: {
-        assertion = builtins.hasAttr target enabled;
-        message = "MCP enabled is missing required target key `${target}`.";
-      })
-      requiredTargets)
+          assertion = builtins.hasAttr target enabled;
+          message = "MCP enabled is missing required target key `${target}`.";
+        })
+        requiredTargets)
 
       # Enabled server references must point to known servers
       (lib.flatten (map (target:
-          lib.optional (builtins.hasAttr target enabled) (
-            map (serverName: {
-              assertion = builtins.elem serverName serverNames;
-              message = "MCP enabled.${target} references unknown server `${serverName}`.";
-            })
-            enabled.${target}
-          ))
-        requiredTargets))
+        lib.optional (builtins.hasAttr target enabled) (
+          map (serverName: {
+            assertion = builtins.elem serverName serverNames;
+            message = "MCP enabled.${target} references unknown server `${serverName}`.";
+          })
+          enabled.${target}
+        ))
+      requiredTargets))
 
       # needs_node = true requires command_id
       (lib.flatten (lib.mapAttrsToList (name: server:
-          lib.optional server.needs_node {
-            assertion = server ? command_id;
-            message = "MCP server `${name}` has needs_node = true but does not define `command_id`.";
-          })
-        servers))
+        lib.optional server.needs_node {
+          assertion = server ? command_id;
+          message = "MCP server `${name}` has needs_node = true but does not define `command_id`.";
+        })
+      servers))
     ];
 
     # Command resolution map: command_id -> executable path

@@ -42,8 +42,11 @@ nh darwin switch . -H kurogane -Lt
 
 #+begin_src sh
 nix develop
+nix fmt
 nix flake check
 #+end_src
+
+=nix fmt= formats Nix, Lua, and shell files via =treefmt=. Formatting is also enforced by =nix flake check=.
 
 ** Updating Dependencies
 
