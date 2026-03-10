@@ -303,7 +303,7 @@ delib.module {
       spec = {
         mode = "primary";
         description = "Primary planning agent that handles both ambiguous and well-scoped requests through iterative specification elicitation and systematic planning workflow.";
-        model = "openai/gpt-5.4";
+        model = "github-copilot/gpt-5.4";
         reasoningEffort = "high";
         prompt =
           ''
@@ -401,7 +401,7 @@ delib.module {
             Phase 3.5: Draft Confirmation Gate (Mandatory)
             Goal: Confirm draft direction with the user before writing the final plan.
 
-            1) Ask the user for explicit confirmation to proceed, including the draft plan path from Phase 3.
+            1) Ask the user for explicit confirmation to proceed using `question` tool, including the draft plan path from Phase 3.
             2) If the user requests revisions or does not confirm, call `draft_planner` to produce a revised draft plan file under `.agents/plans/draft/`.
             3) After each revision, return draft plan path + short summary and ask for confirmation again.
             4) Do NOT proceed to Phase 4 until explicit user confirmation is received.
