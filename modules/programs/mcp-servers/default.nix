@@ -82,6 +82,21 @@ delib.module {
         env_static = {};
         needs_node = false;
       };
+      web-search-prime = {
+        url = "https://api.z.ai/api/mcp/web_search_prime/mcp";
+        url_type = "http";
+        auth_secret = "zai-api-key";
+      };
+      web-reader = {
+        url = "https://api.z.ai/api/mcp/web_reader/mcp";
+        url_type = "http";
+        auth_secret = "zai-api-key";
+      };
+      zread = {
+        url = "https://api.z.ai/api/mcp/zread/mcp";
+        url_type = "http";
+        auth_secret = "zai-api-key";
+      };
     };
 
     # Which servers are enabled per target (migrated from nickel/mcp-servers/servers.ncl)
@@ -94,6 +109,9 @@ delib.module {
         "kiri"
         "codex"
         "context7"
+        "web-search-prime"
+        "web-reader"
+        "zread"
       ];
       claude_desktop = [
         "brave-search"
@@ -116,6 +134,9 @@ delib.module {
         "readability"
         "kiri"
         "context7"
+        "web-search-prime"
+        "web-reader"
+        "zread"
       ];
     };
 
@@ -186,7 +207,7 @@ delib.module {
 
       # needs_node = true requires command_id
       (lib.flatten (lib.mapAttrsToList (name: server:
-        lib.optional server.needs_node {
+        lib.optional (server.needs_node or false) {
           assertion = server ? command_id;
           message = "MCP server `${name}` has needs_node = true but does not define `command_id`.";
         })
@@ -332,14 +353,40 @@ delib.module {
       }
       else dynamicFields // staticFields;
 
-    mkServer = targetMeta: _name: server: let
+    # Target-aware auth header rendering for remote servers with auth_secret.
+    # Claude Code uses ${VAR} env interpolation; OpenCode uses {file:path} substitution.
+    mkAuthHeaders = target: server:
+      if !(server ? auth_secret)
+      then {}
+      else let
+        secret = server.auth_secret;
+        envVarName = lib.toUpper (builtins.replaceStrings ["-"] ["_"] secret);
+        bearerValue =
+          if target == "claude_code" || target == "claude_desktop"
+          then "Bearer \${${envVarName}}"
+          else if target == "opencode"
+          then "Bearer {file:${secretPath secret}}"
+          else "Bearer {env:${envVarName}}";
+      in {
+        headers.Authorization = bearerValue;
+      };
+
+    mkServer = targetMeta: target: _name: server: let
       urlTypePolicy = targetMeta.url_type_policy;
       localTypePolicy = targetMeta.local_type_policy;
+      # Per-server url_type override for Claude targets only (e.g. "http" for streamable HTTP);
+      # non-Claude targets keep their target default (e.g. OpenCode uses "remote").
+      isClaude = target == "claude_code" || target == "claude_desktop";
+      effectiveUrlType =
+        if isClaude && (server ? url_type)
+        then server.url_type
+        else urlTypePolicy;
     in
       if server ? url
       then
         {url = server.url;}
-        // lib.optionalAttrs (urlTypePolicy != null) {type = urlTypePolicy;}
+        // lib.optionalAttrs (effectiveUrlType != null) {type = effectiveUrlType;}
+        // mkAuthHeaders target server
       else
         (
           if targetMeta.command_list_behavior
@@ -355,7 +402,7 @@ delib.module {
       targetMeta = targetsMeta.${target};
     in
       lib.filterAttrs (name: _: builtins.elem name enabled.${target})
-      (lib.mapAttrs (name: server: mkServer targetMeta name (withWrapperManagedEnv server)) servers);
+      (lib.mapAttrs (name: server: mkServer targetMeta target name (withWrapperManagedEnv server)) servers);
 
     # Targets that require the context7 side-effect
     # See https://docs.claude.com/en/docs/claude-code/mcp and https://opencode.ai/docs/mcp-servers

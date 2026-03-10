@@ -14,8 +14,9 @@
 - Use `deepwiki` MCP for repository-level architecture details
 
 ### Web Operations
-- **MUST** use Brave Search MCP for web searches
-- **MUST** use Readability MCP to fetch web page contents
+- **MUST** use Brave Search MCP or Web Search Prime MCP for web searches (both have rate limits — alternate to avoid throttling)
+- **MUST** use Readability MCP or Web Reader MCP to fetch web page contents
+- Use `zread` MCP for reading GitHub repository contents
 - **NEVER** use built-in web search and fetch tools
 
 ## Proactive Delegation

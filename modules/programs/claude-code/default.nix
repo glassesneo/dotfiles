@@ -23,7 +23,8 @@ delib.module {
           if [ -f "$bin" ]; then
             wrapProgram "$bin" \
               --run 'if [ ! -r "${secretPath "claude-code-oauth-token"}" ]; then echo "Missing readable secret file: ${secretPath "claude-code-oauth-token"}" >&2; exit 1; fi' \
-              --run 'export CLAUDE_CODE_OAUTH_TOKEN="$(${cat} "${secretPath "claude-code-oauth-token"}")"'
+              --run 'export CLAUDE_CODE_OAUTH_TOKEN="$(${cat} "${secretPath "claude-code-oauth-token"}")"' \
+              --run 'if [ -r "${secretPath "zai-api-key"}" ]; then export ZAI_API_KEY="$(${cat} "${secretPath "zai-api-key"}")"; fi'
           fi
         done
       '';
@@ -44,6 +45,11 @@ delib.module {
             "mcp__deepwiki__*"
             "mcp__brave-search__brave_web_search"
             "mcp__readability__read_url_content_as_markdown"
+            "mcp__web-search-prime__webSearchPrime"
+            "mcp__web-reader__webReader"
+            "mcp__zread__search_doc"
+            "mcp__zread__get_repo_structure"
+            "mcp__zread__read_file"
           ];
         };
 
@@ -68,8 +74,9 @@ delib.module {
           Tool priority (strict):
           1) `context7` for official library/framework docs and API behavior.
           2) `deepwiki` for repository-level architecture/API details.
-          3) `brave-search` for broader web discovery and recency-sensitive information.
-          4) `readability` for full page extraction from selected URLs.
+          3) `brave-search` or `web-search-prime` for broader web discovery and recency-sensitive information. Both have rate limits — alternate between them to avoid throttling.
+          4) `readability` or `web-reader` for full page extraction from selected URLs. Use either interchangeably.
+          5) `zread` for reading GitHub repository contents (files, structure, and documentation).
 
           Research workflow:
           1) Start from the delegated research questions and known local findings.
