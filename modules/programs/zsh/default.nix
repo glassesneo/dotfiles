@@ -23,6 +23,11 @@ delib.module {
         github = "${ghqRoot}/github.com";
       };
       dotDir = "${homeConfig.xdg.configHome}/zsh";
+      setOptions = [
+        "HIST_IGNORE_ALL_DUPS"
+        "HIST_SAVE_NO_DUPS"
+        "HIST_EXPIRE_DUPS_FIRST"
+      ];
       history = {
         extended = true;
         size = 10000;
