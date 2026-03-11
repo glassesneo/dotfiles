@@ -1,25 +1,19 @@
 {
   delib,
   homeConfig,
-  lib,
+  host,
   ...
 }:
 delib.module {
   name = "programs.zsh";
 
-  options.programs.zsh = with delib; {
-    enable = boolOption true;
-  };
+  options = delib.singleEnableOption host.guiShellFeatured;
 
   home.ifEnabled = {
-    cfg,
-    myconfig,
-    ...
-  }: {
     programs.zsh = let
       ghqRoot = homeConfig.programs.git.settings.ghq.root;
     in {
-      enable = cfg.enable;
+      enable = true;
       enableCompletion = true;
       autosuggestion.enable = true;
       syntaxHighlighting.enable = true;

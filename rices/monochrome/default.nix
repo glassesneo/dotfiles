@@ -13,6 +13,7 @@ in
 
     myconfig.colorscheme = config.myconfig.colorschemes.monochrome.default;
     myconfig.wallpaper = "roses";
+    myconfig.programs.ghostty.quick-terminal-background = colors.base00;
 
     myconfig.services.sketchybar = {
       # datetimeFontOverride = "Iosevka:Regular:16";

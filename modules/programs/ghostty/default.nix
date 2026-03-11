@@ -2,6 +2,7 @@
   brewCasks,
   delib,
   host,
+  lib,
   pkgs,
   ...
 }:
@@ -10,9 +11,14 @@ delib.module {
 
   options.programs.ghostty = with delib; {
     enable = boolOption host.guiShellFeatured;
+    quick-terminal-background = strOption "#20263a";
   };
 
-  home.ifEnabled = {myconfig, ...}: {
+  home.ifEnabled = {
+    cfg,
+    myconfig,
+    ...
+  }: {
     programs.ghostty = {
       enable = true;
       package =
@@ -45,5 +51,9 @@ delib.module {
         # custom-shader-animation = true;
       };
     };
+    programs.zsh.initContent =
+      pkgs.replaceVars ./quick-terminal-check.sh {color = cfg.quick-terminal-background;}
+      |> builtins.readFile
+      |> lib.mkOrder 1200;
   };
 }

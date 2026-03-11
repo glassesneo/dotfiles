@@ -14,6 +14,7 @@ in
     myconfig = {
       colorscheme = colors;
       wallpaper = "forest";
+      programs.ghostty.quick-terminal-background = colors.base00;
 
       services = {
         jankyborders = {
