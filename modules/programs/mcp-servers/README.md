@@ -37,4 +37,3 @@ Secrets must exist in `modules/toplevel/secrets.nix` and be bound in the host se
 ## Notes
 
 - Validation assertions (url xor command_id, required targets, enabled-server references, needs_node rules) are enforced as Nix assertions in the same file.
-- `nickel/packages/node.ncl` is informational only and is not part of any active pipeline.

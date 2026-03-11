@@ -56,7 +56,7 @@ nix flake update
 
 * Node Package Management
 
-Active Node packages for MCP server wiring are managed via =node-packages/= and generated using bun2nix. The Nickel file =nickel/packages/node.ncl= is currently an informational manifest and is not wired into the active bun2nix pipeline.
+Active Node packages for MCP server wiring are managed via =node-packages/= and generated using bun2nix.
 
 When modifying Node package dependencies, regenerate the Nix expressions from repository root:
 

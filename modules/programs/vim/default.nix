@@ -44,10 +44,6 @@ delib.module {
         "vim colorscheme.config is set but colorscheme.plugin is empty - the colorscheme won't be available"; [pkgs.vimPlugins.${cfg.colorscheme.plugin}]
       else [];
   in {
-    # TODO(stabilization-window): Keep legacy artifacts for rollback safety.
-    # Deletion is deferred to a follow-up after stability sign-off.
-    # Pending cleanup targets:
-    # - modules/programs/vim/plugins/skk.toml
     # Deploy vim-specific dpp configuration files
     xdg.configFile = {
       "vim-dpp/dpp.ts" = {

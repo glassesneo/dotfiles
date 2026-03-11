@@ -57,5 +57,4 @@ Full Neovim configuration via nixvim. Module name: `programs.nixvim`.
 - LSP guide: @modules/programs/nixvim/lsp/CLAUDE.md
 - LSP root: @modules/programs/nixvim/lsp/default.nix
 - AI workflows: @modules/programs/nixvim/plugins/ai/
-- DPP regen: @modules/programs/nixvim/plugins/dpp/regenerate-toml.sh
 - Orgmode: @modules/programs/nixvim/plugins/orgmode/default.nix
