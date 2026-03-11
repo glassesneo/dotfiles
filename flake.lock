@@ -813,7 +813,8 @@
         "tree-sitter-moonbit": "tree-sitter-moonbit",
         "treefmt-nix": "treefmt-nix_3",
         "various-wallpapers": "various-wallpapers",
-        "wallpapers": "wallpapers"
+        "wallpapers": "wallpapers",
+        "zeno-zsh": "zeno-zsh"
       }
     },
     "skills-deployer": {
@@ -1009,6 +1010,22 @@
       "original": {
         "owner": "rose-pine",
         "repo": "wallpapers",
+        "type": "github"
+      }
+    },
+    "zeno-zsh": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1772957729,
+        "narHash": "sha256-IPYj4hJ4N5guqgpdJbo2poA+W/KuxkoHInhId4GcGHs=",
+        "owner": "yuki-yano",
+        "repo": "zeno.zsh",
+        "rev": "37bebf0e1737de000abe0d58f70d41b8ef61f9b4",
+        "type": "github"
+      },
+      "original": {
+        "owner": "yuki-yano",
+        "repo": "zeno.zsh",
         "type": "github"
       }
     }

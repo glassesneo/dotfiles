@@ -16,7 +16,6 @@ delib.module {
       enable = true;
       enableCompletion = true;
       autosuggestion.enable = true;
-      syntaxHighlighting.enable = true;
       cdpath = [
         "${ghqRoot}/github.com"
       ];
@@ -28,12 +27,6 @@ delib.module {
         extended = true;
         size = 10000;
         path = "${homeConfig.xdg.stateHome}/zsh/history";
-      };
-      zsh-abbr = {
-        enable = true;
-        abbreviations = {
-          g = "git";
-        };
       };
     };
   };

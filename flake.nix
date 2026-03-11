@@ -164,6 +164,10 @@
       url = "github:Mic92/sops-nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    zeno-zsh = {
+      url = "github:yuki-yano/zeno.zsh";
+      flake = false;
+    };
     dpp-vim = {
       url = "github:Shougo/dpp.vim";
       flake = false;
