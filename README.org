@@ -1,150 +1,162 @@
-#+TITLE: Nix Dotfiles
+#+TITLE: Neo's Nix Dotfiles
 #+AUTHOR: Neo Kitani
-#+EMAIL: glassesneo@protonmail.com
 
 * Overview
 
-Declarative and modular Nix dotfiles for macOS using [[https://github.com/yunfachi/denix][Denix]], nix-darwin, and Home Manager.
+This repository is my declarative macOS setup built with
+[[https://github.com/yunfachi/denix][Denix]], [[https://github.com/nix-darwin/nix-darwin][nix-darwin]], and
+[[https://github.com/nix-community/home-manager][Home Manager]].
 
-Denix auto-discovers all =.nix= files under =hosts/= and =modules/=, so new files must be git-tracked before builds. Avoid cross-module imports; instead, rely on Denix discovery and extensions.
+It is currently centered on one Apple Silicon host, =kurogane=, and uses
+Denix to compose host definitions, reusable modules, and theme variants
+("rices") into both user-level and system-level configurations.
 
-* System Information
+What this repo optimizes for:
 
-- *Platform*: macOS (Apple Silicon)
-- *Module System*: Denix auto-discovery with extensions
+- reproducible workstation setup with Nix flakes
+- modular configuration without hand-wired import trees
+- themeable desktop and editor setup through reusable rices
+- AI-heavy local tooling, including Codex, Claude Code, OpenCode, and MCP wiring
+- a layout that future me can re-enter without reverse-engineering the whole tree
 
-* Highlights
+* Mental Model
 
-- *System configuration* via nix-darwin and Home Manager
-- *Modular architecture* with Denix auto-discovery from =hosts/= and =modules/=
-- *Secret management* via [[https://github.com/Mic92/sops-nix][sops-nix]] and =config.sops.secrets.<key>.path=
-- *Homebrew integration* via [[https://github.com/BatteredBunny/brew-nix][brew-nix]]
-- *AI tooling* with MCP servers
-- *Desktop environment* with AeroSpace, SketchyBar, and Borders
-- *Editor and CLI tooling* via nixvim, ripgrep, fd, and more
-- *Reproducible builds* through flake-based configuration
+Denix auto-discovers =.nix= files under =hosts/=, =modules/=, and =rices/=.
+That gives the repo its shape:
 
-* Quickstart
+- =hosts/= defines machine-specific facts such as platform, default rice, and host-only wiring
+- =modules/= contains reusable configuration split into =config/=, =programs/=, =services/=, and =toplevel/=
+- =rices/= contains theme variants and inheritance-only theme bases
 
-Apply user environment only:
+The important constraints are:
+
+- Do not manually stitch modules together across those Denix discovery trees.
+- Flakes only see git-tracked files, so new files must be added before evaluation or builds.
+- Rices should stay data-oriented. Modules own package resolution and platform-specific wiring.
+- Secrets are consumed through =config.sops.secrets.<key>.path=, not hardcoded paths or plaintext values.
+
+Current host/theme reality:
+
+- Host: =kurogane=
+- Platform: =aarch64-darwin=
+- Default rice: =monochrome=
+- Other selectable rices: =catppuccin=, =everforest=
+
+* Daily Workflows
+
+Apply the Home Manager layer only:
 
 #+begin_src sh
 nh home switch
 #+end_src
 
-Apply system + Home Manager configuration:
+Apply the full nix-darwin + Home Manager system for =kurogane=:
 
 #+begin_src sh
 nh darwin switch . -H kurogane -Lt
 #+end_src
 
-* Development and Validation
+Switch to a different rice:
 
 #+begin_src sh
-nix develop
-nix fmt
+nh darwin switch . -H kurogane-catppuccin -Lt
+#+end_src
+
+Common maintenance commands:
+
+#+begin_src sh
 nix flake check
+nix fmt
+nix develop
 #+end_src
 
-=nix fmt= formats Nix, Lua, and shell files via =treefmt=. Formatting is also enforced by =nix flake check=.
+=nix flake check= validates the flake outputs and formatting checks.
+=nix fmt= runs treefmt-based formatting for Nix, Lua, and shell files.
+=nix develop= enters the repo dev shell used for local maintenance work.
 
-** Updating Dependencies
+* Key Subsystems
 
-#+begin_src sh
-nix flake update
-#+end_src
+** Theming
 
-* Node Package Management
+Theme data lives in =modules/config/colorschemes/= and =rices/=.
+Rices choose colors, wallpaper, and theme-oriented option values; modules
+consume those values to configure tools such as Ghostty, tmux, nixvim,
+SketchyBar, and JankyBorders.
 
-Active Node packages for MCP server wiring are managed via =node-packages/= and generated using bun2nix.
-
-When modifying Node package dependencies, regenerate the Nix expressions from repository root:
-
-#+begin_src sh
-cd node-packages
-bun install
-bun2nix -o bun.nix
-#+end_src
-
-* Repository Structure
-
-#+begin_example
-.
-├── AGENTS.md              # Non-Claude agent entry guidance
-├── CLAUDE.md              # Claude Code entry guidance
-├── docs/                  # Policy docs and runbooks
-├── flake.nix              # Flake configuration and inputs
-├── flake.lock             # Locked dependency versions
-├── hosts/                 # Host-specific configurations
-├── modules/               # Modular configuration files
-│   ├── config/            # Core configuration (constants, node2nix)
-│   ├── programs/          # Program configurations
-│   ├── services/          # Service configurations
-│   └── toplevel/          # System-wide settings
-├── node-packages/         # bun2nix-managed MCP server packages
-├── rices/                 # Theme variants
-└── var/                   # Generated artifacts
-#+end_example
-
-** Key Directories
-
-- =hosts/= :: Host metadata and overrides
-- =modules/= :: Auto-discovered modules
-  - =programs/= :: User program configurations (git, fd, nixvim, etc.)
-  - =services/= :: Service configurations (aerospace, sketchybar, etc.)
-  - =config/= :: Shared configuration and constants
-  - =toplevel/= :: System-level settings and wiring
-
-* Architecture Notes
-
-** Denix Module System
-
-Denix loads configuration via auto-discovery and extensions:
-
-#+begin_src nix
-paths = [./hosts ./modules ./rices]
-extensions = [args base.withConfig]
-#+end_src
-
-Platform blocks target the right layer:
-
-- =home.ifEnabled= :: Home Manager configuration
-- =darwin.ifEnabled= :: nix-darwin system configuration
-- Host routing uses =delib.host= with conditional config when =config.<myconfigName>.host= matches
-- New files must be git-tracked before builds (flake reads tracked files only)
-
-** Constants and Shared Arguments
-
-User metadata is centralized in =modules/config/constants.nix= and referenced as =constants.username=, =constants.userfullname=, and =constants.useremail=.
+The inheritance-only rice at =rices/inheritanceOnly/laptop.nix= holds shared
+laptop defaults. Concrete rices such as =monochrome=, =catppuccin=, and
+=everforest= build on top of it.
 
 ** Secrets
 
-Secrets are defined via sops-nix and referenced as =config.sops.secrets.<key>.path=. Shared declarations live in =modules/toplevel/secrets.nix=, with host binding in =hosts/kurogane/secrets.nix= and encrypted source at =hosts/kurogane/secrets.yaml=. For rotation and validation steps, use =docs/secrets-key-rotation.md=.
+Secrets are declared centrally in =modules/toplevel/secrets.nix= and bound to
+the current host in =hosts/kurogane/secrets.nix=. The encrypted source of truth
+is =hosts/kurogane/secrets.yaml=, managed with
+[[https://github.com/Mic92/sops-nix][sops-nix]].
 
-** MCP Server Architecture
+If you need the rotation procedure, use =docs/secrets-key-rotation.md= rather
+than expanding the root README.
 
-Centralized MCP server definitions live in =modules/programs/mcp-servers/default.nix=. Each tool uses separate memory files under =$XDG_DATA_HOME= (for example, =claudecode_memory.json=, =opencode_memory.json=, and =crush_memory.json=).
+** AI And Agent Tooling
 
-Kiri MCP is wrapped in =modules/config/node-packages.nix= to avoid tree-sitter download issues. It runs =kiri-mcp-server= via =npx=, stores its index at =.kiri/index.duckdb=, and supports watch mode via =--watch=.
+This repo has first-class configuration for:
 
-** Rices (Theme Variants)
+- Claude Code
+- Codex
+- OpenCode
+- agent-browser
+- shared MCP server wiring
 
-Rices define theme variants under =rices/= and should only set pure data (no =pkgs= references). Modules resolve packages using their own =pkgs= to avoid cross-compilation issues. Select a rice per host in =hosts/<name>/default.nix=.
+The MCP source of truth lives in =modules/programs/mcp-servers/default.nix=.
+That module owns server definitions, target-specific adapters, validation
+assertions, and secret-aware runtime wiring.
 
-* Documentation
+Some MCP helpers come from =node-packages/=, which is a bun2nix-managed Node
+package set used by the Nix wrappers in =modules/config/node-packages.nix=.
 
-- =docs/documentation-policy.md= :: Canonical documentation ownership and maintenance rules
-- =CLAUDE.md= :: Claude Code entry guidance
-- =AGENTS.md= :: Non-Claude agent entry guidance
-- Local examples: =modules/CLAUDE.md=, =modules/config/CLAUDE.md=, =modules/toplevel/CLAUDE.md=
+** Development Environment
+
+The flake defines a small maintenance shell with tools such as =bun=, =deno=,
+=nickel=, =stylua=, and =emmylua-ls=. Formatting is configured through
+=treefmt.nix=.
+
+This is a Nix-native repo. Prefer changing the flake and modules over managing
+tool state outside the configuration, unless a local module explicitly requires
+it.
+
+* Repository Map
+
+#+begin_example
+.
+├── docs/           Stable policy docs and runbooks
+├── hosts/          Host-specific definitions and bindings
+├── modules/        Reusable Denix modules
+├── node-packages/  bun2nix-managed Node packages for MCP-related wrappers
+├── nickel/         Nickel experiments and support material
+├── rices/          Theme variants and inheritance-only theme bases
+└── var/            Small repo-local artifacts and planning scratch files
+#+end_example
+
+Within =modules/=:
+
+- =config/= holds shared data and cross-cutting configuration helpers
+- =programs/= configures user-facing tools
+- =services/= configures desktop services such as AeroSpace and SketchyBar
+- =toplevel/= handles broad system/user wiring such as Nix, Home Manager, fonts, and secrets
+
+You will also see directories such as =.kiri/=, =.agents/=, =.claude/=,
+=.agent-browser/=, =.opencode/=, and =.crush/=. Those are local runtime or
+tool-state directories, not the main declarative source of truth.
+
+* Pointers
+
+- Documentation policy: =docs/documentation-policy.md=
+- Claude Code entry guidance: =CLAUDE.md=
+- Other coding agents entry guidance: =AGENTS.md=
+- Module tree guidance: =modules/CLAUDE.md=
+- Config-specific notes: =modules/config/CLAUDE.md=
+- Toplevel/secrets notes: =modules/toplevel/CLAUDE.md=
 
 * License
 
-See [[file:LICENSE][LICENSE]] for details.
-
-* Acknowledgments
-
-- [[https://github.com/yunfachi/denix][Denix]] for the modular framework
-- [[https://github.com/nix-community][Nix Community]] for Home Manager and nixvim
-- [[https://github.com/nikitabobko][nikitabobko]] for AeroSpace
-- [[https://github.com/FelixKratz][FelixKratz]] for SketchyBar
+See [[file:LICENSE][LICENSE]].
