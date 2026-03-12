@@ -147,16 +147,6 @@ in
         };
       };
 
-      # Use rice-aware options for vim and tmux
-      programs.vim.colorscheme = {
-        plugin = "catppuccin-vim";
-        config = ''
-          " Catppuccin colorscheme configuration
-          let g:catppuccin_flavour = "${flavor}"
-          silent! colorscheme catppuccin_macchiato
-        '';
-      };
-
       programs.tmux.theme = {
         plugin = "catppuccin";
         pluginConfig = ''

@@ -72,8 +72,6 @@ bun2nix -o bun.nix
 .
 ├── AGENTS.md              # Non-Claude agent entry guidance
 ├── CLAUDE.md              # Claude Code entry guidance
-├── deno.json              # Deno tooling configuration
-├── deno.lock              # Deno dependency lockfile
 ├── docs/                  # Policy docs and runbooks
 ├── flake.nix              # Flake configuration and inputs
 ├── flake.lock             # Locked dependency versions

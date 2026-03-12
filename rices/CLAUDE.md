@@ -7,28 +7,15 @@ Rices **cannot** reference `pkgs` directly — `pkgs` in `delib.rice` resolves t
 **Solution**: Modules define string options that rices set as pure data. Modules then resolve packages using their own `pkgs`:
 
 ```nix
-# Module (e.g., modules/programs/vim/default.nix)
-options.programs.vim.colorscheme = {
-  plugin = strOption "";  # Rice sets: "catppuccin-vim"
-  config = strOption "";  # Rice sets: vimscript string
-};
-
-home.ifEnabled = {cfg, ...}: let
-  # Module resolves package from string (correct platform)
-  colorschemePlugin =
-    if cfg.colorscheme.plugin != ""
-    then [pkgs.vimPlugins.${cfg.colorscheme.plugin}]
-    else [];
-in { ... };
-
-# Rice (e.g., rices/catppuccin.nix)
-myconfig.programs.vim.colorscheme = {
-  plugin = "catppuccin-vim";  # Pure string, no pkgs reference
-  config = "colorscheme catppuccin_macchiato";
+# Module (e.g., modules/programs/tmux/default.nix)
+options.programs.tmux.theme = {
+  plugin = strOption "";
+  pluginConfig = strOption "";
+  extraConfig = strOption "";
 };
 ```
 
-**Key files**: `modules/programs/vim/default.nix`, `modules/programs/tmux/default.nix`, `rices/*.nix`
+**Key files**: `modules/programs/tmux/default.nix`, `rices/*.nix`
 
 **Validation**: Modules assert plugin names exist in `pkgs.*Plugins` with helpful error messages.
 
