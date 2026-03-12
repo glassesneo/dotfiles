@@ -277,11 +277,11 @@ delib.module {
         recursive = true;
       };
     };
-    xdg.configFile."sketchybar_icon_map.sh" = {
-      source = pkgs.replaceVars ./sketchybar_icon_map.sh {
-        sketchybar-app-font = "${pkgs.sketchybar-app-font}/bin/icon_map.sh";
-      };
-    };
+    xdg.configFile."sketchybar_icon_map.sh".text = ''
+      source ${pkgs.sketchybar-app-font}/bin/icon_map.sh
+      __icon_map "$1"
+      echo "$icon_result"
+    '';
     home.packages = with pkgs; [
       sketchybar-app-font
       nerd-fonts.hack

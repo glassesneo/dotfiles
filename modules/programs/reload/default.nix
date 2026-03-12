@@ -6,7 +6,7 @@
   ...
 }:
 delib.module {
-  name = "programs.reload_config";
+  name = "programs.reload";
 
   options = delib.singleEnableOption true;
 
@@ -19,17 +19,16 @@ delib.module {
         ${lib.getExe pkgs.sketchybar} --reload && echo 'sketchybar reloaded';
       '';
       ghostty_reload = lib.optionalString (pkgs.stdenv.isDarwin && homeConfig.programs.ghostty.enable) ''
-        osascript -e 'tell application "Ghostty" to activate' \
-          -e 'tell application "System Events" to key code 43 using {command down, shift down}' && echo 'ghostty reloaded'
+        osascript -e '${builtins.readFile ./reload_ghostty.applescript}' && echo 'ghostty reloaded';
       '';
-      reload_config =
+      reload =
         [
           tmux_reload
           sketchybar_reload
           ghostty_reload
         ]
         |> lib.concatStrings
-        |> pkgs.writeShellScriptBin "reload_config";
-    in [reload_config];
+        |> pkgs.writeShellScriptBin "reload";
+    in [reload];
   };
 }

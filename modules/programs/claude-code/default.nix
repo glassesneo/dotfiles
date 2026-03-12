@@ -38,8 +38,6 @@ delib.module {
         permissions = {
           allow = [
             "Skill(tmux-runner)"
-            "Skill(codex-subagent)"
-            "Skill(codex-exec)"
             "mcp__context7__resolve-library-id"
             "mcp__context7__get-library-docs"
             "mcp__deepwiki__*"

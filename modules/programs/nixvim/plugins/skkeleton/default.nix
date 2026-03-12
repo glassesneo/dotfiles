@@ -1,7 +1,6 @@
 {
   delib,
   homeConfig,
-  lib,
   pkgs,
   ...
 }:
@@ -14,12 +13,10 @@ delib.module {
   home.ifEnabled.programs.nixvim = {
     extraPlugins = [pkgs.vimPlugins.skkeleton];
     extraConfigLua =
-      lib.replaceStrings
-      ["@skk-dict-path@" "@user-dict-path@"]
-      [
-        "${pkgs.skkDictionaries.l}/share/skk/SKK-JISYO.L"
-        "${homeConfig.xdg.configHome}/.skkeleton"
-      ]
-      (builtins.readFile ./skkeleton.lua);
+      pkgs.replaceVars ./config.lua {
+        skk-dict-path = "${pkgs.skkDictionaries.l}/share/skk/SKK-JISYO.L";
+        user-dict-path = "${homeConfig.xdg.configHome}/.skkeleton";
+      }
+      |> builtins.readFile;
   };
 }
