@@ -8,6 +8,11 @@ export default defineConfig(() => ({
       snippet: "git status --short --branch",
     },
     {
+      name: "git add",
+      keyword: "ga",
+      snippet: "git add {{path}}",
+    },
+    {
       name: "git add -A",
       keyword: "gaa",
       snippet: "git add -A",
