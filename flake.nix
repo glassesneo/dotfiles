@@ -168,26 +168,6 @@
       url = "github:yuki-yano/zeno.zsh";
       flake = false;
     };
-    dpp-vim = {
-      url = "github:Shougo/dpp.vim";
-      flake = false;
-    };
-    dpp-ext-installer = {
-      url = "github:Shougo/dpp-ext-installer";
-      flake = false;
-    };
-    dpp-ext-lazy = {
-      url = "github:Shougo/dpp-ext-lazy";
-      flake = false;
-    };
-    dpp-ext-toml = {
-      url = "github:Shougo/dpp-ext-toml";
-      flake = false;
-    };
-    dpp-protocol-git = {
-      url = "github:Shougo/dpp-protocol-git";
-      flake = false;
-    };
     skills-deployer = {
       url = "github:glassesneo/skills-deployer";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -210,6 +190,10 @@
     };
     bun2nix = {
       url = "github:nix-community/bun2nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    denops-plugins = {
+      url = "github:glassesneo/denops-plugins.nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
     catppuccin = {

@@ -2,37 +2,9 @@
 
 ## Overview
 
-Vim configuration with DPP (Dark Powered Plugin manager) via Denops. Module name: `programs.vim` (avoids collision with nixvim's `programs.vim`).
+Minimal Vim configuration with base `.vimrc` settings only. Module name: `programs.vim`.
 
-## Rice-Aware Colorscheme Pattern
-
-This module is the primary example of the rice-aware options architecture:
-
-```nix
-options.programs.vim.colorscheme = {
-  plugin = strOption "";   # Rice sets pure string, e.g., "catppuccin-vim"
-  config = strOption "";   # Rice sets vimscript string
-};
-```
-
-- Module resolves `pkgs.vimPlugins.${cfg.colorscheme.plugin}` at build time (correct platform).
-- Validates plugin exists in `pkgs.vimPlugins` with `assert lib.assertMsg`.
-- Colorscheme config injected last in `extraConfig` to override base settings.
-
-## DPP Plugin Manager
-
-- DPP ownership follows the shared core + editor bootstrap split used in `modules/programs/nixvim/plugins/dpp/README.md`.
-- **Shared core layer**: `modules/config/dpp-shared.nix`
-  - Builds shared plugin packages (`dppShared.dppPluginPkgs`)
-  - Compiles generated TOMLs (`dppShared.pluginTomls`)
-  - Exposes shared hook sources (`dppShared.sharedHookSources.skkVim`)
-- Plugin definitions are Nix attrsets in `modules/config/dpp-shared.nix` (`editingPlugins`, `motionPlugins`, `skkPlugins`, `ddcPlugins`), with editor guards (e.g., `"if" = "has('nvim')"`) so one data set serves both Vim and Neovim.
-- **Vim-specific bootstrap**: `modules/programs/vim/default.nix`
-  - Owns Vim loader setup (`setup-dpp.vim`)
-  - Owns Vim environment wiring (`$DPP_HOOK_DIR`) and runtimepath wiring
-  - Deploys Vim-facing config under `~/.config/vim-dpp/`
-- SKK hook source is shared from `dppShared.sharedHookSources.skkVim` and dictionary path is injected in Vim module wiring.
-- Cache/state path remains `~/.cache/vim-dpp` (separate from Neovim `~/.cache/dpp`).
+No plugin manager or plugins are installed. Vim is available as a fallback editor with standard settings (syntax, filetype, indentation, search, keymaps).
 
 ## Key Detail
 

@@ -173,83 +173,24 @@
         "type": "github"
       }
     },
-    "dpp-ext-installer": {
-      "flake": false,
+    "denops-plugins": {
+      "inputs": {
+        "flake-parts": "flake-parts_2",
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
       "locked": {
-        "lastModified": 1757647703,
-        "narHash": "sha256-LnYjCg3DTq74wgVO19xAe/EdonJeiZUufgdTrOAV4HY=",
-        "owner": "Shougo",
-        "repo": "dpp-ext-installer",
-        "rev": "25ed2c4c0c7415950476be4a8e7e0c541127cefa",
+        "lastModified": 1773301058,
+        "narHash": "sha256-fFkdIXHLHCgtz4z6y8gMQebVjqLec6n3I7b6ZT1BMgs=",
+        "owner": "glassesneo",
+        "repo": "denops-plugins.nix",
+        "rev": "84b6b33bad34ce424182b037ff8524596539a321",
         "type": "github"
       },
       "original": {
-        "owner": "Shougo",
-        "repo": "dpp-ext-installer",
-        "type": "github"
-      }
-    },
-    "dpp-ext-lazy": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1759795538,
-        "narHash": "sha256-Vs5pge9EEo2Ww7x4ItGkvhZmRNG7mL4uhJOWV9Cm/co=",
-        "owner": "Shougo",
-        "repo": "dpp-ext-lazy",
-        "rev": "0edbfc603eba41b3ad3705806602ce5f751918ee",
-        "type": "github"
-      },
-      "original": {
-        "owner": "Shougo",
-        "repo": "dpp-ext-lazy",
-        "type": "github"
-      }
-    },
-    "dpp-ext-toml": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1756537708,
-        "narHash": "sha256-txtUBfy9FcFQt/TWWD1p+Z8vVhUyolxtMpwfuvJzv8g=",
-        "owner": "Shougo",
-        "repo": "dpp-ext-toml",
-        "rev": "9a441896eebb09ca5f9b93fec79d094799ae3cde",
-        "type": "github"
-      },
-      "original": {
-        "owner": "Shougo",
-        "repo": "dpp-ext-toml",
-        "type": "github"
-      }
-    },
-    "dpp-protocol-git": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1758602989,
-        "narHash": "sha256-qaLbB+MP9C+9VpdbZ01HLCzSa1NhaG7Kd1nxrc3bAVs=",
-        "owner": "Shougo",
-        "repo": "dpp-protocol-git",
-        "rev": "dd6dddfaa0bdc3cccde41316bcb9a24dbc701040",
-        "type": "github"
-      },
-      "original": {
-        "owner": "Shougo",
-        "repo": "dpp-protocol-git",
-        "type": "github"
-      }
-    },
-    "dpp-vim": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1760238956,
-        "narHash": "sha256-bqx9P7z6iI94EzxOeuILJbOVjYeBsdPlFyAQN14UMH0=",
-        "owner": "Shougo",
-        "repo": "dpp.vim",
-        "rev": "e742a0779fb1ebe98ffb8e6dec432fb82498a30f",
-        "type": "github"
-      },
-      "original": {
-        "owner": "Shougo",
-        "repo": "dpp.vim",
+        "owner": "glassesneo",
+        "repo": "denops-plugins.nix",
         "type": "github"
       }
     },
@@ -289,6 +230,24 @@
     },
     "flake-parts_2": {
       "inputs": {
+        "nixpkgs-lib": "nixpkgs-lib_3"
+      },
+      "locked": {
+        "lastModified": 1772408722,
+        "narHash": "sha256-rHuJtdcOjK7rAHpHphUb1iCvgkU3GpfvicLMwwnfMT0=",
+        "owner": "hercules-ci",
+        "repo": "flake-parts",
+        "rev": "f20dc5d9b8027381c474144ecabc9034d6a839a3",
+        "type": "github"
+      },
+      "original": {
+        "owner": "hercules-ci",
+        "repo": "flake-parts",
+        "type": "github"
+      }
+    },
+    "flake-parts_3": {
+      "inputs": {
         "nixpkgs-lib": [
           "llm-agents",
           "nixpkgs"
@@ -308,7 +267,7 @@
         "type": "github"
       }
     },
-    "flake-parts_3": {
+    "flake-parts_4": {
       "inputs": {
         "nixpkgs-lib": [
           "mcp-hub",
@@ -329,7 +288,7 @@
         "type": "github"
       }
     },
-    "flake-parts_4": {
+    "flake-parts_5": {
       "inputs": {
         "nixpkgs-lib": [
           "mcphub-nvim",
@@ -350,7 +309,7 @@
         "type": "github"
       }
     },
-    "flake-parts_5": {
+    "flake-parts_6": {
       "inputs": {
         "nixpkgs-lib": [
           "neovim-nightly-overlay",
@@ -371,7 +330,7 @@
         "type": "github"
       }
     },
-    "flake-parts_6": {
+    "flake-parts_7": {
       "inputs": {
         "nixpkgs-lib": [
           "nixvim",
@@ -392,7 +351,7 @@
         "type": "github"
       }
     },
-    "flake-parts_7": {
+    "flake-parts_8": {
       "inputs": {
         "nixpkgs-lib": [
           "nur",
@@ -490,7 +449,7 @@
       "inputs": {
         "blueprint": "blueprint",
         "bun2nix": "bun2nix_2",
-        "flake-parts": "flake-parts_2",
+        "flake-parts": "flake-parts_3",
         "nixpkgs": "nixpkgs_2",
         "systems": "systems_2",
         "treefmt-nix": "treefmt-nix_2"
@@ -511,7 +470,7 @@
     },
     "mcp-hub": {
       "inputs": {
-        "flake-parts": "flake-parts_3",
+        "flake-parts": "flake-parts_4",
         "nixpkgs": [
           "nixpkgs"
         ]
@@ -552,7 +511,7 @@
     },
     "mcphub-nvim": {
       "inputs": {
-        "flake-parts": "flake-parts_4",
+        "flake-parts": "flake-parts_5",
         "nixpkgs": [
           "nixpkgs"
         ]
@@ -573,7 +532,7 @@
     },
     "neovim-nightly-overlay": {
       "inputs": {
-        "flake-parts": "flake-parts_5",
+        "flake-parts": "flake-parts_6",
         "neovim-src": "neovim-src",
         "nixpkgs": "nixpkgs_3"
       },
@@ -674,6 +633,21 @@
         "type": "github"
       }
     },
+    "nixpkgs-lib_3": {
+      "locked": {
+        "lastModified": 1772328832,
+        "narHash": "sha256-e+/T/pmEkLP6BHhYjx6GmwP5ivonQQn0bJdH9YrRB+Q=",
+        "owner": "nix-community",
+        "repo": "nixpkgs.lib",
+        "rev": "c185c7a5e5dd8f9add5b2f8ebeff00888b070742",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nix-community",
+        "repo": "nixpkgs.lib",
+        "type": "github"
+      }
+    },
     "nixpkgs_2": {
       "locked": {
         "lastModified": 1772956932,
@@ -724,7 +698,7 @@
     },
     "nixvim": {
       "inputs": {
-        "flake-parts": "flake-parts_6",
+        "flake-parts": "flake-parts_7",
         "nixpkgs": [
           "nixpkgs"
         ],
@@ -747,7 +721,7 @@
     },
     "nur": {
       "inputs": {
-        "flake-parts": "flake-parts_7",
+        "flake-parts": "flake-parts_8",
         "nixpkgs": [
           "nixpkgs"
         ]
@@ -793,11 +767,7 @@
         "bun2nix": "bun2nix",
         "catppuccin": "catppuccin",
         "denix": "denix",
-        "dpp-ext-installer": "dpp-ext-installer",
-        "dpp-ext-lazy": "dpp-ext-lazy",
-        "dpp-ext-toml": "dpp-ext-toml",
-        "dpp-protocol-git": "dpp-protocol-git",
-        "dpp-vim": "dpp-vim",
+        "denops-plugins": "denops-plugins",
         "home-manager": "home-manager",
         "llm-agents": "llm-agents",
         "mcp-hub": "mcp-hub",

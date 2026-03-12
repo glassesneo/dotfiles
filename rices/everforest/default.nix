@@ -59,17 +59,6 @@ in
         };
       };
 
-      programs.vim.colorscheme = {
-        plugin = "everforest";
-        config = ''
-          " Everforest colorscheme configuration
-          set background=dark
-          let g:everforest_background = 'medium'
-          let g:everforest_transparent_background = 1
-          silent! colorscheme everforest
-        '';
-      };
-
       programs.tmux.theme = {
         plugin = "";
         pluginConfig = "";
