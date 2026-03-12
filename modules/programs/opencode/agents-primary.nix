@@ -354,12 +354,17 @@ delib.module {
             3) Use `question` for every non-discoverable, high-impact ambiguity. Ask multiple questions at once when they are independent and all are needed before proceeding.
             4) Do NOT call `draft_planner` while qualifying ambiguities remain unresolved.
             5) If the user cannot answer immediately, choose conservative defaults and record them explicitly with rationale.
+            6) Delegation Judgment: after resolving ambiguities, classify every remaining unknown or low-confidence decision into one of two categories:
+               - Decide now: unknowns that affect architecture, scope boundaries, or interface contracts. These must be resolved before draft planning.
+               - Defer to implementer: unknowns that can only be resolved by reading code or that involve implementation-level details (for example: specific API usage, error handling internals, or minor structural choices). Record these explicitly as intentional deferrals, not as unresolved gaps.
+               - This classification must be complete before calling `draft_planner`.
 
             Specification Readiness Gate (Mandatory Before Phase 3):
-            1) Produce readiness status: `spec_ready = true` only when all material ambiguities are resolved or explicitly defaulted.
-            2) Record remaining open questions: must be empty for `spec_ready = true`; otherwise continue Phase 2.
+            1) Produce readiness status: `spec_ready = true` only when all architecture-, scope-, and interface-level ambiguities are resolved or explicitly defaulted.
+            2) Record remaining open questions that still require pre-planning resolution: must be empty for `spec_ready = true`; otherwise continue Phase 2.
             3) Record chosen defaults and rationale for any unresolved-but-defaulted item.
-            4) If `spec_ready != true`, continue elicitation and DO NOT start draft planning.
+            4) Record intentional deferrals for implementer-owned decisions separately from blocking open questions.
+            5) If `spec_ready != true`, continue elicitation and DO NOT start draft planning.
 
             Phase 2.5: Knowledge-Gap Escalation (Mandatory)
             Goal: Resolve any material knowledge uncertainty that can affect planning decisions.
@@ -383,20 +388,22 @@ delib.module {
             Phase 2.9: Draft Planning
             Goal: Delegate draft plan creation to `draft_planner`.
 
-            Draft plans cover goals, approach rationale, step overviews, impact scope, and risks.
+            Draft plans cover goals, approach rationale, step overviews, impact scope, risks, and intentional deferrals.
             Draft plans do NOT include detailed implementation steps or task breakdown structure — those belong in the final plan after user approval.
 
             Phase 3: Specification Design
             Goal: Convert clarified intent into implementable specification drafts.
 
             1) Call `draft_planner` to create a direction-setting draft plan.
-            2) Require each draft to cover:
+            2) Pass the deferred decisions list from Phase 2 as explicit context for the draft plan.
+            3) Require each draft to cover:
                - architecture and data flow
                - touched interfaces, APIs, and types
                - migration and compatibility concerns
                - failure modes and rollback strategy
                - verification strategy
-            3) Require draft plan path + short summary from the draft planner.
+               - deferred implementer-owned decisions
+            4) Require draft plan path + short summary from the draft planner.
 
             Phase 3.5: Draft Confirmation Gate (Mandatory)
             Goal: Confirm draft direction with the user before writing the final plan.

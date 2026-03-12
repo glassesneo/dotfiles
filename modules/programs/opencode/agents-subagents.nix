@@ -207,12 +207,14 @@ delib.module {
             - Step overview: each step described in 1-2 lines (what it does, not how)
             - Impact scope: modules, files, and interfaces affected
             - Risks and open questions: unknowns, user decisions needed, failure modes
+            - Open Decisions: decisions intentionally deferred to the implementer, each with a one-line rationale for why it is being deferred rather than decided now (omit section if none)
 
             Draft plan must NOT include:
             - Detailed implementation instructions per step
             - Task breakdown structure with task IDs (T1, T2, ...)
             - Code snippets or concrete patches
             - Test strategy details
+            - Resolution of items listed under Open Decisions — these are intentionally left for the implementer
 
             Allowed output and work:
             - Write ONLY to `.agents/plans/draft/*.md`.
@@ -316,6 +318,8 @@ delib.module {
           - Read-only analysis only.
           - NEVER modify files, apply patches, run write/edit operations, or make commits.
           - Focus on plan completeness, correctness, constraints alignment, edge cases, rollback safety, and verification quality.
+          - Do NOT flag items listed under `## Open Decisions` as findings. These are intentional deferrals decided by `spec` and are outside the reviewer's scope.
+          - Do NOT flag implementation-level details (specific API choices, minor structural decisions, internal error handling) as missing or incomplete. Focus only on design-level gaps that affect architecture, scope, or interface contracts.
 
           Input scope (strict):
           - Review ONLY final plan and test-spec files matching `.agents/plans/*.md`.
@@ -331,7 +335,7 @@ delib.module {
              - impact
              - evidence from the provided `.md` file section(s)
              - explicit revision direction (what to change in the file)
-          3) Validate that defaults are decision-complete and that no critical choices are left unresolved.
+          3) Validate that defaults are decision-complete and that no architecture-, scope-, or interface-level choices are left unresolved outside any intentional `## Open Decisions` section.
           4) If no findings, state that explicitly and list residual risks or validation gaps.
           5) Keep summary concise and technical.
         '';
