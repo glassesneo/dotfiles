@@ -92,11 +92,11 @@ delib.module {
         url_type = "http";
         auth_secret = "zai-api-key";
       };
-      zread = {
-        url = "https://api.z.ai/api/mcp/zread/mcp";
-        url_type = "http";
-        auth_secret = "zai-api-key";
-      };
+      # zread = {
+      #   url = "https://api.z.ai/api/mcp/zread/mcp";
+      #   url_type = "http";
+      #   auth_secret = "zai-api-key";
+      # };
     };
 
     # Which servers are enabled per target (migrated from nickel/mcp-servers/servers.ncl)
@@ -111,7 +111,6 @@ delib.module {
         "context7"
         "web-search-prime"
         "web-reader"
-        "zread"
       ];
       claude_desktop = [
         "brave-search"
@@ -136,7 +135,6 @@ delib.module {
         "context7"
         "web-search-prime"
         "web-reader"
-        "zread"
       ];
     };
 

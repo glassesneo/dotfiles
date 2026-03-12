@@ -390,7 +390,6 @@ delib.module {
             2) `deepwiki` for repository-level architecture/API details.
             3) `brave-search` or `web-search-prime` for broader web discovery and recency-sensitive information. Both have rate limits — alternate between them to avoid throttling.
             4) `readability` or `web-reader` for full page extraction from selected URLs. Use either interchangeably.
-            5) `zread` for reading GitHub repository contents (files, structure, and documentation).
 
             Research workflow:
             1) Start from the delegated research questions and known local findings.

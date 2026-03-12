@@ -45,9 +45,6 @@ delib.module {
             "mcp__readability__read_url_content_as_markdown"
             "mcp__web-search-prime__webSearchPrime"
             "mcp__web-reader__webReader"
-            "mcp__zread__search_doc"
-            "mcp__zread__get_repo_structure"
-            "mcp__zread__read_file"
           ];
         };
 
@@ -74,7 +71,6 @@ delib.module {
           2) `deepwiki` for repository-level architecture/API details.
           3) `brave-search` or `web-search-prime` for broader web discovery and recency-sensitive information. Both have rate limits — alternate between them to avoid throttling.
           4) `readability` or `web-reader` for full page extraction from selected URLs. Use either interchangeably.
-          5) `zread` for reading GitHub repository contents (files, structure, and documentation).
 
           Research workflow:
           1) Start from the delegated research questions and known local findings.
