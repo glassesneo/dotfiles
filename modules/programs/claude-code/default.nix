@@ -35,7 +35,11 @@ delib.module {
       package = claudeCodeWrapped;
       settings = {
         model = "opus";
+        skipDangerousModePermissionPrompt = true;
+        skipAutoPermissionPrompt = true;
+        automode = true;
         permissions = {
+          defaultMode = "auto";
           allow = [
             "Skill(tmux-runner)"
             "mcp__context7__resolve-library-id"
@@ -46,6 +50,10 @@ delib.module {
             "mcp__web-search-prime__webSearchPrime"
             "mcp__web-reader__webReader"
           ];
+        };
+        sandbox = {
+          enabled = true;
+          autoAllowBashIfSandboxed = true;
         };
 
         env = {
