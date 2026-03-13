@@ -82,16 +82,16 @@ delib.module {
         env_static = {};
         needs_node = false;
       };
-      web-search-prime = {
-        url = "https://api.z.ai/api/mcp/web_search_prime/mcp";
-        url_type = "http";
-        auth_secret = "zai-api-key";
-      };
-      web-reader = {
-        url = "https://api.z.ai/api/mcp/web_reader/mcp";
-        url_type = "http";
-        auth_secret = "zai-api-key";
-      };
+      # web-search-prime = {
+      #   url = "https://api.z.ai/api/mcp/web_search_prime/mcp";
+      #   url_type = "http";
+      #   auth_secret = "zai-api-key";
+      # };
+      # web-reader = {
+      #   url = "https://api.z.ai/api/mcp/web_reader/mcp";
+      #   url_type = "http";
+      #   auth_secret = "zai-api-key";
+      # };
       # zread = {
       #   url = "https://api.z.ai/api/mcp/zread/mcp";
       #   url_type = "http";
@@ -109,8 +109,6 @@ delib.module {
         "kiri"
         "codex"
         "context7"
-        "web-search-prime"
-        "web-reader"
       ];
       claude_desktop = [
         "brave-search"
@@ -133,8 +131,6 @@ delib.module {
         "readability"
         "kiri"
         "context7"
-        "web-search-prime"
-        "web-reader"
       ];
     };
 

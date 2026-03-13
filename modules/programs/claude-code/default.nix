@@ -47,8 +47,6 @@ delib.module {
             "mcp__deepwiki__*"
             "mcp__brave-search__brave_web_search"
             "mcp__readability__read_url_content_as_markdown"
-            "mcp__web-search-prime__webSearchPrime"
-            "mcp__web-reader__webReader"
           ];
         };
         sandbox = {
@@ -77,8 +75,8 @@ delib.module {
           Tool priority (strict):
           1) `context7` for official library/framework docs and API behavior.
           2) `deepwiki` for repository-level architecture/API details.
-          3) `brave-search` or `web-search-prime` for broader web discovery and recency-sensitive information. Both have rate limits — alternate between them to avoid throttling.
-          4) `readability` or `web-reader` for full page extraction from selected URLs. Use either interchangeably.
+          3) `brave-search` for broader web discovery and recency-sensitive information.
+          4) `readability` for full page extraction from selected URLs.
 
           Research workflow:
           1) Start from the delegated research questions and known local findings.
