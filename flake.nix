@@ -29,6 +29,15 @@
               server = ["devCore"];
               virtual = ["devCore"];
             };
+            hosts.extraSubmodules = [
+              ({lib, ...}: {
+                options.tier = lib.mkOption {
+                  type = lib.types.enum ["minimal" "basic" "standard" "full"];
+                  default = "standard";
+                  description = "Performance tier of this host. Ordered: minimal < basic < standard < full.";
+                };
+              })
+            ];
           })
           overlays
         ];

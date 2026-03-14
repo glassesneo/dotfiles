@@ -18,6 +18,11 @@ Theme palettes are owned by `@modules/config/colorschemes/`.
 Add/update palette files under `@modules/config/colorschemes/schemes/*.nix`.
 Keep values as pure data (`#RRGGBB` + `polarity`), and keep cross-module package logic out of this directory.
 
+## Host Tier Helpers
+
+`modules/config/host-tier.nix` exports the shared arg `tiers` for ordered tier comparisons.
+Full semantics and usage: `docs/host-tiers.md`.
+
 ## Kiri Wrapper
 
 Kiri MCP uses a wrapper to avoid tree-sitter download issues, implemented in:

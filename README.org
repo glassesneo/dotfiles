@@ -35,11 +35,16 @@ The important constraints are:
 - Rices should stay data-oriented. Modules own package resolution and platform-specific wiring.
 - Secrets are consumed through =config.sops.secrets.<key>.path=, not hardcoded paths or plaintext values.
 
+Hosts carry a performance tier (=minimal=, =basic=, =standard=, =full=) that
+modules can use to scale behavior to machine capability. See
+=docs/host-tiers.md= for the full contract.
+
 Current host/theme reality:
 
 - Host: =kurogane=
 - Platform: =aarch64-darwin=
 - Default rice: =monochrome=
+- Tier: =full=
 - Other selectable rices: =catppuccin=, =everforest=
 
 * Daily Workflows
