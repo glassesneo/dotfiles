@@ -16,7 +16,7 @@ delib.module {
 
   darwin.always = {myconfig, ...}: let
     username = myconfig.constants.username;
-    userSecrets = [
+    sharedSecrets = [
       "claude-code-oauth-token"
       "gemini-api-key"
       "ai-mop-api-key"
@@ -26,9 +26,16 @@ delib.module {
       "morph-fast-apply-api-key"
       "google-cloud-api-key"
       "zai-api-key"
+      "iniad-id"
+      "iniad-password"
     ];
 
-    mkUserSecret = _: {
+    # mkUserSecret = _: {
+    # owner = username;
+    # mode = "0400";
+    # };
+    mkSharedSecret = _: {
+      sopsFile = ../../secrets/shared.yaml;
       owner = username;
       mode = "0400";
     };
@@ -37,7 +44,8 @@ delib.module {
 
     sops = {
       age.keyFile = "/Users/${username}/.config/sops/age/keys.txt";
-      secrets = lib.genAttrs userSecrets mkUserSecret;
+      secrets = lib.genAttrs sharedSecrets mkSharedSecret;
     };
+    # sops.defaultSopsFile = ./secrets.yaml;
   };
 }

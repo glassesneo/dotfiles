@@ -1,5 +1,13 @@
 creation_rules:
-  - path_regex: ^hosts/kurogane/secrets\.yaml$
+  - path_regex: ^secrets/shared\.yaml$ 
     key_groups:
       - age:
           - age1r990kv2jq2vd4fxhf6znzmqqg6w2wfhllw9s9uzjun6tvcd43e3san06yu
+  - path_regex: ^secrets/kurogane\.yaml$
+    key_groups:
+      - age:
+          - age1r990kv2jq2vd4fxhf6znzmqqg6w2wfhllw9s9uzjun6tvcd43e3san06yu
+
+  - path_regex: ^secrets/seiran\.yaml$
+    key_groups:
+      - age: []
