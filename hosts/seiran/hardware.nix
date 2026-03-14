@@ -8,5 +8,6 @@ delib.host {
   darwin = {
     nixpkgs.hostPlatform = "aarch64-darwin";
     system.stateVersion = 4;
+    ids.gids.nixbld = 350;
   };
 }
