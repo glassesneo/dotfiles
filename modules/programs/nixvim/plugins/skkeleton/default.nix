@@ -1,7 +1,6 @@
 {
   delib,
   homeConfig,
-  lib,
   pkgs,
   ...
 }:
@@ -10,11 +9,7 @@ delib.module {
 
   options.programs.nixvim.plugins.skkeleton = with delib; {
     enable = boolOption true;
-    skkeletonUserDictPath = lib.mkOption {
-      type = lib.types.str;
-      default = "${homeConfig.xdg.dataHome}/skkeleton/jisyo";
-      description = "Path to the user dictionary for skkeleton.";
-    };
+    skkeletonUserDictPath = readOnly (strOption "${homeConfig.xdg.dataHome}/skkeleton/jisyo");
   };
 
   # deno runtime is provided by denops.nix

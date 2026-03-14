@@ -1,6 +1,5 @@
 {
   brewCasks,
-  config,
   delib,
   host,
   lib,
@@ -12,14 +11,14 @@ delib.module {
 
   options = delib.singleEnableOption (pkgs.stdenv.isDarwin && host.guiShellFeatured);
 
-  home.ifEnabled.home.file = let
+  home.ifEnabled = {myconfig, ...}: let
     mkDict = name: sourcePkg: type: {
       source = "${sourcePkg}/share/skk/${name}";
       inherit type;
     };
     largeJISYO = mkDict "SKK-JISYO.L" pkgs.skkDictionaries.l 0;
     skkeletonJISYO = {
-      source = config.myconfig.programs.nixvim.plugins.skkeleton.skkeletonUserDictPath;
+      source = myconfig.programs.nixvim.plugins.skkeleton.skkeletonUserDictPath;
       type = 5;
     };
     dictionarySet =
@@ -39,20 +38,22 @@ delib.module {
         iconv -f UTF-8 -t EUC-JP ${./kana-rule.conf} > $out
       '';
   in {
-    # Symlink AquaSKK.app to ~/Library/Input Methods/ for macOS discovery
-    "Library/Input Methods/AquaSKK.app" = {
-      source = "${brewCasks.aquaskk}/Library/Input Methods/AquaSKK.app";
-    };
+    home.file = {
+      # Symlink AquaSKK.app to ~/Library/Input Methods/ for macOS discovery
+      "Library/Input Methods/AquaSKK.app" = {
+        source = "${brewCasks.aquaskk}/Library/Input Methods/AquaSKK.app";
+      };
 
-    # AquaSKK keymap configuration (uses tabs as separators, required by AquaSKK parser)
-    "Library/Application Support/AquaSKK/keymap.conf" = {
-      source = ./keymap.conf;
-    };
+      # AquaSKK keymap configuration (uses tabs as separators, required by AquaSKK parser)
+      "Library/Application Support/AquaSKK/keymap.conf" = {
+        source = ./keymap.conf;
+      };
 
-    # Kana rule (romaji-to-kana mapping, must be EUC-JP encoded)
-    "Library/Application Support/AquaSKK/kana-rule.conf" = {
-      source = kanaRuleEucJP;
+      # Kana rule (romaji-to-kana mapping, must be EUC-JP encoded)
+      "Library/Application Support/AquaSKK/kana-rule.conf" = {
+        source = kanaRuleEucJP;
+      };
+      "Library/Application Support/AquaSKK/DictionarySet.plist".text = dictionarySet |> lib.generators.toPlist {escape = true;};
     };
-    "Library/Application Support/AquaSKK/DictionarySet.plist".text = dictionarySet |> lib.generators.toPlist {escape = true;};
   };
 }
