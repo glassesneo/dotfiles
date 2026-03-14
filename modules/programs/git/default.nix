@@ -43,6 +43,7 @@ delib.module {
         user = {
           name = myconfig.constants.username;
           email = myconfig.constants.useremail;
+          signingkey = myconfig.programs.ssh.mainIdentity;
         };
         alias = {
           stat = "status";
@@ -50,7 +51,15 @@ delib.module {
         commit = {
           verbose = true;
           template = "${homeConfig.xdg.configHome}/git/.gitmsg";
+          gpgsign = true;
         };
+        tag = {
+          gpgsign = true;
+        };
+        gpg = {
+          format = "ssh";
+        };
+
         core = {
           editor = "nvim";
         };
