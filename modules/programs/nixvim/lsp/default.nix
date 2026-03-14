@@ -18,7 +18,7 @@ delib.module {
     serverLevelKeys = ["activate" "package"];
     mkServer = args: let
       serverAttrs = lib.filterAttrs (name: _: builtins.elem name serverLevelKeys) args;
-      configAttrs = builtins.removeAttrs args serverLevelKeys;
+      configAttrs = removeAttrs args serverLevelKeys;
     in
       defaultServer
       // serverAttrs
