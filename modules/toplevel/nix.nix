@@ -7,7 +7,7 @@
   shared.nix = {
     package = lib.mkDefault pkgs.nix;
     settings = {
-      experimental-features = ["nix-command" "flakes" "pipe-operators"];
+      experimental-features = ["nix-command" "flakes"];
       warn-dirty = false;
       trusted-users = ["root" "@admin" "neo"];
       substituters = [

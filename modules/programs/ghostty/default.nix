@@ -51,9 +51,10 @@ delib.module {
         # custom-shader-animation = true;
       };
     };
-    programs.zsh.initContent =
-      pkgs.replaceVars ./quick-terminal-check.sh {color = cfg.quick-terminal-background;}
-      |> builtins.readFile
-      |> lib.mkOrder 1200;
+    programs.zsh.initContent = lib.mkOrder 1200 (
+      builtins.readFile (
+        pkgs.replaceVars ./quick-terminal-check.sh {color = cfg.quick-terminal-background;}
+      )
+    );
   };
 }

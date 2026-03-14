@@ -22,10 +22,11 @@ delib.module {
       acp = {
         claude_code.__raw = ''
           function()
-            ${builtins.readFile
-            <| pkgs.replaceVars ./adapters/claude-code.lua {
+            ${builtins.readFile (
+            pkgs.replaceVars ./adapters/claude-code.lua {
               command = lib.getExe llm-agents.claude-code-acp;
-            }}
+            }
+          )}
           end
         '';
       };

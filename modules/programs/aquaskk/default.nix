@@ -22,15 +22,14 @@ delib.module {
       type = 5;
     };
     dictionarySet =
-      [
-        largeJISYO
-        skkeletonJISYO
-      ]
-      |> map (jisyo: {
+      map (jisyo: {
         active = true;
         location = jisyo.source;
         inherit (jisyo) type;
-      });
+      }) [
+        largeJISYO
+        skkeletonJISYO
+      ];
     kanaRuleEucJP =
       pkgs.runCommand "kana-rule.conf" {
         nativeBuildInputs = [pkgs.libiconv];
@@ -53,7 +52,7 @@ delib.module {
       "Library/Application Support/AquaSKK/kana-rule.conf" = {
         source = kanaRuleEucJP;
       };
-      "Library/Application Support/AquaSKK/DictionarySet.plist".text = dictionarySet |> lib.generators.toPlist {escape = true;};
+      "Library/Application Support/AquaSKK/DictionarySet.plist".text = lib.generators.toPlist {escape = true;} dictionarySet;
     };
   };
 }

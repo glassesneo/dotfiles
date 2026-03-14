@@ -45,7 +45,7 @@ delib.module {
               run = ["layout floating"];
             }
           ]
-          ++ (cfg.tilingApps |> map enableTiling);
+          ++ (map enableTiling cfg.tilingApps);
 
         enable-normalization-flatten-containers = true;
         enable-normalization-opposite-orientation-for-nested-containers = true;

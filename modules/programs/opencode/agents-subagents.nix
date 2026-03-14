@@ -11,7 +11,7 @@ delib.module {
     inherit (lib.attrsets) nameValuePair;
 
     mkRules = value: paths:
-      paths |> map (p: nameValuePair p value) |> builtins.listToAttrs;
+      builtins.listToAttrs (map (p: nameValuePair p value) paths);
 
     allow = mkRules "allow";
     deny = mkRules "deny";
@@ -57,9 +57,9 @@ delib.module {
       name,
       ops,
     }: perm:
-      perm
-      |> addRulesToOps ops (allow scopes.${name}.files)
-      |> addExternalDirs scopes.${name}.dirs;
+      addExternalDirs scopes.${name}.dirs (
+        addRulesToOps ops (allow scopes.${name}.files) perm
+      );
 
     readOnlyPermission = {
       edit = denyAll;
@@ -77,50 +77,44 @@ delib.module {
 
     boundedEditPermission = fullAccessPermission // noCommandPermission;
 
-    tempWorkspacePermission =
-      {}
-      |> addExternalDirs ["/tmp/*" "/private/tmp/*" "/nix/store/*"]
-      |> addRulesToOps ["read"] (allow ["/tmp/*" "/private/tmp/*" "/nix/store" "/nix/store/*"])
-      |> (p:
-        merge p {
-          edit = denyAll // allow ["/tmp/**" "/private/tmp/**"];
-          write = denyAll // allow ["/tmp/**" "/private/tmp/**"];
-        });
-
-    plansOnlyPermission =
-      readOnlyPermission
-      |> withScope {
-        name = "plans";
-        ops = ["edit" "write"];
+    tempWorkspacePermission = let
+      externalDirPermission = addExternalDirs ["/tmp/*" "/private/tmp/*" "/nix/store/*"] {};
+      readablePermission = addRulesToOps ["read"] (allow ["/tmp/*" "/private/tmp/*" "/nix/store" "/nix/store/*"]) externalDirPermission;
+    in
+      merge readablePermission {
+        edit = denyAll // allow ["/tmp/**" "/private/tmp/**"];
+        write = denyAll // allow ["/tmp/**" "/private/tmp/**"];
       };
 
-    draftPlansOnlyPermission =
-      readOnlyPermission
-      |> withScope {
-        name = "draftPlans";
-        ops = ["edit" "write"];
-      };
+    plansOnlyPermission = withScope {
+      name = "plans";
+      ops = ["edit" "write"];
+    }
+    readOnlyPermission;
 
-    researchOnlyPermission =
-      readOnlyPermission
-      |> withScope {
-        name = "research";
-        ops = ["edit" "write"];
-      };
+    draftPlansOnlyPermission = withScope {
+      name = "draftPlans";
+      ops = ["edit" "write"];
+    }
+    readOnlyPermission;
 
-    reportsOnlyPermission =
-      readOnlyPermission
-      |> withScope {
-        name = "reports";
-        ops = ["edit" "write"];
-      };
+    researchOnlyPermission = withScope {
+      name = "research";
+      ops = ["edit" "write"];
+    }
+    readOnlyPermission;
 
-    tempWorkspaceWithReportsPermission =
-      tempWorkspacePermission
-      |> withScope {
-        name = "reports";
-        ops = ["read" "edit" "write"];
-      };
+    reportsOnlyPermission = withScope {
+      name = "reports";
+      ops = ["edit" "write"];
+    }
+    readOnlyPermission;
+
+    tempWorkspaceWithReportsPermission = withScope {
+      name = "reports";
+      ops = ["read" "edit" "write"];
+    }
+    tempWorkspacePermission;
 
     failureReportFormatContract = ''
       `failure-report` output format (strict, exact):

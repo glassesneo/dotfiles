@@ -11,7 +11,7 @@ delib.module {
     inherit (lib.attrsets) nameValuePair;
 
     mkRules = value: paths:
-      paths |> map (p: nameValuePair p value) |> builtins.listToAttrs;
+      builtins.listToAttrs (map (p: nameValuePair p value) paths);
 
     allow = mkRules "allow";
     deny = mkRules "deny";
@@ -57,9 +57,9 @@ delib.module {
       name,
       ops,
     }: perm:
-      perm
-      |> addRulesToOps ops (allow scopes.${name}.files)
-      |> addExternalDirs scopes.${name}.dirs;
+      addExternalDirs scopes.${name}.dirs (
+        addRulesToOps ops (allow scopes.${name}.files) perm
+      );
 
     readOnlyPermission = {
       edit = denyAll;
@@ -71,34 +71,30 @@ delib.module {
       write = allowAll;
     };
 
-    tempWorkspacePermission =
-      {}
-      |> addExternalDirs ["/tmp/*" "/private/tmp/*" "/nix/store/*"]
-      |> addRulesToOps ["read"] (allow ["/tmp/*" "/private/tmp/*" "/nix/store" "/nix/store/*"])
-      |> (p:
-        merge p {
-          edit = denyAll // allow ["/tmp/**" "/private/tmp/**"];
-          write = denyAll // allow ["/tmp/**" "/private/tmp/**"];
-        });
-
-    plansOnlyPermission =
-      readOnlyPermission
-      |> withScope {
-        name = "plans";
-        ops = ["edit" "write"];
+    tempWorkspacePermission = let
+      externalDirPermission = addExternalDirs ["/tmp/*" "/private/tmp/*" "/nix/store/*"] {};
+      readablePermission = addRulesToOps ["read"] (allow ["/tmp/*" "/private/tmp/*" "/nix/store" "/nix/store/*"]) externalDirPermission;
+    in
+      merge readablePermission {
+        edit = denyAll // allow ["/tmp/**" "/private/tmp/**"];
+        write = denyAll // allow ["/tmp/**" "/private/tmp/**"];
       };
 
-    specPlansPermission =
-      plansOnlyPermission
-      |> addRulesToOps ["read"] (allow scopes.draftPlans.files)
-      |> addExternalDirs scopes.draftPlans.dirs;
+    plansOnlyPermission = withScope {
+      name = "plans";
+      ops = ["edit" "write"];
+    }
+    readOnlyPermission;
 
-    tempWorkspaceWithReportsPermission =
-      tempWorkspacePermission
-      |> withScope {
-        name = "reports";
-        ops = ["read" "edit" "write"];
-      };
+    specPlansPermission = addExternalDirs scopes.draftPlans.dirs (
+      addRulesToOps ["read"] (allow scopes.draftPlans.files) plansOnlyPermission
+    );
+
+    tempWorkspaceWithReportsPermission = withScope {
+      name = "reports";
+      ops = ["read" "edit" "write"];
+    }
+    tempWorkspacePermission;
 
     testSpecFormatContract = ''
       `test-spec` output format (strict, exact):

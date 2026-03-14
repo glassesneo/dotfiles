@@ -17,7 +17,7 @@ in
 
     options = {
       wallpaper = lib.mkOption {
-        type = lib.types.nullOr <| lib.types.enum (builtins.attrNames wallpapers);
+        type = lib.types.nullOr (lib.types.enum (builtins.attrNames wallpapers));
         default = null;
         description = "Path to the wallpaper image to set.";
       };

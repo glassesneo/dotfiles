@@ -21,14 +21,13 @@ delib.module {
       ghostty_reload = lib.optionalString (pkgs.stdenv.isDarwin && homeConfig.programs.ghostty.enable) ''
         osascript -e '${builtins.readFile ./reload_ghostty.applescript}' && echo 'ghostty reloaded';
       '';
-      reload =
-        [
+      reload = pkgs.writeShellScriptBin "reload" (
+        lib.concatStrings [
           tmux_reload
           sketchybar_reload
           ghostty_reload
         ]
-        |> lib.concatStrings
-        |> pkgs.writeShellScriptBin "reload";
+      );
     in [reload];
   };
 }

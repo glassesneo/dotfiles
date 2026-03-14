@@ -67,12 +67,11 @@
     checks.aarch64-darwin = let
       pkgs = nixpkgs.legacyPackages.aarch64-darwin;
 
-      hmChecks =
-        homeConfigs
-        |> pkgs.lib.mapAttrs' (name: config: {
-          name = "hm-" + builtins.replaceStrings ["@"] ["_at_"] name;
-          value = config.activationPackage;
-        });
+      hmChecks = pkgs.lib.mapAttrs' (name: config: {
+        name = "hm-" + builtins.replaceStrings ["@"] ["_at_"] name;
+        value = config.activationPackage;
+      })
+      homeConfigs;
 
       nixvimChecks =
         pkgs.lib.mapAttrs' (name: config: {

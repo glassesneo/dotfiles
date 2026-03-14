@@ -16,12 +16,12 @@ delib.module {
   home.ifEnabled = {cfg, ...}: {
     programs.nixvim = {
       extraPlugins = [pkgs.vimPlugins.skkeleton];
-      extraConfigLua =
+      extraConfigLua = builtins.readFile (
         pkgs.replaceVars ./config.lua {
           skk-dict-path = "${pkgs.skkDictionaries.l}/share/skk/SKK-JISYO.L";
           user-dict-path = cfg.skkeletonUserDictPath;
         }
-        |> builtins.readFile;
+      );
     };
   };
 }

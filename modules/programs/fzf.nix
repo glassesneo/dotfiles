@@ -13,7 +13,7 @@ delib.module {
     programs.fzf = let
       fd-exe = lib.getExe homeConfig.programs.fd.package;
       base-command = "${fd-exe} -H -E .git --type f --strip-cwd-prefix";
-      exclude-dir = myconfig.programs.git.ignore_names |> lib.strings.concatMapStringsSep " " (s: "-E " + s);
+      exclude-dir = lib.strings.concatMapStringsSep " " (s: "-E " + s) myconfig.programs.git.ignore_names;
     in {
       enable = true;
       enableZshIntegration = true;
