@@ -28,6 +28,16 @@ export default defineConfig(() => ({
       snippet: "git commit -m '{{commit_message}}'",
     },
     {
+      name: "git diff",
+      keyword: "gd",
+      snippet: "git diff",
+    },
+    {
+      name: "git diff --staged",
+      keyword: "gds",
+      snippet: "git diff --staged",
+    },
+    {
       name: "git log graph",
       keyword: "glg",
       snippet: "git log --oneline --graph --decorate -n 20",
