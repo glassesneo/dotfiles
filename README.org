@@ -44,7 +44,7 @@ Current host/theme reality:
 - Host: =kurogane=
 - Platform: =aarch64-darwin=
 - Default rice: =monochrome=
-- Tier: =full=
+- Tier: =basic=
 - Other selectable rices: =catppuccin=, =everforest=
 
 * Daily Workflows
