@@ -8,6 +8,11 @@ vim.api.nvim_create_autocmd("User", {
       globalDictionaries = { "@skk-dict-path@" },
       eggLikeNewline = true,
       userDictionary = "@user-dict-path@",
+      sources = { "skk_dictionary", "skk_server" },
+      skkServerHost = "127.0.0.1",
+      skkServerPort = 1178,
+      skkServerResEnc = "euc-jp",
+      skkServerReqEnc = "euc-jp",
     })
 
     vim.fn["skkeleton#register_keymap"]("input", ":", "henkanPoint")

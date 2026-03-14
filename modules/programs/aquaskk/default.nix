@@ -1,7 +1,7 @@
 {
   brewCasks,
+  config,
   delib,
-  homeConfig,
   host,
   lib,
   pkgs,
@@ -13,28 +13,24 @@ delib.module {
   options = delib.singleEnableOption (pkgs.stdenv.isDarwin && host.guiShellFeatured);
 
   home.ifEnabled.home.file = let
-    homeDir = homeConfig.home.homeDirectory;
-    mkDict = name: sourcePkg: {
-      inherit name;
+    mkDict = name: sourcePkg: type: {
       source = "${sourcePkg}/share/skk/${name}";
+      inherit type;
     };
-    largeJISYO = mkDict "SKK-JISYO.L" pkgs.skkDictionaries.l;
-    dictionaries = [
-      largeJISYO
-    ];
-    dictionaryFiles =
-      dictionaries
-      |> map (jisyo: {
-        name = "Library/Application Support/AquaSKK/${jisyo.name}";
-        value.source = jisyo.source;
-      })
-      |> builtins.listToAttrs;
+    largeJISYO = mkDict "SKK-JISYO.L" pkgs.skkDictionaries.l 0;
+    skkeletonJISYO = {
+      source = config.myconfig.programs.nixvim.plugins.skkeleton.skkeletonUserDictPath;
+      type = 5;
+    };
     dictionarySet =
-      dictionaries
+      [
+        largeJISYO
+        skkeletonJISYO
+      ]
       |> map (jisyo: {
         active = true;
-        location = "${homeDir}/Library/Application Support/AquaSKK/${jisyo.name}";
-        type = 0;
+        location = jisyo.source;
+        inherit (jisyo) type;
       });
     kanaRuleEucJP =
       pkgs.runCommand "kana-rule.conf" {
@@ -42,27 +38,21 @@ delib.module {
       } ''
         iconv -f UTF-8 -t EUC-JP ${./kana-rule.conf} > $out
       '';
-  in
-    {
-      # Symlink AquaSKK.app to ~/Library/Input Methods/ for macOS discovery
-      "Library/Input Methods/AquaSKK.app" = {
-        source = "${brewCasks.aquaskk}/Library/Input Methods/AquaSKK.app";
-      };
+  in {
+    # Symlink AquaSKK.app to ~/Library/Input Methods/ for macOS discovery
+    "Library/Input Methods/AquaSKK.app" = {
+      source = "${brewCasks.aquaskk}/Library/Input Methods/AquaSKK.app";
+    };
 
-      # "Library/Application Support/AquaSKK/SKK-JISYO.L" = {
-      # source = "${pkgs.skkDictionaries.l}/share/skk/SKK-JISYO.L";
-      # };
+    # AquaSKK keymap configuration (uses tabs as separators, required by AquaSKK parser)
+    "Library/Application Support/AquaSKK/keymap.conf" = {
+      source = ./keymap.conf;
+    };
 
-      # AquaSKK keymap configuration (uses tabs as separators, required by AquaSKK parser)
-      "Library/Application Support/AquaSKK/keymap.conf" = {
-        source = ./keymap.conf;
-      };
-
-      # Kana rule (romaji-to-kana mapping, must be EUC-JP encoded)
-      "Library/Application Support/AquaSKK/kana-rule.conf" = {
-        source = kanaRuleEucJP;
-      };
-      "Library/Application Support/AquaSKK/DictionarySet.plist".text = dictionarySet |> lib.generators.toPlist {escape = true;};
-    }
-    // dictionaryFiles;
+    # Kana rule (romaji-to-kana mapping, must be EUC-JP encoded)
+    "Library/Application Support/AquaSKK/kana-rule.conf" = {
+      source = kanaRuleEucJP;
+    };
+    "Library/Application Support/AquaSKK/DictionarySet.plist".text = dictionarySet |> lib.generators.toPlist {escape = true;};
+  };
 }
