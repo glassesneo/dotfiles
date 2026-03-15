@@ -51,6 +51,7 @@ delib.module {
         NSGlobalDomain = {
           # `defaults read NSGlobalDomain "xxx"`
           "com.apple.swipescrolldirection" = true; # enable natural scrolling(default to true)
+          "com.apple.sound.beep.volume" = 0.0;
           "com.apple.sound.beep.feedback" = 0; # disable beep sound when pressing volume up/down key
           "com.apple.mouse.tapBehavior" = 1;
           "com.apple.trackpad.scaling" = 3.0;
@@ -121,6 +122,9 @@ delib.module {
           };
           # Prevent Photos from opening automatically when devices are plugged in
           "com.apple.ImageCapture".disableHotPlug = true;
+          "com.apple.universalaccess" = {
+            flashScreen = false;
+          };
         };
         loginwindow = {
           GuestEnabled = false; # disable guest user
