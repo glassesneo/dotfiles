@@ -22,6 +22,7 @@ Full Neovim configuration via nixvim. Module name: `programs.nixvim`.
 - **Lazy loading**: Most plugins use `lz.n` with event/cmd/ft triggers.
 - **Denops plugins**: `denops.nix` owns the shared `denops-vim` runtime. `skkeleton.nix` owns `skkeleton` + `deno`. `motion.nix` owns `kensaku.vim`, `kensaku-search.vim`, and `fuzzy-motion.vim`.
 - **Completion**: blink-cmp with LSP, path, buffer, ripgrep, copilot, snippets, git sources.
+- **Copilot** (`plugins/copilot/`): copilot-language-server LSP config, copilot.lua auth plugin, inline completion wiring.
 - **AI** (`plugins/ai/`): codecompanion split into four `delib.module` files:
   - `default.nix` — composition root (copilot, strategies, display, lazy keys)
   - `adapters.nix` — all adapter registrations (http + acp)
