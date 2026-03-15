@@ -1,4 +1,9 @@
-{delib, ...}:
+{
+  delib,
+  lib,
+  pkgs,
+  ...
+}:
 delib.module {
   name = "programs.ssh";
 
@@ -14,11 +19,16 @@ delib.module {
 
       matchBlocks = {
         "*" = {
-          extraOptions = {
-            AddKeysToAgent = "yes";
-            IdentitiesOnly = "yes";
-            SetEnv = "TERM=xterm-256color";
-          };
+          extraOptions = lib.mkMerge [
+            {
+              AddKeysToAgent = "yes";
+              IdentitiesOnly = "yes";
+              SetEnv = "TERM=xterm-256color";
+            }
+            (lib.mkIf pkgs.stdenv.hostPlatform.isDarwin {
+              UseKeychain = "yes";
+            })
+          ];
         };
         "github.com" = {
           hostname = "github.com";
