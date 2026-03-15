@@ -4,22 +4,23 @@ use ../colors.nu
 use ../utils.nu
 
 export const name = "front_app"
+const position = "@front_app_position@"
 
 export def item () {
   log info $"Rendering ($name)"
   let current_path = $name | utils get_current_path
 
   (
-    sketchybar
-      --add item $name left
+        sketchybar
+      --add item $name $position
       --set $name
         padding_left=10
-        # background.clip=1.0
+        padding_right=8
         display=active
         label.font.style=Bold
-        label.font.size=18
+        label.font.size=14
         label.padding_right=0
-        icon.font="sketchybar-app-font:Regular:20.0"
+        icon.font="sketchybar-app-font:Regular:16.0"
         icon.padding_right=2
         script=$"($nu.current-exe) ($current_path)"
       --subscribe $name

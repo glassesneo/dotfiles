@@ -13,17 +13,17 @@ export def item () {
     sketchybar
       --add item $name right
       --set $name
+        padding_left=4
+        padding_right=4
         icon.font.style=Regular
-        icon.font.size=16
-        icon.padding_right=5
+        icon.font.size=14
+        icon.padding_right=4
         label.font.style=Bold
-        label.font.size=19
+        label.font.size=15
         script=$"($nu.current-exe) ($current_path)"
         update_freq=120
       --subscribe $name system_woke power_source_change
   )
-
-  # utils set_item_unit $name $surface_background $popup_border
 }
 
 def main () {

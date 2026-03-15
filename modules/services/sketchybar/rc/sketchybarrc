@@ -8,13 +8,13 @@ def run () {
   (
     sketchybar
       --bar
-        padding_left=8
-        padding_right=8
-        height=42
+        padding_left=6
+        padding_right=6
+        height=32
         position=@bar_position@
-        margin=-2
+        margin=@bar_margin@
         topmost=window
-        shadow=off
+        shadow=@bar_shadow@
         sticky=on
         color=@bar_color@
         corner_radius=@bar_corner_radius@
@@ -24,13 +24,13 @@ def run () {
         @bar_notch_lines@
 
       --default
-        padding_left=5
-        padding_right=5
-        icon.font=$"($font):Bold:19"
-        label.font=$"($font):Regular:16"
-        label.padding_left=6
-        label.padding_right=10
-        icon.padding_left=10
+        padding_left=2
+        padding_right=2
+        icon.font=$"($font):Bold:17"
+        label.font=$"($font):Regular:14"
+        label.padding_left=4
+        label.padding_right=6
+        icon.padding_left=6
         label.color=$"($colors.text_primary)"
         icon.color=$"($colors.text_primary)"
   )
@@ -42,7 +42,6 @@ def run () {
   use ./plugins/datetime.nu; datetime item
   use ./plugins/battery.nu; battery item
   use ./plugins/cpu.nu; cpu item
-  use ./plugins/volume.nu; volume item
   # use ./plugins/bluetooth.nu; bluetooth item
 
   @layout_code@

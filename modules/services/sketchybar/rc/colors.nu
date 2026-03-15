@@ -31,6 +31,15 @@ export const app_ghostty = "@app_ghostty@"
 export const app_obsidian = "@app_obsidian@"
 export const app_kitty = "@app_kitty@"
 
+# Island surface color (low-alpha neutral haze for floating islands)
+export const island_surface = "@island_surface@"
+
+# Island border color (subtle outline for floating islands)
+export const island_border = "@island_border@"
+
+# Active indicator color (pill behind active workspace)
+export const active_indicator = "@active_indicator@"
+
 # CPU graph colors by usage level
 export const cpu_low = "@cpu_low@"
 export const cpu_medium = "@cpu_medium@"

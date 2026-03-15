@@ -3,6 +3,24 @@
 This document is a runtime verification reference for `sketchybar --query` in this repository.
 It intentionally uses raw command output examples (no `jq`, no rewritten tables) and focuses on how to verify live daemon state.
 
+## Architecture: Floating Island Composition
+
+The bar uses a **floating island** model instead of a full-width strip:
+
+- The outer SketchyBar surface is fully transparent (`0x00000000`).
+- Visible surfaces come from **layout brackets** (island backgrounds) with low-alpha neutral haze (`island_surface` token, ~15% opacity).
+- Islands have `corner_radius=12`, `height=28`, no border, no blur.
+- Shadow is enabled on the outer bar to create floating depth.
+
+### Host-driven layout
+
+- **Notched hosts** (e.g. `seiran`): top bar with two islands — a left island (workspaces + front\_app) in the `left` region and a right island (datetime + battery + cpu) in the `right` region, anchored toward the screen corners.
+- **Non-notched hosts** (e.g. `kurogane`): bottom bar with one centered island containing all items.
+
+### Active workspace indicator
+
+The active workspace renders as a standalone dot with no visible workspace number. Inactive workspaces continue to render as numeric labels. The focused dot uses the more vivid `workspace_active` token instead of the subtler `active_indicator` accent.
+
 ## Local Wiring to Keep in Mind
 
 - Reload entrypoint: `modules/programs/reload_config.nix` runs `sketchybar --reload` when SketchyBar is enabled.
@@ -58,10 +76,13 @@ sketchybar --query bar
 
 ```json
 {
-  "height": 42,
+  "height": 32,
   "position": "bottom",
   "topmost": "window",
-  "items": ["workspace.1", "front_app", "datetime", "battery", "cpu", "volume"]
+  "shadow": "on",
+  "margin": 8,
+  "color": "0x00000000",
+  "items": ["workspace.1", "front_app", "datetime", "battery", "cpu"]
 }
 ```
 
@@ -75,30 +96,30 @@ Discover candidate names first:
 sketchybar --query bar
 ```
 
-```json
-{
-  "items": ["workspace.1", "workspace.2", "front_app", "datetime", "battery", "cpu", "volume"]
-}
-```
-
 Then query one item (for example, `workspace.1`; placeholder only):
 
 ```bash
 sketchybar --query workspace.1
 ```
 
+On a non-notched host, workspace items should show `position: "center"`:
+```json
+{
+  "name": "workspace.1",
+  "type": "item",
+  "geometry": {
+    "position": "center"
+  }
+}
+```
+
+On a notched host, workspace items should show `position: "left"`:
 ```json
 {
   "name": "workspace.1",
   "type": "item",
   "geometry": {
     "position": "left"
-  },
-  "label": {
-    "drawing": "on"
-  },
-  "icon": {
-    "drawing": "on"
   }
 }
 ```
@@ -112,13 +133,13 @@ sketchybar --query defaults
 ```json
 {
   "icon": {
-    "padding_left": 10,
-    "font": "Hack Nerd Font:Bold:19"
+    "padding_left": 6,
+    "font": "Hack Nerd Font:Bold:17"
   },
   "label": {
-    "padding_left": 6,
-    "padding_right": 10,
-    "font": "Hack Nerd Font:Regular:16"
+    "padding_left": 4,
+    "padding_right": 6,
+    "font": "Hack Nerd Font:Regular:14"
   }
 }
 ```
@@ -174,6 +195,19 @@ If your version is older than `v2.22.1`, `displays` may fail with:
 ```text
 [!] Query: Invalid query, or item 'displays' not found
 ```
+
+## Visual Verification Checklist
+
+After reloading, verify the floating island appearance:
+
+- [ ] Outer bar reads as transparent (no full-width opaque band).
+- [ ] On notched host: two islands appear at the top-left and top-right corners.
+- [ ] On non-notched host: one centered island appears at the bottom.
+- [ ] Island surfaces show a subtle neutral haze (low-alpha background).
+- [ ] No visible borders or blur on islands.
+- [ ] Shadow gives soft floating depth without heaviness.
+- [ ] Active workspace renders as a standalone vivid dot with no visible workspace number.
+- [ ] All widgets (front app, datetime, battery, cpu) are readable and unclipped.
 
 ## Troubleshooting
 
@@ -241,8 +275,8 @@ nh darwin switch . -H seiran -Lt --dry
 - Runtime position verification (after applying config and reloading):
 
 ```bash
-# On kurogane (non-notched): expect "position": "bottom"
-# On seiran (notched): expect "position": "top"
+# On kurogane (non-notched): expect "position": "bottom", items at "center"
+# On seiran (notched): expect "position": "top", left island items at "left", right island items at "right"
 sketchybar --query bar
 ```
 

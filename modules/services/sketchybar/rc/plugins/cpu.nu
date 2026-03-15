@@ -14,8 +14,10 @@ export def item () {
     sketchybar
       --add item $name right
       --set $name
-        label.padding_right=5
-        icon.padding_left=5
+        padding_left=4
+        padding_right=8
+        label.padding_right=4
+        icon.padding_left=4
         icon=""
         popup.align=center
         popup.background.color=$"($colors.popup_background)"
@@ -53,7 +55,7 @@ def main () {
       )
     }
     _ => {
-      let cpu_usage = (sys cpu -l | get cpu_usage | math sum) / 8 | math round --precision 1
+      let cpu_usage = sys cpu -l | get cpu_usage | math avg | math round --precision 1
       let graph_color = match $cpu_usage {
         1..25 => { $colors.cpu_low }
         26..50 => { $colors.cpu_medium }

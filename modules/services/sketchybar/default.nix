@@ -38,6 +38,9 @@ delib.module {
             cpu_medium = lib.mkOption {type = colorType;};
             cpu_high = lib.mkOption {type = colorType;};
             cpu_critical = lib.mkOption {type = colorType;};
+            island_surface = lib.mkOption {type = colorType;};
+            island_border = lib.mkOption {type = colorType;};
+            active_indicator = lib.mkOption {type = colorType;};
           };
         };
       default = {};
@@ -58,6 +61,8 @@ delib.module {
       blurRadius = strOption "0";
       borderWidth = strOption "0";
       borderColor = strOption "";
+      margin = strOption "8";
+      shadow = strOption "on";
       notchWidth = lib.mkOption {
         type = lib.types.nullOr lib.types.int;
         default = null;
@@ -105,35 +110,61 @@ delib.module {
           };
         };
       };
+    in let
+      islandBracket = padding: {
+        enable = true;
+        cornerRadius = "12";
+        borderWidth = "1";
+        height = "28";
+        paddingLeft = padding;
+        paddingRight = padding;
+      };
     in {
       zones = {
         left = lib.mkOption {
           type = lib.types.listOf zoneGroupType;
-          default = [
-            {
-              id = "primary";
-              priority = 1;
-              items = ["workspaces" "front_app"];
-              bracket.enable = false;
-            }
-          ];
+          default =
+            if host.hasNotch
+            then [
+              {
+                id = "island-left";
+                priority = 1;
+                items = ["/workspace\\..*/" "front_app"];
+                bracket = islandBracket "8";
+              }
+            ]
+            else [];
           description = "Left zone groups with deterministic ordering by priority";
         };
         center = lib.mkOption {
           type = lib.types.listOf zoneGroupType;
-          default = [];
+          default =
+            if !host.hasNotch
+            then [
+              {
+                id = "island";
+                priority = 1;
+                items = ["/workspace\\..*/" "front_app" "datetime" "battery" "cpu"];
+                regionOverride = "center";
+                bracket = islandBracket "12";
+              }
+            ]
+            else [];
           description = "Center zone groups with deterministic ordering by priority";
         };
         right = lib.mkOption {
           type = lib.types.listOf zoneGroupType;
-          default = [
-            {
-              id = "primary";
-              priority = 1;
-              items = ["datetime" "battery" "cpu" "volume"];
-              bracket.enable = false;
-            }
-          ];
+          default =
+            if host.hasNotch
+            then [
+              {
+                id = "island-right";
+                priority = 1;
+                items = ["datetime" "battery" "cpu"];
+                bracket = islandBracket "8";
+              }
+            ]
+            else [];
           description = "Right zone groups with deterministic ordering by priority";
         };
       };
@@ -155,18 +186,46 @@ delib.module {
       datetime_font_lines =
         if cfg.datetimeFontOverride != ""
         then ''label.font="${cfg.datetimeFontOverride}"''
-        else "label.font.style=\"Bold Italic\"\n        label.font.size=16";
+        else "label.font.style=\"Bold Italic\"\n        label.font.size=14";
+    };
+
+    # Derive workspace/front_app position from layout config
+    workspacePosition = let
+      allGroups = cfg.layout.zones.left ++ cfg.layout.zones.center ++ cfg.layout.zones.right;
+      workspaceGroups = lib.filter (g: lib.any (i: i == "/workspace\\..*/") g.items) allGroups;
+    in
+      if workspaceGroups == []
+      then "left"
+      else if (lib.head workspaceGroups).regionOverride != null
+      then (lib.head workspaceGroups).regionOverride
+      else "left";
+
+    workspaceNu = pkgs.replaceVars ./rc/plugins/workspace.nu {
+      workspace_position = workspacePosition;
+    };
+
+    frontAppNu = pkgs.replaceVars ./rc/plugins/front_app.nu {
+      front_app_position = workspacePosition;
     };
 
     # Generate bracket code for a group
-    generateBracketCode = zone: group: ''
+    # When backgroundColor is empty, fall back to the island_surface runtime color token
+    generateBracketCode = zone: group: let
+      bgColor =
+        if group.bracket.backgroundColor != ""
+        then ''"${group.bracket.backgroundColor}"''
+        else ''$"($colors.island_surface)"'';
+      borderColor =
+        if group.bracket.borderColor != ""
+        then ''"${group.bracket.borderColor}"''
+        else ''$"($colors.island_border)"'';
+    in ''
       (
         sketchybar --add bracket "group.${zone}.${group.id}" ${lib.concatStringsSep " " (map lib.escapeShellArg group.items)}
           --set "group.${zone}.${group.id}"
-            background.color="${group.bracket.backgroundColor}"
-            background.blur_radius=${group.bracket.blurRadius}
+            background.color=${bgColor}
             background.border_width=${group.bracket.borderWidth}
-            background.border_color="${group.bracket.borderColor}"
+            background.border_color=${borderColor}
             background.corner_radius=${group.bracket.cornerRadius}
             background.height=${group.bracket.height}
             background.padding_left=${group.bracket.paddingLeft}
@@ -185,6 +244,9 @@ delib.module {
         group.items
       else "";
 
+    # Helper to detect regex patterns in item lists (start with /)
+    isRegexPattern = s: lib.hasPrefix "/" s;
+
     # Generate all layout code (brackets, region overrides, and reorder)
     generateLayoutCode = zone: groups: let
       sortedGroups = lib.sort (a: b: a.priority < b.priority) groups;
@@ -195,13 +257,15 @@ delib.module {
       sortedGroups;
       regionOverrideCodes = lib.concatMapStrings generateRegionOverrideCode sortedGroups;
       allItems = lib.concatMap (g: g.items) sortedGroups;
-      itemString = lib.concatStringsSep " " (map lib.escapeShellArg allItems);
+      # Only reorder literal item names; regex patterns are for brackets/overrides only
+      literalItems = lib.filter (i: !isRegexPattern i) allItems;
+      itemString = lib.concatStringsSep " " (map lib.escapeShellArg literalItems);
     in
       if allItems != []
       then ''
         ${bracketCodes}
         ${regionOverrideCodes}
-        sketchybar --reorder ${itemString}
+        ${lib.optionalString (literalItems != []) "sketchybar --reorder ${itemString}"}
       ''
       else "# No items in ${zone} zone";
 
@@ -234,6 +298,8 @@ delib.module {
         if cfg.bar.borderColor != ""
         then cfg.bar.borderColor
         else "0x00000000";
+      bar_margin = cfg.bar.margin;
+      bar_shadow = cfg.bar.shadow;
       bar_notch_lines = notchLines;
       layout_code = layoutCode;
     };
@@ -245,6 +311,8 @@ delib.module {
       cp ${colorsNu} $out/colors.nu
       cp ${sketchybarrc} $out/sketchybarrc
       cp ${datetimeNu} $out/plugins/datetime.nu
+      cp ${workspaceNu} $out/plugins/workspace.nu
+      cp ${frontAppNu} $out/plugins/front_app.nu
     '';
   in {
     assertions = let

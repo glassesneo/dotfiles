@@ -4,32 +4,46 @@ use ../colors.nu
 use ../utils.nu
 
 export const name = "workspace"
+const position = "@workspace_position@"
 
 def create_workspace (space_id: string, display: int) {
   let current_path = $name | utils get_current_path
   let space = $"($name).($space_id)"
   (
     sketchybar
-      --add item $space left
+      --add item $space $position
       --set $space
         display=$"($display)"
-        padding_left=0
-        padding_right=0
+        padding_left=2
+        padding_right=2
         label=$"($space_id)"
         label.color=$"($colors.text_primary)"
-        label.font.size=17
+        label.font.size=14
+        label.font.style="Regular"
         label.padding_left=8
         label.padding_right=8
-        label.highlight=off
-        label.background.color="0x00000000"
-        label.highlight_color=$"($colors.workspace_active)"
-        label.background.corner_radius=6
-        label.background.height=24
-        label.background.y_offset=0
+        label.drawing=on
+        icon="•"
+        icon.color=$"($colors.workspace_active)"
+        icon.font.size=15
+        icon.padding_left=8
+        icon.padding_right=8
         icon.drawing=off
         click_script=$"aerospace workspace ($space_id)"
         script=$"($nu.current-exe) ($current_path) ($space_id)"
       --subscribe $space aerospace_workspace_change
+  )
+}
+
+def set_focus_style (space_id: string, focused: bool) {
+  let space = $"($name).($space_id)"
+  (
+    sketchybar
+      --set $space
+        label=$"($space_id)"
+        label.drawing=$"(not $focused)"
+        label.font.style="Regular"
+        icon.drawing=$"($focused)"
   )
 }
 
@@ -49,20 +63,24 @@ export def item () {
 
   sketchybar --add event aerospace_workspace_change
 
-  aerospace list-workspaces --all --format '%{workspace}%{monitor-appkit-nsscreen-screens-id}' --json
+  let spaces = aerospace list-workspaces --all --format '%{workspace}%{monitor-appkit-nsscreen-screens-id}' --json
   | from json
-  | each {|space|
+
+  $spaces | each {|space|
     create_workspace $space.workspace $space.monitor-appkit-nsscreen-screens-id
   }
 
+  # Reorder workspace items to fix q-region right-to-left stacking
+  let space_names = $spaces | each {|s| $"($name).($s.workspace)"}
+  let ordered = if $position == "q" { $space_names | reverse } else { $space_names }
+  sketchybar --reorder ...($ordered)
+
+  # Bracket kept for display_change subscription; visual styling owned by layout islands
   (
     sketchybar
       --add bracket workspaces '/workspace\..*/'
       --set workspaces
-        padding_left=0
-        background.color=$"($colors.surface_background)"
-        background.corner_radius=8
-        background.height=28
+        background.color="0x00000000"
         script=$"($nu.current-exe) ($current_path) update-display"
       --subscribe workspaces display_change
 
@@ -71,22 +89,12 @@ export def item () {
   let focused_workspace = aerospace list-workspaces --focused --format '%{workspace}' --json
   | from json
   | get 0.workspace
-  let space = $"($name).($focused_workspace)"
-  (
-    sketchybar --set $space
-      label.highlight=on
-      # label.background.color=$"($colors.surface_background)
-  )
+  set_focus_style $focused_workspace true
 }
 
 def toggle_highlight (space_id: string) {
   let state = $space_id == ($env.FOCUSED_WORKSPACE? | default "")
-  (
-    sketchybar
-      --set $env.NAME
-        # label.background.color=$"(if $state {$colors.surface_background} else {'0x00000000'})
-        label.highlight=$"($state)"
-  )
+  set_focus_style $space_id $state
 }
 
 def main [space_id: string] {

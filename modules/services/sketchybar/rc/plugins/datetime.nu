@@ -18,14 +18,15 @@ export def item () {
     sketchybar
       --add item $name right
       --set $name
-        padding_right=0
+        padding_left=4
+        padding_right=4
         label=$"($output)"
         label.color=$"($colors.accent_datetime)"
         @datetime_font_lines@
-        label.padding_right=8
+        label.padding_right=4
         icon.drawing=off
         script=$"($nu.current-exe) ($current_path)"
-        update_freq=1
+        update_freq=30
   )
 }
 

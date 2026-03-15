@@ -6,6 +6,9 @@
   colors = config.myconfig.colorschemes.everforest."dark-medium";
   colorschemeLib = config.myconfig.args.shared.colorschemeLib;
   argb = colorschemeLib.toArgb "ff";
+  argbLow = colorschemeLib.toArgb "26";
+  argbBorder = colorschemeLib.toArgb "40";
+  argbIndicator = colorschemeLib.toArgb "50";
 in
   delib.rice {
     name = "everforest";
@@ -18,7 +21,7 @@ in
 
       services = {
         jankyborders = {
-          active_color = "0xff8ec07c";
+          active_color = argb colors.base0B;
           inactive_color = "0x00000000";
           style = "round";
           width = 5.0;
@@ -50,12 +53,18 @@ in
             app_obsidian = argb colors.base0E;
             app_kitty = argb colors.base0F;
 
+            # Island and indicator colors
+            island_surface = argbLow colors.base02;
+            island_border = argbBorder colors.base04;
+            active_indicator = argbIndicator colors.base0B;
+
             cpu_low = argb colors.base0B;
             cpu_medium = argb colors.base0A;
             cpu_high = argb colors.base09;
             cpu_critical = argb colors.base08;
           };
-          bar.color = "";
+          # Transparent outer bar — visible surface comes from island brackets
+          bar.color = "0x00000000";
         };
       };
 

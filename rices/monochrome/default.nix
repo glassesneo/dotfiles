@@ -6,6 +6,9 @@
   colors = config.myconfig.colorschemes.monochrome.default;
   colorschemeLib = config.myconfig.args.shared.colorschemeLib;
   argb = colorschemeLib.toArgb "ff";
+  argbLow = colorschemeLib.toArgb "26";
+  argbBorder = colorschemeLib.toArgb "40";
+  argbIndicator = colorschemeLib.toArgb "50";
 in
   delib.rice {
     name = "monochrome";
@@ -46,6 +49,11 @@ in
         app_ghostty = argb colors.base0D;
         app_obsidian = argb colors.base0E;
         app_kitty = argb colors.base0F;
+
+        # Island and indicator colors
+        island_surface = argbLow colors.base01;
+        island_border = argbBorder colors.base04;
+        active_indicator = argbIndicator colors.base08;
 
         # CPU graph colors - grayscale gradient from dark to light
         cpu_low = argb colors.base03;
