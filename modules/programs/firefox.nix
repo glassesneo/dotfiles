@@ -18,7 +18,7 @@ delib.module {
           isDefault = true;
           search = {
             force = true;
-            default = "brave";
+            default = "google";
             engines = {
               "brave" = {
                 urls = [
@@ -108,6 +108,9 @@ delib.module {
             "sidebar.verticalTabs" = true;
             "browser.toolbars.bookmarks.visibility" = "never";
             "extensions.autoDisableScopes" = 0;
+
+            # options to sync via Firefox Sync
+            "services.sync.prefs.sync.sidebar.position_start" = true;
           };
         };
       };

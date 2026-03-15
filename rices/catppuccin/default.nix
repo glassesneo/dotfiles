@@ -22,6 +22,7 @@ in
         inherit flavor;
         nvim.enable = false;
         tmux.enable = false;
+        firefox.enable = false;
       };
       programs = {
         ghostty = {
