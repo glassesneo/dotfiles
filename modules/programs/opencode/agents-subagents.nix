@@ -86,35 +86,40 @@ delib.module {
         write = denyAll // allow ["/tmp/**" "/private/tmp/**"];
       };
 
-    plansOnlyPermission = withScope {
-      name = "plans";
-      ops = ["edit" "write"];
-    }
-    readOnlyPermission;
+    plansOnlyPermission =
+      withScope {
+        name = "plans";
+        ops = ["edit" "write"];
+      }
+      readOnlyPermission;
 
-    draftPlansOnlyPermission = withScope {
-      name = "draftPlans";
-      ops = ["edit" "write"];
-    }
-    readOnlyPermission;
+    draftPlansOnlyPermission =
+      withScope {
+        name = "draftPlans";
+        ops = ["edit" "write"];
+      }
+      readOnlyPermission;
 
-    researchOnlyPermission = withScope {
-      name = "research";
-      ops = ["edit" "write"];
-    }
-    readOnlyPermission;
+    researchOnlyPermission =
+      withScope {
+        name = "research";
+        ops = ["edit" "write"];
+      }
+      readOnlyPermission;
 
-    reportsOnlyPermission = withScope {
-      name = "reports";
-      ops = ["edit" "write"];
-    }
-    readOnlyPermission;
+    reportsOnlyPermission =
+      withScope {
+        name = "reports";
+        ops = ["edit" "write"];
+      }
+      readOnlyPermission;
 
-    tempWorkspaceWithReportsPermission = withScope {
-      name = "reports";
-      ops = ["read" "edit" "write"];
-    }
-    tempWorkspacePermission;
+    tempWorkspaceWithReportsPermission =
+      withScope {
+        name = "reports";
+        ops = ["read" "edit" "write"];
+      }
+      tempWorkspacePermission;
 
     failureReportFormatContract = ''
       `failure-report` output format (strict, exact):

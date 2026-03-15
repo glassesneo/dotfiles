@@ -80,21 +80,23 @@ delib.module {
         write = denyAll // allow ["/tmp/**" "/private/tmp/**"];
       };
 
-    plansOnlyPermission = withScope {
-      name = "plans";
-      ops = ["edit" "write"];
-    }
-    readOnlyPermission;
+    plansOnlyPermission =
+      withScope {
+        name = "plans";
+        ops = ["edit" "write"];
+      }
+      readOnlyPermission;
 
     specPlansPermission = addExternalDirs scopes.draftPlans.dirs (
       addRulesToOps ["read"] (allow scopes.draftPlans.files) plansOnlyPermission
     );
 
-    tempWorkspaceWithReportsPermission = withScope {
-      name = "reports";
-      ops = ["read" "edit" "write"];
-    }
-    tempWorkspacePermission;
+    tempWorkspaceWithReportsPermission =
+      withScope {
+        name = "reports";
+        ops = ["read" "edit" "write"];
+      }
+      tempWorkspacePermission;
 
     testSpecFormatContract = ''
       `test-spec` output format (strict, exact):

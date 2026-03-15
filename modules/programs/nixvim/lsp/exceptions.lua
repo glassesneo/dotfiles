@@ -115,4 +115,3 @@ vim.lsp.config.efm = {
     },
   },
 }
-
