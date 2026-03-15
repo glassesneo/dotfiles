@@ -53,11 +53,12 @@ delib.module {
           "com.apple.swipescrolldirection" = true; # enable natural scrolling(default to true)
           "com.apple.sound.beep.feedback" = 0; # disable beep sound when pressing volume up/down key
           "com.apple.mouse.tapBehavior" = 1;
+          "com.apple.trackpad.scaling" = 3.0;
           AppleEnableMouseSwipeNavigateWithScrolls = true;
           AppleEnableSwipeNavigateWithScrolls = true;
           AppleInterfaceStyle = "Dark"; # dark mode
           AppleKeyboardUIMode = 3; # Mode 3 enables full keyboard control.
-          ApplePressAndHoldEnabled = true; # enable press and hold
+          ApplePressAndHoldEnabled = false; # enable press and hold
 
           InitialKeyRepeat = 12; # normal minimum is 15 (225 ms), maximum is 120 (1800 ms)
           # sets how fast it repeats once it starts.
