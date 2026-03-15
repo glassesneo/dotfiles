@@ -19,6 +19,23 @@ delib.module {
       ];
       description = "App bundle IDs that should use tiling layout by default";
     };
+    # Which screen edge gets the large bar reserve. Defaults follow host.hasNotch
+    # so notched hosts reserve the top (where SketchyBar sits) and non-notched
+    # hosts reserve the bottom. Rices can override via myconfig.services.aerospace.reservedEdge.
+    reservedEdge = lib.mkOption {
+      type = lib.types.enum ["top" "bottom"];
+      default =
+        if host.hasNotch
+        then "top"
+        else "bottom";
+      description = "Screen edge that receives the full bar reserve gap. Defaults to top for notched hosts, bottom otherwise. Should stay aligned with SketchyBar bar placement.";
+    };
+    # Size of the large reserved-edge gap, matching the SketchyBar bar height.
+    reservedSize = lib.mkOption {
+      type = lib.types.int;
+      default = 42;
+      description = "Size of the reserved-edge outer gap in pixels. Should match the SketchyBar bar height.";
+    };
   };
 
   darwin.ifEnabled = {cfg, ...}: {
@@ -60,13 +77,24 @@ delib.module {
 
         on-focused-monitor-changed = ["move-mouse monitor-lazy-center"];
 
-        gaps = {
+        gaps = let
+          outerDefault = 4;
+        in {
           inner.horizontal = 5;
           inner.vertical = 5;
-          outer.left = 4;
-          outer.right = 4;
-          outer.bottom = 42;
-          outer.top = 4;
+          outer.left = outerDefault;
+          outer.right = outerDefault;
+          outer.top =
+            if cfg.reservedEdge == "top"
+            then [
+              {monitor."built-in" = outerDefault;}
+              cfg.reservedSize
+            ]
+            else outerDefault;
+          outer.bottom =
+            if cfg.reservedEdge == "bottom"
+            then cfg.reservedSize
+            else outerDefault;
         };
 
         workspace-to-monitor-force-assignment = {

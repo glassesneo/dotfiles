@@ -4,4 +4,5 @@ delib.host {
   type = "laptop";
   rice = "catppuccin";
   tier = "full";
+  hasNotch = true;
 }

@@ -65,6 +65,8 @@ sketchybar --query bar
 }
 ```
 
+Note: `position` is host-dependent. Notched hosts (e.g. `seiran`) default to `"top"`; non-notched hosts (e.g. `kurogane`) default to `"bottom"`. Verify against the active host.
+
 ### `<item_name>`
 
 Discover candidate names first:
@@ -225,6 +227,22 @@ nh darwin switch . -H kurogane -Lt --dry
 - Runtime checks (live daemon state and query payloads):
 
 ```bash
+sketchybar --query bar
+```
+
+- Host-specific verification (build validation):
+
+```bash
+# Verify both hosts evaluate cleanly
+nh darwin switch . -H kurogane -Lt --dry
+nh darwin switch . -H seiran -Lt --dry
+```
+
+- Runtime position verification (after applying config and reloading):
+
+```bash
+# On kurogane (non-notched): expect "position": "bottom"
+# On seiran (notched): expect "position": "top"
 sketchybar --query bar
 ```
 

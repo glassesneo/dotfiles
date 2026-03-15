@@ -45,36 +45,70 @@ delib.module {
     };
     # Bar appearance
     bar = {
+      position = lib.mkOption {
+        type = lib.types.enum ["top" "bottom"];
+        default =
+          if host.hasNotch
+          then "top"
+          else "bottom";
+        description = "Bar position. Defaults to top for notched hosts, bottom otherwise.";
+      };
       color = strOption ""; # 0xAARRGGBB format
       cornerRadius = strOption "0";
       blurRadius = strOption "0";
       borderWidth = strOption "0";
       borderColor = strOption "";
+      notchWidth = lib.mkOption {
+        type = lib.types.nullOr lib.types.int;
+        default = null;
+        description = "Override notch_width for notch-aware bar layout. Omitted when null.";
+      };
+      notchOffset = lib.mkOption {
+        type = lib.types.nullOr lib.types.int;
+        default = null;
+        description = "Override notch_offset for notch-aware bar layout. Omitted when null.";
+      };
+      notchDisplayHeight = lib.mkOption {
+        type = lib.types.nullOr lib.types.int;
+        default =
+          if host.hasNotch
+          then 32
+          else null;
+        description = "Override notch_display_height for notch-aware bar layout. Omitted when null.";
+      };
     };
     # Datetime font override (Family:Style:Size). When empty, uses Bold Italic default.
     datetimeFontOverride = strOption "";
     # Typed layout abstraction with zones and groups
-    layout = {
+    layout = let
+      regionOverrideType = lib.types.nullOr (lib.types.enum ["left" "right" "center" "q" "e"]);
+      zoneGroupType = lib.types.submodule {
+        options = {
+          id = lib.mkOption {type = lib.types.str;};
+          priority = lib.mkOption {type = lib.types.int;};
+          items = lib.mkOption {type = lib.types.listOf lib.types.str;};
+          regionOverride = lib.mkOption {
+            type = regionOverrideType;
+            default = null;
+            description = "When set, overrides the runtime SketchyBar position for all items in this group (e.g. q/e for notch-aware placement).";
+          };
+          bracket = {
+            enable = boolOption false;
+            backgroundColor = strOption "";
+            blurRadius = strOption "0";
+            borderWidth = strOption "0";
+            borderColor = strOption "";
+            cornerRadius = strOption "8";
+            height = strOption "28";
+            paddingLeft = strOption "0";
+            paddingRight = strOption "0";
+          };
+        };
+      };
+    in {
       zones = {
         left = lib.mkOption {
-          type = lib.types.listOf (lib.types.submodule {
-            options = {
-              id = lib.mkOption {type = lib.types.str;};
-              priority = lib.mkOption {type = lib.types.int;};
-              items = lib.mkOption {type = lib.types.listOf lib.types.str;};
-              bracket = {
-                enable = boolOption false;
-                backgroundColor = strOption "";
-                blurRadius = strOption "0";
-                borderWidth = strOption "0";
-                borderColor = strOption "";
-                cornerRadius = strOption "8";
-                height = strOption "28";
-                paddingLeft = strOption "0";
-                paddingRight = strOption "0";
-              };
-            };
-          });
+          type = lib.types.listOf zoneGroupType;
           default = [
             {
               id = "primary";
@@ -86,46 +120,12 @@ delib.module {
           description = "Left zone groups with deterministic ordering by priority";
         };
         center = lib.mkOption {
-          type = lib.types.listOf (lib.types.submodule {
-            options = {
-              id = lib.mkOption {type = lib.types.str;};
-              priority = lib.mkOption {type = lib.types.int;};
-              items = lib.mkOption {type = lib.types.listOf lib.types.str;};
-              bracket = {
-                enable = boolOption false;
-                backgroundColor = strOption "";
-                blurRadius = strOption "0";
-                borderWidth = strOption "0";
-                borderColor = strOption "";
-                cornerRadius = strOption "8";
-                height = strOption "28";
-                paddingLeft = strOption "0";
-                paddingRight = strOption "0";
-              };
-            };
-          });
+          type = lib.types.listOf zoneGroupType;
           default = [];
           description = "Center zone groups with deterministic ordering by priority";
         };
         right = lib.mkOption {
-          type = lib.types.listOf (lib.types.submodule {
-            options = {
-              id = lib.mkOption {type = lib.types.str;};
-              priority = lib.mkOption {type = lib.types.int;};
-              items = lib.mkOption {type = lib.types.listOf lib.types.str;};
-              bracket = {
-                enable = boolOption false;
-                backgroundColor = strOption "";
-                blurRadius = strOption "0";
-                borderWidth = strOption "0";
-                borderColor = strOption "";
-                cornerRadius = strOption "8";
-                height = strOption "28";
-                paddingLeft = strOption "0";
-                paddingRight = strOption "0";
-              };
-            };
-          });
+          type = lib.types.listOf zoneGroupType;
           default = [
             {
               id = "primary";
@@ -174,7 +174,18 @@ delib.module {
       )
     '';
 
-    # Generate all layout code (brackets and reorder)
+    # Generate region override code for a group (post-creation --set position).
+    # Runs after item creation, before --reorder; both are independent operations.
+    generateRegionOverrideCode = group:
+      if group.regionOverride != null
+      then
+        lib.concatMapStrings (item: ''
+          sketchybar --set ${lib.escapeShellArg item} position=${lib.escapeShellArg group.regionOverride}
+        '')
+        group.items
+      else "";
+
+    # Generate all layout code (brackets, region overrides, and reorder)
     generateLayoutCode = zone: groups: let
       sortedGroups = lib.sort (a: b: a.priority < b.priority) groups;
       bracketCodes = lib.concatMapStrings (g:
@@ -182,12 +193,14 @@ delib.module {
         then generateBracketCode zone g
         else "# Bracket disabled for ${g.id}")
       sortedGroups;
+      regionOverrideCodes = lib.concatMapStrings generateRegionOverrideCode sortedGroups;
       allItems = lib.concatMap (g: g.items) sortedGroups;
       itemString = lib.concatStringsSep " " (map lib.escapeShellArg allItems);
     in
       if allItems != []
       then ''
         ${bracketCodes}
+        ${regionOverrideCodes}
         sketchybar --reorder ${itemString}
       ''
       else "# No items in ${zone} zone";
@@ -198,7 +211,18 @@ delib.module {
       ${generateLayoutCode "right" cfg.layout.zones.right}
     '';
 
+    # Build conditional notch property lines (omitted when null)
+    notchLines = let
+      lines = lib.filter (s: s != "") [
+        (lib.optionalString (cfg.bar.notchWidth != null) "notch_width=${toString cfg.bar.notchWidth}")
+        (lib.optionalString (cfg.bar.notchOffset != null) "notch_offset=${toString cfg.bar.notchOffset}")
+        (lib.optionalString (cfg.bar.notchDisplayHeight != null) "notch_display_height=${toString cfg.bar.notchDisplayHeight}")
+      ];
+    in
+      lib.concatStringsSep "\n        " lines;
+
     sketchybarrc = pkgs.replaceVars ./rc/sketchybarrc {
+      bar_position = cfg.bar.position;
       bar_color =
         if cfg.bar.color != ""
         then cfg.bar.color
@@ -210,6 +234,7 @@ delib.module {
         if cfg.bar.borderColor != ""
         then cfg.bar.borderColor
         else "0x00000000";
+      bar_notch_lines = notchLines;
       layout_code = layoutCode;
     };
 
