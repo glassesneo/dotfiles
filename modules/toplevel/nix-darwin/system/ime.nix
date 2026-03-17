@@ -11,6 +11,31 @@ delib.module {
           AppleGlobalTextInputProperties = {
             TextInputGlobalPropertyPerContextInput = true; # Keep input method state per application, default is false
           };
+
+          AppleEnabledInputSources = [
+            {
+              "Bundle ID" = "com.apple.CharacterPaletteIM";
+              InputSourceKind = "Non Keyboard Input Method";
+            }
+            {
+              "Bundle ID" = "com.apple.PressAndHold";
+              InputSourceKind = "Non Keyboard Input Method";
+            }
+            {
+              InputSourceKind = "Keyboard Layout";
+              "KeyboardLayout ID" = 252;
+              "KeyboardLayout Name" = "ABC";
+            }
+            {
+              "Bundle ID" = "com.apple.50onPaletteIM";
+              InputSourceKind = "Non Keyboard Input Method";
+            }
+            {
+              "Bundle ID" = "jp.sourceforge.inputmethod.aquaskk";
+              InputSourceKind = "Keyboard Input Method";
+            }
+          ];
+
           AppleSelectedInputSources = [
             {
               "Bundle ID" = "com.apple.PressAndHold";
