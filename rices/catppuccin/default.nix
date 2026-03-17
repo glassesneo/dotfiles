@@ -33,6 +33,7 @@ in
             background-opacity = 0.2;
             background-blur = 3;
             window-padding-x = 6;
+            custom-shader-animation = "always";
           };
         };
         nixvim = {
@@ -98,7 +99,10 @@ in
     myconfig = {
       colorscheme = colors;
       wallpaper = "sakura";
-      programs.ghostty.quick-terminal-background = colors.base00;
+      programs.ghostty = {
+        quick-terminal-background = colors.base00;
+        custom-shader = "sakura";
+      };
 
       services = {
         jankyborders = {
