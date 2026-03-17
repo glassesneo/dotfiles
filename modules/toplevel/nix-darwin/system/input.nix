@@ -37,6 +37,11 @@ delib.module {
           TrackpadThreeFingerDrag = false;
           TrackpadThreeFingerTapGesture = 0;
         };
+        CustomUserPreferences."com.apple.HIToolbox" = {
+          AppleGlobalTextInputProperties = {
+            TextInputGlobalPropertyPerContextInput = true; # Keep input method state per application, default is false
+          };
+        };
       };
     };
   };
