@@ -119,6 +119,29 @@ assertions, and secret-aware runtime wiring.
 Some MCP helpers come from =node-packages/=, which is a bun2nix-managed Node
 package set used by the Nix wrappers in =modules/config/node-packages.nix=.
 
+** AquaSKK (Japanese Input)
+
+AquaSKK is installed declaratively via =modules/programs/aquaskk/=. The module
+seeds required AquaSKK preferences at activation time using =defaults write=
+into the =jp.sourceforge.inputmethod.aquaskk= domain. This runs after Home
+Manager's =linkGeneration= phase so that any previously managed symlink is
+cleaned up before the real CFPreferences plist is created.
+
+If AquaSKK does not appear in Input Sources after activation:
+
+1. Log out and log back in (macOS discovers input methods on session start).
+2. If it still doesn't appear, go to System Settings → Keyboard → Input Sources
+   → Edit → Add Input Source, then search for "AquaSKK" and add it.
+
+If activation warns about a symlink at
+=~/Library/Preferences/jp.sourceforge.inputmethod.aquaskk.plist=, remove or
+back up the symlink, then re-run activation:
+
+#+begin_src sh
+rm ~/Library/Preferences/jp.sourceforge.inputmethod.aquaskk.plist
+nh home switch
+#+end_src
+
 ** Development Environment
 
 The flake defines a small maintenance shell with tools such as =bun=, =deno=,
