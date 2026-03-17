@@ -8,3 +8,10 @@
 - **NEVER** hardcode secrets or plaintext values.
 - Encrypted blobs live in host directories (currently `hosts/kurogane/secrets.yaml`).
 - Rotation runbook: @docs/secrets-key-rotation.md
+
+## nix-darwin Module Ownership
+
+- `nix-darwin/system/` — shared OS/system policy only: activation glue, host identity, security, and central IME aggregation.
+- `nix-darwin/preferences/` — shared macOS user preferences (appearance, dock, input, files, etc.).
+- `nix-darwin/preferences/accessibility/` — accessibility-specific preference modules (zoom).
+- Feature modules (e.g. `programs/aquaskk`) own their own darwin-specific settings and contribute to central aggregation interfaces (e.g. `nix-darwin.system.ime.extraEnabledInputSources`) rather than hardcoding entries in system modules.

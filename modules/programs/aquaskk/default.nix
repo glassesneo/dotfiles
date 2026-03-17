@@ -153,17 +153,32 @@ delib.module {
         fi
       fi
 
-      # Best-effort Input Sources registration. macOS may not reflect changes
-      # until logout/login. See README.org for manual fallback steps.
-      if ! /usr/bin/defaults read com.apple.HIToolbox AppleEnabledInputSources 2>/dev/null | /usr/bin/grep -q "jp.sourceforge.inputmethod.aquaskk"; then
-        $VERBOSE_ECHO "Registering AquaSKK input source (best-effort)..."
-        $DRY_RUN_CMD /usr/bin/defaults write com.apple.HIToolbox AppleEnabledInputSources -array-add \
-          '{
-            "Bundle ID" = "jp.sourceforge.inputmethod.aquaskk";
-            InputSourceKind = "Keyboard Input Method";
-          }' 2>/dev/null || \
-          $VERBOSE_ECHO "Could not auto-register AquaSKK input source. Add it manually via System Settings > Keyboard > Input Sources."
-      fi
     '';
+  };
+
+  # Declare AquaSKK-owned input-source entries via the central HIToolbox
+  # aggregation interface in ime.nix. This replaces the former best-effort
+  # activation-time `defaults write ... -array-add` registration.
+  myconfig.ifEnabled.nix-darwin.system.ime = {
+    extraEnabledInputSources = [
+      {
+        "Bundle ID" = "jp.sourceforge.inputmethod.aquaskk";
+        InputSourceKind = "Keyboard Input Method";
+      }
+    ];
+    extraSelectedInputSources = [
+      {
+        "Bundle ID" = "jp.sourceforge.inputmethod.aquaskk";
+        "Input Mode" = "com.apple.inputmethod.Japanese";
+        InputSourceKind = "Input Mode";
+      }
+    ];
+    extraInputSourceHistory = [
+      {
+        "Bundle ID" = "jp.sourceforge.inputmethod.aquaskk";
+        "Input Mode" = "com.apple.inputmethod.Japanese";
+        InputSourceKind = "Input Mode";
+      }
+    ];
   };
 }

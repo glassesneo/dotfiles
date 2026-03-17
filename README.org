@@ -127,6 +127,10 @@ into the =jp.sourceforge.inputmethod.aquaskk= domain. This runs after Home
 Manager's =linkGeneration= phase so that any previously managed symlink is
 cleaned up before the real CFPreferences plist is created.
 
+Input-source registration (=com.apple.HIToolbox=) is owned declaratively by the
+AquaSKK module via the central aggregation interface in
+=modules/toplevel/nix-darwin/system/ime.nix=.
+
 If AquaSKK does not appear in Input Sources after activation:
 
 1. Log out and log back in (macOS discovers input methods on session start).
@@ -171,6 +175,8 @@ Within =modules/=:
 - =programs/= configures user-facing tools
 - =services/= configures desktop services such as AeroSpace and SketchyBar
 - =toplevel/= handles broad system/user wiring such as Nix, Home Manager, fonts, and secrets
+  - =toplevel/nix-darwin/system/= — shared OS policy (activation, host, security, IME aggregation)
+  - =toplevel/nix-darwin/preferences/= — shared macOS user preferences (appearance, dock, input, etc.)
 
 You will also see directories such as =.kiri/=, =.agents/=, =.claude/=,
 =.agent-browser/=, =.opencode/=, and =.crush/=. Those are local runtime or

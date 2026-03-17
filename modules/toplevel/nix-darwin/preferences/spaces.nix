@@ -1,6 +1,6 @@
 {delib, ...}:
 delib.module {
-  name = "nix-darwin.system.spaces";
+  name = "nix-darwin.preferences.spaces";
 
   options = delib.singleEnableOption true;
 

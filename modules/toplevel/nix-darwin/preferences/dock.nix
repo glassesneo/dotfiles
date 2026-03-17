@@ -1,6 +1,6 @@
 {delib, ...}:
 delib.module {
-  name = "nix-darwin.system.dock";
+  name = "nix-darwin.preferences.dock";
 
   options = delib.singleEnableOption true;
 

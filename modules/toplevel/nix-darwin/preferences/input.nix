@@ -1,6 +1,6 @@
 {delib, ...}:
 delib.module {
-  name = "nix-darwin.system.input";
+  name = "nix-darwin.preferences.input";
 
   options = delib.singleEnableOption true;
 

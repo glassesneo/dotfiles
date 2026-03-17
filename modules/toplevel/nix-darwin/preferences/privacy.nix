@@ -1,6 +1,6 @@
 {delib, ...}:
 delib.module {
-  name = "nix-darwin.system.privacy";
+  name = "nix-darwin.preferences.privacy";
 
   options = delib.singleEnableOption true;
 

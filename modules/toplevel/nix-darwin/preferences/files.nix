@@ -1,6 +1,6 @@
 {delib, ...}:
 delib.module {
-  name = "nix-darwin.system.files";
+  name = "nix-darwin.preferences.files";
 
   options = delib.singleEnableOption true;
 

@@ -1,6 +1,6 @@
 {delib, ...}:
 delib.module {
-  name = "nix-darwin.system.developer";
+  name = "nix-darwin.preferences.developer";
 
   options = delib.singleEnableOption true;
 

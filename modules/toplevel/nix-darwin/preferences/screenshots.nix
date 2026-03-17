@@ -1,6 +1,6 @@
 {delib, ...}:
 delib.module {
-  name = "nix-darwin.system.screenshots";
+  name = "nix-darwin.preferences.screenshots";
 
   options = delib.singleEnableOption true;
 

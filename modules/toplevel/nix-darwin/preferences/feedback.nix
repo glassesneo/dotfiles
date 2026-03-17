@@ -1,6 +1,6 @@
 {delib, ...}:
 delib.module {
-  name = "nix-darwin.system.feedback";
+  name = "nix-darwin.preferences.feedback";
 
   options = delib.singleEnableOption true;
 

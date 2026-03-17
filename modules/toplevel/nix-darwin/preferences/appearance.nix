@@ -1,6 +1,6 @@
 {delib, ...}:
 delib.module {
-  name = "nix-darwin.system.appearance";
+  name = "nix-darwin.preferences.appearance";
 
   options = delib.singleEnableOption true;
 
