@@ -34,7 +34,8 @@ delib.module {
       enable = true;
       package = claudeCodeWrapped;
       settings = {
-        model = "opus";
+        model = "opus[1M]";
+        autoMemoryEnabled = false;
         skipDangerousModePermissionPrompt = true;
         skipAutoPermissionPrompt = true;
         automode = true;
