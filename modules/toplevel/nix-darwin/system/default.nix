@@ -15,7 +15,6 @@ delib.module {
 
       defaults = {
         smb.NetBIOSName = myconfig.constants.username;
-
         dock = {
           autohide = true;
           autohide-delay = 1000.0;
