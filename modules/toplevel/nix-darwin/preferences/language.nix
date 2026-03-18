@@ -9,8 +9,8 @@ delib.module {
       CustomUserPreferences = {
         NSGlobalDomain = {
           AppleLanguages = [
-            "ja-JP"
             "en-US"
+            "ja-JP"
           ];
 
           AppleLocale = "en_US";
