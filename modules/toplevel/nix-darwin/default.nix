@@ -1,19 +1,12 @@
 {
   delib,
   host,
-  pkgs,
   ...
 }:
 delib.module {
   name = "nix-darwin";
 
   darwin.always = {myconfig, ...}: {
-    users.users = {
-      "${myconfig.constants.username}" = {
-        shell = pkgs.zsh;
-      };
-    };
-
     environment = {
       variables = {
         LC_ALL = "en_US.UTF-8";
