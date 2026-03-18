@@ -38,14 +38,19 @@ export default defineConfig(() => ({
       snippet: "git diff --staged",
     },
     {
+      name: "git grep",
+      keyword: "gg",
+      snippet: "git grep",
+    },
+    {
+      name: "git log",
+      keyword: "gl",
+      snippet: "git log --graph --decorate",
+    },
+    {
       name: "git log graph",
       keyword: "glg",
       snippet: "git log --oneline --graph --decorate -n 20",
-    },
-    {
-      name: "nix flake update",
-      keyword: "nfu",
-      snippet: "nix flake update",
     },
     {
       name: "home-manager activation",
