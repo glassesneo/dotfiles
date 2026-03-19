@@ -16,7 +16,6 @@ in
 
     options.programs.ghostty = with delib; {
       enable = boolOption host.guiShellFeatured;
-      quick-terminal-background = strOption "#20263a";
       custom-shader = lib.mkOption {
         type = lib.types.nullOr (lib.types.enum (builtins.attrNames shaders));
         default = null;
@@ -46,23 +45,16 @@ in
             "cmd+shift+p=toggle_command_palette"
             "global:cmd+backquote=toggle_quick_terminal"
           ];
-          quick-terminal-position = "center";
-          quick-terminal-size = "45%";
-          quick-terminal-autohide = true;
           auto-update = "off";
           font-feature = "-dlig";
           window-inherit-working-directory = false;
           macos-titlebar-style = "hidden";
+          background-opacity-cells = true;
           # cursor-style = "block";
           cursor-style-blink = false;
           shell-integration-features = "no-cursor";
           custom-shader = lib.mkIf (cfg.custom-shader != null) shaders.${cfg.custom-shader};
         };
       };
-      programs.zsh.initContent = lib.mkOrder 1200 (
-        builtins.readFile (
-          pkgs.replaceVars ./quick-terminal-check.sh {color = cfg.quick-terminal-background;}
-        )
-      );
     };
   }

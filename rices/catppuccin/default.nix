@@ -31,8 +31,9 @@ in
         ghostty = {
           settings = {
             background-opacity = 0.2;
-            background-blur = 3;
+            background-blur = 12;
             window-padding-x = 6;
+            minimum-contrast = 4;
             custom-shader-animation = "always";
           };
         };
@@ -100,8 +101,8 @@ in
       colorscheme = colors;
       wallpaper = "sakura";
       programs.ghostty = {
-        quick-terminal-background = colors.base00;
         custom-shader = "sakura";
+        quick-terminal.background = colors.base00;
       };
 
       services = {
