@@ -103,4 +103,12 @@ delib.module {
       };
     };
   };
+
+  # Default MCP server membership for Codex.
+  myconfig.ifEnabled.programs.mcp-servers-nix.targets.codex = [
+    "brave-search"
+    "deepwiki"
+    "readability"
+    "context7"
+  ];
 }

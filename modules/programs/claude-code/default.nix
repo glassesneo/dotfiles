@@ -194,4 +194,12 @@ delib.module {
       memory.text = builtins.readFile ./GLOBAL_CLAUDE.md;
     };
   };
+
+  # Default MCP server membership for Claude Code.
+  myconfig.ifEnabled.programs.mcp-servers-nix.targets.claude_code = [
+    "brave-search"
+    "deepwiki"
+    "readability"
+    "context7"
+  ];
 }

@@ -2,12 +2,19 @@
 
 ## MCP Architecture
 
-Centralized MCP server definitions live in a single Nix file:
-- @modules/programs/mcp-servers/default.nix (server data, target metadata, validation, and runtime wiring)
+Centralized MCP server definitions and runtime wiring live in a single Nix file:
+- @modules/programs/mcp-servers/default.nix (typed server catalog, target adapter metadata, validation assertions, and rendering)
+
+### Ownership Model
+
+- **Shared server catalog** (`programs.mcp-servers-nix.catalog`): centralized in this module. Add or modify server definitions here.
+- **Per-client membership** (`programs.mcp-servers-nix.targets.<target>`): owned by each client module via `myconfig.ifEnabled`. To change which servers a client uses, edit the client module:
+  - Claude Code: @modules/programs/claude-code/default.nix
+  - Claude Desktop: @modules/programs/claude-desktop.nix
+  - Codex: @modules/programs/codex/default.nix
+  - OpenCode: @modules/programs/opencode/default.nix
 
 Each AI tool uses a separate memory file under `$XDG_DATA_HOME` to prevent conflicts (e.g., `claudecode_memory.json`, `opencode_memory.json`, `crush_memory.json`).
-
-**IMPORTANT**: When adding a new MCP server, edit `servers` and `enabled` in `modules/programs/mcp-servers/default.nix`. Do not scatter MCP configs across individual tool modules.
 
 ## Secrets
 

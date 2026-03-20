@@ -4,16 +4,19 @@ This module keeps MCP server data and runtime wiring in a single Nix file.
 
 ## Ownership model
 
-- Nix owns all MCP server data, target metadata, validation assertions, and runtime wiring:
-  - `modules/programs/mcp-servers/default.nix`
+- **Shared server catalog** — typed option `programs.mcp-servers-nix.catalog` in `modules/programs/mcp-servers/default.nix`. Each entry defines a server's command/URL, args, env, and behavior.
+- **Per-client membership** — typed list options `programs.mcp-servers-nix.targets.<target>` contributed by each client module via `myconfig.ifEnabled`:
+  - `modules/programs/claude-code/default.nix` → `targets.claude_code`
+  - `modules/programs/claude-desktop.nix` → `targets.claude_desktop`
+  - `modules/programs/codex/default.nix` → `targets.codex`
+  - `modules/programs/opencode/default.nix` → `targets.opencode`
+- **Target adapter metadata** — centralized in `modules/programs/mcp-servers/default.nix` (env format, type policies, command behavior per target).
 
-## Practical rule
+## Practical rules
 
-- Add or adjust server/target metadata directly in `modules/programs/mcp-servers/default.nix`:
-  - `servers` attrset: per-server config (command_id/url, args, env_keys, env_static, needs_node)
-  - `enabled` attrset: list of enabled server names per target
-  - `targetsMeta` attrset: per-target adapter config (env format, type policies, command behavior)
-- Keep path resolution and per-host executable details in the same file.
+- To add or adjust a server definition: edit `catalog` defaults in `modules/programs/mcp-servers/default.nix`.
+- To change which servers a client uses: edit the `myconfig.ifEnabled.programs.mcp-servers-nix.targets.<target>` list in the client module.
+- Keep path resolution, wrappers, and per-host executable details in the MCP module file.
 
 ## Authenticated remote (hosted) MCP servers
 

@@ -17,4 +17,12 @@ delib.module {
       /usr/bin/defaults write com.anthropic.claudefordesktop disableAutoUpdates -bool true || true
     '';
   };
+
+  # Default MCP server membership for Claude Desktop.
+  myconfig.ifEnabled.programs.mcp-servers-nix.targets.claude_desktop = [
+    "brave-search"
+    "readability"
+    "chrome-devtools"
+    "context7"
+  ];
 }
