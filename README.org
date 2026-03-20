@@ -7,9 +7,10 @@ This repository is my declarative macOS setup built with
 [[https://github.com/yunfachi/denix][Denix]], [[https://github.com/nix-darwin/nix-darwin][nix-darwin]], and
 [[https://github.com/nix-community/home-manager][Home Manager]].
 
-It is currently centered on one Apple Silicon host, =kurogane=, and uses
-Denix to compose host definitions, reusable modules, and theme variants
-("rices") into both user-level and system-level configurations.
+It currently manages two Apple Silicon hosts and uses Denix to compose host
+definitions, reusable modules, and theme variants ("rices") into both
+user-level and system-level configurations. The day-to-day default host is
+=seiran=.
 
 What this repo optimizes for:
 
@@ -39,13 +40,18 @@ Hosts carry a performance tier (=minimal=, =basic=, =standard=, =full=) that
 modules can use to scale behavior to machine capability. See
 =docs/host-tiers.md= for the full contract.
 
-Current host/theme reality:
+Current default host/theme reality:
 
-- Host: =kurogane=
+- Host: =seiran=
 - Platform: =aarch64-darwin=
-- Default rice: =monochrome=
-- Tier: =basic=
-- Other selectable rices: =catppuccin=, =everforest=
+- Default rice: =catppuccin=
+- Tier: =full=
+- Display: notch-aware laptop layout
+- Other selectable rices: =monochrome=, =everforest=
+
+Other host currently defined:
+
+- =kurogane= — =aarch64-darwin= laptop, default rice =monochrome=, tier =basic=
 
 * Daily Workflows
 
@@ -76,7 +82,7 @@ The underlying commands are still available directly:
 
 #+begin_src sh
 nh home switch
-nh darwin switch . -H kurogane -Lt
+nh darwin switch . -H seiran -Lt
 nix flake check
 nix fmt
 nix develop
@@ -97,13 +103,13 @@ laptop defaults. Concrete rices such as =monochrome=, =catppuccin=, and
 
 ** Secrets
 
-Secrets are declared centrally in =modules/toplevel/secrets.nix= and bound to
-the current host in =hosts/kurogane/secrets.nix=. The encrypted source of truth
-is =hosts/kurogane/secrets.yaml=, managed with
+Secrets are declared centrally in =modules/toplevel/secrets.nix= and consumed
+through host-specific secret bindings when a host needs them. The encrypted
+source of truth is managed with
 [[https://github.com/Mic92/sops-nix][sops-nix]].
 
-If you need the rotation procedure, use =docs/secrets-key-rotation.md= rather
-than expanding the root README.
+If you need the exact file paths or the rotation procedure, use
+=docs/secrets-key-rotation.md= rather than expanding the root README.
 
 ** AI And Agent Tooling
 

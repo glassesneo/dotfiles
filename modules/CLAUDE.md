@@ -9,7 +9,7 @@
 - Rices: Theme variants via `delib.rice`. Each rice sets `myconfig.*`, `home`, `darwin`, or `nixos` attrs.
   - Rices can inherit from others (e.g., `inherits = ["laptop"]`).
   - Switch rice per-host in `hosts/<name>/default.nix` with `rice = "<name>"`.
-  - Switch rices: `nh home switch -c kurogane-catppuccin` or `nh darwin switch . -H kurogane-catppuccin -Lt`.
+  - Switch rices: `nh home switch -c seiran-everforest` or `nh darwin switch . -H seiran-everforest -Lt`.
 - Platform blocks: `home.ifEnabled` targets `config` for `moduleSystem = "home"` and `config.home-manager.users.neo` for `"darwin"` when HM is enabled.
 - Shared arguments: `myconfig.always.args.shared.<key>` pattern for global args.
 - Host routing: `delib.host` + conditional config when `config.${myconfigName}.host` matches.
@@ -42,7 +42,7 @@ just apply-home                                          # fmt → check → hom
 just build                                               # nh darwin build . -H <host>
 just build-home                                          # nh home build
 
-# Override host: just host=kurogane switch
+# Override the default `seiran` target: just host=kurogane switch
 ```
 
 ## Development and Testing

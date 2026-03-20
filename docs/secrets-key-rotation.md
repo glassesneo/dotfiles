@@ -6,6 +6,7 @@ This runbook rotates the SOPS age key used by this repository without changing s
 
 - `age`, `age-keygen`, and `sops` are installed.
 - Existing encrypted file is `hosts/kurogane/secrets.yaml`.
+  Update the host path in the commands below if secret ownership moves to a different host later.
 - Existing SOPS policy file is `.sops.yaml`.
 - You can access the legacy key file path used before this migration.
 

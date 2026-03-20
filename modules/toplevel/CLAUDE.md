@@ -3,10 +3,10 @@
 ## Secrets Management
 
 - All shared secrets are declared in @modules/toplevel/secrets.nix and referenced as `config.sops.secrets.<key>.path`.
-- Host default secret files are bound in @hosts/kurogane/secrets.nix.
+- Host-specific secret bindings, when present, live in `hosts/<name>/secrets.nix`.
 - Use a dedicated SOPS age key only; do not reuse SSH keys or keys from unrelated workflows.
 - **NEVER** hardcode secrets or plaintext values.
-- Encrypted blobs live in host directories (currently `hosts/kurogane/secrets.yaml`).
+- Exact encrypted blob paths belong in the rotation runbook, not this entry guide.
 - Rotation runbook: @docs/secrets-key-rotation.md
 
 ## nix-darwin Module Ownership

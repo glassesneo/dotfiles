@@ -22,9 +22,9 @@ Each host sets its tier in its Denix host definition:
 ```nix
 # hosts/<name>/default.nix
 delib.host {
-  name = "kurogane";
+  name = "seiran";
   type = "laptop";
-  rice = "monochrome";
+  rice = "catppuccin";
   tier = "full";
 }
 ```
@@ -72,4 +72,4 @@ This enables the program by default only on `standard` or `full` hosts.
 
 - Schema extension: `flake.nix` (`hosts.extraSubmodules`)
 - Helper export: `modules/config/host-tier.nix`
-- Host value: `hosts/kurogane/default.nix`
+- Host value example: `hosts/seiran/default.nix`
