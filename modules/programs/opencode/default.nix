@@ -379,7 +379,7 @@ delib.module {
       idea = {
         mode = "primary";
         description = "Primary ideation agent for early-stage exploration and problem framing before planning; hand off to `spec` by switching agents with the same chat history.";
-        model = "github-copilot/claude-sonnet-4.6";
+        model = "zai-coding-plan/glm-5";
         prompt = ''
           You are the `idea` agent — a thinking partner for early-stage exploration.
 
@@ -427,7 +427,7 @@ delib.module {
       spec = {
         mode = "primary";
         description = "Primary planning agent that handles both ambiguous and well-scoped requests through iterative specification elicitation and systematic planning workflow.";
-        model = "github-copilot/gpt-5.4";
+        model = "openai/gpt-5.4";
         reasoningEffort = "high";
         prompt =
           ''
@@ -712,7 +712,7 @@ delib.module {
 
       debugger = {
         mode = "all";
-        model = "github-copilot/claude-opus-4.6";
+        model = "zai-coding-plan/glm-5";
         description = "Performs command-driven bug investigation with reproduction, root-cause analysis, and evidence-only reporting.";
         prompt =
           ''
@@ -773,7 +773,7 @@ delib.module {
 
       test_designer = {
         mode = "all";
-        model = "github-copilot/claude-opus-4.6";
+        model = "zai-coding-plan/glm-5";
         description = "Creates decision-complete test-spec files for zero-context implementation/testing agents, then gates them through plan_reviewer.";
         reasoningEffort = "high";
         prompt =
@@ -832,7 +832,7 @@ delib.module {
       };
       draft_planner = {
         mode = "subagent";
-        model = "github-copilot/claude-sonnet-4.6";
+        model = "zai-coding-plan/glm-5";
         description = "Creates direction-setting draft plan files for user approval before detailed final planning.";
         prompt =
           ''
@@ -915,7 +915,7 @@ delib.module {
 
       general = {
         mode = "subagent";
-        model = "github-copilot/claude-sonnet-4.6";
+        model = "zai-coding-plan/glm-5";
         description = "General implementation subagent for delegated file edits plus targeted path exploration.";
         prompt = ''
           You are the `general` implementation subagent.
