@@ -23,42 +23,46 @@
 
 ## Build Commands
 
+All common commands have `just` aliases (run `just` to list). The underlying commands:
+
 ```bash
 # Full system (darwin + home-manager)
-nh darwin switch . --hostname kurogane -Lt    # Long form
-nh darwin switch . -H kurogane -Lt            # Short form
-nh darwin switch . -H kurogane -Lt --dry      # Dry run
-nh darwin switch . -H kurogane -Lt --ask      # Confirm before applying
-nh darwin switch . -H kurogane -Lt --update   # Update all flake inputs first
-nh darwin switch . -H kurogane -Lt --update-input nixpkgs  # Update specific input
+just switch                                              # nh darwin switch . -H <host> -Lt
+just switch-dry                                          # + --dry
+just switch-ask                                          # + --ask
+just rice catppuccin                                     # switch to a different rice
+just apply                                               # fmt → check → switch
 
 # Home Manager only (fastest for userland changes)
-nh home switch                  # Default configuration
-nh home switch .#neo            # Explicit configuration
-nh home switch --dry            # Dry run
+just home                                                # nh home switch
+just home-dry                                            # + --dry
+just apply-home                                          # fmt → check → home
 
 # Build without activation
-nh darwin build
-nh home build
+just build                                               # nh darwin build . -H <host>
+just build-home                                          # nh home build
+
+# Override host: just host=kurogane switch
 ```
 
 ## Development and Testing
 
 ```bash
-nix develop                               # Enter dev shell (deno, emmylua-ls, stylua)
-nix fmt                                   # Format Nix/Lua/shell files via treefmt
-nix flake check                           # Validate flake structure (includes formatting check)
-nix flake show                            # Show available outputs
-nix flake update                          # Update all flake inputs
-nix flake lock --update-input nixpkgs     # Update specific input
-nh darwin repl                            # REPL with darwin config loaded
-nh home repl                              # REPL with home-manager config loaded
+just develop                              # nix develop (dev shell with deno, emmylua-ls, stylua, just)
+just fmt                                  # nix fmt (treefmt)
+just check                                # nix flake check
+just lint                                 # fmt → check
+just show                                 # nix flake show
+just update                               # nix flake update
+just update-input nixpkgs                 # nix flake lock --update-input <name>
+just repl                                 # nh darwin repl
+just repl-home                            # nh home repl
 ```
 
 ## Cleanup
 
 ```bash
-nh clean all --keep 5                     # Clean all generations, keep last 5
-nh clean user --keep 3                    # Clean current user's profiles only
-nh clean profile <profile-path> --keep 5  # Clean specific profile
+just clean                                # nh clean all --keep 5
+just clean-user                           # nh clean user --keep 3
+just keep=3 clean                         # override keep count
 ```

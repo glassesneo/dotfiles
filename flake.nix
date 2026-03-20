@@ -110,6 +110,7 @@
             deno
             # lua-language-server
             emmylua-ls
+            just
             nickel
             stylua
           ]

@@ -49,35 +49,38 @@ Current host/theme reality:
 
 * Daily Workflows
 
-Apply the Home Manager layer only:
+A =justfile= provides short aliases for all common commands. Run =just= (from
+=nix develop=) to see the full recipe list.
+
+#+begin_src sh
+just home                      # Home Manager only (fastest)
+just switch                    # Full system (darwin + home-manager)
+just rice catppuccin           # Switch rice
+just apply                     # fmt → check → switch (safe full deploy)
+just check                     # Validate flake
+just fmt                       # Format via treefmt
+just develop                   # Enter dev shell
+just update                    # Update all flake inputs
+just upgrade                   # Update + apply
+just clean                     # Clean generations (keep 5)
+#+end_src
+
+Override the default host or keep count:
+
+#+begin_src sh
+just host=kurogane switch
+just keep=3 clean
+#+end_src
+
+The underlying commands are still available directly:
 
 #+begin_src sh
 nh home switch
-#+end_src
-
-Apply the full nix-darwin + Home Manager system for =kurogane=:
-
-#+begin_src sh
 nh darwin switch . -H kurogane -Lt
-#+end_src
-
-Switch to a different rice:
-
-#+begin_src sh
-nh darwin switch . -H kurogane-catppuccin -Lt
-#+end_src
-
-Common maintenance commands:
-
-#+begin_src sh
 nix flake check
 nix fmt
 nix develop
 #+end_src
-
-=nix flake check= validates the flake outputs and formatting checks.
-=nix fmt= runs treefmt-based formatting for Nix, Lua, and shell files.
-=nix develop= enters the repo dev shell used for local maintenance work.
 
 * Key Subsystems
 
@@ -149,8 +152,9 @@ nh home switch
 ** Development Environment
 
 The flake defines a small maintenance shell with tools such as =bun=, =deno=,
-=nickel=, =stylua=, and =emmylua-ls=. Formatting is configured through
-=treefmt.nix=.
+=just=, =nickel=, =stylua=, and =emmylua-ls=. A =justfile= at repo root
+provides short aliases for all common workflows. Formatting is configured
+through =treefmt.nix=.
 
 This is a Nix-native repo. Prefer changing the flake and modules over managing
 tool state outside the configuration, unless a local module explicitly requires

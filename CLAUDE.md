@@ -10,11 +10,14 @@ This file is the Claude Code entry point for this repository. Keep it short and 
 
 ## Fast Path
 
+A `justfile` provides short aliases for all common commands. Run `just` to list recipes.
+
 ```bash
-nh home switch
-nh darwin switch . -H kurogane -Lt
-nix flake check
-nix develop
+just home          # nh home switch
+just switch        # nh darwin switch . -H <host> -Lt
+just check         # nix flake check
+just develop       # nix develop
+just apply         # fmt → check → switch (safe full deploy)
 ```
 
 ## Canonical Docs
