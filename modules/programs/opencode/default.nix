@@ -453,7 +453,7 @@ delib.module {
 
       internet_research = {
         mode = "subagent";
-        model = "openai/gpt-5.4";
+        model = "github-copilot/gpt-5.4-mini";
         reasoningEffort = "medium";
         description = "Performs targeted internet research when primary planning agents have material knowledge uncertainty.";
         prompt = renderAgentPrompt "internet_research" {
