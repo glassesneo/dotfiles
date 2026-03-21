@@ -1,0 +1,8 @@
+* Start :checkin:
+:PROPERTIES:
+:FEELING: %^{FEELING|fresh|calm|sleepy|anxious|tired|restless}
+:MOOD: %^{MOOD|🙂|😀|🙂|😐|🙁|😫}
+:ENERGY: %^{ENERGY|⚡️⚡️|⚡️⚡️⚡️|⚡️⚡️|⚡️|🪫|🪫🪫}
+:END:
+  [%<%H:%M>]
+%?

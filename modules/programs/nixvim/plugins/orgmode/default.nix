@@ -282,24 +282,11 @@ delib.module {
         org_capture_templates = {
           N = {
             description = "Inbox / Fleeting Note | Zettelkasten";
-            template = ''
-              * %?
-                %u
-
-            '';
+            template = builtins.readFile ./templates/inbox.org;
           };
           m = {
             description = "Morning check-in | Daily journal";
-            template = ''
-              * Start :checkin:
-              :PROPERTIES:
-              :FEELING: %^{FEELING|fresh|calm|sleepy|anxious|tired|restless}
-              :MOOD: %^{MOOD|🙂|😀|🙂|😐|🙁|😫}
-              :ENERGY: %^{ENERGY|⚡️⚡️|⚡️⚡️⚡️|⚡️⚡️|⚡️|🪫|🪫🪫}
-              :END:
-                [%<%H:%M>]
-              %?
-            '';
+            template = builtins.readFile ./templates/morning-checkin.org;
             target = journalTemplate;
             datetree = {
               tree_type = "day";
@@ -307,28 +294,7 @@ delib.module {
           };
           d = {
             description = "Diary | Daily journal";
-            template = ''
-              * Diary :diary:
-              :PROPERTIES:
-              :FEELING: %^{FEELING|fresh|calm|sleepy|anxious|tired|restless}
-              :MOOD: %^{MOOD|🙂|😀|🙂|😐|🙁|😫}
-              :ENERGY: %^{ENERGY|⚡️⚡️|⚡️⚡️⚡️|⚡️⚡️|⚡️|🪫|🪫🪫}
-              :END:
-                [%<%H:%M>]
-
-              - 一行 :: %?
-              - できた ::
-                -
-              - ひっかかり ::
-                -
-              - 明日のTop3 ::
-                - [ ]
-                - [ ]
-                - [ ]
-              - 朝イチ ::
-                -
-
-            '';
+            template = builtins.readFile ./templates/diary.org;
             target = journalTemplate;
             datetree = {
               tree_type = "day";
@@ -336,37 +302,12 @@ delib.module {
           };
           w = {
             description = "Weekly report | Reflection";
-            template = ''
-              * Weekly Review :weekly:
-              :PROPERTIES:
-              :WEEK: %<%Y-W%V>
-              :END:
-                [%<%Y-%m-%d>]
-
-              - 今週のハイライト ::
-              - いちばんの成果 ::
-              - 困ったこと / 障害 ::
-              - 学び ::
-              - 来週のフォーカス ::
-              - 感謝 ::
-                %?
-
-            '';
+            template = builtins.readFile ./templates/weekly.org;
             target = "${orgfiles}/weekly.org";
           };
           r = {
             description = "Reflection | Daily journal";
-            template = ''
-              * Reflection
-              :PROPERTIES:
-              :REFLECT: %^{CARD|A 事実/解釈/感情|B 前提チェック|C 可能性|D 行動変換}
-              :END:
-                [%<%H:%M>]
-              - トピック :: %^{TOPIC}
-                -
-              - 明日試す一手
-
-            '';
+            template = builtins.readFile ./templates/reflection.org;
             target = journalTemplate;
             datetree = {
               tree_type = "day";
@@ -374,14 +315,7 @@ delib.module {
           };
           R = {
             description = "Read later";
-            template = ''
-              * TODO %^{Title} :readlater:
-                %u
-
-              - URL :: %^{URL}
-              - Notes :: %?
-
-            '';
+            template = builtins.readFile ./templates/read-later.org;
             target = readLaterFile;
           };
         };
@@ -424,16 +358,7 @@ delib.module {
             {
               __unkeyed-1 = "gf";
               mode = ["n"];
-              # __unkeyed-3 = "<Cmd>lua ${org-action "org_mappings.open_at_point"}<CR>";
-              __unkeyed-3.__raw = ''
-                function()
-                  if vim.bo.filetype == "org" then
-                    ${org-action "org_mappings.open_at_point"}
-                    return
-                  end
-                  vim.cmd("normal! gf")
-                end
-              '';
+              __unkeyed-3.__raw = builtins.readFile ./callbacks.lua;
             }
           ];
         };

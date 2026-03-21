@@ -99,61 +99,34 @@ delib.module {
     # caused AquaSKK to crash with SIGSEGV on startup. This hook runs after
     # linkGeneration so that any obsolete managed symlink is already cleaned up
     # before we seed preferences into the real CFPreferences domain.
-    home.activation.aquaskkSetup = inputs.home-manager.lib.hm.dag.entryAfter ["linkGeneration"] ''
-      _aquaskk_plist="$HOME/Library/Preferences/jp.sourceforge.inputmethod.aquaskk.plist"
-      _aquaskk_domain="jp.sourceforge.inputmethod.aquaskk"
-
-      # Create user dictionary parent directory before AquaSKK first use
-      $DRY_RUN_CMD mkdir -p "${userDictDir}"
-
-      # --- AquaSKK preference seeding ---
-      if [ -L "$_aquaskk_plist" ]; then
-        # A symlink still exists after linkGeneration — this is non-legacy
-        # protected state (e.g. manually placed or from another manager).
-        # Preserve it and warn the user.
-        echo "WARNING: $_aquaskk_plist is a symlink after linkGeneration."
-        echo "AquaSKK preferences cannot be seeded while a symlink is in place."
-        echo "To fix: remove or back up the symlink, then re-run activation."
-        echo "  rm \"$_aquaskk_plist\""
-        echo "  nh home switch"
-      elif [ -n "$DRY_RUN_CMD" ]; then
-        $VERBOSE_ECHO "Dry run: would seed AquaSKK preferences via defaults write"
-      else
-        # Seed startup-safe keys into the AquaSKK domain.
-        # Uses additive writes so unrelated user/UI-managed settings persist.
-        $VERBOSE_ECHO "Seeding AquaSKK preferences into $_aquaskk_domain..."
-        /usr/bin/defaults write "$_aquaskk_domain" user_dictionary_path -string "${toString aquaskkPrefs.user_dictionary_path}"
-        /usr/bin/defaults write "$_aquaskk_domain" keyboard_layout -string "${aquaskkPrefs.keyboard_layout}"
-        /usr/bin/defaults write "$_aquaskk_domain" enable_skkserv -int ${toString aquaskkPrefs.enable_skkserv}
-        /usr/bin/defaults write "$_aquaskk_domain" skkserv_port -int ${toString aquaskkPrefs.skkserv_port}
-        /usr/bin/defaults write "$_aquaskk_domain" skkserv_localonly -int ${toString aquaskkPrefs.skkserv_localonly}
-        /usr/bin/defaults write "$_aquaskk_domain" suppress_newline_on_commit -int ${toString aquaskkPrefs.suppress_newline_on_commit}
-        /usr/bin/defaults write "$_aquaskk_domain" fix_intermediate_conversion -int ${toString aquaskkPrefs.fix_intermediate_conversion}
-        /usr/bin/defaults write "$_aquaskk_domain" use_numeric_conversion -int ${toString aquaskkPrefs.use_numeric_conversion}
-        /usr/bin/defaults write "$_aquaskk_domain" show_input_mode_icon -int ${toString aquaskkPrefs.show_input_mode_icon}
-        /usr/bin/defaults write "$_aquaskk_domain" delete_okuri_when_quit -int ${toString aquaskkPrefs.delete_okuri_when_quit}
-        /usr/bin/defaults write "$_aquaskk_domain" enable_annotation -int ${toString aquaskkPrefs.enable_annotation}
-        /usr/bin/defaults write "$_aquaskk_domain" enable_dynamic_completion -int ${toString aquaskkPrefs.enable_dynamic_completion}
-        /usr/bin/defaults write "$_aquaskk_domain" enable_extended_completion -int ${toString aquaskkPrefs.enable_extended_completion}
-        /usr/bin/defaults write "$_aquaskk_domain" dynamic_completion_range -int ${toString aquaskkPrefs.dynamic_completion_range}
-        /usr/bin/defaults write "$_aquaskk_domain" max_count_of_inline_candidates -int ${toString aquaskkPrefs.max_count_of_inline_candidates}
-        /usr/bin/defaults write "$_aquaskk_domain" candidate_window_font_name -string "${aquaskkPrefs.candidate_window_font_name}"
-        /usr/bin/defaults write "$_aquaskk_domain" candidate_window_font_size -int ${toString aquaskkPrefs.candidate_window_font_size}
-        /usr/bin/defaults write "$_aquaskk_domain" candidate_window_labels -string "${aquaskkPrefs.candidate_window_labels}"
-        /usr/bin/defaults write "$_aquaskk_domain" put_candidate_window_upward -int ${toString aquaskkPrefs.put_candidate_window_upward}
-        /usr/bin/defaults write "$_aquaskk_domain" use_individual_input_mode -int ${toString aquaskkPrefs.use_individual_input_mode}
-        /usr/bin/defaults write "$_aquaskk_domain" direct_clients -array ${lib.concatMapStringsSep " " (c: ''-string "${c}"'') aquaskkPrefs.direct_clients}
-
-        # Verify the domain is readable by CFPreferences
-        if /usr/bin/defaults read "$_aquaskk_domain" user_dictionary_path >/dev/null 2>&1; then
-          $VERBOSE_ECHO "AquaSKK preferences domain is readable."
-        else
-          echo "WARNING: defaults read failed for $_aquaskk_domain after seeding."
-          echo "AquaSKK may not start correctly. Try: defaults read $_aquaskk_domain"
-        fi
-      fi
-
-    '';
+    home.activation.aquaskkSetup = inputs.home-manager.lib.hm.dag.entryAfter ["linkGeneration"] (
+      builtins.readFile (pkgs.replaceVars ./activation.sh {
+        inherit userDictDir;
+        inherit (aquaskkPrefs)
+          user_dictionary_path
+          keyboard_layout
+          candidate_window_font_name
+          candidate_window_labels
+          ;
+        enable_skkserv = toString aquaskkPrefs.enable_skkserv;
+        skkserv_port = toString aquaskkPrefs.skkserv_port;
+        skkserv_localonly = toString aquaskkPrefs.skkserv_localonly;
+        suppress_newline_on_commit = toString aquaskkPrefs.suppress_newline_on_commit;
+        fix_intermediate_conversion = toString aquaskkPrefs.fix_intermediate_conversion;
+        use_numeric_conversion = toString aquaskkPrefs.use_numeric_conversion;
+        show_input_mode_icon = toString aquaskkPrefs.show_input_mode_icon;
+        delete_okuri_when_quit = toString aquaskkPrefs.delete_okuri_when_quit;
+        enable_annotation = toString aquaskkPrefs.enable_annotation;
+        enable_dynamic_completion = toString aquaskkPrefs.enable_dynamic_completion;
+        enable_extended_completion = toString aquaskkPrefs.enable_extended_completion;
+        dynamic_completion_range = toString aquaskkPrefs.dynamic_completion_range;
+        max_count_of_inline_candidates = toString aquaskkPrefs.max_count_of_inline_candidates;
+        candidate_window_font_size = toString aquaskkPrefs.candidate_window_font_size;
+        put_candidate_window_upward = toString aquaskkPrefs.put_candidate_window_upward;
+        use_individual_input_mode = toString aquaskkPrefs.use_individual_input_mode;
+        directClientsArgs = lib.concatMapStringsSep " " (c: ''-string "${c}"'') aquaskkPrefs.direct_clients;
+      })
+    );
   };
 
   # Declare AquaSKK-owned input-source entries via the central HIToolbox

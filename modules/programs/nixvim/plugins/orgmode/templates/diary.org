@@ -1,0 +1,20 @@
+* Diary :diary:
+:PROPERTIES:
+:FEELING: %^{FEELING|fresh|calm|sleepy|anxious|tired|restless}
+:MOOD: %^{MOOD|🙂|😀|🙂|😐|🙁|😫}
+:ENERGY: %^{ENERGY|⚡️⚡️|⚡️⚡️⚡️|⚡️⚡️|⚡️|🪫|🪫🪫}
+:END:
+  [%<%H:%M>]
+
+- 一行 :: %?
+- できた ::
+  -
+- ひっかかり ::
+  -
+- 明日のTop3 ::
+  - [ ]
+  - [ ]
+  - [ ]
+- 朝イチ ::
+  -
+

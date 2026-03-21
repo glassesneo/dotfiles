@@ -1,4 +1,4 @@
-{delib, ...}:
+{delib, pkgs, ...}:
 delib.module {
   name = "nix-darwin.preferences.accessibility.zoom";
 
@@ -24,28 +24,10 @@ delib.module {
       };
       # Keyboard remap is owned by preferences/input.nix — not duplicated here.
       activationScripts.zoomPipSize.text = ''
-        /usr/bin/swift -e '
-          import Foundation
-          import AppKit
-
-          let size = NSSize(width: ${toString cfg.pipWidth}, height: ${toString cfg.pipHeight})
-          let data = try NSKeyedArchiver.archivedData(
-            withRootObject: NSValue(size: size),
-            requiringSecureCoding: false
-          )
-
-          let path = NSString(string: "~/Library/Preferences/com.apple.universalaccess.plist").expandingTildeInPath
-          let url = URL(fileURLWithPath: path)
-
-          let plistData = try Data(contentsOf: url)
-          var format = PropertyListSerialization.PropertyListFormat.binary
-          var plist = try PropertyListSerialization.propertyList(from: plistData, options: [], format: &format) as! [String: Any]
-
-          plist["closeViewWindowSize"] = data
-
-          let out = try PropertyListSerialization.data(fromPropertyList: plist, format: format, options: 0)
-          try out.write(to: url)
-        '
+        /usr/bin/swift -e '${builtins.readFile (pkgs.replaceVars ./zoom-pip.swift {
+          pipWidth = toString cfg.pipWidth;
+          pipHeight = toString cfg.pipHeight;
+        })}'
 
         /usr/bin/killall cfprefsd SystemUIServer >/dev/null 2>&1 || true
       '';

@@ -1,0 +1,9 @@
+* Reflection
+:PROPERTIES:
+:REFLECT: %^{CARD|A 事実/解釈/感情|B 前提チェック|C 可能性|D 行動変換}
+:END:
+  [%<%H:%M>]
+- トピック :: %^{TOPIC}
+  -
+- 明日試す一手
+
