@@ -187,6 +187,9 @@
       url = "github:numtide/llm-agents.nix";
     };
     # kanata-darwin-nix.url = "github:ryoppippi/kanata-darwin-nix";
+    zed-extensions = {
+      url = "github:DuskSystems/nix-zed-extensions";
+    };
     various-wallpapers = {
       url = "github:andrewzn69/wallpapers";
       flake = false;
