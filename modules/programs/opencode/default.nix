@@ -16,7 +16,7 @@ delib.module {
     renderAgentPrompt = name: replacements: let
       placeholders = builtins.attrNames replacements;
     in
-      builtins.replaceStrings placeholders (builtins.map (placeholder: replacements.${placeholder}) placeholders) (
+      builtins.replaceStrings placeholders (map (_placeholder: replacements.${_placeholder}) placeholders) (
         readAgentPrompt name
       );
 
@@ -345,7 +345,7 @@ delib.module {
       idea = {
         mode = "primary";
         description = "Primary ideation agent for early-stage exploration and problem framing before planning; hand off to `spec` by switching agents with the same chat history.";
-        model = "zai-coding-plan/glm-5";
+        model = "github-copilot/claude-opus-4.5";
         prompt = readAgentPrompt "idea";
         permission = readOnlyPermission // {question = "allow";};
       };
