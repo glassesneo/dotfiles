@@ -11,14 +11,11 @@ delib.module {
 
   home.ifEnabled = let
     orgfiles = "${homeConfig.home.homeDirectory}/orgfiles";
-    journalTemplate = "${orgfiles}/journal/%<%Y-%m>.org";
     readLaterFile = "${orgfiles}/inbox.org";
 
-    # --- Shared file lists (deduplicated) ---
+    # --- Shared file lists ---
     inboxOnly = ["${orgfiles}/inbox.org"];
     allFiles = ["${orgfiles}/inbox.org" "${orgfiles}/projects/**/*"];
-    journalFiles = ["${orgfiles}/journal/**/*.org"];
-    dailyFiles = ["${orgfiles}/journal/daily/**/*.org"];
     zettelLitFiles = ["${orgfiles}/zettelkasten/literature/**/*"];
     zettelKnowFiles = ["${orgfiles}/zettelkasten/knowledge/**/*"];
 
@@ -187,26 +184,6 @@ delib.module {
             extra.org_agenda_span = "month";
           };
 
-          # --- Journal views ---
-          C = mkTagsCmd {
-            description = "Daily Check-in";
-            match = "checkin";
-            header = "Daily Check-in";
-            files = journalFiles;
-          };
-          D = mkTagsCmd {
-            description = "Diary Entries";
-            match = "diary";
-            header = "Diary Entries";
-            files = journalFiles;
-          };
-          j = mkTagsCmd {
-            description = "Daily Journal Files";
-            match = "LEVEL=1";
-            header = "Daily Journal Files";
-            files = dailyFiles;
-          };
-
           # --- Zettelkasten views ---
           Z = {
             description = "Zettelkasten Overview";
@@ -284,34 +261,10 @@ delib.module {
             description = "Inbox / Fleeting Note | Zettelkasten";
             template = builtins.readFile ./templates/inbox.org;
           };
-          m = {
-            description = "Morning check-in | Daily journal";
-            template = builtins.readFile ./templates/morning-checkin.org;
-            target = journalTemplate;
-            datetree = {
-              tree_type = "day";
-            };
-          };
-          d = {
-            description = "Diary | Daily journal";
-            template = builtins.readFile ./templates/diary.org;
-            target = journalTemplate;
-            datetree = {
-              tree_type = "day";
-            };
-          };
           w = {
             description = "Weekly report | Reflection";
             template = builtins.readFile ./templates/weekly.org;
             target = "${orgfiles}/weekly.org";
-          };
-          r = {
-            description = "Reflection | Daily journal";
-            template = builtins.readFile ./templates/reflection.org;
-            target = journalTemplate;
-            datetree = {
-              tree_type = "day";
-            };
           };
           R = {
             description = "Read later";
@@ -369,14 +322,8 @@ delib.module {
 
     home.packages = let
       org = pkgs.writeShellScriptBin "org" ''(cd ${orgfiles} && nvim .)'';
-      checkin = pkgs.writeShellScriptBin "checkin" "nvim -c 'Org capture m'";
-      diary = pkgs.writeShellScriptBin "diary" "nvim -c 'Org capture d'";
-      today = pkgs.writeShellScriptBin "today" "nvim -c 'Today'";
     in [
       org
-      checkin
-      diary
-      today
     ];
   };
 }

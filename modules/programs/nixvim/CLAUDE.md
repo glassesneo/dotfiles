@@ -28,6 +28,9 @@ Full Neovim configuration via nixvim. Module name: `programs.nixvim`.
   - `adapters.nix` — all adapter registrations (http + acp)
   - `workflows.nix` — prompt_library entries (TDD, refactor-test, plan, implementation)
   - `extensions.nix` — extensions (history, mcphub), extraPlugins, extraConfigLua
+- **Orgmode** (`plugins/orgmode/`): split into base and journal child module:
+  - `default.nix` — base plugin owner (shared settings, GTD views, zettelkasten, weekly capture, `:Zettel` command)
+  - `journal/default.nix` — journal child module (`programs.nixvim.plugins.orgmode.journal.enable`): agenda commands `C`/`D`/`j`, capture templates `m`/`d`/`r`, `:Today` command, shell wrappers `checkin`/`diary`/`today`. Journal files target `~/journal`.
 - **UI**: snacks.nvim (picker, explorer, notifier), noice, fidget, bufferline, lualine.
 
 ## LSP Configuration
@@ -53,4 +56,5 @@ Full Neovim configuration via nixvim. Module name: `programs.nixvim`.
 - LSP guide: @modules/programs/nixvim/lsp/CLAUDE.md
 - LSP root: @modules/programs/nixvim/lsp/default.nix
 - AI workflows: @modules/programs/nixvim/plugins/ai/
-- Orgmode: @modules/programs/nixvim/plugins/orgmode/default.nix
+- Orgmode base: @modules/programs/nixvim/plugins/orgmode/default.nix
+- Orgmode journal: @modules/programs/nixvim/plugins/orgmode/journal/default.nix
