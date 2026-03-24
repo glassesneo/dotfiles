@@ -83,7 +83,7 @@ export class CompanyDetailScreen extends Component {
 
 1. **Searchability**: AI agents using grep/ripgrep locate code via natural language or IDs without hallucinating paths
 2. **LLM Alignment**: Models are trained on OSS where docs precede implementations; `DocComment → Code` is the optimal pattern
-3. **Semantic Search**: Tools like kiri MCP extract symbol + documentation as a single unit, providing both "what" and "why"
+3. **Semantic Search**: Code intelligence tools can extract symbol + documentation as a single unit, providing both "what" and "why"
 4. **Token Efficiency**: Colocated specs eliminate round-trips to external files, reducing context window usage
 
 ## Language-Specific Formats

@@ -103,4 +103,4 @@ clean-user:
 
 # Regenerate node lockfile for MCP packages
 bun2nix:
-    cd node-packages && bun install && bun2nix -o bun.nix
+    cd node-packages && bun install

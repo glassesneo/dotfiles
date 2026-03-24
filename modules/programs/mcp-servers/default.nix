@@ -4,7 +4,6 @@
   inputs,
   lib,
   nodePackages,
-  nodePkgs,
   pkgs,
   sopsSecretPaths,
   ...
@@ -87,10 +86,6 @@ in
             command_id = "morph-fast-apply-mcp";
             env_keys = {MORPH_API_KEY = "MORPH_API_KEY";};
             env_static = {ALL_TOOLS = "false";};
-          };
-          kiri = {
-            command_id = "kiri-mcp";
-            args = ["--repo" "." "--db" ".kiri/index.duckdb" "--watch"];
           };
           codex = {
             command_id = "codex-mcp";
@@ -205,7 +200,6 @@ in
         "tavily-mcp" = lib.getExe wrappers."tavily-mcp";
         "chrome-devtools-mcp" = "${nodePackages}/bin/chrome-devtools-mcp";
         "morph-fast-apply-mcp" = lib.getExe wrappers."morph-fast-apply-mcp";
-        "kiri-mcp" = lib.getExe' nodePkgs."kiri-mcp-server" "kiri-mcp-server";
         "context7-mcp" = lib.getExe inputs.mcp-servers-nix.packages.${host.homeManagerSystem}.context7-mcp;
       };
 

@@ -192,7 +192,7 @@ Within =modules/=:
   - =toplevel/nix-darwin/system/= — shared OS policy (activation, host, security, IME aggregation)
   - =toplevel/nix-darwin/preferences/= — shared macOS user preferences (appearance, dock, input, etc.)
 
-You will also see directories such as =.kiri/=, =.agents/=, =.claude/=,
+You will also see directories such as =.agents/=, =.claude/=,
 =.agent-browser/=, =.opencode/=, and =.crush/=. Those are local runtime or
 tool-state directories, not the main declarative source of truth.
 
