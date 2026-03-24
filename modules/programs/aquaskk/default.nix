@@ -1,8 +1,8 @@
 {
   brewCasks,
   delib,
+  homeConfig,
   host,
-  inputs,
   lib,
   pkgs,
   ...
@@ -99,7 +99,7 @@ delib.module {
     # caused AquaSKK to crash with SIGSEGV on startup. This hook runs after
     # linkGeneration so that any obsolete managed symlink is already cleaned up
     # before we seed preferences into the real CFPreferences domain.
-    home.activation.aquaskkSetup = inputs.home-manager.lib.hm.dag.entryAfter ["linkGeneration"] (
+    home.activation.aquaskkSetup = homeConfig.lib.dag.entryAfter ["linkGeneration"] (
       builtins.readFile (pkgs.replaceVars ./activation.sh {
         inherit userDictDir;
         inherit
