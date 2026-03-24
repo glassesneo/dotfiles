@@ -65,7 +65,15 @@ delib.module {
             {
               __unkeyed-1 = "gf";
               mode = ["n"];
-              __unkeyed-3.__raw = builtins.readFile ./callbacks.lua;
+              __unkeyed-3.__raw = ''
+                function()
+                  if vim.bo.filetype == "org" then
+                    require('orgmode').action('org_mappings.open_at_point')
+                    return
+                  end
+                  vim.cmd("normal! gf")
+                end
+              '';
             }
           ];
         };

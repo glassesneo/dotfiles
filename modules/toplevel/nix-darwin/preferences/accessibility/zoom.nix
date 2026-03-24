@@ -1,4 +1,8 @@
-{delib, pkgs, ...}:
+{
+  delib,
+  pkgs,
+  ...
+}:
 delib.module {
   name = "nix-darwin.preferences.accessibility.zoom";
 

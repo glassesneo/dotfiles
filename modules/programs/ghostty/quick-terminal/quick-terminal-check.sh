@@ -3,4 +3,5 @@ if [ -n "${GHOSTTY_QUICK_TERMINAL:-}" ]; then
 elif [ -n "${GHOSTTY_RESOURCES_DIR:-}" ]; then
   printf '\e]111\e\\'
 else
+  :
 fi

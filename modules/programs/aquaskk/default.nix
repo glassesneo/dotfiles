@@ -102,7 +102,8 @@ delib.module {
     home.activation.aquaskkSetup = inputs.home-manager.lib.hm.dag.entryAfter ["linkGeneration"] (
       builtins.readFile (pkgs.replaceVars ./activation.sh {
         inherit userDictDir;
-        inherit (aquaskkPrefs)
+        inherit
+          (aquaskkPrefs)
           user_dictionary_path
           keyboard_layout
           candidate_window_font_name
