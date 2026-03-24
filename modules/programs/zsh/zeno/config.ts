@@ -33,9 +33,19 @@ export default defineConfig(() => ({
       snippet: "git diff",
     },
     {
+      name: "git diff --stat",
+      keyword: "gdst",
+      snippet: "git diff --stat",
+    },
+    {
       name: "git diff --staged",
       keyword: "gds",
       snippet: "git diff --staged",
+    },
+    {
+      name: "git diff --staged --stat",
+      keyword: "gdss",
+      snippet: "git diff --staged --stat",
     },
     {
       name: "git grep",
@@ -51,6 +61,16 @@ export default defineConfig(() => ({
       name: "git log graph",
       keyword: "glg",
       snippet: "git log --oneline --graph --decorate -n 20",
+    },
+    {
+      name: "pbcopy",
+      keyword: "pc",
+      "snippet": "pbcopy",
+    },
+    {
+      name: "pbpaste",
+      keyword: "pp",
+      "snippet": "pbpaste",
     },
     {
       name: "home-manager activation",
