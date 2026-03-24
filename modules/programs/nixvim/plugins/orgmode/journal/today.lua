@@ -107,11 +107,7 @@ end
 
 --- Main :Today command — create/open today's daily journal with Top3 carryover.
 local function today_command()
-  local ok_expand, journal = pcall(vim.fn.expand, "~/journal")
-  if not ok_expand then
-    vim.notify("Today: failed to expand journal path: " .. tostring(journal), vim.log.levels.ERROR)
-    return
-  end
+  local journal = "@journal-path@"
 
   local today_date = os.date("%Y-%m-%d")
   local yesterday_time = os.time() - 86400

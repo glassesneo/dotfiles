@@ -1,6 +1,5 @@
 {
   delib,
-  homeConfig,
   pkgs,
   ...
 }:
@@ -9,8 +8,8 @@ delib.module {
 
   options = delib.singleCascadeEnableOption;
 
-  home.ifEnabled = let
-    journal = "${homeConfig.home.homeDirectory}/journal";
+  home.ifEnabled = {parent, ...}: let
+    journal = "${parent.entrypoint}/journal";
     journalTemplate = "${journal}/%<%Y-%m>.org";
     journalFiles = ["${journal}/**/*.org"];
     dailyFiles = ["${journal}/daily/**/*.org"];
@@ -86,7 +85,11 @@ delib.module {
       };
     };
 
-    programs.nixvim.extraConfigLua = builtins.readFile ./today.lua;
+    programs.nixvim.extraConfigLua = builtins.readFile (
+      pkgs.replaceVars ./today.lua {
+        journal-path = journal;
+      }
+    );
 
     home.packages = let
       checkin = pkgs.writeShellScriptBin "checkin" "nvim -c 'Org capture m'";
