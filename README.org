@@ -36,6 +36,10 @@ The important constraints are:
 - Rices should stay data-oriented. Modules own package resolution and platform-specific wiring.
 - Secrets are consumed through =config.sops.secrets.<key>.path=, not hardcoded paths or plaintext values.
 
+If you are entering the repo cold and need the actual module-boundary and
+splitting rules, read =docs/denix-architecture.md= next. This README keeps the
+high-level map only.
+
 Hosts carry a performance tier (=minimal=, =basic=, =standard=, =full=) that
 modules can use to scale behavior to machine capability. See
 =docs/host-tiers.md= for the full contract.
@@ -194,6 +198,7 @@ tool-state directories, not the main declarative source of truth.
 
 * Pointers
 
+- Denix architecture and module-splitting guide: =docs/denix-architecture.md=
 - Documentation policy: =docs/documentation-policy.md=
 - Claude Code entry guidance: =CLAUDE.md=
 - Other coding agents entry guidance: =AGENTS.md=

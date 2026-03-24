@@ -9,6 +9,8 @@ delib.module {
 
   options = with delib;
     moduleOptions ({parent, ...}: {
+      # Child feature under the Ghostty namespace. This stays separate because
+      # quick-terminal behavior is useful to toggle independently of Ghostty itself.
       enable = boolOption parent.enable;
       background = strOption "#20263a";
     });

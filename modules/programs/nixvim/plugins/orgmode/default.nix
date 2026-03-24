@@ -9,6 +9,8 @@ delib.module {
 
   options = with delib;
     moduleOptions {
+      # Base owner for orgmode. Optional workflows such as inbox and journal
+      # hang off this namespace as child modules and inherit shared state.
       enable = boolOption true;
       entrypoint = strOption "${homeConfig.home.homeDirectory}/brain";
     };

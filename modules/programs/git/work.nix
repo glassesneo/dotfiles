@@ -6,6 +6,8 @@
 delib.module {
   name = "programs.git.work";
 
+  # Context-specific overlay on top of the base git module rather than a
+  # separate git owner. Keeps work-only behavior independently toggleable.
   options = delib.singleEnableOption true;
 
   home.ifEnabled = {

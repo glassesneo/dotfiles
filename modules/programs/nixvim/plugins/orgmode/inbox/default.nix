@@ -2,6 +2,8 @@
 delib.module {
   name = "programs.nixvim.plugins.orgmode.inbox";
 
+  # Optional child feature: disable independently while keeping the base
+  # orgmode module active.
   options = delib.singleCascadeEnableOption;
 
   home.ifEnabled = {parent, ...}: let

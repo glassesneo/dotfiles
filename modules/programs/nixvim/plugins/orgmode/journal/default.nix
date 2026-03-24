@@ -6,6 +6,7 @@
 delib.module {
   name = "programs.nixvim.plugins.orgmode.journal";
 
+  # Optional child workflow layered on top of the base orgmode owner.
   options = delib.singleCascadeEnableOption;
 
   home.ifEnabled = {parent, ...}: let
