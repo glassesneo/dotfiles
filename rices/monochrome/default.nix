@@ -18,53 +18,6 @@ in
     myconfig.wallpaper = "roses";
     myconfig.programs.ghostty.quick-terminal.background = colors.base00;
 
-    myconfig.services.sketchybar = {
-      # datetimeFontOverride = "Iosevka:Regular:16";
-      colors = {
-        # Bar and text colors
-        bar_background = argb colors.base00;
-        text_primary = argb colors.base05;
-        text_muted = argb colors.base04;
-
-        # Workspace colors
-        workspace_active = argb colors.base08;
-
-        # Surface and popup colors
-        surface_background = argb colors.base01;
-        popup_background = argb colors.base02;
-        popup_border = argb colors.base05;
-
-        # Accent colors
-        accent_datetime = argb colors.base05;
-
-        # Status colors
-        status_error = argb colors.base08;
-        status_warning = argb colors.base05;
-        status_caution = argb colors.base09;
-        status_success = argb colors.base05;
-        status_charging = argb colors.base0A;
-
-        # App-specific icon colors - these stay colorful even in monochrome
-        app_arc = argb colors.base08;
-        app_ghostty = argb colors.base0D;
-        app_obsidian = argb colors.base0E;
-        app_kitty = argb colors.base0F;
-
-        # Island and indicator colors
-        island_surface = argbLow colors.base01;
-        island_border = argbBorder colors.base04;
-        active_indicator = argbIndicator colors.base08;
-
-        # CPU graph colors - grayscale gradient from dark to light
-        cpu_low = argb colors.base03;
-        cpu_medium = argb colors.base04;
-        cpu_high = argb colors.base09;
-        cpu_critical = argb colors.base08;
-      };
-      # Transparent outer bar background
-      bar.color = "0x00000000"; # Fully transparent
-    };
-
     myconfig.services.jankyborders = {
       active_color = colors.base05;
       inactive_color = colors.base03;

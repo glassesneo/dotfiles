@@ -27,45 +27,6 @@ in
           width = 5.0;
           order = "above";
         };
-
-        sketchybar = {
-          colors = {
-            bar_background = argb colors.base00;
-            text_primary = argb colors.base05;
-            text_muted = argb colors.base04;
-
-            workspace_active = argb colors.base0B;
-
-            surface_background = argb colors.base02;
-            popup_background = argb colors.base01;
-            popup_border = argb colors.base04;
-
-            accent_datetime = argb colors.base0C;
-
-            status_error = argb colors.base08;
-            status_warning = argb colors.base0A;
-            status_caution = argb colors.base09;
-            status_success = argb colors.base0B;
-            status_charging = argb colors.base09;
-
-            app_arc = argb colors.base06;
-            app_ghostty = argb colors.base0D;
-            app_obsidian = argb colors.base0E;
-            app_kitty = argb colors.base0F;
-
-            # Island and indicator colors
-            island_surface = argbLow colors.base02;
-            island_border = argbBorder colors.base04;
-            active_indicator = argbIndicator colors.base0B;
-
-            cpu_low = argb colors.base0B;
-            cpu_medium = argb colors.base0A;
-            cpu_high = argb colors.base09;
-            cpu_critical = argb colors.base08;
-          };
-          # Transparent outer bar — visible surface comes from island brackets
-          bar.color = "0x00000000";
-        };
       };
 
       programs.tmux.theme = {
