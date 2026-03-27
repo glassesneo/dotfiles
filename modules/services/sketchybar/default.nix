@@ -42,8 +42,16 @@ in
         );
         layout = lib.mkOption {
           type = layoutType;
-          default = {};
+          default = {
+            a = [];
+            b = [];
+            c = [];
+            x = [];
+            y = ["battery"];
+            z = ["datetime"];
+          };
         };
+        sections = readOnly (listOfOption str sectionOrder);
       };
 
     darwin.ifEnabled = {cfg, ...}: {
@@ -84,7 +92,10 @@ in
         (lib.filter (name: lib.hasPrefix "widget-" name) (builtins.attrNames myconfig.services.sketchybar));
       unknownWidgets = lib.filter (widget: !(builtins.elem widget availableWidgets)) enabledWidgets;
       renderableLayout = lib.filter (entry: !(builtins.elem entry.widget unknownWidgets)) normalizedLayout;
-      config = pkgs.replaceVars ./rc/config.nu {
+      renderLayout =
+        lib.filter (entry: entry.direction == "left") renderableLayout
+        ++ lib.reverseList (lib.filter (entry: entry.direction == "right") renderableLayout);
+      config = pkgs.replaceVars ./config.nu {
         inherit (cfg) position;
       };
       widgetOf = key: myconfig.services.sketchybar."widget-${key}";
@@ -93,7 +104,7 @@ in
           #!${lib.getExe pkgs.nushell}
           ${builtins.readFile config}
         ''
-        + lib.concatStringsSep "\n" (map (entry: "${nushellBin} ${(widgetOf entry.widget).render} ${entry.direction}") renderableLayout)
+        + lib.concatStringsSep "\n" (map (entry: "${nushellBin} ${(widgetOf entry.widget).render} ${entry.direction}") renderLayout)
         + "\n"
         + ''
           sketchybar --update
@@ -116,5 +127,14 @@ in
           executable = true;
         };
       };
+      home.packages = [
+        pkgs.nerd-fonts.hack
+      ];
+      # home.activation.sketchybarHackNerdFont = homeConfig.lib.dag.entryAfter ["linkGeneration"] ''
+      # mkdir -p "$HOME/Library/Fonts"
+      # rm -f "$HOME"/Library/Fonts/HackGen*NF*.ttf
+      # cp -f ${pkgs.nerd-fonts.hack}/share/fonts/truetype/NerdFonts/Hack/*.ttf "$HOME/Library/Fonts/"
+      # atsutil databases -removeUser >/dev/null 2>&1 || true
+      # '';
     };
   }

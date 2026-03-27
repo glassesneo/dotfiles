@@ -5,11 +5,11 @@
   ...
 }:
 delib.module {
-  name = "services.sketchybar.widget-datetime";
+  name = "services.sketchybar.widget-battery";
 
   options = with delib;
     moduleOptions ({parent, ...}: let
-      name = "datetime";
+      name = "battery";
       nushellBin = lib.getExe parent.nushellPackage;
       enabled =
         parent.enable
