@@ -333,7 +333,7 @@ delib.module {
       orchestrator = {
         mode = "primary";
         description = "Primary implementation orchestrator that delegates exploration and edits to specialized subagents.";
-        model = "zai-coding-plan/glm-4.7";
+        model = "zai-coding-plan/glm-5-turbo";
         prompt = readAgentPrompt "orchestrator";
         permission = merge readOnlyPermission {
           edit = askAll;
@@ -378,7 +378,7 @@ delib.module {
 
       debugger = {
         mode = "all";
-        model = "zai-coding-plan/glm-5";
+        model = "zai-coding-plan/glm-5-turbo";
         description = "Performs command-driven bug investigation with reproduction, root-cause analysis, and evidence-only reporting.";
         prompt = renderAgentPrompt "debugger" {
           "{{BUG_REPORT_FORMAT_CONTRACT}}" = bugReportFormatContract;
@@ -389,7 +389,7 @@ delib.module {
 
       test_designer = {
         mode = "all";
-        model = "zai-coding-plan/glm-5";
+        model = "zai-coding-plan/glm-5-turbo";
         description = "Creates decision-complete test-spec files for zero-context implementation/testing agents, then gates them through plan_reviewer.";
         reasoningEffort = "high";
         prompt = renderAgentPrompt "test_designer" {
@@ -400,7 +400,7 @@ delib.module {
       };
       draft_planner = {
         mode = "subagent";
-        model = "zai-coding-plan/glm-5";
+        model = "zai-coding-plan/glm-5-turbo";
         description = "Creates direction-setting draft plan files for user approval before detailed final planning.";
         prompt = renderAgentPrompt "draft_planner" {
           "{{DRAFT_FILENAME_POLICY}}" = draftFilenamePolicy;
@@ -411,7 +411,7 @@ delib.module {
 
       editor = {
         mode = "subagent";
-        model = "zai-coding-plan/glm-4.7";
+        model = "zai-coding-plan/glm-5-turbo";
         description = "Instruction-following editor subagent for bounded file edits with minimal required context reads.";
         prompt = readAgentPrompt "editor";
         permission = boundedEditPermission;
@@ -419,7 +419,7 @@ delib.module {
 
       general = {
         mode = "subagent";
-        model = "zai-coding-plan/glm-5";
+        model = "zai-coding-plan/glm-5-turbo";
         description = "General implementation subagent for delegated file edits plus targeted path exploration.";
         prompt = readAgentPrompt "general";
         permission = boundedEditPermission;
