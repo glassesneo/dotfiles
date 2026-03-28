@@ -3,6 +3,7 @@ def setup [] {
 
   let bar_config = [
     position=@position@,
+    height=32
     color=0x00000000,
   ]
 
