@@ -1,6 +1,6 @@
 {
   delib,
-  homeConfig,
+  # homeConfig,
   lib,
   pkgs,
   ...
@@ -19,8 +19,7 @@ delib.module {
 
   home.ifEnabled = {
     home.shellAliases = {
-      bd = "cd ..";
-      projectroot = "${lib.getExe homeConfig.programs.git.package} rev-parse --show-toplevel";
+      # projectroot = "${lib.getExe homeConfig.programs.git.package} rev-parse --show-toplevel";
     };
   };
 

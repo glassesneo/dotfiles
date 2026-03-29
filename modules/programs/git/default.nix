@@ -44,9 +44,6 @@ delib.module {
           email = myconfig.constants.useremail;
           signingkey = myconfig.programs.ssh.mainIdentity;
         };
-        alias = {
-          stat = "status";
-        };
         commit = {
           verbose = true;
           template = "${homeConfig.xdg.configHome}/git/.gitmsg";

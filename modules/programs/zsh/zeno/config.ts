@@ -3,6 +3,11 @@ import { defineConfig } from "jsr:@yuki-yano/zeno";
 export default defineConfig(() => ({
   snippets: [
     {
+      name: "back directory",
+      keyword: "bd",
+      snippet: "cd ..",
+    },
+    {
       name: "git status",
       keyword: "gs",
       snippet: "git status --short --branch",
