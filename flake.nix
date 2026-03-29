@@ -194,6 +194,10 @@
       url = "github:not-in-stock/kanata-darwin";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    media-control = {
+      url = "git+https://github.com/ungive/media-control?submodules=1";
+      flake = false;
+    };
     zed-extensions = {
       url = "github:DuskSystems/nix-zed-extensions";
     };

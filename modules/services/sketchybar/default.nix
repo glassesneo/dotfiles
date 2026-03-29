@@ -46,7 +46,7 @@ in
             a = [];
             b = [];
             c = [];
-            x = [];
+            x = ["media"];
             y = ["battery"];
             z = ["datetime"];
           };

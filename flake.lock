@@ -505,6 +505,24 @@
         "type": "github"
       }
     },
+    "media-control": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1757501287,
+        "narHash": "sha256-GvdgkW3Jux5oEqj+UfgUyk/Xj8fcAWo9ZmaNDIR6vzY=",
+        "ref": "refs/heads/master",
+        "rev": "7f2b6107eab208ac6f7dd206232c7a8eb5c34aca",
+        "revCount": 47,
+        "submodules": true,
+        "type": "git",
+        "url": "https://github.com/ungive/media-control"
+      },
+      "original": {
+        "submodules": true,
+        "type": "git",
+        "url": "https://github.com/ungive/media-control"
+      }
+    },
     "nix-darwin": {
       "inputs": {
         "nixpkgs": [
@@ -743,6 +761,7 @@
         "kanata-darwin": "kanata-darwin",
         "llm-agents": "llm-agents",
         "mcp-servers-nix": "mcp-servers-nix",
+        "media-control": "media-control",
         "nix-darwin": "nix-darwin",
         "nixpkgs": "nixpkgs_3",
         "nixvim": "nixvim",
