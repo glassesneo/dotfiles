@@ -378,7 +378,7 @@ delib.module {
 
       debugger = {
         mode = "all";
-        model = "zai-coding-plan/glm-5-turbo";
+        model = "zai-coding-plan/glm-5.1";
         description = "Performs command-driven bug investigation with reproduction, root-cause analysis, and evidence-only reporting.";
         prompt = renderAgentPrompt "debugger" {
           "{{BUG_REPORT_FORMAT_CONTRACT}}" = bugReportFormatContract;
@@ -389,7 +389,7 @@ delib.module {
 
       test_designer = {
         mode = "all";
-        model = "zai-coding-plan/glm-5-turbo";
+        model = "zai-coding-plan/glm-5.1";
         description = "Creates decision-complete test-spec files for zero-context implementation/testing agents, then gates them through plan_reviewer.";
         reasoningEffort = "high";
         prompt = renderAgentPrompt "test_designer" {
@@ -400,7 +400,7 @@ delib.module {
       };
       draft_planner = {
         mode = "subagent";
-        model = "zai-coding-plan/glm-5-turbo";
+        model = "zai-coding-plan/glm-5.1";
         description = "Creates direction-setting draft plan files for user approval before detailed final planning.";
         prompt = renderAgentPrompt "draft_planner" {
           "{{DRAFT_FILENAME_POLICY}}" = draftFilenamePolicy;
@@ -419,15 +419,15 @@ delib.module {
 
       general = {
         mode = "subagent";
-        model = "zai-coding-plan/glm-5-turbo";
+        model = "zai-coding-plan/glm-5.1";
         description = "General implementation subagent for delegated file edits plus targeted path exploration.";
         prompt = readAgentPrompt "general";
         permission = boundedEditPermission;
       };
 
       explore = {
-        model = "openai/gpt-5.4";
-        reasoningEffort = "medium";
+        model = "github-copilot/gpt-5.4-mini";
+        reasoningEffort = "high";
         description = "Read-only exploration agent that uses relevant skills provided by primary-agent delegation context.";
         prompt = readAgentPrompt "explore";
         permission = readOnlyPermission;
