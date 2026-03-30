@@ -76,21 +76,7 @@
         lib,
         ...
       }: {
-        treefmt = {
-          projectRootFile = "flake.nix";
-          programs.alejandra.enable = true;
-          programs.stylua.enable = true;
-          programs.shfmt.enable = true;
-          settings.formatter.stylua.options = [
-            "--indent-type"
-            "Spaces"
-            "--indent-width"
-            "2"
-          ];
-          settings.global.excludes = [
-            "node-packages/bun.nix"
-          ];
-        };
+        treefmt = import ./treefmt.nix {inherit pkgs;};
 
         checks = lib.optionalAttrs (system == "aarch64-darwin") (let
           homeConfigs = inputs.self.homeConfigurations;
