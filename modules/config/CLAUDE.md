@@ -23,6 +23,15 @@ Keep values as pure data (`#RRGGBB` + `polarity`), and keep cross-module package
 `modules/config/host-tier.nix` exports the shared arg `tiers` for ordered tier comparisons.
 Full semantics and usage: `docs/host-tiers.md`.
 
+## Shared Keymap Registry
+
+`modules/config/keymaps/default.nix` defines semantic editor actions (key, modes, description) consumed by both Neovim and Zed modules.
+
+- Shared export: `myconfig.always.args.shared.keymaps`
+- Actions are editor-agnostic intents. Each editor module owns its own translation (Neovim RHS in `modules/programs/nixvim/config.nix`, Zed actions in `modules/programs/zed-editor/default.nix`).
+- Only actions with clear equivalents in both editors belong here. Near-equivalent mappings require explicit user approval and are tracked in `.agents/plans/zed-keymap-review.md`.
+- Plugin-specific Neovim mappings remain in their plugin modules and are out of scope for the shared registry.
+
 ## MCP Node Package Management (bun2nix)
 
 MCP server npm packages are managed via bun2nix in `node-packages/`.

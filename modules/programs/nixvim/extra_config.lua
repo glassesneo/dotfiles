@@ -2,11 +2,7 @@ vim.loader.enable()
 vim.g.mapleader = " "
 vim.keymap.set("i", "jj", [[<ESC>]], { silent = true })
 -- vim.keymap.set("t", "jj", [[<C-\><C-n>]], { silent = true })
-vim.keymap.set({ "n", "x", "o" }, "<Space>j", "<S-g>")
-vim.keymap.set({ "n", "x", "o" }, "<Space>k", "gg")
-vim.keymap.set("n", "<S-h>", vim.cmd["bprev"], { silent = true })
-vim.keymap.set("n", "<S-l>", vim.cmd["bnext"], { silent = true })
-vim.keymap.set("n", "q", [[<Nop>]])
+-- goto-file-top/bottom, prev/next-buffer, disable-macro-record: owned by shared keymaps registry
 vim.keymap.set("n", "r", "<C-r>")
 vim.keymap.set("n", "<C-r>", "r")
 vim.keymap.set("n", "<S-Y>", [[y$]], { silent = true })
@@ -39,16 +35,14 @@ vim.keymap.set("i", "<C-,>", function()
 end, { silent = true })
 vim.keymap.set("i", "<C-b>", "<Left>", { silent = true })
 vim.keymap.set("i", "<C-f>", "<Right>", { silent = true })
-vim.keymap.set({ "n", "x", "o" }, "<Space>h", [[^]], { silent = true })
-vim.keymap.set({ "n", "x", "o" }, "<Space>l", [[$]], { silent = true })
+-- goto-line-start/end: owned by shared keymaps registry
 vim.keymap.set({ "n", "x" }, "j", function()
   return "gj"
 end, { expr = true, silent = true })
 vim.keymap.set({ "n", "x" }, "k", function()
   return "gk"
 end, { expr = true, silent = true })
-vim.keymap.set({ "n", "x", "o" }, "M", [[%]], { silent = true })
-vim.keymap.set({ "n" }, "<Space>w", vim.cmd["w"], { silent = true })
+-- match-bracket, save-file: owned by shared keymaps registry
 vim.keymap.set("x", "x", [["_x]], { silent = true })
 vim.keymap.set("o", "x", [[d]], { silent = true })
 vim.keymap.set("x", "y", [[mzy`z]], { silent = true })

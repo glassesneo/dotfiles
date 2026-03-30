@@ -45,6 +45,7 @@ Full Neovim configuration via nixvim. Module name: `programs.nixvim`.
 - `<Space><Space>` smart picker, `<Space>g` grep, `<Space>f` explorer, `<Space>z` zen mode — provided by snacks.nvim
 - `jj` escape in insert mode
 - `<C-j>` SKK (Japanese input) enable
+- Some non-plugin keymaps (e.g. `<Space>h/j/k/l`, `<S-h>/<S-l>`, `M`, `q`, `<Space>w`) are now generated from the shared semantic registry at `modules/config/keymaps/default.nix` via `config.nix`. Editor-specific Neovim RHS translations live in `config.nix`. Plugin-specific and Vim-internal mappings remain in `extra_config.lua`.
 
 ## Key Files
 
