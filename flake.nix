@@ -1,129 +1,146 @@
 {
   description = "Modular configuration of Home Manager and Nix-Darwin with Denix";
 
-  outputs = {
+  outputs = inputs @ {
+    flake-parts,
     denix,
     nixpkgs,
     ...
-  } @ inputs: let
-    mkConfigurations = moduleSystem:
-      denix.lib.configurations rec {
-        inherit moduleSystem;
-        homeManagerUser = "neo";
+  }:
+    flake-parts.lib.mkFlake {inherit inputs;} {
+      imports = [inputs.treefmt-nix.flakeModule];
 
-        paths = [
-          ./hosts
-          ./modules
-          ./rices
-        ];
+      systems = ["aarch64-darwin" "x86_64-linux"];
 
-        extensions = with denix.lib.extensions; [
-          args
-          (base.withConfig {
-            args.enable = true;
-            rices.enable = true;
-            hosts.type.types = ["laptop" "server" "virtual"];
-            hosts.features.features = ["guiShell" "windowManagement" "devCore"];
-            hosts.features.defaultByHostType = {
-              laptop = ["guiShell" "windowManagement" "devCore"];
-              server = ["devCore"];
-              virtual = ["devCore"];
-            };
-            hosts.extraSubmodules = [
-              ({lib, ...}: {
-                options.tier = lib.mkOption {
-                  type = lib.types.enum ["minimal" "basic" "standard" "full"];
-                  default = "standard";
-                  description = "Performance tier of this host. Ordered: minimal < basic < standard < full.";
-                };
-                options.hasNotch = lib.mkOption {
-                  type = lib.types.bool;
-                  default = false;
-                  description = "Whether this host has a display notch (e.g. MacBook Pro). Drives bar position and notch-aware layout defaults.";
-                };
-              })
+      # ----------------------------------------------------------------
+      # System-agnostic outputs: denix-generated configurations
+      # ----------------------------------------------------------------
+      flake = let
+        mkConfigurations = moduleSystem:
+          denix.lib.configurations rec {
+            inherit moduleSystem;
+            homeManagerUser = "neo";
+
+            paths = [
+              ./hosts
+              ./modules
+              ./rices
             ];
-          })
-          overlays
-        ];
 
-        specialArgs = {
-          inherit inputs moduleSystem homeManagerUser;
-        };
+            extensions = with denix.lib.extensions; [
+              args
+              (base.withConfig {
+                args.enable = true;
+                rices.enable = true;
+                hosts.type.types = ["laptop" "server" "virtual"];
+                hosts.features.features = ["guiShell" "windowManagement" "devCore"];
+                hosts.features.defaultByHostType = {
+                  laptop = ["guiShell" "windowManagement" "devCore"];
+                  server = ["devCore"];
+                  virtual = ["devCore"];
+                };
+                hosts.extraSubmodules = [
+                  ({lib, ...}: {
+                    options.tier = lib.mkOption {
+                      type = lib.types.enum ["minimal" "basic" "standard" "full"];
+                      default = "standard";
+                      description = "Performance tier of this host. Ordered: minimal < basic < standard < full.";
+                    };
+                    options.hasNotch = lib.mkOption {
+                      type = lib.types.bool;
+                      default = false;
+                      description = "Whether this host has a display notch (e.g. MacBook Pro). Drives bar position and notch-aware layout defaults.";
+                    };
+                  })
+                ];
+              })
+              overlays
+            ];
+
+            specialArgs = {
+              inherit inputs moduleSystem homeManagerUser;
+            };
+          };
+      in {
+        # nixosConfigurations = mkConfigurations "nixos";
+        homeConfigurations = mkConfigurations "home";
+        darwinConfigurations = mkConfigurations "darwin";
       };
 
-    homeConfigs = mkConfigurations "home";
-
-    treefmtSystems = ["aarch64-darwin" "x86_64-linux"];
-    treefmtEval = nixpkgs.lib.genAttrs treefmtSystems (
-      system:
-        inputs.treefmt-nix.lib.evalModule nixpkgs.legacyPackages.${system} ./treefmt.nix
-    );
-  in {
-    # nixosConfigurations = mkConfigurations "nixos";
-    homeConfigurations = homeConfigs;
-    darwinConfigurations = mkConfigurations "darwin";
-
-    formatter = nixpkgs.lib.genAttrs treefmtSystems (
-      system:
-        treefmtEval.${system}.config.build.wrapper
-    );
-
-    checks.aarch64-darwin = let
-      pkgs = nixpkgs.legacyPackages.aarch64-darwin;
-
-      hmChecks =
-        pkgs.lib.mapAttrs' (name: config: {
-          name = "hm-" + builtins.replaceStrings ["@"] ["_at_"] name;
-          value = config.activationPackage;
-        })
-        homeConfigs;
-
-      nixvimChecks =
-        pkgs.lib.mapAttrs' (name: config: {
-          name = "nixvim-" + builtins.replaceStrings ["@"] ["_at_"] name;
-          value = config.config.programs.nixvim.build.test;
-        }) (pkgs.lib.filterAttrs (
-            name: _:
-              name == "neo@kurogane" || name == "neo@kurogane-catppuccin"
-          )
-          homeConfigs);
-    in
-      hmChecks
-      // nixvimChecks
-      // {
-        formatting = treefmtEval.aarch64-darwin.config.build.check inputs.self;
-      };
-
-    checks.x86_64-linux = {
-      formatting = treefmtEval.x86_64-linux.config.build.check inputs.self;
-    };
-
-    devShells.aarch64-darwin = let
-      pkgs = nixpkgs.legacyPackages.aarch64-darwin;
-    in rec {
-      dotfiles = pkgs.mkShellNoCC {
-        name = "dotfiles";
-        packages = with pkgs;
-          [
-            bun
-            deno
-            # lua-language-server
-            emmylua-ls
-            just
-            nickel
-            stylua
-          ]
-          ++ [
-            inputs.bun2nix.packages.aarch64-darwin.default
+      # ----------------------------------------------------------------
+      # Per-system outputs
+      # ----------------------------------------------------------------
+      perSystem = {
+        pkgs,
+        system,
+        lib,
+        ...
+      }: {
+        treefmt = {
+          projectRootFile = "flake.nix";
+          programs.alejandra.enable = true;
+          programs.stylua.enable = true;
+          programs.shfmt.enable = true;
+          settings.formatter.stylua.options = [
+            "--indent-type"
+            "Spaces"
+            "--indent-width"
+            "2"
           ];
+          settings.global.excludes = [
+            "node-packages/bun.nix"
+          ];
+        };
+
+        checks = lib.optionalAttrs (system == "aarch64-darwin") (let
+          homeConfigs = inputs.self.homeConfigurations;
+
+          hmChecks =
+            pkgs.lib.mapAttrs' (name: config: {
+              name = "hm-" + builtins.replaceStrings ["@"] ["_at_"] name;
+              value = config.activationPackage;
+            })
+            homeConfigs;
+
+          nixvimChecks =
+            pkgs.lib.mapAttrs' (name: config: {
+              name = "nixvim-" + builtins.replaceStrings ["@"] ["_at_"] name;
+              value = config.config.programs.nixvim.build.test;
+            }) (pkgs.lib.filterAttrs (
+                name: _:
+                  name == "neo@kurogane" || name == "neo@kurogane-catppuccin"
+              )
+              homeConfigs);
+        in
+          hmChecks
+          // nixvimChecks);
+
+        devShells = lib.optionalAttrs (system == "aarch64-darwin") (let
+          dotfiles = pkgs.mkShellNoCC {
+            name = "dotfiles";
+            packages = with pkgs;
+              [
+                bun
+                deno
+                emmylua-ls
+                just
+                nickel
+                stylua
+              ]
+              ++ [
+                inputs.bun2nix.packages.aarch64-darwin.default
+              ];
+          };
+        in {
+          inherit dotfiles;
+          default = dotfiles;
+        });
       };
-      default = dotfiles;
     };
-  };
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixpkgs-unstable";
+    flake-parts.url = "github:hercules-ci/flake-parts";
     treefmt-nix = {
       url = "github:numtide/treefmt-nix";
       inputs.nixpkgs.follows = "nixpkgs";
