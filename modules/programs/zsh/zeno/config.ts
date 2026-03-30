@@ -8,6 +8,26 @@ export default defineConfig(() => ({
       snippet: "cd ..",
     },
     {
+      name: "neovim",
+      keyword: "nv",
+      snippet: "nvim",
+    },
+    {
+      name: "claude-code",
+      keyword: "cc",
+      snippet: "claude",
+    },
+    {
+      name: "codex",
+      keyword: "cx",
+      snippet: "codex",
+    },
+    {
+      name: "opencode",
+      keyword: "oc",
+      snippet: "opencode",
+    },
+    {
       name: "git status",
       keyword: "gs",
       snippet: "git status --short --branch",
