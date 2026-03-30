@@ -58,7 +58,7 @@ in
         cmdheight = 0;
         # winblend = 5;
         # pumblend = 0;
-        winborder = "bold";
+        winborder = lib.mkDefault "bold";
         termguicolors = true;
         wildoptions = "pum";
         laststatus = 1;
@@ -90,7 +90,7 @@ in
       diagnostic.settings = {
         severity_sort = true;
         float = {
-          border = "none";
+          border = lib.mkDefault "none";
           # title = "Diagnostics";
           header = {};
           suffix = {};

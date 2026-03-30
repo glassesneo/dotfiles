@@ -2,9 +2,10 @@
   config,
   delib,
   inputs,
+  lib,
   ...
 }: let
-  flavor = "frappe";
+  flavor = "macchiato";
   colors = config.myconfig.colorschemes.catppuccin.${flavor};
   colorschemeLib = config.myconfig.args.shared.colorschemeLib;
   argb = colorschemeLib.toArgb "ff";
@@ -30,11 +31,35 @@ in
       programs = {
         ghostty = {
           settings = {
-            background-opacity = 0.2;
-            background-blur = 12;
-            window-padding-x = 6;
-            minimum-contrast = 4;
+            background-opacity = 0.34;
+            background-blur = 20;
+            background = colors.base00;
+            foreground = colors.base05;
+            cursor-color = colors.base06;
+            selection-background = colors.base02;
+            selection-foreground = colors.base05;
+            window-padding-x = 8;
+            window-padding-y = 6;
+            minimum-contrast = 1.8;
             custom-shader-animation = "always";
+            palette = [
+              "0=${colors.base00}"
+              "1=${colors.base08}"
+              "2=${colors.base0B}"
+              "3=${colors.base0A}"
+              "4=${colors.base0D}"
+              "5=${colors.base0E}"
+              "6=${colors.base0C}"
+              "7=${colors.base05}"
+              "8=${colors.base03}"
+              "9=${colors.base08}"
+              "10=${colors.base0B}"
+              "11=${colors.base0A}"
+              "12=${colors.base0D}"
+              "13=${colors.base0E}"
+              "14=${colors.base0C}"
+              "15=${colors.base07}"
+            ];
           };
         };
         nixvim = {
@@ -70,10 +95,49 @@ in
                   show_tab_indicators = true;
                 };
                 highlights.__raw = ''
-                  require("catppuccin.special.bufferline").get_theme()
+                  (function()
+                    local theme = require("catppuccin.special.bufferline").get_theme()()
+                    theme.buffer_selected = vim.tbl_extend("force", theme.buffer_selected or {}, {
+                      bold = true,
+                      italic = false,
+                      underline = true,
+                      sp = "${colors.base0E}",
+                    })
+                    theme.indicator_selected = vim.tbl_extend("force", theme.indicator_selected or {}, {
+                      fg = "${colors.base0E}",
+                      sp = "${colors.base0E}",
+                      underline = true,
+                    })
+                    theme.tab_selected = vim.tbl_extend("force", theme.tab_selected or {}, {
+                      fg = "${colors.base07}",
+                      bold = true,
+                    })
+                    return theme
+                  end)()
                 '';
               };
             };
+            gitsigns.settings.preview_config.border = lib.mkForce "rounded";
+            snacks.settings.picker.win.list.border = lib.mkForce "rounded";
+          };
+          opts.winborder = lib.mkForce "rounded";
+          highlight = {
+            FloatBorder = {
+              fg = "${colors.base03}";
+              bg = "none";
+            };
+            FloatTitle = {
+              fg = "${colors.base0E}";
+              bg = "none";
+            };
+            FloatShadow.bg = "none";
+            FloatShadowThrough.bg = "none";
+            NormalFloat.bg = "${colors.base01}";
+            Pmenu.bg = "${colors.base01}";
+            Pmenu.fg = "${colors.base05}";
+            PmenuSel.bg = "${colors.base02}";
+            PmenuSel.fg = "${colors.base06}";
+            WinSeparator.fg = "${colors.base03}";
           };
           autoCmd = [
             {
@@ -82,14 +146,23 @@ in
               once = false;
               callback.__raw = ''
                 function()
-                  local groups = {
-                    "Normal", "NormalNC", "NormalFloat",
-                    "SignColumn", "EndOfBuffer", "LineNr", "CursorLineNr",
-                    "Folded", "FoldColumn", "VertSplit", "StatusLine", "StatusLineNC",
+                  local transparent = {
+                    "Normal", "NormalNC", "SignColumn", "EndOfBuffer",
+                    "LineNr", "CursorLineNr", "Folded", "FoldColumn",
+                    "StatusLine", "StatusLineNC",
                   }
-                  for _, g in ipairs(groups) do
-                    vim.api.nvim_set_hl(0, g, { bg = "none" })
+                  for _, group in ipairs(transparent) do
+                    vim.api.nvim_set_hl(0, group, { bg = "none" })
                   end
+                  vim.api.nvim_set_hl(0, "NormalFloat", { bg = "${colors.base01}" })
+                  vim.api.nvim_set_hl(0, "FloatBorder", { fg = "${colors.base03}", bg = "none" })
+                  vim.api.nvim_set_hl(0, "FloatTitle", { fg = "${colors.base0E}", bg = "none" })
+                  vim.api.nvim_set_hl(0, "FloatShadow", { bg = "none" })
+                  vim.api.nvim_set_hl(0, "FloatShadowThrough", { bg = "none" })
+                  vim.api.nvim_set_hl(0, "Pmenu", { fg = "${colors.base05}", bg = "${colors.base01}" })
+                  vim.api.nvim_set_hl(0, "PmenuSel", { fg = "${colors.base06}", bg = "${colors.base02}" })
+                  vim.api.nvim_set_hl(0, "VertSplit", { fg = "${colors.base03}", bg = "none" })
+                  vim.api.nvim_set_hl(0, "WinSeparator", { fg = "${colors.base03}", bg = "none" })
                 end
               '';
             }
@@ -102,7 +175,7 @@ in
       wallpaper = "sakura";
       programs.ghostty = {
         custom-shader = "sakura";
-        quick-terminal.background = colors.base00;
+        quick-terminal.background = colors.base01;
       };
 
       services = {
@@ -110,7 +183,7 @@ in
           active_color = argb colors.base0F;
           inactive_color = "0x00000000"; # transparent
           style = "round";
-          width = 5.0;
+          width = 2.0;
           order = "above";
         };
 
@@ -173,9 +246,15 @@ in
           set -g status-right-length 100
           set -g status-left-length 100
           set -g status-left ""
-          set -g status-right "#{E:@catppuccin_status_session}"
+          set -g status-right ""
+          set -g pane-border-style "fg=${colors.base03}"
+          set -g pane-active-border-style "fg=${colors.base07}"
+          set -g message-style "fg=${colors.base05},bg=default"
+          set -g message-command-style "fg=${colors.base07},bg=default"
+          set -g display-panes-colour "${colors.base04}"
+          set -g display-panes-active-colour "${colors.base07}"
           set -g popup-style "bg=default,fg=${colors.base05}"
-          set -g popup-border-style "fg=${colors.base0E}"
+          set -g popup-border-style "fg=${colors.base07}"
         '';
       };
     };

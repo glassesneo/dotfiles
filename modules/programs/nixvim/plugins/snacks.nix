@@ -64,7 +64,7 @@ delib.module {
             enabled = true;
             win = {
               input.border = "rounded";
-              list.border = "solid";
+              list.border = lib.mkDefault "solid";
               preview.border = "rounded";
               backdrop = {
                 transparent = true;

@@ -50,7 +50,7 @@ delib.module {
                 auto_show = true;
               };
               menu = {
-                border = "none";
+                border = lib.mkDefault "none";
                 draw = {
                   columns = [
                     {
