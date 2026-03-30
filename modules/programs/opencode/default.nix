@@ -378,7 +378,8 @@ delib.module {
 
       debugger = {
         mode = "all";
-        model = "zai-coding-plan/glm-5.1";
+        model = "openai/gpt-5.4";
+        reasoningEffort = "high";
         description = "Performs command-driven bug investigation with reproduction, root-cause analysis, and evidence-only reporting.";
         prompt = renderAgentPrompt "debugger" {
           "{{BUG_REPORT_FORMAT_CONTRACT}}" = bugReportFormatContract;
@@ -454,7 +455,7 @@ delib.module {
       internet_research = {
         mode = "subagent";
         model = "github-copilot/gpt-5.4-mini";
-        reasoningEffort = "medium";
+        reasoningEffort = "high";
         description = "Performs targeted internet research when primary planning agents have material knowledge uncertainty.";
         prompt = renderAgentPrompt "internet_research" {
           "{{RESEARCH_FILENAME_POLICY}}" = researchFilenamePolicy;
@@ -464,8 +465,7 @@ delib.module {
 
       tester = {
         mode = "subagent";
-        model = "openai/gpt-5.4";
-        reasoningEffort = "high";
+        model = "zai-coding-plan/glm-5.1";
         description = "Read-only test runner that triages failures and writes failure-report files when suites fail.";
         prompt = renderAgentPrompt "tester" {
           "{{FAILURE_REPORT_FORMAT_CONTRACT}}" = failureReportFormatContract;
