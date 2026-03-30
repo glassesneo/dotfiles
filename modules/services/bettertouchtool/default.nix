@@ -21,10 +21,10 @@ delib.module {
         Label = "com.${host.name}.bettertouchtool";
         ProgramArguments = [
           "/usr/bin/open"
-          "-g"
+          "-gj"
           "-a"
-          "-j"
-          "${brewCasks.bettertouchtool}/Applications/BetterTouchTool.app"
+          # "${brewCasks.bettertouchtool}/Applications/BetterTouchTool"
+          "BetterTouchTool"
         ];
         RunAtLoad = true;
       };
