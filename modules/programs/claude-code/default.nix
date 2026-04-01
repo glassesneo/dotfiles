@@ -37,11 +37,11 @@ delib.module {
       settings = {
         model = "opus[1M]";
         autoMemoryEnabled = false;
-        skipDangerousModePermissionPrompt = true;
-        skipAutoPermissionPrompt = true;
+        # skipDangerousModePermissionPrompt = true;
+        # skipAutoPermissionPrompt = true;
         automode = true;
         permissions = {
-          defaultMode = "auto";
+          # defaultMode = "auto";
           allow = [
             "Skill(tmux-runner)"
             "mcp__context7__resolve-library-id"
