@@ -190,7 +190,10 @@
     llm-agents = {
       url = "github:numtide/llm-agents.nix";
     };
-    # kanata-darwin-nix.url = "github:ryoppippi/kanata-darwin-nix";
+    kanata-darwin = {
+      url = "github:not-in-stock/kanata-darwin";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     zed-extensions = {
       url = "github:DuskSystems/nix-zed-extensions";
     };

@@ -1,0 +1,13 @@
+(defcfg
+  process-unmapped-keys no
+)
+
+(defsrc
+  f1 f2 f7 f8 f9 f10 f11 f12
+  ;
+)
+
+(deflayer base
+  brdn brup prev pp next mute vold volu
+  (fork S-; (unshift ;) (lsft rsft))
+)

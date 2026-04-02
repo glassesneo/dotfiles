@@ -22,6 +22,7 @@ delib.module {
           NSAutomaticPeriodSubstitutionEnabled = false;
           NSAutomaticQuoteSubstitutionEnabled = false;
           NSAutomaticSpellingCorrectionEnabled = false;
+          "com.apple.keyboard.fnState" = false;
 
           # Mouse & Trackpad
           AppleEnableMouseSwipeNavigateWithScrolls = true;
