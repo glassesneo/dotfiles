@@ -1,6 +1,8 @@
 {
   delib,
+  homeConfig,
   host,
+  lib,
   pkgs,
   ...
 }:
@@ -13,6 +15,14 @@ delib.module {
     home.packages = [
       pkgs.raycast
     ];
+
+    home.activation.raycastPruneStaleInstances = homeConfig.lib.dag.entryAfter ["writeBoundary"] (
+      builtins.readFile (pkgs.replaceVars ./activation.sh {
+        currentRaycastExe = lib.escapeShellArg "${pkgs.raycast}/Applications/Raycast.app/Contents/MacOS/Raycast";
+        currentRaycastPrefix = lib.escapeShellArg "${pkgs.raycast}/Applications/Raycast.app/Contents/";
+        currentRaycastApp = lib.escapeShellArg "${pkgs.raycast}/Applications/Raycast.app";
+      })
+    );
 
     # Start at login
     launchd.agents."raycast" = {
