@@ -43,6 +43,7 @@ delib.module {
       enable = true;
       settings = let
         sketchybarExe = lib.getExe pkgs.sketchybar;
+        aerospaceExe = lib.getExe pkgs.aerospace;
       in {
         exec-on-workspace-change = [
           "/bin/bash"
@@ -118,6 +119,10 @@ delib.module {
           alt-j = "focus down";
           alt-k = "focus up";
           alt-l = "focus right";
+          ctrl-alt-cmd-shift-h = "exec-and-forget ${aerospaceExe} focus-monitor left || ${aerospaceExe} focus left";
+          ctrl-alt-cmd-shift-j = "exec-and-forget ${aerospaceExe} focus-monitor down || ${aerospaceExe} focus down";
+          ctrl-alt-cmd-shift-k = "exec-and-forget ${aerospaceExe} focus-monitor up || ${aerospaceExe} focus up";
+          ctrl-alt-cmd-shift-l = "exec-and-forget ${aerospaceExe} focus-monitor right || ${aerospaceExe} focus right";
 
           alt-f = "layout tiling floating";
           alt-q = "close";
