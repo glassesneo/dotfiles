@@ -1,5 +1,7 @@
 (defcfg
-  process-unmapped-keys no
+  ;; fork checks only work for keys kanata is processing. We need unmapped
+  ;; keys enabled so held Shift can be seen while remapping ';'.
+  process-unmapped-keys yes
 )
 
 (defsrc
@@ -9,5 +11,6 @@
 
 (deflayer base
   brdn brup prev pp next mute vold volu
-  (fork S-; (unshift ;) (lsft rsft))
+  ;; Swap ';' and ':' on a US keyboard.
+  (fork S-; (unmod (lsft rsft) ;) (lsft rsft))
 )
