@@ -123,8 +123,11 @@ delib.module {
     home.activation.codexConfigTomlPrepare = homeConfig.lib.dag.entryBefore ["checkLinkTargets"] ''
       config_file='${codexConfigPath}'
       backup_file='${codexConfigBackupPath}'
+      hm_backup_ext="''${HOME_MANAGER_BACKUP_EXT:-home_manager_backup}"
+      hm_backup_file="$config_file.$hm_backup_ext"
 
       rm -f "$backup_file"
+      rm -f "$hm_backup_file"
       if [ -f "$config_file" ] && [ ! -L "$config_file" ]; then
         cp "$config_file" "$backup_file"
       fi
