@@ -1,5 +1,6 @@
 {
   delib,
+  homeConfig,
   llm-agents,
   pkgs,
   sopsSecretPaths,
@@ -12,10 +13,23 @@ delib.module {
 
   home.ifEnabled = let
     cat = pkgs.lib.getExe' pkgs.coreutils "cat";
+    codexConfigBackupPath = "/tmp/codex-config-pre-switch-${homeConfig.home.username}.toml";
+    codexConfigMergeScript = pkgs.replaceVars ./merge-config.sh {
+      backupFile = pkgs.lib.escapeShellArg codexConfigBackupPath;
+      configFile = pkgs.lib.escapeShellArg codexConfigPath;
+      mergeNuScript = pkgs.lib.escapeShellArg (toString ./merge-config.nu);
+      nu = pkgs.lib.escapeShellArg (pkgs.lib.getExe pkgs.nushell);
+    };
     secretPath = name: sopsSecretPaths.${name} or "/run/secrets/${name}";
+    codexConfigPath =
+      if homeConfig.home.preferXdgDirectories
+      then "${homeConfig.xdg.configHome}/codex/config.toml"
+      else "${homeConfig.home.homeDirectory}/.codex/config.toml";
 
     codexWrapped = pkgs.symlinkJoin {
       name = "codex-wrapped";
+      pname = "codex";
+      version = llm-agents.codex.version or (builtins.parseDrvName llm-agents.codex.name).version;
       paths = [llm-agents.codex];
       nativeBuildInputs = [pkgs.makeWrapper];
       postBuild = ''
@@ -102,6 +116,23 @@ delib.module {
         };
       };
     };
+
+    # Codex persists project trust into config.toml. Capture the runtime file
+    # before Home Manager relinks the declarative seed, then merge runtime-only
+    # tables such as projects.* back into the fresh seed TOML.
+    home.activation.codexConfigTomlPrepare = homeConfig.lib.dag.entryBefore ["checkLinkTargets"] ''
+      config_file='${codexConfigPath}'
+      backup_file='${codexConfigBackupPath}'
+
+      rm -f "$backup_file"
+      if [ -f "$config_file" ] && [ ! -L "$config_file" ]; then
+        cp "$config_file" "$backup_file"
+      fi
+    '';
+
+    home.activation.codexConfigTomlMerge = homeConfig.lib.dag.entryAfter ["linkGeneration"] ''
+      ${builtins.readFile codexConfigMergeScript}
+    '';
   };
 
   # Default MCP server membership for Codex.
