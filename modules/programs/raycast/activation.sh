@@ -10,15 +10,14 @@ while IFS=$'\t' read -r pid command; do
   [ -n "$command" ] || continue
 
   case "$command" in
-    "$currentRaycastExe")
-      current_running=1
-      ;;
-    "$currentRaycastPrefix"*)
-      ;;
-    */Applications/Raycast.app/Contents/*)
-      stale_found=1
-      /bin/kill "$pid" >/dev/null 2>&1 || true
-      ;;
+  "$currentRaycastExe")
+    current_running=1
+    ;;
+  "$currentRaycastPrefix"*) ;;
+  */Applications/Raycast.app/Contents/*)
+    stale_found=1
+    /bin/kill "$pid" >/dev/null 2>&1 || true
+    ;;
   esac
 done < <(
   /bin/ps -axo pid=,command= |

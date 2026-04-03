@@ -5,8 +5,7 @@
   inputs,
   pkgs,
   ...
-}:
-let
+}: let
   kanataConfigFile = "${homeConfig.xdg.configHome}/kanata/kanata.kbd";
   kanataBarConfig = (pkgs.formats.toml {}).generate "kanata-bar.toml" {
     kanata = {
@@ -53,53 +52,53 @@ let
     </plist>
   '';
 in
-delib.module {
-  name = "services.kanata";
+  delib.module {
+    name = "services.kanata";
 
-  options.services.kanata = with delib; {
-    enable = boolOption host.guiShellFeatured;
-  };
+    options.services.kanata = with delib; {
+      enable = boolOption host.guiShellFeatured;
+    };
 
-  darwin.always = {
-    imports = [
-      inputs.kanata-darwin.darwinModules.default
-    ];
-  };
+    darwin.always = {
+      imports = [
+        inputs.kanata-darwin.darwinModules.default
+      ];
+    };
 
-  home.ifEnabled = {
-    home.activation.kanataSetup = homeConfig.lib.dag.entryAfter ["linkGeneration"] ''
-      mkdir -p "${homeConfig.xdg.configHome}/kanata" "${homeConfig.xdg.configHome}/kanata-bar" "$HOME/Library/LaunchAgents"
-      cp -f ${./kanata.kbd} "${kanataConfigFile}"
-      cp -f ${kanataBarConfig} "${homeConfig.xdg.configHome}/kanata-bar/config.toml"
-      cp -f ${kanataBarLaunchAgent} "$HOME/Library/LaunchAgents/com.kanata-bar.launchd.plist"
-    '';
-  };
+    home.ifEnabled = {
+      home.activation.kanataSetup = homeConfig.lib.dag.entryAfter ["linkGeneration"] ''
+        mkdir -p "${homeConfig.xdg.configHome}/kanata" "${homeConfig.xdg.configHome}/kanata-bar" "$HOME/Library/LaunchAgents"
+        cp -f ${./kanata.kbd} "${kanataConfigFile}"
+        cp -f ${kanataBarConfig} "${homeConfig.xdg.configHome}/kanata-bar/config.toml"
+        cp -f ${kanataBarLaunchAgent} "$HOME/Library/LaunchAgents/com.kanata-bar.launchd.plist"
+      '';
+    };
 
-  darwin.ifEnabled = {
-    services.kanata = {
-      enable = true;
-      package = pkgs.kanata-with-cmd;
-      configFile = kanataConfigFile;
-      # With sudoers enabled, kanata starts without a login-time auth prompt.
-      # Keep .kbd free of cmd actions unless you intentionally want root-triggered commands.
-      sudoers = true;
-      daemon.enable = false;
-      kanata-bar = {
+    darwin.ifEnabled = {
+      services.kanata = {
         enable = true;
-        settings = {
-          kanata = {
-            path = "${pkgs.kanata-with-cmd}/bin/kanata";
-            config = kanataConfigFile;
-            port = 5829;
-            extra_args = ["--nodelay"];
-          };
-          kanata_bar = {
-            autostart_kanata = true;
-            pam_touchid = "auto";
-            autorestart_kanata = true;
+        package = pkgs.kanata-with-cmd;
+        configFile = kanataConfigFile;
+        # With sudoers enabled, kanata starts without a login-time auth prompt.
+        # Keep .kbd free of cmd actions unless you intentionally want root-triggered commands.
+        sudoers = true;
+        daemon.enable = false;
+        kanata-bar = {
+          enable = true;
+          settings = {
+            kanata = {
+              path = "${pkgs.kanata-with-cmd}/bin/kanata";
+              config = kanataConfigFile;
+              port = 5829;
+              extra_args = ["--nodelay"];
+            };
+            kanata_bar = {
+              autostart_kanata = true;
+              pam_touchid = "auto";
+              autorestart_kanata = true;
+            };
           };
         };
       };
     };
-  };
-}
+  }
