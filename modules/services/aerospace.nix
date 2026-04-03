@@ -75,7 +75,7 @@ delib.module {
 
         key-mapping.preset = "qwerty";
 
-        on-focused-monitor-changed = ["move-mouse monitor-lazy-center"];
+        on-focused-monitor-changed = [];
 
         gaps = let
           outerDefault = 4;
