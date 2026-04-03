@@ -7,10 +7,16 @@
 (defsrc
   f1 f2 f7 f8 f9 f10 f11 f12
   ;
+  rmet
 )
 
 (deflayer base
   brdn brup prev pp next mute vold volu
   ;; Swap ';' and ':' on a US keyboard.
   (fork S-; (unmod (lsft rsft) ;) (lsft rsft))
+  ;; Right Command becomes Tab only when another modifier is already held.
+  (switch
+    ((or lctl rctl lalt ralt lsft rsft lmet)) tab break
+    () rmet break
+  )
 )
