@@ -22,9 +22,11 @@
   ;; Swap ';' and ':' on a US keyboard.
   (fork S-; (unmod (lsft rsft) ;) (lsft rsft))
   @hyper @hyper
-  ;; Right Command becomes Tab only when another modifier is already held.
+  ;; Right Command becomes Tab when another modifier is already held.
+  ;; Otherwise: other key pressed while holding -> Command, short solo tap -> Esc,
+  ;; long solo hold/release -> Command press/release only.
   (switch
     ((or lctl rctl lalt ralt lsft rsft lmet)) tab break
-    () rmet break
+    () (tap-hold-release-timeout 200 150 esc rmet rmet) break
   )
 )
