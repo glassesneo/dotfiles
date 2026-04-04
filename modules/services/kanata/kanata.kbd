@@ -2,6 +2,8 @@
   ;; fork checks only work for keys kanata is processing. We need unmapped
   ;; keys enabled so held Shift can be seen while remapping ';'.
   process-unmapped-keys yes
+  concurrent-tap-hold yes
+  chords-v2-min-idle 5
 )
 
 (defalias
@@ -20,8 +22,8 @@
 
 (defsrc
   f1 f2 f7 f8 f9 f10 f11 f12
-  caps
-  ;
+  caps f ;
+  lsft j k l
   lctl rctl
   rmet
 )
@@ -39,7 +41,10 @@
       break
   )
   ;; Swap ';' and ':' on a US keyboard.
+  f
   (fork S-; (unmod (lsft rsft) ;) (lsft rsft))
+  lsft
+  j k l
   @hyper @hyper
   ;; Right Command becomes Tab when another modifier is already held.
   ;; Otherwise: other key pressed while holding -> Command, short solo tap -> Esc,
@@ -48,4 +53,11 @@
     ((or lctl rctl lalt ralt lsft rsft lmet)) tab break
     () (tap-hold-release-timeout 200 150 esc rmet rmet) break
   )
+)
+
+(defchordsv2
+  ;; F acts as a punctuation chord prefix for , . /.
+  (f k) , 40 first-release ()
+  (f l) . 40 first-release ()
+  (f ;) / 40 first-release ()
 )
