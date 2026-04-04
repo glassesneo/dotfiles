@@ -18,10 +18,6 @@ delib.module {
   };
 
   home.ifEnabled = {cfg, ...}: let
-    keybinds_for_ghostty = [
-      "cmd+t=csi:24~"
-    ];
-
     # Validate plugin name if specified
     pluginExists = cfg.theme.plugin == "" || pkgs.tmuxPlugins ? ${cfg.theme.plugin};
 
@@ -52,6 +48,5 @@ delib.module {
           ${cfg.theme.extraConfig}
         '';
     };
-    programs.ghostty.settings.keybind = keybinds_for_ghostty;
   };
 }

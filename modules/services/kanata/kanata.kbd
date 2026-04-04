@@ -8,6 +8,16 @@
   hyper (multi lctl lsft lalt lmet)
 )
 
+(deffakekeys
+  cap-prefix f12
+  cap-window f20
+  cap-shift lsft
+)
+
+(defalias
+  cap-window-open (hold-for-duration 200 cap-window)
+)
+
 (defsrc
   f1 f2 f7 f8 f9 f10 f11 f12
   caps
@@ -18,7 +28,16 @@
 
 (deflayer base
   brdn brup prev pp next mute vold volu
-  lctl
+  ;; Caps is immediate Ctrl by default. A quick second press within the
+  ;; double-tap window sends F12 immediately and holds Shift until release.
+  (switch
+    ((input virtual cap-window))
+      (multi (on-press-fakekey cap-prefix tap) (on-press-fakekey cap-shift press) (on-release-fakekey cap-shift release))
+      break
+    ()
+      (multi lctl @cap-window-open)
+      break
+  )
   ;; Swap ';' and ':' on a US keyboard.
   (fork S-; (unmod (lsft rsft) ;) (lsft rsft))
   @hyper @hyper
