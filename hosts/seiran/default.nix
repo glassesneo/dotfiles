@@ -5,4 +5,5 @@ delib.host {
   rice = "catppuccin";
   tier = "full";
   hasNotch = true;
+  myconfig.services.kanata.profile = "macbook-us";
 }

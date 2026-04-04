@@ -5,15 +5,15 @@ Prefer this file over parent guidance for Kanata-specific changes.
 
 ## Files
 
-- `default.nix`: Nix wiring for the Kanata service, config file deployment, and Kanata Bar integration.
-- `kanata.kbd`: The actual Kanata keymap/configuration. Most behavior changes happen here.
+- `default.nix`: Nix wiring for the Kanata service, config profile selection, and Kanata Bar integration.
+- `macbook-us.kbd`: The current MacBook US-layout Kanata keymap/configuration. Most behavior changes happen here.
 
 ## How To Validate
 
 - Syntax-check the Kanata config before proposing activation:
 
 ```bash
-kanata --cfg modules/services/kanata/kanata.kbd --check
+kanata --cfg modules/services/kanata/macbook-us.kbd --check
 ```
 
 - If you add a new file under this subtree and expect Nix to see it, remember that flakes only read git-tracked files.
@@ -53,4 +53,4 @@ strings /run/current-system/sw/bin/kanata | rg 'tap-hold|one-shot|defchordsv2|fa
 - This config is optimized for practical macOS use, not for showcasing Kanata features.
 - Favor implementations that keep common shortcuts reliable over more clever state machines.
 - Be conservative with fake-key press/release flows. If press and release can diverge across branches, modifier-stuck failures are possible.
-- For risky remaps, prefer small composable mechanisms and keep a straightforward rollback path in `kanata.kbd`.
+- For risky remaps, prefer small composable mechanisms and keep a straightforward rollback path in the active `*.kbd` profile.

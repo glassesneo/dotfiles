@@ -4,4 +4,5 @@ delib.host {
   type = "laptop";
   rice = "monochrome";
   tier = "basic";
+  myconfig.services.kanata.profile = "macbook-us";
 }
