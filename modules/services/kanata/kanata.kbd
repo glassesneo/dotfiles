@@ -46,12 +46,9 @@
   lsft
   j k l
   @hyper @hyper
-  ;; Right Command becomes Tab when another modifier is already held.
-  ;; Otherwise: other key pressed while holding -> Command, short solo tap -> Esc,
-  ;; long solo hold/release -> Command press/release only.
   (switch
     ((or lctl rctl lalt ralt lsft rsft lmet)) tab break
-    () (tap-hold-release-timeout 200 150 esc rmet rmet) break
+    () rmet break
   )
 )
 
