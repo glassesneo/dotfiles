@@ -12,7 +12,8 @@
 
 (deffakekeys
   cap-prefix f12
-  cap-window f20
+  ;; Internal double-tap detection state only; do not emit a real keycode.
+  cap-window XX
   cap-shift lsft
 )
 
