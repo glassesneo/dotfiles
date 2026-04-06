@@ -47,19 +47,19 @@
     };
     pane-left = {
       context = "VimControl && !menu";
-      action = "workspace::ActivatePaneLeft";
+      action = ["workspace::SendKeystrokes" "ctrl-w h"];
     };
     pane-down = {
       context = "VimControl && !menu";
-      action = "workspace::ActivatePaneDown";
+      action = ["workspace::SendKeystrokes" "ctrl-w j"];
     };
     pane-up = {
       context = "VimControl && !menu";
-      action = "workspace::ActivatePaneUp";
+      action = ["workspace::SendKeystrokes" "ctrl-w k"];
     };
     pane-right = {
       context = "VimControl && !menu";
-      action = "workspace::ActivatePaneRight";
+      action = ["workspace::SendKeystrokes" "ctrl-w l"];
     };
   };
 
@@ -141,6 +141,11 @@ in
         ];
         userSettings = {
           vim_mode = true;
+          agent = {
+            tool_permissions = {
+              default = "allow";
+            };
+          };
           "experimental.theme_overrides" = {
             "background" = "#000000b5";
             "background.appearance" = "blurred";
@@ -167,18 +172,84 @@ in
                 "j j" = "vim::NormalBefore";
               };
             }
-            # Unbind Ctrl-l in Agent panel to avoid conflict with Japanese IME.
+            # Preserve AquaSKK toggles inside insert-mode editing.
+            # This overrides the shared Vim pane-navigation bindings only while
+            # typing, so normal/visual mode Ctrl-h/j/k/l still navigates panes.
+            {
+              context = "Editor && vim_mode == insert";
+              bindings = {
+                "ctrl-j" = null;
+                "ctrl-l" = null;
+                "ctrl-a" = [
+                  "editor::MoveToBeginningOfLine"
+                  {
+                    stop_at_soft_wraps = false;
+                  }
+                ];
+                "ctrl-e" = [
+                  "editor::MoveToEndOfLine"
+                  {
+                    stop_at_soft_wraps = false;
+                  }
+                ];
+                "ctrl-b" = "editor::MoveLeft";
+                "ctrl-f" = "editor::MoveRight";
+              };
+            }
+            # If an edit prediction is visible, prefer accepting it with Ctrl-e.
+            # Otherwise the generic insert-mode Ctrl-e binding above moves to
+            # the end of the line.
+            {
+              context = "Editor && vim_mode == insert && edit_prediction";
+              bindings = {
+                "ctrl-e" = "editor::AcceptEditPrediction";
+              };
+            }
+            {
+              context = "Editor && vim_mode == insert && showing_completions";
+              bindings = {
+                "ctrl-p" = "editor::ContextMenuPrevious";
+                "ctrl-n" = "editor::ContextMenuNext";
+                "ctrl-y" = "editor::ConfirmCompletion";
+                "tab" = null;
+              };
+            }
+            {
+              context = "Editor && vim_mode == insert && showing_completions && edit_prediction_conflict";
+              bindings = {
+                "ctrl-p" = "editor::ContextMenuPrevious";
+                "ctrl-n" = "editor::ContextMenuNext";
+                "ctrl-y" = "editor::ConfirmCompletion";
+                "ctrl-e" = null;
+              };
+            }
             # AgentPanel covers the whole panel; AgentPanel > Editor targets
             # the message editor specifically where IME input happens.
             {
               context = "AgentPanel > Editor";
               bindings = {
+                "ctrl-j" = null;
                 "ctrl-l" = null;
+                "ctrl-a" = [
+                  "editor::MoveToBeginningOfLine"
+                  {
+                    stop_at_soft_wraps = false;
+                  }
+                ];
+                "ctrl-e" = [
+                  "editor::MoveToEndOfLine"
+                  {
+                    stop_at_soft_wraps = false;
+                  }
+                ];
+                "ctrl-b" = "editor::MoveLeft";
+                "ctrl-f" = "editor::MoveRight";
               };
             }
             {
               context = "AgentPanel";
               bindings = {
+                "ctrl-j" = null;
                 "ctrl-l" = null;
               };
             }
@@ -194,6 +265,7 @@ in
         enable = true;
         packages = with pkgs.zed-extensions; [
           nix
+          zig
         ];
       };
     };
