@@ -10,6 +10,10 @@
   hyper (multi lctl lsft lalt lmet)
 )
 
+(defalias
+  rsft-esc (tap-hold-press 200 200 esc rsft)
+)
+
 (deffakekeys
   cap-prefix f12
   ;; Internal double-tap detection state only; do not emit a real keycode.
@@ -24,8 +28,8 @@
 (defsrc
   f1 f2 f7 f8 f9 f10 f11 f12
   caps f ;
-  lsft j k l
-  lctl rctl
+  lsft j k l rsft
+  lctl
   rmet
 )
 
@@ -46,7 +50,8 @@
   (fork S-; (unmod (lsft rsft) ;) (lsft rsft))
   lsft
   j k l
-  @hyper @hyper
+  @rsft-esc
+  @hyper
   (switch
     ((or lctl rctl lalt ralt lsft rsft lmet)) tab break
     () rmet break
