@@ -1,7 +1,6 @@
 {
   delib,
   host,
-  lib,
   pkgs,
   ...
 }:
@@ -16,8 +15,11 @@ delib.module {
         pkgs.autoraise
       ];
     };
+
+    # AutoRaise interprets delay in pollMillis ticks, not seconds.
     xdg.configFile."AutoRaise/config".text = ''
-      delay=1
+      pollMillis=50
+      delay=2
       requireMouseStop=true
     '';
 
@@ -26,7 +28,7 @@ delib.module {
       config = {
         Label = "com.${host.name}.autoraise";
         ProgramArguments = [
-          "${lib.getExe pkgs.autoraise}"
+          "${pkgs.autoraise}/bin/autoraise"
         ];
         RunAtLoad = true;
       };
