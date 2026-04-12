@@ -1,8 +1,11 @@
 {
   delib,
+  homeConfig,
   host,
   inputs,
   keymaps,
+  lib,
+  llm-agents,
   pkgs,
   ...
 }: let
@@ -123,6 +126,33 @@
         }
       )
       contexts);
+
+  codexEnabled = homeConfig.programs.codex.enable;
+  claudeCodeEnabled = homeConfig.programs.claude-code.enable;
+
+  zedAgentPackages =
+    (lib.optional codexEnabled homeConfig.programs.codex.package)
+    ++ (lib.optional claudeCodeEnabled homeConfig.programs.claude-code.package);
+
+  zedAgentServers =
+    (lib.optionalAttrs codexEnabled {
+      "Codex" = {
+        type = "custom";
+        command = lib.getExe llm-agents."codex-acp";
+        args = [];
+        env = {};
+      };
+    })
+    // (lib.optionalAttrs claudeCodeEnabled {
+      "Claude-Code" = {
+        type = "custom";
+        command = lib.getExe llm-agents."claude-code-acp";
+        args = [];
+        env = {
+          CLAUDE_CODE_EXECUTABLE = lib.getExe' homeConfig.programs.claude-code.package "claude";
+        };
+      };
+    });
 in
   delib.module {
     name = "programs.zed-editor";
@@ -136,32 +166,39 @@ in
     home.ifEnabled = {
       programs.zed-editor = {
         enable = true;
-        extraPackages = with pkgs; [
-          nixd
-        ];
-        userSettings = {
-          vim_mode = true;
-          agent = {
-            tool_permissions = {
-              default = "allow";
+        extraPackages =
+          (with pkgs; [
+            nixd
+          ])
+          ++ zedAgentPackages;
+        mutableUserSettings = false;
+        userSettings =
+          {
+            vim_mode = true;
+            agent = {
+              tool_permissions = {
+                default = "allow";
+              };
             };
+            "experimental.theme_overrides" = {
+              "background" = "#000000b5";
+              "background.appearance" = "blurred";
+              "editor.background" = "#00000000";
+              "editor.gutter.background" = "#00000000";
+              "panel.background" = "#00000000";
+              "surface.background" = "#00000090";
+              "elevated_surface.background" = "#000000f0";
+              "tab_bar.background" = "#00000000";
+              "tab.inactive_background" = "#00000000";
+              "tab.active_background" = "#3f3f4650";
+              "toolbar.background" = "#00000000";
+              "status_bar.background" = "#00000090";
+              "title_bar.background" = "#00000070";
+            };
+          }
+          // lib.optionalAttrs (zedAgentServers != {}) {
+            agent_servers = zedAgentServers;
           };
-          "experimental.theme_overrides" = {
-            "background" = "#000000b5";
-            "background.appearance" = "blurred";
-            "editor.background" = "#00000000";
-            "editor.gutter.background" = "#00000000";
-            "panel.background" = "#00000000";
-            "surface.background" = "#00000090";
-            "elevated_surface.background" = "#000000f0";
-            "tab_bar.background" = "#00000000";
-            "tab.inactive_background" = "#00000000";
-            "tab.active_background" = "#3f3f4650";
-            "toolbar.background" = "#00000000";
-            "status_bar.background" = "#00000090";
-            "title_bar.background" = "#00000070";
-          };
-        };
         userKeymaps =
           mkZedKeymaps
           ++ [
