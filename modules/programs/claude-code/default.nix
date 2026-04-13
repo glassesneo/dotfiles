@@ -68,7 +68,7 @@ delib.module {
         code_reviewer = readAgentPrompt "code_reviewer";
         tester = readAgentPrompt "tester";
       };
-      memory.text = builtins.readFile ./GLOBAL_CLAUDE.md;
+      context = ./GLOBAL_CLAUDE.md;
     };
   };
 

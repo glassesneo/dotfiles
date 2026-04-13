@@ -310,7 +310,7 @@ delib.module {
         };
         plugin = [];
       };
-      rules = ''
+      context = ''
 
         ## OpenCode-Specific Guidance
 

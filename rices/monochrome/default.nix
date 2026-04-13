@@ -233,11 +233,6 @@ in
             ];
           };
         };
-        opencode = {
-          settings = {
-            theme = "default";
-          };
-        };
       };
     };
   }
