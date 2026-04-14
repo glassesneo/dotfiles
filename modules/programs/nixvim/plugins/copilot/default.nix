@@ -35,6 +35,7 @@ delib.module {
       require('lz.n').load({{
         'copilot.lua',
         cmd = {"Copilot"},
+        event = {"BufReadPost", "BufNewFile", "InsertEnter"},
         after = function()
           require('copilot').setup({
             suggestion = { enabled = false },
