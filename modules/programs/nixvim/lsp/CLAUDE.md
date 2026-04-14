@@ -8,6 +8,8 @@
 - `servers-exceptions.nix`: efm and its supporting packages (nls, nickel, treefmt wrapper from flake `inputs.treefmt-nix`).
 - `lsp-format.nix`: patched `lsp-format` package and its allowlist. `nixd` is excluded so `.nix` formatting has one owner (`efm` -> `treefmt` -> `alejandra`).
 - `servers-lua-only.lua`: non-schema servers and Lua-only config blocks; keep `lua_only_executables` here.
+- Arduino LSP lives in `servers-lua-only.lua` because startup depends on nearest-ancestor `sketch.yaml`, project-local `default_fqbn`, and explicit `-clangd` / `-cli` / `-cli-config` / `-fqbn` command assembly.
+- Arduino startup can take several seconds inside `arduino-language-server` while it builds the compilation database and warms clangd. Keep startup visibility in `servers-lua-only.lua`; do not add `FileType`/activation hacks to force re-enable.
 - `exceptions.lua`: runtime-only efm config and `exception_executables`. Nix, Lua, and shell formatters delegate to `treefmt --stdin` so treefmt selects the correct backend (alejandra, stylua, shfmt).
 - `activation.lua`: the only place that calls `vim.lsp.enable`; it consumes `path_gated_executables`, `lua_only_executables`, and `exception_executables` in that order.
 
