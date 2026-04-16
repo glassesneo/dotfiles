@@ -4,7 +4,7 @@
   ...
 }:
 delib.module {
-  name = "programs.git.work";
+  name = "programs.git.include";
 
   # Context-specific overlay on top of the base git module rather than a
   # separate git owner. Keeps work-only behavior independently toggleable.
@@ -17,6 +17,10 @@ delib.module {
         {
           condition = "gitdir:${homeConfig.home.homeDirectory}/work/";
           path = "${homeConfig.xdg.configHome}/git/work.gitconfig";
+        }
+        {
+          condition = "gitdir:${homeConfig.home.homeDirectory}/iniad/";
+          path = "${homeConfig.xdg.configHome}/git/iniad.gitconfig";
         }
       ];
     };
