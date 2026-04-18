@@ -7,6 +7,9 @@ delib.module {
   darwin.ifEnabled = {
     system.defaults = {
       CustomUserPreferences = {
+        "com.apple.Music" = {
+          AppleLanguages = ["ja"];
+        };
         NSGlobalDomain = {
           AppleLanguages = [
             "en-US"
