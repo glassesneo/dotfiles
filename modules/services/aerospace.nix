@@ -42,15 +42,8 @@ delib.module {
     services.aerospace = {
       enable = true;
       settings = let
-        sketchybarExe = lib.getExe pkgs.sketchybar;
         aerospaceExe = lib.getExe pkgs.aerospace;
       in {
-        exec-on-workspace-change = [
-          "/bin/bash"
-          "-c"
-          "${sketchybarExe} --trigger aerospace_workspace_change FOCUSED_WORKSPACE=$AEROSPACE_FOCUSED_WORKSPACE"
-        ];
-
         on-window-detected = let
           enableTiling = app-id: {
             "if".app-id = app-id;

@@ -43,7 +43,7 @@ in
         layout = lib.mkOption {
           type = layoutType;
           default = {
-            a = [];
+            a = ["workspace"];
             b = [];
             c = [];
             x = ["media"];
