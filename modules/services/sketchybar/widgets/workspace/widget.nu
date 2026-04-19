@@ -48,5 +48,5 @@ def main [direction: string] {
   sketchybar --add item $listener $direction
   sketchybar --add event aerospace_workspace_change
   sketchybar --set $listener ...$listener_widget_options
-  sketchybar --subscribe $listener display_change aerospace_workspace_change
+  sketchybar --subscribe $listener display_change space_change aerospace_workspace_change
 }
