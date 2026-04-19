@@ -1,4 +1,4 @@
--- Copilot LSP runtime config: cmd, root_dir policy, on_attach.
+-- Copilot runtime policy for copilot.lua backed by copilot-language-server.
 local orgfiles_dir = vim.fs.normalize(vim.fn.expand("~/orgfiles"))
 
 local function realpath_or_self(path)
@@ -23,29 +23,56 @@ local function path_is_within(path, root)
   return normalized_path:sub(1, #root_with_sep) == root_with_sep
 end
 
-vim.lsp.config.copilot = {
-  cmd = { "copilot-language-server", "--stdio" },
-  root_dir = function(bufnr, callback)
-    local buf_path = vim.api.nvim_buf_get_name(bufnr)
-    if path_is_within(realpath_or_self(buf_path), orgfiles_dir) then
-      return
+local function should_skip_path(buf_path)
+  if path_is_within(realpath_or_self(buf_path), orgfiles_dir) then
+    return true
+  end
+
+  local fname = vim.fs.basename(buf_path)
+  if fname == nil or fname == "" then
+    return false
+  end
+
+  local disable_patterns = { "env", "conf", "local", "private" }
+  return vim.iter(disable_patterns):any(function(pattern)
+    return string.match(fname, pattern) ~= nil
+  end)
+end
+
+local function git_root_for_bufnr(bufnr)
+  return vim.fs.root(bufnr, { ".git" }) or vim.fs.root(vim.fn.getcwd(), { ".git" })
+end
+
+return {
+  -- Keep panel enabled so copilot.lua does not disable server-side auto completions.
+  panel = { enabled = true },
+  suggestion = { enabled = false },
+  filetypes = {
+    gitcommit = true,
+  },
+  server = {
+    type = "binary",
+    custom_server_filepath = "copilot-language-server",
+  },
+  root_dir = function()
+    return git_root_for_bufnr(0) or vim.fn.getcwd()
+  end,
+  should_attach = function(bufnr, buf_path)
+    if not vim.bo[bufnr].buflisted or vim.bo[bufnr].buftype ~= "" then
+      return false
     end
 
-    local fname = vim.fs.basename(buf_path)
-    local disable_patterns = { "env", "conf", "local", "private" }
-    local is_disabled = vim.iter(disable_patterns):any(function(pattern)
-      return string.match(fname, pattern)
-    end)
-    if is_disabled then
-      return
+    if should_skip_path(buf_path) then
+      return false
     end
 
-    local root_dir = vim.fs.root(bufnr, { ".git" })
-    if root_dir then
-      callback(root_dir)
-    end
+    return git_root_for_bufnr(bufnr) ~= nil
   end,
-  on_attach = function(_client, bufnr)
-    vim.lsp.inline_completion.enable(true, { bufnr = bufnr })
-  end,
+  server_opts_overrides = {
+    on_attach = function(client, bufnr)
+      if client:supports_method(vim.lsp.protocol.Methods.textDocument_inlineCompletion, bufnr) then
+        vim.lsp.inline_completion.enable(true, { bufnr = bufnr })
+      end
+    end,
+  },
 }

@@ -1,6 +1,5 @@
 {
   delib,
-  nixvimLsp,
   pkgs,
   ...
 }:
@@ -15,13 +14,8 @@ delib.module {
       config.allowUnfree = true;
     };
   in {
-    lsp.servers.copilot = nixvimLsp.mkServer {
-      activate = true;
-    };
-
     extraPackages = [
       copilotPkgs.copilot-language-server
-      pkgs.nodejs
     ];
 
     extraPlugins = [
@@ -32,19 +26,18 @@ delib.module {
     ];
 
     extraConfigLua = ''
+      local copilot_opts = (function()
+      ${builtins.readFile ./copilot-lsp.lua}
+      end)()
+
       require('lz.n').load({{
         'copilot.lua',
         cmd = {"Copilot"},
         event = {"BufReadPost", "BufNewFile", "InsertEnter"},
         after = function()
-          require('copilot').setup({
-            suggestion = { enabled = false },
-            panel = { enabled = false },
-          })
+          require('copilot').setup(copilot_opts)
         end,
       }})
     '';
-
-    extraConfigLuaPost = builtins.readFile ./copilot-lsp.lua;
   };
 }
