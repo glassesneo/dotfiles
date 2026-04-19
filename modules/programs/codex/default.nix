@@ -12,19 +12,21 @@ delib.module {
   options = delib.singleEnableOption true;
 
   home.ifEnabled = let
+    inherit (pkgs) lib;
     cat = pkgs.lib.getExe' pkgs.coreutils "cat";
-    codexConfigBackupPath = "/tmp/codex-config-pre-switch-${homeConfig.home.username}.toml";
-    codexConfigMergeScript = pkgs.replaceVars ./merge-config.sh {
-      backupFile = pkgs.lib.escapeShellArg codexConfigBackupPath;
-      configFile = pkgs.lib.escapeShellArg codexConfigPath;
-      mergeNuScript = pkgs.lib.escapeShellArg (toString ./merge-config.nu);
-      nu = pkgs.lib.escapeShellArg (pkgs.lib.getExe pkgs.nushell);
-    };
+    codexConfigMerger = pkgs.python3.withPackages (pythonPackages: [
+      pythonPackages.tomlkit
+    ]);
     secretPath = name: sopsSecretPaths.${name} or "/run/secrets/${name}";
     codexConfigPath =
       if homeConfig.home.preferXdgDirectories
       then "${homeConfig.xdg.configHome}/codex/config.toml"
       else "${homeConfig.home.homeDirectory}/.codex/config.toml";
+    codexConfigTarget =
+      if homeConfig.home.preferXdgDirectories
+      then "${lib.removePrefix "${homeConfig.home.homeDirectory}/" homeConfig.xdg.configHome}/codex/config.toml"
+      else ".codex/config.toml";
+    codexConfigSeed = (pkgs.formats.toml {}).generate "codex-config" homeConfig.programs.codex.settings;
 
     codexWrapped = pkgs.symlinkJoin {
       name = "codex-wrapped";
@@ -117,24 +119,18 @@ delib.module {
       };
     };
 
-    # Codex persists project trust into config.toml. Capture the runtime file
-    # before Home Manager relinks the declarative seed, then merge runtime-only
-    # tables such as projects.* back into the fresh seed TOML.
-    home.activation.codexConfigTomlPrepare = homeConfig.lib.dag.entryBefore ["checkLinkTargets"] ''
-      config_file='${codexConfigPath}'
-      backup_file='${codexConfigBackupPath}'
-      hm_backup_ext="''${HOME_MANAGER_BACKUP_EXT:-home_manager_backup}"
-      hm_backup_file="$config_file.$hm_backup_ext"
+    home.file.${codexConfigTarget}.enable = lib.mkForce false;
 
-      rm -f "$backup_file"
-      rm -f "$hm_backup_file"
-      if [ -f "$config_file" ] && [ ! -L "$config_file" ]; then
-        cp "$config_file" "$backup_file"
-      fi
-    '';
-
+    # Codex persists project trust and small UI notices into config.toml, so the
+    # target must be a writable file instead of a Home Manager store symlink.
     home.activation.codexConfigTomlMerge = homeConfig.lib.dag.entryAfter ["linkGeneration"] ''
-      ${builtins.readFile codexConfigMergeScript}
+      config_file='${codexConfigPath}'
+      mkdir -p "$(dirname "$config_file")"
+      ${lib.getExe codexConfigMerger} \
+        ${./merge-config.py} \
+        ${codexConfigSeed} \
+        "$config_file" \
+        "$config_file"
     '';
   };
 
