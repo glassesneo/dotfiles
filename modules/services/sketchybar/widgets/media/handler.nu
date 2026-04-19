@@ -35,7 +35,7 @@ def show_media (label: string) {
     background.border_color=0x80f5bde6
   ]
   sketchybar --set $name ...$options
-  sketchybar --animate tanh 30 --set $name ...$animated_options
+  sketchybar --animate tanh 32 --set $name ...$animated_options
 }
 
 def hide_media () {
