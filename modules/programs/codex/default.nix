@@ -59,6 +59,8 @@ delib.module {
         profiles = {
           "full-auto" = {
             model = "gpt-5.4";
+            model_reasoning_effort = "high";
+            plan_mode_reasoning_effort = "high";
             approval_policy = "never";
             sandbox_mode = "workspace-write";
             sandbox_workspace_write.network_access = true;
@@ -76,7 +78,6 @@ delib.module {
               XDG_DATA_HOME = "/tmp/agent-browser/data";
               XDG_STATE_HOME = "/tmp/agent-browser/state";
             };
-            model_reasoning_effort = "high";
             # model_provider = "openrouter";
             # model = "kwaipilot/kat-coder-pro:free";
           };
