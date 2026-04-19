@@ -10,8 +10,7 @@ delib.module {
 
   home.ifEnabled = {
     home.packages = [
-  pkgs.slack
+      pkgs.slack
     ];
   };
 }
-
