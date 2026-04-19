@@ -9,7 +9,11 @@ delib.module {
   name = "services.sketchybar.widget-media";
 
   options = with delib;
-    moduleOptions ({parent, ...}: let
+    moduleOptions ({
+      myconfig,
+      parent,
+      ...
+    }: let
       name = "media";
       nushellBin = lib.getExe parent.nushellPackage;
       enabled =
@@ -17,6 +21,7 @@ delib.module {
         && lib.any (section: lib.any (entry: entry.widget == name) parent.layout.${section}) parent.sections;
       handler = pkgs.replaceVars ./handler.nu {
         inherit name;
+        media-control = lib.getExe myconfig.programs.media-control.package;
       };
       script = pkgs.writeShellScript "script" ''
         exec ${nushellBin} ${handler}

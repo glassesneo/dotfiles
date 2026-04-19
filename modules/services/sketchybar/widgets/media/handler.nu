@@ -1,18 +1,22 @@
 const name = "@name@"
+const media_control = "@media-control@"
 
 def main () {
-  match $env.SENDER {
-    "media_stream_change" => handle_media_stream_change
-    _ => ()
+
+  let payload = match $env.SENDER {
+    "media_stream_change" => ($env.PAYLOAD | from json),
+    "forced" => (^$media_control get | from json | select artist title album playing),
+    _ => (null),
   }
+
+  handle_media_stream_change ($payload | default {playing: false})
 }
 
 def label_text (): record -> string {
   $"($in | get title) • ($in | get artist)"
 }
 
-def handle_media_stream_change () {
-  let payload = $env.PAYLOAD | from json
+def handle_media_stream_change (payload: record) {
   if ($payload | get playing? | default false) {
     let label = $payload | label_text
     show_media $label
