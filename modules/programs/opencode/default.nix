@@ -401,7 +401,7 @@ delib.module {
       };
       draft_planner = {
         mode = "subagent";
-        model = "zai-coding-plan/glm-5.1";
+        model = "github-copilot/gpt-5.4-mini";
         description = "Creates direction-setting draft plan files for user approval before detailed final planning.";
         prompt = renderAgentPrompt "draft_planner" {
           "{{DRAFT_FILENAME_POLICY}}" = draftFilenamePolicy;
@@ -465,7 +465,7 @@ delib.module {
 
       tester = {
         mode = "subagent";
-        model = "zai-coding-plan/glm-5.1";
+        model = "github-copilot/gpt-5.4-mini";
         description = "Read-only test runner that triages failures and writes failure-report files when suites fail.";
         prompt = renderAgentPrompt "tester" {
           "{{FAILURE_REPORT_FORMAT_CONTRACT}}" = failureReportFormatContract;
