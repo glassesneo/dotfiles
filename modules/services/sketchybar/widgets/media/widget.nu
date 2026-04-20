@@ -6,6 +6,7 @@ def main [direction: string] {
   log info $"Rendering ($name)"
   let widget_options = [
     display=active
+    padding_right=12
     label=──
     label.max_chars=28
     label.scroll_duration=180

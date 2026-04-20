@@ -4,6 +4,7 @@ def setup [] {
   let bar_config = [
     position=@position@,
     height=32
+    y_offset=2
     color=0x00000000,
   ]
 
