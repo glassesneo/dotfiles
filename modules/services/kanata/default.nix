@@ -28,9 +28,43 @@ in
       ];
     };
 
-    darwin.ifEnabled = {cfg, ...}: let
+    darwin.ifEnabled = {
+      cfg,
+      myconfig,
+      ...
+    }: let
       selectedProfile = cfg.profile;
       profileSet = selectedProfile != null;
+      riftEnabled = myconfig.services.rift.enable;
+      riftExtension =
+        if riftEnabled
+        then
+          pkgs.replaceVars ./rift.kbd {
+            riftCli = "${myconfig.services.rift.package}/bin/rift-cli";
+          }
+        else pkgs.writeText "kanata-rift-disabled.kbd" "";
+      effectiveConfigSource = pkgs.writeText "${selectedProfile}-generated.kbd" (
+        builtins.replaceStrings
+        [
+          "  ;; @rift-src-h@\n"
+          "  ;; @rift-src-lmet@\n"
+          "  ;; @rift-base-h@\n"
+          "  ;; @rift-base-lmet@\n"
+          "  @cmd-right-default\n"
+          "  chords-v2-min-idle 5\n"
+          ";; @rift-include@\n"
+        ]
+        [
+          (lib.optionalString riftEnabled "  h\n")
+          (lib.optionalString riftEnabled "  lmet\n")
+          (lib.optionalString riftEnabled "  h\n")
+          (lib.optionalString riftEnabled "  @rift-lmet\n")
+          (lib.optionalString riftEnabled "  @rift-rmet\n")
+          "  chords-v2-min-idle 5\n${lib.optionalString riftEnabled "  danger-enable-cmd yes\n"}"
+          "(include \"${riftExtension}\")\n"
+        ]
+        (builtins.readFile profiles.${selectedProfile})
+      );
     in {
       assertions = [
         {
@@ -72,7 +106,7 @@ in
           };
         }
         // lib.optionalAttrs (selectedProfile != null) {
-          configSource = profiles.${selectedProfile};
+          configSource = effectiveConfigSource;
         };
     };
   }

@@ -14,6 +14,13 @@
   rsft-esc (tap-hold-press 200 200 esc rsft)
 )
 
+(defalias
+  cmd-right-default (switch
+    ((or lctl rctl lalt ralt lsft rsft lmet)) tab break
+    () rmet break
+  )
+)
+
 (deffakekeys
   cap-prefix f12
   ;; Internal double-tap detection state only; do not emit a real keycode.
@@ -28,8 +35,10 @@
 (defsrc
   f1 f2 f7 f8 f9 f10 f11 f12
   caps f ;
+  ;; @rift-src-h@
   lsft j k l rsft
   lctl
+  ;; @rift-src-lmet@
   rmet
 )
 
@@ -48,14 +57,13 @@
   ;; Swap ';' and ':' on a US keyboard.
   f
   (fork S-; (unmod (lsft rsft) ;) (lsft rsft))
+  ;; @rift-base-h@
   lsft
   j k l
   @rsft-esc
   @hyper
-  (switch
-    ((or lctl rctl lalt ralt lsft rsft lmet)) tab break
-    () rmet break
-  )
+  ;; @rift-base-lmet@
+  @cmd-right-default
 )
 
 (defchordsv2
@@ -64,3 +72,5 @@
   (f l) . 40 first-release ()
   (f ;) / 40 first-release ()
 )
+
+;; @rift-include@

@@ -1,0 +1,54 @@
+(deffakekeys
+  rift-cmd-arm XX
+)
+
+(defalias
+  rift-cmd-arm-open (hold-for-duration 300 rift-cmd-arm)
+  rift-next (one-shot-release-pcancel 500 (layer-while-held rift))
+
+  rift-lmet (switch
+    ((input virtual rift-cmd-arm)) @rift-next break
+    () (multi lmet @rift-cmd-arm-open) break
+  )
+
+  rift-rmet (switch
+    ((input virtual rift-cmd-arm)) @rift-next break
+    () (multi @cmd-right-default @rift-cmd-arm-open) break
+  )
+
+  rift-focus-left  (cmd "@riftCli@" "execute" "window" "focus" "left")
+  rift-focus-down  (cmd "@riftCli@" "execute" "window" "focus" "down")
+  rift-focus-up    (cmd "@riftCli@" "execute" "window" "focus" "up")
+  rift-focus-right (cmd "@riftCli@" "execute" "window" "focus" "right")
+
+  rift-move-left  (cmd "@riftCli@" "execute" "layout" "move-node" "left")
+  rift-move-down  (cmd "@riftCli@" "execute" "layout" "move-node" "down")
+  rift-move-up    (cmd "@riftCli@" "execute" "layout" "move-node" "up")
+  rift-move-right (cmd "@riftCli@" "execute" "layout" "move-node" "right")
+
+  rift-left (switch
+    ((or (input real lsft) (input real rsft))) @rift-move-left break
+    () @rift-focus-left break
+  )
+  rift-down (switch
+    ((or (input real lsft) (input real rsft))) @rift-move-down break
+    () @rift-focus-down break
+  )
+  rift-up (switch
+    ((or (input real lsft) (input real rsft))) @rift-move-up break
+    () @rift-focus-up break
+  )
+  rift-right (switch
+    ((or (input real lsft) (input real rsft))) @rift-move-right break
+    () @rift-focus-right break
+  )
+)
+
+(deflayer rift
+  _ _ _ _ _ _ _ _
+  _ _ _ @rift-left
+  XX @rift-down @rift-up @rift-right XX
+  _
+  @rift-lmet
+  @rift-rmet
+)

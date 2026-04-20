@@ -49,21 +49,21 @@ workspace_rules = []
 workspace_names = ["first", "second"]
 app_rules = []
 
-[modifier_combinations]
-move = "Alt + Shift"
+# [modifier_combinations]
+# move = "Alt + Shift"
 
 [keys]
 "Alt + Z" = "toggle_space_activated"
 
-"Alt + H" = { move_focus = "left" }
-"Alt + J" = { move_focus = "down" }
-"Alt + K" = { move_focus = "up" }
-"Alt + L" = { move_focus = "right" }
+# "Alt + H" = { move_focus = "left" }
+# "Alt + J" = { move_focus = "down" }
+# "Alt + K" = { move_focus = "up" }
+# "Alt + L" = { move_focus = "right" }
 
-"move + H" = { move_node = "left" }
-"move + J" = { move_node = "down" }
-"move + K" = { move_node = "up" }
-"move + L" = { move_node = "right" }
+# "move + H" = { move_node = "left" }
+# "move + J" = { move_node = "down" }
+# "move + K" = { move_node = "up" }
+# "move + L" = { move_node = "right" }
 
 "Alt + 1" = { switch_to_workspace = 0 }
 "Alt + 2" = { switch_to_workspace = 1 }
