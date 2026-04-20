@@ -2,6 +2,12 @@ use std/log
 use ../../colors.nu
 
 const workspace_selector = '/workspace\..*/'
+const workspace_focus_animation_duration = 25
+const workspace_bar_visible_y_offset = 12
+const workspace_bar_hidden_y_offset = 22
+const workspace_label_padding = 5
+const workspace_bar_padding = 5
+const workspace_bar_x_offset = 1
 
 def transparent [color: string] {
   $color | str replace --regex '^0x[0-9a-fA-F]{2}' '0x00'
@@ -29,6 +35,11 @@ def hidden_workspace_options [] {
     label.padding_right=0
     icon.padding_left=0
     icon.padding_right=0
+    label.background.color.alpha=0.0
+    $"label.background.padding_left=($workspace_bar_padding)"
+    $"label.background.padding_right=($workspace_bar_padding)"
+    $"label.background.x_offset=($workspace_bar_x_offset)"
+    $"label.background.y_offset=($workspace_bar_hidden_y_offset)"
   ]
 }
 
@@ -37,10 +48,14 @@ def visible_workspace_options [] {
     width=28
     label.color.alpha=1.0
     icon.color.alpha=1.0
-    label.padding_left=8
-    label.padding_right=8
-    icon.padding_left=8
-    icon.padding_right=8
+    $"label.padding_left=($workspace_label_padding)"
+    $"label.padding_right=($workspace_label_padding)"
+    icon.padding_left=0
+    icon.padding_right=0
+    label.background.color.alpha=1.0
+    $"label.background.padding_left=($workspace_bar_padding)"
+    $"label.background.padding_right=($workspace_bar_padding)"
+    $"label.background.x_offset=($workspace_bar_x_offset)"
   ]
 }
 
@@ -54,33 +69,92 @@ def single_workspace_id [workspace: string] {
   }
 }
 
-def update_focus [focused_workspace: string, previous_workspace?: string, --reset-all, --hidden] {
-  let normal_label_color = if $hidden { transparent $colors.text_primary } else { $colors.text_primary }
-  let focused_label_color = if $hidden { transparent $colors.workspace_active } else { $colors.workspace_active }
+def inactive_workspace_options [hidden: bool] {
+  let normal_color = if $hidden { transparent $colors.text_primary } else { $colors.text_primary }
 
-  let workspace_widget_options = [
+  [
     label.drawing=on
     icon.drawing=off
-    $"label.color=($normal_label_color)"
-    $"icon.color=($normal_label_color)"
+    $"label.color=($normal_color)"
+    $"icon.color=($normal_color)"
+    $"label.background.x_offset=($workspace_bar_x_offset)"
+    $"label.background.y_offset=($workspace_bar_hidden_y_offset)"
   ]
+}
 
-  let focused_workspace_widget_options = [
-    label.drawing=off
-    icon.drawing=on
-    $"label.color=($focused_label_color)"
-    $"icon.color=($focused_label_color)"
+def focused_workspace_start_options [] {
+  [
+    label.drawing=on
+    icon.drawing=off
+    $"label.color=($colors.text_primary)"
+    $"icon.color=($colors.text_primary)"
+    $"label.background.x_offset=($workspace_bar_x_offset)"
+    $"label.background.y_offset=($workspace_bar_hidden_y_offset)"
   ]
+}
 
+def inactive_workspace_label_options [] {
+  [
+    label.drawing=on
+    icon.drawing=off
+    $"label.color=($colors.text_primary)"
+    $"icon.color=($colors.text_primary)"
+  ]
+}
+
+def focused_workspace_options [hidden: bool] {
+  let focused_bar_y_offset = if $hidden { $workspace_bar_hidden_y_offset } else { $workspace_bar_visible_y_offset }
+
+  [
+    label.drawing=on
+    icon.drawing=off
+    $"label.color=($colors.text_primary)"
+    $"icon.color=($colors.text_primary)"
+    $"label.background.x_offset=($workspace_bar_x_offset)"
+    $"label.background.y_offset=($focused_bar_y_offset)"
+  ]
+}
+
+def hidden_workspace_bar_options [] {
+  [
+    label.background.drawing=on
+    $"label.background.x_offset=($workspace_bar_x_offset)"
+    $"label.background.y_offset=($workspace_bar_hidden_y_offset)"
+  ]
+}
+
+def visible_workspace_bar_options [] {
+  [
+    label.background.drawing=on
+    $"label.background.x_offset=($workspace_bar_x_offset)"
+    $"label.background.y_offset=($workspace_bar_visible_y_offset)"
+  ]
+}
+
+def set_focused_workspace [workspace: string, hidden: bool] {
+  if $hidden {
+    sketchybar --set $"workspace.($workspace)" ...(focused_workspace_options true)
+  } else {
+    sketchybar --set $"workspace.($workspace)" ...(focused_workspace_start_options)
+    sketchybar --animate tanh $workspace_focus_animation_duration --set $"workspace.($workspace)" ...(visible_workspace_bar_options)
+  }
+}
+
+def animate_inactive_workspace [workspace: string] {
+  sketchybar --set $"workspace.($workspace)" ...(inactive_workspace_label_options)
+  sketchybar --animate tanh $workspace_focus_animation_duration --set $"workspace.($workspace)" ...(hidden_workspace_bar_options)
+}
+
+def update_focus [focused_workspace: string, previous_workspace?: string, --reset-all, --hidden] {
   log info $"($previous_workspace) -> ($focused_workspace)"
 
   if $reset_all {
-    sketchybar --set $workspace_selector ...$workspace_widget_options
-  } else if $previous_workspace != null {
-    sketchybar --set $"workspace.($previous_workspace)" ...$workspace_widget_options
+    sketchybar --set $workspace_selector ...(inactive_workspace_options $hidden)
+  } else if $previous_workspace != null and $previous_workspace != $focused_workspace {
+    animate_inactive_workspace $previous_workspace
   }
 
-  sketchybar --set $"workspace.($focused_workspace)" ...$focused_workspace_widget_options
+  set_focused_workspace $focused_workspace $hidden
 }
 
 def update_display (workspaces: table<monitor-appkit-nsscreen-screens-id: int, workspace: string>) {
@@ -183,7 +257,11 @@ def lock_is_stale [lock_path: string] {
 
   try {
     let now = (^date +%s | into int)
-    let lock_mtime = (^stat -c %Y $lock_path | into int)
+    let lock_mtime = if ("/usr/bin/stat" | path exists) {
+      ^/usr/bin/stat -f %m $lock_path | into int
+    } else {
+      ^stat -c %Y $lock_path | into int
+    }
     (($now - $lock_mtime) > 5)
   } catch {
     false
@@ -268,6 +346,8 @@ def resync_workspaces [--animate] {
   if $should_animate {
     reset_hidden_workspaces
     animate_show_workspaces
+    sleep 350ms
+    update_focus $snapshot.focused --reset-all
   }
 
   if $animate {

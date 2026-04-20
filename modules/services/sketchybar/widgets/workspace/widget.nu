@@ -24,12 +24,14 @@ def main [direction: string] {
       label.padding_right=5
       $"label.color=($colors.text_primary)"
       label.drawing=on
-      "icon=•"
-      icon.font.size=15
-      icon.align=center
-      icon.padding_left=5
-      icon.padding_right=5
-      $"icon.color=($colors.workspace_active)"
+      label.background.drawing=on
+      $"label.background.color=($colors.workspace_active)"
+      label.background.height=2
+      label.background.corner_radius=1
+      label.background.padding_left=8
+      label.background.padding_right=8
+      label.background.x_offset=1
+      label.background.y_offset=22
       icon.drawing=off
       $"click_script=aerospace workspace ($workspace_id)"
     ]
