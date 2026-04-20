@@ -18,11 +18,34 @@ in
     myconfig.wallpaper = "roses";
     myconfig.programs.ghostty.quick-terminal.background = colors.base00;
 
-    myconfig.services.jankyborders = {
-      active_color = colors.base05;
-      inactive_color = colors.base03;
-      style = "round";
-      width = 4.0;
+    myconfig.services = {
+      sketchybar = {
+        colors = {
+          text_primary = argb colors.base05;
+          text_muted = argb colors.base04;
+          workspace_active = argb colors.base08;
+          accent_datetime = argb colors.base05;
+          status_error = argb colors.base08;
+          status_warning = argb colors.base05;
+          status_caution = argb colors.base09;
+          status_success = argb colors.base05;
+          status_charging = argb colors.base0A;
+          app_arc = argb colors.base08;
+          app_ghostty = argb colors.base0D;
+          app_obsidian = argb colors.base0E;
+          app_kitty = argb colors.base0F;
+          island_surface = argbLow colors.base01;
+          island_border = argbBorder colors.base04;
+          active_indicator = argbIndicator colors.base08;
+        };
+      };
+
+      jankyborders = {
+        active_color = colors.base05;
+        inactive_color = colors.base03;
+        style = "round";
+        width = 4.0;
+      };
     };
 
     myconfig.programs.tmux.theme = {

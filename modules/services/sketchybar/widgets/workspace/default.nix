@@ -14,20 +14,17 @@ delib.module {
       ...
     }: let
       name = "workspace";
-      nushellBin = lib.getExe parent.nushellPackage;
       enabled =
         parent.enable
         && (lib.any (section: lib.any (entry: entry.widget == name) parent.layout.${section}) parent.sections)
         && myconfig.services.aerospace.enable;
       handler = pkgs.replaceVars ./handler.nu {};
-      script = pkgs.writeShellScript "script" ''
-        exec ${nushellBin} ${handler}
-      '';
     in {
       enable = boolOption enabled;
+      handler = readOnly (packageOption handler);
       render = readOnly (packageOption (pkgs.replaceVars ./widget.nu {
         inherit name;
-        script-path = script;
+        script-path = null;
       }));
     });
 

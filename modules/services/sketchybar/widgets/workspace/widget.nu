@@ -1,4 +1,5 @@
 use std/log
+use ../../colors.nu
 
 def main [direction: string] {
   const name = "@name@"
@@ -19,14 +20,16 @@ def main [direction: string] {
       label.font.size=14
       "label.font.style=Regular"
       label.align=center
-      label.padding_left=6
-      label.padding_right=6
+      label.padding_left=5
+      label.padding_right=5
+      $"label.color=($colors.text_primary)"
       label.drawing=on
       "icon=•"
       icon.font.size=15
       icon.align=center
-      icon.padding_left=6
-      icon.padding_right=6
+      icon.padding_left=5
+      icon.padding_right=5
+      $"icon.color=($colors.workspace_active)"
       icon.drawing=off
       $"click_script=aerospace workspace ($workspace_id)"
     ]

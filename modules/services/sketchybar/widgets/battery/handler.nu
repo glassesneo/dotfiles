@@ -1,3 +1,5 @@
+use ../../colors.nu
+
 def main () {
   const name = "@name@"
   let percentage = pmset -g batt
@@ -12,7 +14,7 @@ def main () {
     let options = [
       $"icon=($percentage)%"
       "label="
-      "label.color=0xFFFFFF00"
+      $"label.color=($colors.status_charging)"
     ]
 
     sketchybar --set $name ...$options
@@ -21,11 +23,11 @@ def main () {
   }
 
   let icon: record<kind: string, color: string> = match $percentage {
-    91..100 => {kind: $"\u{f240}", color: "0xFF00FF00"}
-    61..90 => {kind: $"\u{f241}", color: "0xFFFFFF00"}
-    31..60 => {kind: $"\u{f242}", color: "0xFFFFA500"}
-    11..30 => {kind: $"\u{f243}", color: "0xFFFF0000"}
-    _ => {kind: $"\u{f244}", color: "0xFFFF0000"}
+    91..100 => {kind: $"\u{f240}", color: $colors.status_success}
+    61..90 => {kind: $"\u{f241}", color: $colors.status_success}
+    31..60 => {kind: $"\u{f242}", color: $colors.status_warning}
+    11..30 => {kind: $"\u{f243}", color: $colors.status_caution}
+    _ => {kind: $"\u{f244}", color: $colors.status_error}
   }
 
   let options = [

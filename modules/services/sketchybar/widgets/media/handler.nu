@@ -1,3 +1,5 @@
+use ../../colors.nu
+
 const name = "@name@"
 const media_control = "@media-control@"
 
@@ -32,7 +34,7 @@ def show_media (label: string) {
   ]
   let animated_options = [
     $"label=($label)"
-    background.border_color=0x80f5bde6
+    $"background.border_color=($colors.active_indicator)"
   ]
   sketchybar --set $name ...$options
   sketchybar --animate tanh 32 --set $name ...$animated_options
@@ -41,7 +43,7 @@ def show_media (label: string) {
 def hide_media () {
   let animated_options = [
     label=──
-    background.border_color=0x14000000
+    $"background.border_color=($colors.island_border)"
   ]
   let options = [
     scroll_texts=off

@@ -1,4 +1,5 @@
 use std/log
+use ../../colors.nu
 
 def main [direction: string] {
   const name = "@name@"
@@ -16,11 +17,11 @@ def main [direction: string] {
     icon.padding_right=8
     blur_radius=12
     background.drawing=on
-    background.color=0x18000000
+    $"background.color=($colors.island_surface)"
     background.corner_radius=12
     background.height=28
     background.border_width=1
-    background.border_color=0x14000000
+    $"background.border_color=($colors.island_border)"
     script="@script-path@"
   ]
 

@@ -15,7 +15,6 @@ delib.module {
       ...
     }: let
       name = "media";
-      nushellBin = lib.getExe parent.nushellPackage;
       enabled =
         parent.enable
         && lib.any (section: lib.any (entry: entry.widget == name) parent.layout.${section}) parent.sections;
@@ -23,14 +22,12 @@ delib.module {
         inherit name;
         media-control = lib.getExe myconfig.programs.media-control.package;
       };
-      script = pkgs.writeShellScript "script" ''
-        exec ${nushellBin} ${handler}
-      '';
     in {
       enable = boolOption enabled;
+      handler = readOnly (packageOption handler);
       render = readOnly (packageOption (pkgs.replaceVars ./widget.nu {
         inherit name;
-        script-path = script;
+        script-path = null;
       }));
     });
 

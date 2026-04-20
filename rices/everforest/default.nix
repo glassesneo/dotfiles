@@ -27,6 +27,27 @@ in
           width = 5.0;
           order = "above";
         };
+
+        sketchybar = {
+          colors = {
+            text_primary = argb colors.base05;
+            text_muted = argb colors.base04;
+            workspace_active = argb colors.base0B;
+            accent_datetime = argb colors.base0C;
+            status_error = argb colors.base08;
+            status_warning = argb colors.base0A;
+            status_caution = argb colors.base09;
+            status_success = argb colors.base0B;
+            status_charging = argb colors.base09;
+            app_arc = argb colors.base06;
+            app_ghostty = argb colors.base0D;
+            app_obsidian = argb colors.base0E;
+            app_kitty = argb colors.base0F;
+            island_surface = argbLow colors.base02;
+            island_border = argbBorder colors.base04;
+            active_indicator = argbIndicator colors.base0B;
+          };
+        };
       };
 
       programs.tmux.theme = {

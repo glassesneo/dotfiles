@@ -1,3 +1,5 @@
+use ./colors.nu
+
 def setup [] {
   let font = "Hack Nerd Font"
 
@@ -15,6 +17,8 @@ def setup [] {
     $"label.font=($font):Regular:14"
     label.padding_left=4
     label.padding_right=4
+    $"label.color=($colors.text_primary)"
+    $"icon.color=($colors.text_primary)"
   ]
 
   sketchybar --bar ...$bar_config

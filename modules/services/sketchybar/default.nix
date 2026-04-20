@@ -6,6 +6,31 @@
   pkgs,
   ...
 }: let
+  colorType = lib.types.strMatching "0x[0-9a-fA-F]{8}";
+  mkColorOption = name: default:
+    lib.mkOption {
+      type = colorType;
+      inherit default;
+      description = "SketchyBar semantic color ${name} in 0xAARRGGBB format.";
+    };
+  colorOptions = lib.mapAttrs mkColorOption {
+    text_primary = "0xffabb2bf";
+    text_muted = "0xff6c7891";
+    workspace_active = "0xffe06c75";
+    accent_datetime = "0xffabb2bf";
+    status_error = "0xffe06c75";
+    status_warning = "0xffabb2bf";
+    status_caution = "0xffa0a0a0";
+    status_success = "0xffabb2bf";
+    status_charging = "0xffa0a0a0";
+    app_arc = "0xffe06c75";
+    app_ghostty = "0xffa0a0a0";
+    app_obsidian = "0xffe06c75";
+    app_kitty = "0xffa0a0a0";
+    island_surface = "0x26252525";
+    island_border = "0x406c7891";
+    active_indicator = "0x50e06c75";
+  };
   sectionOrder = ["a" "b" "c" "x" "y" "z"];
   leftSections = ["a" "b" "c"];
   layoutEntryType = lib.types.coercedTo lib.types.str (widget: {inherit widget;}) (
@@ -35,6 +60,13 @@ in
       moduleOptions {
         enable = boolOption (pkgs.stdenv.isDarwin && host.windowManagementFeatured);
         nushellPackage = packageOption pkgs.nushell;
+        colors = lib.mkOption {
+          type = lib.types.submodule {
+            options = colorOptions;
+          };
+          default = {};
+          description = "Semantic color palette for SketchyBar items and UI elements.";
+        };
         position = enumOption ["top" "bottom"] (
           if host.hasNotch
           then "top"
@@ -95,20 +127,53 @@ in
       renderLayout =
         lib.filter (entry: entry.direction == "left") renderableLayout
         ++ lib.reverseList (lib.filter (entry: entry.direction == "right") renderableLayout);
+      colors = pkgs.replaceVars ./colors.nu cfg.colors;
       config = pkgs.replaceVars ./config.nu {
         inherit (cfg) position;
       };
       widgetOf = key: myconfig.services.sketchybar."widget-${key}";
-      sketchybarrc =
+      copyWidget = entry: let
+        widget = widgetOf entry.widget;
+        widgetDir = "widgets/${entry.widget}";
+      in ''
+        mkdir -p "$out/${widgetDir}"
+        cp ${lib.escapeShellArg widget.render} "$out/${widgetDir}/widget.nu"
+        cp ${lib.escapeShellArg widget.handler} "$out/${widgetDir}/handler.nu"
+        chmod +w "$out/${widgetDir}/widget.nu"
+        substituteInPlace "$out/${widgetDir}/widget.nu" \
+          --replace-fail '@script-path@' "$out/${widgetDir}/script"
+        printf '%s\n' \
+          '#!${pkgs.runtimeShell}' \
+          "exec ${nushellBin} \"$out/${widgetDir}/handler.nu\"" \
+          > "$out/${widgetDir}/script"
+        chmod +x "$out/${widgetDir}/script"
+      '';
+      renderCommand = entry: ''
+        ^${nushellBin} $"($config_dir)/widgets/${entry.widget}/widget.nu" ${entry.direction}
+      '';
+      sketchybarrc = pkgs.writeText "sketchybarrc" (
         ''
-          #!${lib.getExe pkgs.nushell}
-          ${builtins.readFile config}
+          #!${nushellBin}
+          let config_dir = $env.FILE_PWD
+          ^${nushellBin} $"($config_dir)/config.nu"
         ''
-        + lib.concatStringsSep "\n" (map (entry: "${nushellBin} ${(widgetOf entry.widget).render} ${entry.direction}") renderLayout)
+        + lib.concatStringsSep "\n" (map renderCommand renderLayout)
         + "\n"
         + ''
           sketchybar --update
-        '';
+        ''
+      );
+      sketchybarConfig = pkgs.runCommand "sketchybar-config" {} ''
+        mkdir -p "$out"
+        cp ${lib.escapeShellArg colors} "$out/colors.nu"
+        cp ${lib.escapeShellArg config} "$out/config.nu"
+        cp ${lib.escapeShellArg sketchybarrc} "$out/sketchybarrc"
+        chmod +x "$out/sketchybarrc"
+
+        # Nushell relative imports depend on this generated tree matching the
+        # repository layout: colors.nu/config.nu at the root, widgets below.
+        ${lib.concatStringsSep "\n" (map copyWidget renderLayout)}
+      '';
     in {
       assertions = [
         {
@@ -122,9 +187,9 @@ in
       ];
 
       home.file = {
-        ".config/sketchybar/sketchybarrc" = {
-          text = sketchybarrc;
-          executable = true;
+        ".config/sketchybar" = {
+          source = sketchybarConfig;
+          recursive = true;
         };
       };
       home.packages = [

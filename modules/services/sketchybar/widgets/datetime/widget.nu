@@ -1,4 +1,5 @@
 use std/log
+use ../../colors.nu
 
 def main [direction: string] {
   const name = "@name@"
@@ -9,6 +10,7 @@ def main [direction: string] {
     script="@script-path@"
     update_freq=30
     $"label.font.style=($label_font_style)"
+    $"label.color=($colors.accent_datetime)"
     # icon.drawing=off
   ]
 

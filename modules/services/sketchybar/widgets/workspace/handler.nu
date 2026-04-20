@@ -1,6 +1,11 @@
 use std/log
+use ../../colors.nu
 
 const workspace_selector = '/workspace\..*/'
+
+def transparent [color: string] {
+  $color | str replace --regex '^0x[0-9a-fA-F]{2}' '0x00'
+}
 
 def sketchybar_state_dir [] {
   let state_home = ($env.XDG_STATE_HOME? | default ([$env.HOME ".local" "state"] | path join))
@@ -50,19 +55,21 @@ def single_workspace_id [workspace: string] {
 }
 
 def update_focus [focused_workspace: string, previous_workspace?: string, --reset-all, --hidden] {
-  let normal_label_color = if $hidden { "0x00CCCCCC" } else { "0xFFCCCCCC" }
-  let focused_label_color = if $hidden { "0x00FFFFFF" } else { "0xFFFFFFFF" }
+  let normal_label_color = if $hidden { transparent $colors.text_primary } else { $colors.text_primary }
+  let focused_label_color = if $hidden { transparent $colors.workspace_active } else { $colors.workspace_active }
 
   let workspace_widget_options = [
     label.drawing=on
     icon.drawing=off
     $"label.color=($normal_label_color)"
+    $"icon.color=($normal_label_color)"
   ]
 
   let focused_workspace_widget_options = [
     label.drawing=off
     icon.drawing=on
     $"label.color=($focused_label_color)"
+    $"icon.color=($focused_label_color)"
   ]
 
   log info $"($previous_workspace) -> ($focused_workspace)"
