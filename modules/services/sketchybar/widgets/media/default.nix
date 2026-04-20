@@ -20,7 +20,7 @@ delib.module {
         && lib.any (section: lib.any (entry: entry.widget == name) parent.layout.${section}) parent.sections;
       handler = pkgs.replaceVars ./handler.nu {
         inherit name;
-        media-control = lib.getExe myconfig.programs.media-control.package;
+        media-control = lib.getExe' myconfig.programs.media-control.package "media-control";
       };
     in {
       enable = boolOption enabled;
