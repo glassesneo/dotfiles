@@ -5,4 +5,5 @@ delib.host {
   rice = "monochrome";
   tier = "basic";
   myconfig.services.kanata.profile = "macbook-us";
+  myconfig.services.windowManagement.backend = "rift";
 }

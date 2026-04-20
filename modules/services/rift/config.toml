@@ -1,0 +1,91 @@
+[settings]
+animate = true
+animation_duration = 0.45
+animation_fps = 100.0
+default_disable = false
+focus_follows_mouse = true
+mouse_follows_focus = false
+mouse_hides_on_focus = false
+auto_focus_blacklist = []
+run_on_start = []
+hot_reload = true
+
+[settings.layout]
+mode = "scrolling"
+
+[settings.gestures]
+enabled = true
+fingers = 3
+invert_horizontal_swipe = false
+skip_empty = true
+haptics_enabled = false
+
+[settings.layout.scrolling]
+animate = true
+alignment = "center"
+focus_navigation_style = "anchored"
+column_width_ratio = 0.7
+min_column_width_ratio = 0.25
+max_column_width_ratio = 0.75
+
+[settings.layout.gaps.outer]
+top = 0
+left = 0
+bottom = 0
+right = 0
+
+[settings.layout.gaps.inner]
+horizontal = 0
+vertical = 0
+
+[virtual_workspaces]
+enabled = true
+default_workspace_count = 4
+auto_assign_windows = true
+preserve_focus_per_workspace = true
+workspace_auto_back_and_forth = false
+reapply_app_rules_on_title_change = false
+workspace_rules = []
+workspace_names = ["first", "second"]
+app_rules = []
+
+[modifier_combinations]
+move = "Alt + Shift"
+
+[keys]
+"Alt + Z" = "toggle_space_activated"
+
+"Alt + H" = { move_focus = "left" }
+"Alt + J" = { move_focus = "down" }
+"Alt + K" = { move_focus = "up" }
+"Alt + L" = { move_focus = "right" }
+
+"move + H" = { move_node = "left" }
+"move + J" = { move_node = "down" }
+"move + K" = { move_node = "up" }
+"move + L" = { move_node = "right" }
+
+"Alt + 1" = { switch_to_workspace = 0 }
+"Alt + 2" = { switch_to_workspace = 1 }
+"Alt + 3" = { switch_to_workspace = 2 }
+"Alt + 4" = { switch_to_workspace = 3 }
+"Alt + 5" = { switch_to_workspace = 4 }
+
+"move + 1" = { move_window_to_workspace = 0 }
+"move + 2" = { move_window_to_workspace = 1 }
+"move + 3" = { move_window_to_workspace = 2 }
+"move + 4" = { move_window_to_workspace = 3 }
+"move + 5" = { move_window_to_workspace = 4 }
+
+"Alt + Tab" = "switch_to_last_workspace"
+
+"Alt + Comma" = "toggle_stack"
+"Alt + Slash" = "toggle_orientation"
+"Alt + Ctrl + E" = "unjoin_windows"
+
+"Alt + Shift + Space" = "toggle_window_floating"
+"Alt + F" = "toggle_fullscreen"
+"Alt + Shift + F" = "toggle_fullscreen_within_gaps"
+
+"Alt + Shift + Equal" = "resize_window_grow"
+"Alt + Shift + Minus" = "resize_window_shrink"

@@ -748,6 +748,22 @@
         "type": "github"
       }
     },
+    "rift": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1776270192,
+        "narHash": "sha256-JH6G5PWaR8Kw/hE4Rb6RvrkvBX6Hn4u1g+OFXE2Mmkc=",
+        "owner": "acsandmann",
+        "repo": "rift",
+        "rev": "27f5f00e7f40e7ba1b01cd25721b2545f255d42f",
+        "type": "github"
+      },
+      "original": {
+        "owner": "acsandmann",
+        "repo": "rift",
+        "type": "github"
+      }
+    },
     "root": {
       "inputs": {
         "brew-api": "brew-api",
@@ -766,6 +782,7 @@
         "nixpkgs": "nixpkgs_3",
         "nixvim": "nixvim",
         "nur": "nur",
+        "rift": "rift",
         "skills-deployer": "skills-deployer",
         "sops-nix": "sops-nix",
         "tree-sitter-moonbit": "tree-sitter-moonbit",

@@ -8,35 +8,42 @@
 delib.module {
   name = "services.aerospace";
 
-  options.services.aerospace = with delib; {
-    enable = boolOption host.windowManagementFeatured;
-    # Apps that should default to tiling layout (most apps float by default)
-    tilingApps = lib.mkOption {
-      type = lib.types.listOf lib.types.str;
-      default = [
-        "company.thebrowser.Browser" # Arc Browser
-        "com.mitchellh.ghostty" # Ghostty terminal
-      ];
-      description = "App bundle IDs that should use tiling layout by default";
-    };
-    # Which screen edge gets the large bar reserve. Defaults follow host.hasNotch
-    # so notched hosts reserve the top (where SketchyBar sits) and non-notched
-    # hosts reserve the bottom. Rices can override via myconfig.services.aerospace.reservedEdge.
-    reservedEdge = lib.mkOption {
-      type = lib.types.enum ["top" "bottom"];
-      default =
-        if host.hasNotch
-        then "top"
-        else "bottom";
-      description = "Screen edge that receives the full bar reserve gap. Defaults to top for notched hosts, bottom otherwise. Should stay aligned with SketchyBar bar placement.";
-    };
-    # Size of the large reserved-edge gap, matching the SketchyBar bar height.
-    reservedSize = lib.mkOption {
-      type = lib.types.int;
-      default = 42;
-      description = "Size of the reserved-edge outer gap in pixels. Should match the SketchyBar bar height.";
-    };
-  };
+  options = with delib;
+    moduleOptions ({myconfig, ...}: {
+      # Aerospace activation is derived from the host-selected window-manager
+      # backend so exactly one WM provider is active per host. To switch a host
+      # off Aerospace, change services.windowManagement.backend, not this flag.
+      enable = boolOption (
+        myconfig.services.windowManagement.enable
+        && myconfig.services.windowManagement.backend == "aerospace"
+      );
+      # Apps that should default to tiling layout (most apps float by default)
+      tilingApps = lib.mkOption {
+        type = lib.types.listOf lib.types.str;
+        default = [
+          "company.thebrowser.Browser" # Arc Browser
+          "com.mitchellh.ghostty" # Ghostty terminal
+        ];
+        description = "App bundle IDs that should use tiling layout by default";
+      };
+      # Which screen edge gets the large bar reserve. Defaults follow host.hasNotch
+      # so notched hosts reserve the top (where SketchyBar sits) and non-notched
+      # hosts reserve the bottom. Rices can override via myconfig.services.aerospace.reservedEdge.
+      reservedEdge = lib.mkOption {
+        type = lib.types.enum ["top" "bottom"];
+        default =
+          if host.hasNotch
+          then "top"
+          else "bottom";
+        description = "Screen edge that receives the full bar reserve gap. Defaults to top for notched hosts, bottom otherwise. Should stay aligned with SketchyBar bar placement.";
+      };
+      # Size of the large reserved-edge gap, matching the SketchyBar bar height.
+      reservedSize = lib.mkOption {
+        type = lib.types.int;
+        default = 42;
+        description = "Size of the reserved-edge outer gap in pixels. Should match the SketchyBar bar height.";
+      };
+    });
 
   darwin.ifEnabled = {cfg, ...}: {
     services.aerospace = {

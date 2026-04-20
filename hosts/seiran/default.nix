@@ -6,4 +6,5 @@ delib.host {
   tier = "full";
   hasNotch = true;
   myconfig.services.kanata.profile = "macbook-us";
+  myconfig.services.windowManagement.backend = "rift";
 }

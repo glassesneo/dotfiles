@@ -5,7 +5,7 @@
   ...
 }:
 delib.module {
-  name = "services.sketchybar.widget-workspace";
+  name = "services.sketchybar.widget-aerospace_workspace";
 
   options = with delib;
     moduleOptions ({
@@ -13,7 +13,7 @@ delib.module {
       parent,
       ...
     }: let
-      name = "workspace";
+      name = "aerospace_workspace";
       enabled =
         parent.enable
         && (lib.any (section: lib.any (entry: entry.widget == name) parent.layout.${section}) parent.sections)
@@ -28,6 +28,10 @@ delib.module {
       }));
     });
 
+  # The widget's `enable` requires Aerospace to be active, so this Aerospace-
+  # side CLI hook only fires when the widget is actually rendered. Changing the
+  # enable predicate (e.g. relaxing the services.aerospace.enable gate) would
+  # silently start injecting this hook on non-Aerospace hosts.
   darwin.ifEnabled = let
     sketchybarExe = lib.getExe pkgs.sketchybar;
   in {

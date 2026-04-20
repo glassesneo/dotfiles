@@ -75,7 +75,7 @@ in
         layout = lib.mkOption {
           type = layoutType;
           default = {
-            a = ["workspace"];
+            a = ["aerospace_workspace"];
             b = [];
             c = [];
             x = ["media"];
@@ -123,7 +123,15 @@ in
         map (name: lib.removePrefix "widget-" name)
         (lib.filter (name: lib.hasPrefix "widget-" name) (builtins.attrNames myconfig.services.sketchybar));
       unknownWidgets = lib.filter (widget: !(builtins.elem widget availableWidgets)) enabledWidgets;
-      renderableLayout = lib.filter (entry: !(builtins.elem entry.widget unknownWidgets)) normalizedLayout;
+      widgetOf = key: myconfig.services.sketchybar."widget-${key}";
+      # Silently drop widgets that are defined but disabled (for example, the
+      # Aerospace-only workspace widget on a Rift-backed host) so SketchyBar
+      # stays functional regardless of which WM provider is active.
+      disabledWidgets = lib.filter (widget: builtins.elem widget availableWidgets && !((widgetOf widget).enable)) enabledWidgets;
+      renderableLayout =
+        lib.filter
+        (entry: !(builtins.elem entry.widget unknownWidgets) && !(builtins.elem entry.widget disabledWidgets))
+        normalizedLayout;
       renderLayout =
         lib.filter (entry: entry.direction == "left") renderableLayout
         ++ lib.reverseList (lib.filter (entry: entry.direction == "right") renderableLayout);
@@ -131,7 +139,6 @@ in
       config = pkgs.replaceVars ./config.nu {
         inherit (cfg) position;
       };
-      widgetOf = key: myconfig.services.sketchybar."widget-${key}";
       copyWidget = entry: let
         widget = widgetOf entry.widget;
         widgetDir = "widgets/${entry.widget}";
