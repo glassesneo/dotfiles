@@ -1,19 +1,21 @@
 (deffakekeys
-  rift-cmd-arm XX
+  rift-lcmd-arm XX
+  rift-rcmd-arm XX
 )
 
 (defalias
-  rift-cmd-arm-open (hold-for-duration 300 rift-cmd-arm)
+  rift-lcmd-arm-open (hold-for-duration 300 rift-lcmd-arm)
+  rift-rcmd-arm-open (hold-for-duration 300 rift-rcmd-arm)
   rift-next (one-shot-release-pcancel 500 (layer-while-held rift))
 
   rift-lmet (switch
-    ((input virtual rift-cmd-arm)) @rift-next break
-    () (multi lmet @rift-cmd-arm-open) break
+    ((input virtual rift-lcmd-arm)) @rift-next break
+    () (multi lmet @rift-lcmd-arm-open) break
   )
 
   rift-rmet (switch
-    ((input virtual rift-cmd-arm)) @rift-next break
-    () (multi @cmd-right-default @rift-cmd-arm-open) break
+    ((input virtual rift-rcmd-arm)) @rift-next break
+    () (multi @cmd-right-default @rift-rcmd-arm-open) break
   )
 
   rift-focus-left  (cmd "@riftCli@" "execute" "window" "focus" "left")
