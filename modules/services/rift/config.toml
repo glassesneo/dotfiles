@@ -17,8 +17,11 @@ mode = "scrolling"
 enabled = true
 fingers = 3
 invert_horizontal_swipe = false
+swipe_vertical_tolerance = 0.4
 skip_empty = true
+distance_pct = 0.08
 haptics_enabled = false
+haptic_pattern = "level_change"
 
 [settings.layout.scrolling]
 animate = true
@@ -49,8 +52,8 @@ workspace_rules = []
 workspace_names = ["first", "second"]
 app_rules = []
 
-# [modifier_combinations]
-# move = "Alt + Shift"
+[modifier_combinations]
+move = "Alt + Shift"
 
 [keys]
 "Alt + Z" = "toggle_space_activated"
