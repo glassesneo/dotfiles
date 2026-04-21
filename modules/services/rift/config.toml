@@ -32,24 +32,24 @@ min_column_width_ratio = 0.25
 max_column_width_ratio = 0.75
 
 [settings.layout.gaps.outer]
-top = 0
-left = 0
-bottom = 0
-right = 0
+top = 4
+left = 4
+bottom = 4
+right = 4
 
 [settings.layout.gaps.inner]
-horizontal = 0
-vertical = 0
+horizontal = 5
+vertical = 5
 
 [virtual_workspaces]
 enabled = true
-default_workspace_count = 4
+default_workspace_count = 5
 auto_assign_windows = true
 preserve_focus_per_workspace = true
 workspace_auto_back_and_forth = false
 reapply_app_rules_on_title_change = false
 workspace_rules = []
-workspace_names = ["first", "second"]
+workspace_names = ["1", "2", "3", "4", "5"]
 app_rules = []
 
 [modifier_combinations]
@@ -87,8 +87,7 @@ move = "Alt + Shift"
 "Alt + Ctrl + E" = "unjoin_windows"
 
 "Alt + Shift + Space" = "toggle_window_floating"
-"Alt + F" = "toggle_fullscreen"
-"Alt + Shift + F" = "toggle_fullscreen_within_gaps"
+"Alt + F" = "toggle_fullscreen_within_gaps"
 
 "Alt + Shift + Equal" = "resize_window_grow"
 "Alt + Shift + Minus" = "resize_window_shrink"
