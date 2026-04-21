@@ -1,6 +1,6 @@
 (defalias
   hyper (multi lctl lsft lalt lmet)
-  rsft-esc (tap-hold-press 200 200 esc rsft)
+  rsft-esc (tap-hold-press 70 70 esc rsft)
 
   ;; Swallow the app hide shortcut while preserving Command chords that add
   ;; other modifiers, plus the separate double-Cmd rift navigation flow.
