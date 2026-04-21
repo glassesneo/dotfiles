@@ -1,0 +1,39 @@
+(defalias
+  hyper (multi lctl lsft lalt lmet)
+  rsft-esc (tap-hold-press 200 200 esc rsft)
+
+  cmd-right-default (switch
+    ((or lctl rctl lalt ralt lsft rsft lmet)) tab break
+    () rmet break
+  )
+
+  ;; Swallow the app hide shortcut while preserving Command chords that add
+  ;; other modifiers, plus the separate double-Cmd rift navigation flow.
+  cmd-h-guard (switch
+    ((and
+       (or (input real lmet) (input real rmet))
+       (not (or (input real lctl) (input real rctl) (input real lalt) (input real ralt) (input real lsft) (input real rsft)))
+     ))
+      XX
+      break
+    ()
+      h
+      break
+  )
+
+  cap-window-open (hold-for-duration 200 cap-window)
+)
+
+(deffakekeys
+  cap-prefix f12
+  ;; Internal double-tap detection state only; do not emit a real keycode.
+  cap-window XX
+  cap-shift lsft
+)
+
+(defchordsv2
+  ;; F acts as a punctuation chord prefix for , . /.
+  (f k) , 40 first-release ()
+  (f l) . 40 first-release ()
+  (f ;) / 40 first-release ()
+)

@@ -1,0 +1,32 @@
+(defsrc
+  f1 f2 f7 f8 f9 f10 f11 f12
+  caps f ;
+  h lsft j k l rsft
+  lctl
+  lmet
+  rmet
+)
+
+(deflayer base
+  brdn brup prev pp next mute vold volu
+  ;; Caps is immediate Ctrl by default. A quick second press within the
+  ;; double-tap window sends F12 immediately and holds Shift until release.
+  (switch
+    ((input virtual cap-window))
+      (multi (on-press-fakekey cap-prefix tap) (on-press-fakekey cap-shift press) (on-release-fakekey cap-shift release))
+      break
+    ()
+      (multi lctl @cap-window-open)
+      break
+  )
+  ;; Swap ';' and ':' on a US keyboard.
+  f
+  (fork S-; (unmod (lsft rsft) ;) (lsft rsft))
+  @cmd-h-guard
+  lsft
+  j k l
+  @rsft-esc
+  @hyper
+  @rift-rmet
+  @rift-lmet
+)
