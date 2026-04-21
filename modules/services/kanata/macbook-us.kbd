@@ -21,6 +21,22 @@
   )
 )
 
+(defalias
+  ;; Swallow the app hide shortcut while preserving Command chords that add
+  ;; other modifiers, plus the separate double-Cmd rift navigation flow.
+  cmd-h-guard (switch
+    ((and
+       (or (input real lmet) (input real rmet))
+       (not (or (input real lctl) (input real rctl) (input real lalt) (input real ralt) (input real lsft) (input real rsft)))
+     ))
+      XX
+      break
+    ()
+      h
+      break
+  )
+)
+
 (deffakekeys
   cap-prefix f12
   ;; Internal double-tap detection state only; do not emit a real keycode.

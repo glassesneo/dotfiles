@@ -57,7 +57,7 @@ in
         [
           (lib.optionalString riftEnabled "  h\n")
           (lib.optionalString riftEnabled "  lmet\n")
-          (lib.optionalString riftEnabled "  h\n")
+          (lib.optionalString riftEnabled "  @cmd-h-guard\n")
           (lib.optionalString riftEnabled "  @rift-lmet\n")
           (lib.optionalString riftEnabled "  @rift-rmet\n")
           "  chords-v2-min-idle 5\n${lib.optionalString riftEnabled "  danger-enable-cmd yes\n"}"
