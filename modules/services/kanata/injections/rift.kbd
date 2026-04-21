@@ -15,7 +15,7 @@
 
   rift-rmet (switch
     ((input virtual rift-rcmd-arm)) @rift-next break
-    () (multi @cmd-right-default @rift-rcmd-arm-open) break
+    () (multi rmet @rift-rcmd-arm-open) break
   )
 
   rift-focus-left  (cmd "@riftCli@" "execute" "window" "focus" "left")
@@ -27,6 +27,16 @@
   rift-move-down  (cmd "@riftCli@" "execute" "layout" "move-node" "down")
   rift-move-up    (cmd "@riftCli@" "execute" "layout" "move-node" "up")
   rift-move-right (cmd "@riftCli@" "execute" "layout" "move-node" "right")
+
+  rift-join-left  (cmd "@riftCli@" "execute" "layout" "join-window" "left")
+  rift-join-down  (cmd "@riftCli@" "execute" "layout" "join-window" "down")
+  rift-join-up    (cmd "@riftCli@" "execute" "layout" "join-window" "up")
+  rift-join-right (cmd "@riftCli@" "execute" "layout" "join-window" "right")
+  rift-toggle-fullscreen-within-gaps (cmd "@riftCli@" "execute" "window" "toggle-fullscreen-within-gaps")
+  rift-center-selection (cmd "@riftCli@" "execute" "layout" "center-selection")
+  rift-toggle-stack (cmd "@riftCli@" "execute" "layout" "toggle-stack")
+
+  rift-join-hold (layer-while-held rift-join)
 
   rift-left (switch
     ((or (input real lsft) (input real rsft))) @rift-move-left break
@@ -48,9 +58,18 @@
 
 (deflayer rift
   _ _ _ _ _ _ _ _
-  _ _ _ @rift-left
-  XX @rift-down @rift-up @rift-right XX
+  @rift-join-hold @rift-toggle-fullscreen-within-gaps @rift-center-selection _ @rift-left
+  XX @rift-down @rift-up @rift-right @rift-toggle-stack XX
   _
   @rift-lmet
   @rift-rmet
+)
+
+(deflayer rift-join
+  _ _ _ _ _ _ _ _
+  _ _ _ _ @rift-join-left
+  XX @rift-join-down @rift-join-up @rift-join-right @rift-toggle-stack XX
+  _
+  _
+  _
 )

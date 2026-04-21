@@ -26,8 +26,8 @@ haptic_pattern = "level_change"
 [settings.layout.scrolling]
 animate = true
 alignment = "center"
-focus_navigation_style = "anchored"
-column_width_ratio = 0.7
+focus_navigation_style = "niri"
+column_width_ratio = 0.6
 min_column_width_ratio = 0.25
 max_column_width_ratio = 0.75
 
@@ -57,6 +57,8 @@ move = "Alt + Shift"
 
 [keys]
 "Alt + Z" = "toggle_space_activated"
+"Alt + Shift + D" = "debug"
+"Alt + Ctrl + S" = "serialize"
 
 # "Alt + H" = { move_focus = "left" }
 # "Alt + J" = { move_focus = "down" }

@@ -2,11 +2,6 @@
   hyper (multi lctl lsft lalt lmet)
   rsft-esc (tap-hold-press 200 200 esc rsft)
 
-  cmd-right-default (switch
-    ((or lctl rctl lalt ralt lsft rsft lmet)) tab break
-    () rmet break
-  )
-
   ;; Swallow the app hide shortcut while preserving Command chords that add
   ;; other modifiers, plus the separate double-Cmd rift navigation flow.
   cmd-h-guard (switch

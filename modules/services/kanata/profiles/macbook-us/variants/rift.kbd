@@ -1,7 +1,7 @@
 (defsrc
   f1 f2 f7 f8 f9 f10 f11 f12
-  caps f ;
-  h lsft j k l rsft
+  caps f c ;
+  h lsft j k l , rsft
   lctl
   lmet
   rmet
@@ -21,10 +21,11 @@
   )
   ;; Swap ';' and ':' on a US keyboard.
   f
+  c
   (fork S-; (unmod (lsft rsft) ;) (lsft rsft))
   @cmd-h-guard
   lsft
-  j k l
+  j k l ,
   @rsft-esc
   @hyper
   @rift-rmet
