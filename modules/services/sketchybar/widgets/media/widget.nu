@@ -10,6 +10,7 @@ def main [direction: string] {
     padding_right=12
     label=──
     label.max_chars=28
+    label.padding_right=10
     label.scroll_duration=180
     scroll_texts=off
     icon=
@@ -20,7 +21,7 @@ def main [direction: string] {
     $"background.color=($colors.island_surface)"
     background.corner_radius=12
     background.height=28
-    background.border_width=1
+    background.border_width=2
     $"background.border_color=($colors.island_border)"
     script="@script-path@"
   ]
