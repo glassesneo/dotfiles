@@ -11,6 +11,10 @@
       "${./cursor_warp.glsl}"
       "${./typing_micro_sparks.glsl}"
     ];
+    neovide_sakura = [
+      "${./cursor_warp.glsl}"
+      "${./typing_sakura_petals.glsl}"
+    ];
   };
 in
   delib.module {

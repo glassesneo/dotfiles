@@ -174,7 +174,7 @@ in
       colorscheme = colors;
       wallpaper = "sakura";
       programs.ghostty = {
-        shader-profile = "neovide_sparks";
+        shader-profile = "neovide_sakura";
         quick-terminal.background = colors.base01;
       };
 

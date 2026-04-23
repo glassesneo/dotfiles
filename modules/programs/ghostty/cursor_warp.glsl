@@ -3,6 +3,7 @@
 
 const float DURATION = 0.16;
 const float MIN_DISTANCE = 0.75;
+const float WARP_MIN_DISTANCE = 14.0;
 const float SOFTNESS = 1.25;
 const float GLOW = 4.0;
 const float TRAIL_OPACITY = 0.75;
@@ -52,6 +53,11 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     vec2 delta = curCenter - prevCenter;
     float distancePx = length(delta);
     if (distancePx < MIN_DISTANCE) {
+        fragColor = base;
+        return;
+    }
+
+    if (distancePx < WARP_MIN_DISTANCE) {
         fragColor = base;
         return;
     }
