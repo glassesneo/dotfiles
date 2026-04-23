@@ -104,6 +104,9 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     vec2 moveDir = safeNormalize(curCenter - prevCenter);
     float seed = iTimeCursorChange * 173.31;
     float travel = mix(life, easeOutCubic(life), EARLY_BURST);
+    float appear = smoothstep(0.03, 0.12, life);
+    float cursorDeadZone = max(max(iCurrentCursor.z, iCurrentCursor.w) * 0.45, 4.0);
+    float deadZoneMask = smoothstep(cursorDeadZone - 1.0, cursorDeadZone + 2.5, length(fragCoord - curCenter));
 
     for (int i = 0; i < PETAL_COUNT; ++i) {
         float fi = float(i);
@@ -115,8 +118,8 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
         float driftPhase = hash(seed + fi * 17.9) * 6.2831853;
         float drift = sin(life * 4.4 + driftPhase) * DRIFT * (0.45 + hash(seed + fi * 3.2));
         float gravity = GRAVITY + hash(seed + fi * 7.1) * 18.0;
-        float scatterForward = (0.35 + hash(seed + fi * 41.3) * 0.9) * SPAWN_SCATTER;
-        float scatterSide = (hash(seed + fi * 43.7) * 2.0 - 1.0) * SPAWN_SCATTER * 0.95;
+        float scatterForward = (0.28 + hash(seed + fi * 41.3) * 0.92) * SPAWN_SCATTER;
+        float scatterSide = (hash(seed + fi * 43.7) * 2.0 - 1.0) * SPAWN_SCATTER * 0.90;
         vec2 spawnOffset = launchDir * scatterForward + sideDir * scatterSide;
 
         vec2 petalCenter = curCenter
@@ -126,7 +129,7 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
         petalCenter.x += drift * travel;
         petalCenter.y -= gravity * life * life;
 
-        float widthPx = 6.4 + hash(seed + fi * 19.7) * 4.1;
+        float widthPx = 7.4 + hash(seed + fi * 19.7) * 4.8;
         float heightPx = widthPx * (2.15 + hash(seed + fi * 23.3) * 0.75);
         float baseRotation = hash(seed + fi * 29.1) * 6.2831853;
         float spin = (hash(seed + fi * 31.7) * 2.0 - 1.0) * 1.8;
@@ -143,7 +146,7 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
         vec3 fill = petalColor(seed + fi * 37.0);
         fill = mix(fill, vec3(0.99, 0.88, 0.93), centerVein * 0.20 + edge * 0.07);
 
-        float alpha = mask * fade * OPACITY * typingBias;
+        float alpha = mask * fade * appear * deadZoneMask * OPACITY * typingBias;
         color = mix(color, fill, alpha);
         color += fill * edge * alpha * 0.06;
     }
