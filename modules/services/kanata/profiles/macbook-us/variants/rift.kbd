@@ -1,6 +1,6 @@
 (defsrc
   f1 f2 f7 f8 f9 f10 f11 f12
-  caps f c ;
+  caps d f c ;
   h lsft j k l , rsft
   lctl
   lmet
@@ -19,6 +19,7 @@
       (multi lctl @cap-window-open)
       break
   )
+  d
   ;; Swap ';' and ':' on a US keyboard.
   f
   c
