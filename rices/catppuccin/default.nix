@@ -41,7 +41,7 @@ in
             window-padding-x = 8;
             window-padding-y = 6;
             minimum-contrast = 1.8;
-            custom-shader-animation = "always";
+            custom-shader-animation = true;
             palette = colorschemeLib.toGhosttyPalette colors;
           };
         };
@@ -157,7 +157,7 @@ in
       colorscheme = colors;
       wallpaper = "sakura";
       programs.ghostty = {
-        shader-profile = "neovide_sakura";
+        shader-profile = "sakura_ink_ripple";
         quick-terminal.background = colors.base01;
       };
 

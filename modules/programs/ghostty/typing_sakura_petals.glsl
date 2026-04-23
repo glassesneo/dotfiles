@@ -1,6 +1,7 @@
 /* typing_sakura_petals.glsl -- cursor-centered sakura petals on typing
  * Emits a small burst of drifting, rotating petals when cursor changes look like typing. */
 
+const float START_DELAY = 0.16;
 const float DURATION = 0.74;
 const int PETAL_COUNT = 5;
 const float MIN_DISTANCE = 0.15;
@@ -73,7 +74,13 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     }
 
     float elapsed = iTime - iTimeCursorChange;
-    if (elapsed >= DURATION) {
+    if (elapsed < START_DELAY) {
+        fragColor = base;
+        return;
+    }
+
+    float activeElapsed = elapsed - START_DELAY;
+    if (activeElapsed >= DURATION) {
         fragColor = base;
         return;
     }
@@ -93,7 +100,7 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
         return;
     }
 
-    float life = saturate(elapsed / DURATION);
+    float life = saturate(activeElapsed / DURATION);
     float fade = 1.0 - life;
     fade *= fade;
 

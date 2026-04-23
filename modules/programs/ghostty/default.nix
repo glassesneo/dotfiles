@@ -15,6 +15,10 @@
       "${./cursor_warp.glsl}"
       "${./typing_sakura_petals.glsl}"
     ];
+    sakura_ink_ripple = [
+      "${./cursor_ink_ripple.glsl}"
+      "${./typing_sakura_petals.glsl}"
+    ];
   };
 in
   delib.module {
