@@ -63,6 +63,8 @@ in
         set -g pane-border-style 'fg=${colors.base02}'
         set -g pane-active-border-style 'fg=${colors.base08}'
         set -g message-style 'fg=${colors.base05},bg=default'
+        set -g popup-style 'bg=default,fg=${colors.base05}'
+        set -g popup-border-style 'fg=${colors.base08}'
       '';
     };
 

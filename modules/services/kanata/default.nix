@@ -68,11 +68,12 @@ in
       startupLayerFragment =
         if selectedStartupBaseLayer == null
         then null
-        else pkgs.writeText "${selectedProfile}-startup-layer.kbd" ''
-          (defalias
-            kanata-init-layer (layer-switch ${selectedStartupBaseLayer})
-          )
-        '';
+        else
+          pkgs.writeText "${selectedProfile}-startup-layer.kbd" ''
+            (defalias
+              kanata-init-layer (layer-switch ${selectedStartupBaseLayer})
+            )
+          '';
       includedFragments =
         [
           ./common.kbd

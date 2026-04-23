@@ -36,26 +36,6 @@
       base0D = mkColorOption "base0D";
       base0E = mkColorOption "base0E";
       base0F = mkColorOption "base0F";
-
-      base10 = mkColorOption "base10";
-      base11 = mkColorOption "base11";
-      base12 = mkColorOption "base12";
-      base13 = mkColorOption "base13";
-      base14 = mkColorOption "base14";
-      base15 = mkColorOption "base15";
-      base16 = mkColorOption "base16";
-      base17 = mkColorOption "base17";
-    };
-
-    config = {
-      base10 = lib.mkDefault config.base08;
-      base11 = lib.mkDefault config.base09;
-      base12 = lib.mkDefault config.base0A;
-      base13 = lib.mkDefault config.base0B;
-      base14 = lib.mkDefault config.base0C;
-      base15 = lib.mkDefault config.base0D;
-      base16 = lib.mkDefault config.base0E;
-      base17 = lib.mkDefault config.base0F;
     };
   });
 in
