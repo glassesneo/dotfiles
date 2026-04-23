@@ -56,6 +56,17 @@
   )
 )
 
+;; Startup-selected sparse overlay for rift. All unspecified keys transparently
+;; fall back to the canonical first-defined layer in profiles/macbook-us.kbd.
+(deflayermap (rift-base)
+  c c
+  h @cmd-h-guard
+  , ,
+  lmet @rift-rmet
+  rmet @rift-lmet
+  _ _
+)
+
 (deflayer rift
   _ _ _ _ _ _ _ _
   @rift-join-hold _ @rift-toggle-fullscreen-within-gaps @rift-center-selection _ @rift-left
@@ -70,6 +81,8 @@
   _ _ _ _ _ @rift-join-left
   XX @rift-join-down @rift-join-up @rift-join-right @rift-toggle-stack XX
   _
-  _
-  _
+  ;; rift-join sits above rift-base, but transparent keys resolve to the
+  ;; canonical first layer under delegate-to-first-layer, so keep meta keys explicit.
+  @rift-lmet
+  @rift-rmet
 )

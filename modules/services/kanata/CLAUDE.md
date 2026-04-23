@@ -7,9 +7,8 @@ Prefer this file over parent guidance for Kanata-specific changes.
 
 - `default.nix`: Nix wiring for the Kanata service, declarative injection selection, and the generated root config that includes profile fragments.
 - `common.kbd`: Rift-independent aliases, fakekeys, and chord definitions shared by all profiles.
-- `profiles/<name>/base.kbd`: Profile-specific `defsrc` and base layer with no injection-specific rewrites.
-- `profiles/<name>/variants/<name>.kbd`: Full profile variants selected by injection when a tool needs to change `defsrc` or `deflayer`.
-- `injections/<name>.kbd`: Injection-specific aliases, fakekeys, layers, and command bindings.
+- `profiles/<name>.kbd`: Canonical superset `defsrc` plus the first-defined `base` layer for that keyboard profile.
+- `injections/<name>.kbd`: Injection-specific aliases, sparse overlay base layers, extra layers, and command bindings.
 
 ## How To Validate
 
@@ -38,8 +37,9 @@ When changing behavior in `kanata.kbd`, do not rely on memory for advanced actio
 - `tap-hold-*` variants, especially `tap-hold-release-timeout`
 - `switch` conditions such as `input`, `input-history`, and `key-timing`
 - `deffakekeys` plus `on-press-fakekey` / `on-release-fakekey`
+- `deflayermap`, `use-defsrc`, and transparent-key resolution
 - `defchordsv2`, `concurrent-tap-hold`, and `chords-v2-min-idle`
-- `one-shot` and `layer-while-held`
+- `one-shot`, `layer-switch`, `layer-while-held`, and `alias-to-trigger-on-load`
 
 The local binary can also help confirm parser support for action names:
 
@@ -54,5 +54,8 @@ strings /run/current-system/sw/bin/kanata | rg 'tap-hold|one-shot|defchordsv2|fa
 - Be conservative with fake-key press/release flows. If press and release can diverge across branches, modifier-stuck failures are possible.
 - Keep `defcfg` only in the generated root config. Kanata allows only a single `defcfg`.
 - Keep `include` only at the generated root level. Included files cannot themselves include other files.
-- Duplicate `defalias`, `defsrc`, and `deflayer` definitions are invalid. If an injection needs to change profile structure, model that as a full profile variant, not an additive include.
+- Keep the canonical profile `base` as the first defined layer. Sparse injection overlays rely on `delegate-to-first-layer` to inherit it.
+- Keep profile `defsrc` as a stable superset of keys used by global remaps and active injections.
+- Duplicate `defalias`, `defsrc`, and `deflayer` definitions are invalid. Do not redefine `defsrc` from injection fragments.
+- If an injection needs different default behavior, model that as a sparse startup-selected overlay base layer in `injections/<name>.kbd`, not a full profile replacement.
 - For risky remaps, prefer small composable mechanisms and keep a straightforward rollback path in the active profile fragment.

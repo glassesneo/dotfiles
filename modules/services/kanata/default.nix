@@ -8,10 +8,7 @@
 }: let
   profiles = {
     macbook-us = {
-      base = ./profiles/macbook-us/base.kbd;
-      variants = {
-        rift = ./profiles/macbook-us/variants/rift.kbd;
-      };
+      config = ./profiles/macbook-us.kbd;
     };
   };
 in
@@ -43,34 +40,39 @@ in
     }: let
       selectedProfile = cfg.profile;
       include = path: "(include \"${path}\")";
-      selectedProfileFiles = profiles.${selectedProfile};
+      selectedProfileConfig = profiles.${selectedProfile}.config;
       # Keep injections declarative so future tool integrations can add one
-      # entry here and reuse the same root-config assembly flow.
+      # entry here and reuse the same root-config assembly flow. Injections may
+      # add layers and request a startup-selected base layer, but the profile
+      # owns the canonical defsrc/base structure.
       injections = [
         {
           name = "rift";
           enabled = myconfig.services.rift.enable;
-          profileVariant = "rift";
+          startupBaseLayer = "rift-base";
           rootFragment = pkgs.replaceVars ./injections/rift.kbd {
             riftCli = "${myconfig.services.rift.package}/bin/rift-cli";
           };
         }
       ];
       enabledInjections = lib.filter (injection: injection.enabled) injections;
-      enabledProfileVariants = lib.unique (
-        lib.filter (variant: variant != null) (
-          map (injection: injection.profileVariant or null) enabledInjections
+      enabledStartupBaseLayers = lib.unique (
+        lib.filter (layer: layer != null) (
+          map (injection: injection.startupBaseLayer or null) enabledInjections
         )
       );
-      missingProfileVariants =
-        lib.filter (
-          variant: !(builtins.hasAttr variant selectedProfileFiles.variants)
-        )
-        enabledProfileVariants;
-      selectedProfileConfig =
-        if enabledProfileVariants == []
-        then selectedProfileFiles.base
-        else selectedProfileFiles.variants.${builtins.head enabledProfileVariants};
+      selectedStartupBaseLayer =
+        if enabledStartupBaseLayers == []
+        then null
+        else builtins.head enabledStartupBaseLayers;
+      startupLayerFragment =
+        if selectedStartupBaseLayer == null
+        then null
+        else pkgs.writeText "${selectedProfile}-startup-layer.kbd" ''
+          (defalias
+            kanata-init-layer (layer-switch ${selectedStartupBaseLayer})
+          )
+        '';
       includedFragments =
         [
           ./common.kbd
@@ -78,16 +80,23 @@ in
         ]
         ++ map (injection: injection.rootFragment) (
           lib.filter (injection: injection.rootFragment != null) enabledInjections
-        );
+        )
+        ++ lib.optional (startupLayerFragment != null) startupLayerFragment;
       effectiveConfigSource =
         pkgs.writeText "${selectedProfile}-generated.kbd"
         (lib.concatLines (
           [
             "(defcfg"
             "  process-unmapped-keys yes"
+            # Keep the canonical profile base as the first defined layer so
+            # sparse injection overlays can transparently inherit it.
+            "  delegate-to-first-layer yes"
             "  concurrent-tap-hold yes"
             "  chords-v2-min-idle 5"
             "  danger-enable-cmd yes"
+          ]
+          ++ lib.optional (selectedStartupBaseLayer != null) "  alias-to-trigger-on-load kanata-init-layer"
+          ++ [
             ")"
           ]
           ++ map include includedFragments
@@ -95,12 +104,8 @@ in
     in {
       assertions = [
         {
-          assertion = builtins.length enabledProfileVariants <= 1;
-          message = "services.kanata profile ${selectedProfile} has multiple injection profile variants enabled at once: ${lib.concatStringsSep ", " enabledProfileVariants}";
-        }
-        {
-          assertion = missingProfileVariants == [];
-          message = "services.kanata profile ${selectedProfile} is missing profile variants for injections: ${lib.concatStringsSep ", " missingProfileVariants}";
+          assertion = builtins.length enabledStartupBaseLayers <= 1;
+          message = "services.kanata profile ${selectedProfile} has multiple injection startup base layers enabled at once: ${lib.concatStringsSep ", " enabledStartupBaseLayers}";
         }
       ];
       services.kanata =

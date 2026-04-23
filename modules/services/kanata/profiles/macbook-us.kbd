@@ -1,8 +1,11 @@
+;; Canonical macbook-us profile. Keep this defsrc as a stable superset so
+;; global remaps can land here and injections only need sparse overlays.
 (defsrc
   f1 f2 f7 f8 f9 f10 f11 f12
-  caps d f ;
-  lsft j k l rsft
+  caps d f c ;
+  h lsft j k l , rsft
   lctl
+  lmet
   rmet
 )
 
@@ -21,10 +24,13 @@
   d
   ;; Swap ';' and ':' on a US keyboard.
   f
+  c
   (fork S-; (unmod (lsft rsft) ;) (lsft rsft))
+  h
   lsft
-  j k l
+  j k l ,
   @rsft-esc
   @hyper
+  lmet
   rmet
 )
