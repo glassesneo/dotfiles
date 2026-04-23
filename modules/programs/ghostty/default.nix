@@ -6,9 +6,11 @@
   pkgs,
   ...
 }: let
-  shaders = {
-    ink_phosphor = "${./ink_phosphor.glsl}";
-    sakura = "${./sakura.glsl}";
+  shaderProfiles = {
+    neovide_sparks = [
+      "${./cursor_warp.glsl}"
+      "${./typing_micro_sparks.glsl}"
+    ];
   };
 in
   delib.module {
@@ -16,8 +18,8 @@ in
 
     options.programs.ghostty = with delib; {
       enable = boolOption host.guiShellFeatured;
-      custom-shader = lib.mkOption {
-        type = lib.types.nullOr (lib.types.enum (builtins.attrNames shaders));
+      shader-profile = lib.mkOption {
+        type = lib.types.nullOr (lib.types.enum (builtins.attrNames shaderProfiles));
         default = null;
       };
     };
@@ -53,7 +55,7 @@ in
           # cursor-style = "block";
           cursor-style-blink = false;
           shell-integration-features = "no-cursor";
-          custom-shader = lib.mkIf (cfg.custom-shader != null) shaders.${cfg.custom-shader};
+          custom-shader = lib.mkIf (cfg.shader-profile != null) shaderProfiles.${cfg.shader-profile};
         };
       };
     };
