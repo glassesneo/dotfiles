@@ -353,7 +353,7 @@ delib.module {
       spec = {
         mode = "primary";
         description = "Primary planning agent that handles both ambiguous and well-scoped requests through iterative specification elicitation and systematic planning workflow.";
-        model = "openai/gpt-5.4";
+        model = "openai/gpt-5.5-fast";
         reasoningEffort = "high";
         prompt = renderAgentPrompt "spec" {
           "{{DIVIDABLE_TASK_STRUCTURE}}" = dividableTaskStructure;
@@ -364,8 +364,8 @@ delib.module {
       respec = {
         mode = "primary";
         description = "Primary reverse-specification agent that infers existing behavior from code, validates it with the user, and tells the user when to switch agents manually.";
-        model = "openai/gpt-5.4";
-        reasoningEffort = "high";
+        model = "openai/gpt-5.5-fast";
+        reasoningEffort = "medium";
         prompt = readAgentPrompt "respec";
         permission = readOnlyPermission // {question = "allow";};
       };
@@ -378,8 +378,8 @@ delib.module {
 
       debugger = {
         mode = "all";
-        model = "openai/gpt-5.4";
-        reasoningEffort = "high";
+        model = "openai/gpt-5.5-fast";
+        reasoningEffort = "medium";
         description = "Performs command-driven bug investigation with reproduction, root-cause analysis, and evidence-only reporting.";
         prompt = renderAgentPrompt "debugger" {
           "{{BUG_REPORT_FORMAT_CONTRACT}}" = bugReportFormatContract;
@@ -402,6 +402,7 @@ delib.module {
       draft_planner = {
         mode = "subagent";
         model = "github-copilot/gpt-5.4-mini";
+        reasoningEffort = "high";
         description = "Creates direction-setting draft plan files for user approval before detailed final planning.";
         prompt = renderAgentPrompt "draft_planner" {
           "{{DRAFT_FILENAME_POLICY}}" = draftFilenamePolicy;
@@ -436,26 +437,26 @@ delib.module {
 
       plan_reviewer = {
         mode = "subagent";
-        model = "openai/gpt-5.4";
+        model = "openai/gpt-5.5-fast";
         description = "Performs strict read-only review of final plan and test-spec files (`*.md`) with actionable revisions.";
-        reasoningEffort = "high";
+        reasoningEffort = "low";
         prompt = readAgentPrompt "plan_reviewer";
         permission = readOnlyPermission;
       };
 
       code_reviewer = {
         mode = "subagent";
-        model = "openai/gpt-5.4";
+        model = "openai/gpt-5.5-fast";
         description = "Performs strict read-only code review with severity-ordered findings and concrete file/line evidence.";
-        reasoningEffort = "high";
+        reasoningEffort = "medium";
         prompt = readAgentPrompt "code_reviewer";
         permission = readOnlyPermission;
       };
 
       internet_research = {
         mode = "subagent";
-        model = "github-copilot/gpt-5.4-mini";
-        reasoningEffort = "high";
+        model = "openai/gpt-5.5-fast";
+        reasoningEffort = "medium";
         description = "Performs targeted internet research when primary planning agents have material knowledge uncertainty.";
         prompt = renderAgentPrompt "internet_research" {
           "{{RESEARCH_FILENAME_POLICY}}" = researchFilenamePolicy;
@@ -466,6 +467,7 @@ delib.module {
       tester = {
         mode = "subagent";
         model = "github-copilot/gpt-5.4-mini";
+        reasoningEffort = "high";
         description = "Read-only test runner that triages failures and writes failure-report files when suites fail.";
         prompt = renderAgentPrompt "tester" {
           "{{FAILURE_REPORT_FORMAT_CONTRACT}}" = failureReportFormatContract;

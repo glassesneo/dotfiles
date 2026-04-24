@@ -58,9 +58,9 @@ delib.module {
         profile = "full-auto";
         profiles = {
           "full-auto" = {
-            model = "gpt-5.4";
-            model_reasoning_effort = "high";
-            plan_mode_reasoning_effort = "high";
+            model = "gpt-5.5";
+            model_reasoning_effort = "medium";
+            plan_mode_reasoning_effort = "medium";
             approval_policy = "never";
             sandbox_mode = "workspace-write";
             sandbox_workspace_write.network_access = true;
