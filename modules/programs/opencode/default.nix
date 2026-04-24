@@ -319,7 +319,8 @@ delib.module {
         - Make sure to terminate your nohup process.
 
         ### Agent Switching
-        - Primary agents `orchestrator`, `spec`, `respec`, `debugger`, `test_designer`, and `build` should proactively delegate to appropriate subagents on a best-effort basis.
+        - Primary agents `orchestrator`, `instant_plan`, `spec`, `respec`, `debugger`, `test_designer`, and `build` should proactively delegate to appropriate subagents on a best-effort basis.
+        - For quick chat-only planning, use `instant_plan`, then manually switch to `build` in the same chat to implement the latest `<proposed_plan>`.
         - After implementation, run review with `code_reviewer`.
         - `spec` must complete specification elicitation and resolve/default material ambiguities before draft planning.
         - `respec` must validate inferred specifications with the user before delegating confirmed discrepancies to `spec`.
@@ -350,6 +351,15 @@ delib.module {
         permission = readOnlyPermission // {question = "allow";};
       };
 
+      instant_plan = {
+        mode = "primary";
+        description = "Primary chat-only planning agent for quick decision-complete plans before manual switch to `build`.";
+        model = "openai/gpt-5.5-fast";
+        reasoningEffort = "medium";
+        prompt = readAgentPrompt "instant_plan";
+        permission = readOnlyPermission // {question = "allow";};
+      };
+
       spec = {
         mode = "primary";
         description = "Primary planning agent that handles both ambiguous and well-scoped requests through iterative specification elicitation and systematic planning workflow.";
@@ -371,6 +381,8 @@ delib.module {
       };
 
       build = {
+        model = "openai/gpt-5.5-fast";
+        reasoningEffort = "medium";
         description = "Primary build/validation agent with proactive best-effort delegation to testing and debugging subagents.";
         prompt = readAgentPrompt "build";
         permission = fullAccessPermission;
