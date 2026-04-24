@@ -50,7 +50,9 @@ workspace_auto_back_and_forth = false
 reapply_app_rules_on_title_change = false
 workspace_rules = []
 workspace_names = ["1", "2", "3", "4", "5"]
-app_rules = []
+app_rules = [
+  { app_id = "com.apple.finder", manage = false },
+]
 
 [modifier_combinations]
 move = "Alt + Shift"
