@@ -5,7 +5,7 @@ const float START_DELAY = 0.16;
 const float DURATION = 0.74;
 const int PETAL_COUNT = 5;
 const float MIN_DISTANCE = 0.15;
-const float MAX_TYPING_DISTANCE = 42.0;
+const float MAX_PETAL_DISTANCE = 540.0;
 const float BASE_SPEED = 22.0;
 const float SPEED_RAND = 34.0;
 const float FORWARD_BIAS = 16.0;
@@ -13,7 +13,7 @@ const float GRAVITY = 20.0;
 const float DRIFT = 18.0;
 const float SPAWN_SCATTER = 6.2;
 const float EARLY_BURST = 0.72;
-const float OPACITY = 0.58;
+const float OPACITY = 0.80;
 
 float saturate(float x) {
     return clamp(x, 0.0, 1.0);
@@ -42,11 +42,11 @@ float easeOutCubic(float x) {
 
 vec3 petalColor(float n) {
     float slot = floor(hash(n) * 5.0);
-    if (slot < 1.0) return vec3(1.00, 0.93, 0.96);
-    if (slot < 2.0) return vec3(0.99, 0.82, 0.89);
-    if (slot < 3.0) return vec3(0.97, 0.72, 0.84);
-    if (slot < 4.0) return vec3(0.94, 0.60, 0.78);
-    return vec3(0.90, 0.49, 0.70);
+    if (slot < 1.0) return vec3(0.99, 0.88, 0.94);
+    if (slot < 2.0) return vec3(0.98, 0.76, 0.86);
+    if (slot < 3.0) return vec3(0.95, 0.64, 0.79);
+    if (slot < 4.0) return vec3(0.91, 0.52, 0.72);
+    return vec3(0.86, 0.40, 0.63);
 }
 
 float petalField(vec2 p) {
@@ -95,7 +95,7 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     );
 
     float moveDistance = length(curCenter - prevCenter);
-    if (moveDistance < MIN_DISTANCE || moveDistance > MAX_TYPING_DISTANCE) {
+    if (moveDistance < MIN_DISTANCE || moveDistance > MAX_PETAL_DISTANCE) {
         fragColor = base;
         return;
     }
@@ -104,7 +104,7 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     float fade = 1.0 - life;
     fade *= fade;
 
-    float typingBias = 1.0 - saturate((moveDistance - 1.0) / max(MAX_TYPING_DISTANCE - 1.0, 1.0));
+    float typingBias = 1.0 - saturate((moveDistance - 1.0) / max(MAX_PETAL_DISTANCE - 1.0, 1.0));
     typingBias = mix(0.45, 1.0, typingBias);
 
     vec3 color = base.rgb;
@@ -151,7 +151,7 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
         float edge = smoothstep(0.18, -0.02, abs(field));
         float centerVein = exp(-28.0 * local.x * local.x) * smoothstep(-0.85, 0.95, local.y);
         vec3 fill = petalColor(seed + fi * 37.0);
-        fill = mix(fill, vec3(0.99, 0.88, 0.93), centerVein * 0.20 + edge * 0.07);
+        fill = mix(fill, vec3(0.98, 0.84, 0.90), centerVein * 0.16 + edge * 0.05);
 
         float alpha = mask * fade * appear * deadZoneMask * OPACITY * typingBias;
         color = mix(color, fill, alpha);

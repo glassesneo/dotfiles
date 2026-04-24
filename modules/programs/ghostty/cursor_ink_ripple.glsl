@@ -4,12 +4,13 @@
 
 const float START_DELAY = 0.24;
 const float DURATION = 1.0;
-const float THRESHOLD_SCALE = 6.0;
-const float THRESHOLD_MIN = 96.0;
+const float MIN_RIPPLE_DISTANCE = 540.0;
 const float RADIUS_SCALE = 0.10;
 const float RADIUS_MIN = 48.0;
 const float RING_WIDTH = 12.0;
-const float DISTORTION_STRENGTH = 20.0;
+const float OUTER_RING_SCALE = 1.48;
+const float INNER_RING_SCALE = 0.46;
+const float DISTORTION_STRENGTH = 50.0;
 const float RIPPLE_FREQUENCY = 0.185;
 const float RIPPLE_SPEED = 18.0;
 
@@ -63,8 +64,7 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     );
 
     float moveDistance = length(curCenter - prevCenter);
-    float rippleMinDistance = max(max(iCurrentCursor.z, iCurrentCursor.w) * THRESHOLD_SCALE, THRESHOLD_MIN);
-    if (moveDistance < rippleMinDistance) {
+    if (moveDistance < MIN_RIPPLE_DISTANCE) {
         fragColor = base;
         return;
     }
@@ -82,14 +82,14 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     vec2 normal = safeNormalize(fromCenter);
 
     float primaryRing = ringBand(dist, radius, RING_WIDTH);
-    float outerRing = ringBand(dist, radius * 1.27, RING_WIDTH * 1.22) * 0.72;
-    float innerRing = ringBand(dist, radius * 0.68, RING_WIDTH * 1.08) * 0.55;
+    float outerRing = ringBand(dist, radius * OUTER_RING_SCALE, RING_WIDTH * 1.22) * 0.72;
+    float innerRing = ringBand(dist, radius * INNER_RING_SCALE, RING_WIDTH * 1.08) * 0.55;
 
     float rippleField = primaryRing + outerRing + innerRing;
     float waveEnvelope =
         exp(-abs(dist - radius) * 0.060) +
-        exp(-abs(dist - radius * 1.27) * 0.050) * 0.65 +
-        exp(-abs(dist - radius * 0.68) * 0.070) * 0.45;
+        exp(-abs(dist - radius * OUTER_RING_SCALE) * 0.050) * 0.65 +
+        exp(-abs(dist - radius * INNER_RING_SCALE) * 0.070) * 0.45;
     float wave = sin(dist * RIPPLE_FREQUENCY - life * RIPPLE_SPEED);
     float displacementAmount = wave * waveEnvelope * DISTORTION_STRENGTH * fade;
 
@@ -98,17 +98,18 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
 
     float impact = smoothstep(0.22, 0.0, life) * exp(-dist * 0.020);
 
-    vec3 inkTone = mix(iPalette[4], iPalette[5], 0.55);
-    inkTone = mix(inkTone, iPalette[6], 0.30);
-    inkTone = mix(inkTone, iForegroundColor, 0.18);
+    vec3 inkBlack = mix(iBackgroundColor, vec3(0.0), 0.60);
+    vec3 ringWhite = mix(iBackgroundColor, vec3(1.0), 0.38);
 
-    float ringAlpha = rippleField * 0.28 * fade;
     float distortionAlpha = saturate(waveEnvelope * 0.95 * fade);
+    float darkMask = saturate((waveEnvelope * 0.78 + rippleField * 0.42) * fade);
     vec3 color = mix(base.rgb, distorted.rgb, distortionAlpha);
-    color = mix(color, inkTone, ringAlpha);
-    color += inkTone * primaryRing * 0.18 * fade;
-    color += inkTone * outerRing * 0.08 * fade;
-    color -= impact * 0.12;
+    color = mix(color, inkBlack, darkMask);
+    color = mix(color, inkBlack, primaryRing * 0.18 * fade);
+    color = mix(color, inkBlack, outerRing * 0.10 * fade);
+    color = mix(color, ringWhite, outerRing * 0.14 * fade);
+    color = mix(color, ringWhite, innerRing * 0.12 * fade);
+    color -= impact * 0.08;
 
     fragColor = vec4(clamp(color, 0.0, 1.0), base.a);
 }
