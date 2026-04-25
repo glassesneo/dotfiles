@@ -34,3 +34,12 @@
   lmet
   rmet
 )
+
+(deflayer backspace
+  _ _ _ _ _ _ _ _
+  _ _ _ _ _
+  bspc _ _ _ _ _ _
+  _
+  _
+  _
+)
