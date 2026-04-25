@@ -69,7 +69,7 @@
 
 (deflayer rift
   _ _ _ _ _ _ _ _
-  @rift-join-hold _ @rift-toggle-fullscreen-within-gaps @rift-center-selection _ @rift-left
+  @rift-join-hold _ @rift-toggle-fullscreen-within-gaps @rift-center-selection _ _ _ @rift-left
   XX @rift-down @rift-up @rift-right @rift-toggle-stack XX
   _
   @rift-lmet
@@ -78,7 +78,7 @@
 
 (deflayer rift-join
   _ _ _ _ _ _ _ _
-  _ _ _ _ _ @rift-join-left
+  _ _ _ _ _ _ _ @rift-join-left
   XX @rift-join-down @rift-join-up @rift-join-right @rift-toggle-stack XX
   _
   ;; rift-join sits above rift-base, but transparent keys resolve to the

@@ -31,7 +31,8 @@
   ;; F acts as a punctuation chord prefix for , . /.
   (f h) @f-h-edit 40 all-released ()
   (f j) ret 40 first-release ()
-  (d k) tab 40 first-release ()
+  (j t) tab 40 first-release ()
+  (f ') grv 40 first-release ()
   (f k) , 40 first-release ()
   (f l) . 40 first-release ()
   (f ;) / 40 first-release ()

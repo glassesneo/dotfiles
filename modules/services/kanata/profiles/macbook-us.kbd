@@ -2,7 +2,7 @@
 ;; global remaps can land here and injections only need sparse overlays.
 (defsrc
   f1 f2 f7 f8 f9 f10 f11 f12
-  caps d f c ;
+  caps d f c ; t '
   h lsft j k l , rsft
   lctl
   lmet
@@ -26,6 +26,8 @@
   f
   c
   (fork S-; (unmod (lsft rsft) ;) (lsft rsft))
+  t
+  '
   h
   lsft
   j k l ,
@@ -37,7 +39,7 @@
 
 (deflayer backspace
   _ _ _ _ _ _ _ _
-  _ _ _ _ _
+  _ _ _ _ _ _ _
   bspc _ _ _ _ _ _
   _
   _
