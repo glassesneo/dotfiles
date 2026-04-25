@@ -26,8 +26,9 @@ def main [direction: string] {
     script="@script-path@"
   ]
 
-  sketchybar --add event media_stream_change
+  sketchybar --add event media_stream_play
+  sketchybar --add event media_stream_pause
   sketchybar --add item $name $direction
   sketchybar --set $name ...$widget_options
-  sketchybar --subscribe $name media_stream_change
+  sketchybar --subscribe $name media_stream_play media_stream_pause
 }

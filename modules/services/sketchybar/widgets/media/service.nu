@@ -7,9 +7,11 @@ def main [] {
       return
     }
 
-    let payload = $data | get payload | select artist title album playing
-    sketchybar --trigger media_stream_change $"PAYLOAD=($payload | to json)"
-    log info "triggered!"
-    echo $payload
+    let payload = $data | get payload
+    if ($payload | get playing? | default false) {
+      sketchybar --trigger media_stream_play $"PAYLOAD=($payload | select artist title album | to json)"
+    } else {
+      sketchybar --trigger media_stream_pause
+    }
   }
 }
