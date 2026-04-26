@@ -7,6 +7,7 @@
   lctl
   lmet
   rmet
+  spc
 )
 
 (deflayer base
@@ -35,12 +36,14 @@
   @hyper
   lmet
   rmet
+  spc
 )
 
 (deflayer backspace
   _ _ _ _ _ _ _ _
   _ _ _ _ _ _ _
   bspc _ _ _ _ _ _
+  _
   _
   _
   _

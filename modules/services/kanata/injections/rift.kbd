@@ -74,6 +74,7 @@
   _
   @rift-lmet
   @rift-rmet
+  _
 )
 
 (deflayer rift-join
@@ -85,4 +86,5 @@
   ;; canonical first layer under delegate-to-first-layer, so keep meta keys explicit.
   @rift-lmet
   @rift-rmet
+  _
 )
