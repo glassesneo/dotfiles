@@ -138,7 +138,7 @@
     (lib.optionalAttrs codexEnabled {
       "Codex" = {
         type = "custom";
-        command = lib.getExe llm-agents."codex-acp";
+        command = lib.getExe llm-agents.codex-acp;
         args = [];
         env = {};
       };
@@ -146,7 +146,7 @@
     // (lib.optionalAttrs claudeCodeEnabled {
       "Claude-Code" = {
         type = "custom";
-        command = lib.getExe llm-agents."claude-code-acp";
+        command = lib.getExe llm-agents.claude-agent-acp;
         args = [];
         env = {
           CLAUDE_CODE_EXECUTABLE = lib.getExe' homeConfig.programs.claude-code.package "claude";
