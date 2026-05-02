@@ -1,4 +1,5 @@
 {
+  brewCasks,
   delib,
   host,
   pkgs,
@@ -10,8 +11,8 @@ delib.module {
   options = delib.singleEnableOption (pkgs.stdenv.isDarwin && host.guiShellFeatured);
 
   home.ifEnabled = {
-    home.packages = with pkgs; [
-      chatgpt
+    home.packages = [
+      brewCasks.chatgpt
     ];
   };
 }
