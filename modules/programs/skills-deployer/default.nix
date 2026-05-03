@@ -19,7 +19,7 @@ delib.module {
     skills = {
       agent-browser = {
         source = "${llm-agents.agent-browser}";
-        subdir = "etc/agent-browser/skills";
+        subdir = "share/agent-browser/skills/agent-browser";
         targetDirs = [
           ".agents/skills"
           ".claude/skills"
