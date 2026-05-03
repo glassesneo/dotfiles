@@ -42,7 +42,6 @@ delib.module {
         permissions = {
           # defaultMode = "auto";
           allow = [
-            "Skill(tmux-runner)"
             "mcp__context7__resolve-library-id"
             "mcp__context7__get-library-docs"
             "mcp__deepwiki__*"
