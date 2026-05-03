@@ -397,11 +397,10 @@ delib.module {
         - Make sure to terminate your nohup process.
 
         ### Agent Switching
-        - Primary agents `orchestrator`, `instant_plan`, `spec`, `respec`, `debugger`, `test_designer`, `reviewer`, and `build` should proactively delegate to appropriate subagents on a best-effort basis.
+        - Primary agents `instant_plan`, `spec`, `debugger`, `reviewer`, and `build` should proactively delegate to appropriate subagents on a best-effort basis.
         - For quick chat-only planning, use `instant_plan`, then manually switch to `build` in the same chat to implement the latest `<proposed_plan>`.
         - After implementation, run review with `reviewer` for orchestrated review or `code_reviewer` for a focused read-only subagent review.
         - `spec` must complete specification elicitation and resolve/default material ambiguities before draft planning.
-        - `respec` must validate inferred specifications with the user before delegating confirmed discrepancies to `spec`.
         - Ignore backward compatibility unless explicitly specified.
         - When reading `test-spec`, `failure-report`, or `bug-report` files, read the `## Summary` block first.
         - Read detail sections only when implementation-level context is needed for delegation.
@@ -409,18 +408,6 @@ delib.module {
     };
 
     programs.opencode.settings.agent = {
-      orchestrator = {
-        mode = "primary";
-        description = "Primary implementation orchestrator that delegates exploration and edits to specialized subagents.";
-        model = "zai-coding-plan/glm-5-turbo";
-        prompt = readAgentPrompt "orchestrator";
-        permission = merge readOnlyPermission {
-          edit = askAll;
-          write = askAll;
-          bash = "ask";
-        };
-      };
-
       idea = {
         mode = "primary";
         description = "Primary ideation agent for early-stage exploration and problem framing before planning; hand off to `spec` by switching agents with the same chat history.";
@@ -449,15 +436,6 @@ delib.module {
         permission = specPlansPermission // {question = "allow";};
       };
 
-      respec = {
-        mode = "primary";
-        description = "Primary reverse-specification agent that infers existing behavior from code, validates it with the user, and tells the user when to switch agents manually.";
-        model = "openai/gpt-5.5-fast";
-        reasoningEffort = "medium";
-        prompt = readAgentPrompt "respec";
-        permission = readOnlyPermission // {question = "allow";};
-      };
-
       build = {
         model = "openai/gpt-5.5-fast";
         reasoningEffort = "medium";
@@ -475,10 +453,12 @@ delib.module {
           "{{REVIEW_REPORT_FORMAT_CONTRACT}}" = reviewReportFormatContract;
           "{{REPORT_FILENAME_POLICY}}" = reportFilenamePolicy;
         };
-        permission = reportsOnlyPermission // {
-          bash = "allow";
-          question = "allow";
-        };
+        permission =
+          reportsOnlyPermission
+          // {
+            bash = "allow";
+            question = "allow";
+          };
       };
 
       debugger = {
@@ -493,17 +473,6 @@ delib.module {
         permission = tempWorkspaceWithReportsPermission;
       };
 
-      test_designer = {
-        mode = "all";
-        model = "zai-coding-plan/glm-5.1";
-        description = "Creates decision-complete test-spec files for zero-context implementation/testing agents, then gates them through plan_reviewer.";
-        reasoningEffort = "high";
-        prompt = renderAgentPrompt "test_designer" {
-          "{{TEST_SPEC_FORMAT_CONTRACT}}" = testSpecFormatContract;
-          "{{TEST_SPEC_FILENAME_POLICY}}" = testSpecFilenamePolicy;
-        };
-        permission = plansOnlyPermission;
-      };
       draft_planner = {
         mode = "subagent";
         model = "github-copilot/gpt-5.4-mini";
