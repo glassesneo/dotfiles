@@ -185,6 +185,83 @@ delib.module {
       - If collision occurs, append `-v2`, `-v3`, etc.
     '';
 
+    reviewReportFormatContract = ''
+      `review-report` output format (strict, exact):
+
+      # Review Report: <title>
+
+      ## Summary
+      - **Target**: <path, directory, PR, commit, commit range, patch, or diff reviewed>
+      - **Target type**: path | directory | PR | commit | commit-range | patch | diff | other
+      - **Overall verdict**: blocking-findings | non-blocking-findings | no-findings | inconclusive
+      - **Highest severity**: critical | high | medium | low | none
+      - **Finding counts**: critical <N>, high <N>, medium <N>, low <N>
+      - **Target context used**: <PR body, linked issue, commit message, plan, user rationale, or none>
+      - **External research used**: yes | no
+
+      ## Findings
+
+      ### Critical
+
+      #### <finding title>
+      - **Impact**: <one-line user/system impact>
+      - **Evidence**: <file:line or concrete observed evidence>
+      - **Why it matters**: <one concise explanation>
+      - **Suggested fix direction**: <one concrete direction>
+
+      ### High
+
+      #### <finding title>
+      - **Impact**: <one-line user/system impact>
+      - **Evidence**: <file:line or concrete observed evidence>
+      - **Why it matters**: <one concise explanation>
+      - **Suggested fix direction**: <one concrete direction>
+
+      ### Medium
+
+      #### <finding title>
+      - **Impact**: <one-line user/system impact>
+      - **Evidence**: <file:line or concrete observed evidence>
+      - **Why it matters**: <one concise explanation>
+      - **Suggested fix direction**: <one concrete direction>
+
+      ### Low
+
+      #### <finding title>
+      - **Impact**: <one-line user/system impact>
+      - **Evidence**: <file:line or concrete observed evidence>
+      - **Why it matters**: <one concise explanation>
+      - **Suggested fix direction**: <one concrete direction>
+
+      ## Perspective Results
+      - **Correctness/regression**: <attempted | skipped> — <concise result or skip reason>
+      - **Security/privacy/secrets**: <attempted | skipped> — <concise result or skip reason>
+      - **Maintainability/simplicity**: <attempted | skipped> — <concise result or skip reason>
+      - **Architecture/ownership**: <attempted | skipped> — <concise result or skip reason>
+      - **Tests/validation**: <attempted | skipped> — <concise result or skip reason>
+      - **Domain-specific**: <attempted | skipped> — <concise result or skip reason>
+
+      ## Delegation Log
+      - **Git state preparation**: <git preparation status or skip reason>
+      - **explore**: <used | skipped> — <outcome or reason>
+      - **internet_research**: <used | skipped> — <research file path if used, otherwise reason>
+      - **code_reviewer**: <used | skipped> — <outcome or reason>
+      - **tester**: <used | skipped> — <commands/results or failure-report path if used, otherwise reason>
+      - **Other subagents**: <list or none>
+
+      ## Verification Suggestions
+      - `<command or manual check>` — <why this verifies risk>
+
+      ## Residual Risks
+      - <risk or uncertainty, one per line; use `none` if none>
+
+      ## Out of Scope
+      - <explicitly unreviewed area, one per line; use `none` if none>
+
+      ## Recommended Next Step
+      - <exactly one concrete action>
+    '';
+
     testSpecFilenamePolicy = ''
       Filename policy (strict):
       - Create a NEW timestamped file:
@@ -295,9 +372,10 @@ delib.module {
         command = {
           review = {
             template = ''
+              Review target: $ARGUMENTS
             '';
-            agent = "code_reviewer";
-            subtask = true;
+            agent = "reviewer";
+            subtask = false;
           };
         };
         autoshare = false;
@@ -319,9 +397,9 @@ delib.module {
         - Make sure to terminate your nohup process.
 
         ### Agent Switching
-        - Primary agents `orchestrator`, `instant_plan`, `spec`, `respec`, `debugger`, `test_designer`, and `build` should proactively delegate to appropriate subagents on a best-effort basis.
+        - Primary agents `orchestrator`, `instant_plan`, `spec`, `respec`, `debugger`, `test_designer`, `reviewer`, and `build` should proactively delegate to appropriate subagents on a best-effort basis.
         - For quick chat-only planning, use `instant_plan`, then manually switch to `build` in the same chat to implement the latest `<proposed_plan>`.
-        - After implementation, run review with `code_reviewer`.
+        - After implementation, run review with `reviewer` for orchestrated review or `code_reviewer` for a focused read-only subagent review.
         - `spec` must complete specification elicitation and resolve/default material ambiguities before draft planning.
         - `respec` must validate inferred specifications with the user before delegating confirmed discrepancies to `spec`.
         - Ignore backward compatibility unless explicitly specified.
@@ -386,6 +464,21 @@ delib.module {
         description = "Primary build/validation agent with proactive best-effort delegation to testing and debugging subagents.";
         prompt = readAgentPrompt "build";
         permission = fullAccessPermission;
+      };
+
+      reviewer = {
+        mode = "primary";
+        model = "openai/gpt-5.5-fast";
+        reasoningEffort = "high";
+        description = "Primary orchestrated reviewer for code written by others, with exploration, optional research, multi-perspective subreviews, and report output.";
+        prompt = renderAgentPrompt "reviewer" {
+          "{{REVIEW_REPORT_FORMAT_CONTRACT}}" = reviewReportFormatContract;
+          "{{REPORT_FILENAME_POLICY}}" = reportFilenamePolicy;
+        };
+        permission = reportsOnlyPermission // {
+          bash = "allow";
+          question = "allow";
+        };
       };
 
       debugger = {
