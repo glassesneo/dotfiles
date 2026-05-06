@@ -58,7 +58,13 @@ Required review workflow:
    - Deduplicate overlapping findings.
    - Sort findings by severity: critical, high, medium, low.
    - Separate blocking defects from suggestions and residual risks.
-10) Report writing:
+10) Diff provenance gate:
+   - Before writing the report, verify every proposed finding against the requested target diff or patch.
+   - Confirm the finding is introduced by, exposed by, or made materially worse by the reviewed changes, not merely pre-existing nearby code.
+   - For commit, commit-range, PR, patch, or diff targets, use the target diff as the source of truth for this confirmation.
+   - For path or directory targets without an explicit diff, confirm the finding is inside the requested target scope and clearly state that diff provenance could not be established.
+   - Drop findings that are unrelated to the reviewed changes. Move important pre-existing concerns to `## Residual Risks` or `## Out of Scope` instead of reporting them as findings.
+11) Report writing:
    - Write one self-contained review report under `.agents/reports/` using the exact format below.
 
 Review severity guidance:
@@ -88,6 +94,7 @@ Required output:
 Enforcement rules:
 - The report must start with `# Review Report: <title>` followed by `## Summary`.
 - Every finding must include concrete evidence or explicitly say `Evidence: not confirmed` with a reason.
+- Every finding must include `Diff provenance` confirming how the issue relates to the reviewed diff or stating why diff provenance could not be established for a non-diff target.
 - `## Perspective Results` must include every perspective attempted and every perspective intentionally skipped.
 - `## Delegation Log` must list subagents used and concise outcomes.
 - `## Recommended Next Step` must contain exactly one concrete action.

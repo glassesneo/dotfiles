@@ -206,6 +206,7 @@ delib.module {
       #### <finding title>
       - **Impact**: <one-line user/system impact>
       - **Evidence**: <file:line or concrete observed evidence>
+      - **Diff provenance**: <how the target diff introduced/exposed/worsened this, or non-diff target scope reason>
       - **Why it matters**: <one concise explanation>
       - **Suggested fix direction**: <one concrete direction>
 
@@ -214,6 +215,7 @@ delib.module {
       #### <finding title>
       - **Impact**: <one-line user/system impact>
       - **Evidence**: <file:line or concrete observed evidence>
+      - **Diff provenance**: <how the target diff introduced/exposed/worsened this, or non-diff target scope reason>
       - **Why it matters**: <one concise explanation>
       - **Suggested fix direction**: <one concrete direction>
 
@@ -222,6 +224,7 @@ delib.module {
       #### <finding title>
       - **Impact**: <one-line user/system impact>
       - **Evidence**: <file:line or concrete observed evidence>
+      - **Diff provenance**: <how the target diff introduced/exposed/worsened this, or non-diff target scope reason>
       - **Why it matters**: <one concise explanation>
       - **Suggested fix direction**: <one concrete direction>
 
@@ -230,6 +233,7 @@ delib.module {
       #### <finding title>
       - **Impact**: <one-line user/system impact>
       - **Evidence**: <file:line or concrete observed evidence>
+      - **Diff provenance**: <how the target diff introduced/exposed/worsened this, or non-diff target scope reason>
       - **Why it matters**: <one concise explanation>
       - **Suggested fix direction**: <one concrete direction>
 
