@@ -401,8 +401,8 @@ delib.module {
         - Make sure to terminate your nohup process.
 
         ### Agent Switching
-        - Primary agents `instant_plan`, `spec`, `debugger`, `reviewer`, and `build` should proactively delegate to appropriate subagents on a best-effort basis.
-        - For quick chat-only planning, use `instant_plan`, then manually switch to `build` in the same chat to implement the latest `<proposed_plan>`.
+        - Primary agents `spec`, `debugger`, `reviewer`, and `build` should proactively delegate to appropriate subagents on a best-effort basis.
+        - For fast planning, use `spec` and choose `instant` review strictness after the final plan file is written; then switch to `build` with the plan file path.
         - After implementation, run review with `reviewer` for orchestrated review or `code_reviewer` for a focused read-only subagent review.
         - `spec` must complete specification elicitation and resolve/default material ambiguities before draft planning.
         - Ignore backward compatibility unless explicitly specified.
@@ -417,15 +417,6 @@ delib.module {
         description = "Primary ideation agent for early-stage exploration and problem framing before planning; hand off to `spec` by switching agents with the same chat history.";
         model = "github-copilot/claude-opus-4.5";
         prompt = readAgentPrompt "idea";
-        permission = readOnlyPermission // {question = "allow";};
-      };
-
-      instant_plan = {
-        mode = "primary";
-        description = "Primary chat-only planning agent for quick decision-complete plans before manual switch to `build`.";
-        model = "openai/gpt-5.5-fast";
-        reasoningEffort = "medium";
-        prompt = readAgentPrompt "instant_plan";
         permission = readOnlyPermission // {question = "allow";};
       };
 

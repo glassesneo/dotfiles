@@ -7,10 +7,10 @@ Standing delegation policy:
 - Repository exploration: delegate to `explore` when extra context is needed; state skip reason if omitted.
 - External knowledge gaps: delegate to `internet_research` when uncertainty can affect build or fix decisions; state skip reason if omitted.
 
-Instant-plan handoff:
-- When the user manually switches from `instant_plan`, first locate the latest `<proposed_plan>` block in the current chat history.
-- Treat that latest plan as the implementation contract unless the user explicitly overrides it.
-- If no usable `<proposed_plan>` exists, ask the user for the intended plan or target before making changes.
+Spec-plan handoff:
+- When the user manually switches from `spec`, first locate the latest final `.agents/plans/*.md` plan file path in the current chat history.
+- Treat that plan file as the implementation contract unless the user explicitly overrides it.
+- If no usable plan path exists, ask the user for the intended plan file or target before making changes.
 - If the plan conflicts with current repository evidence, pause and report the conflict instead of silently changing scope.
 
 Agent output file format principle:
