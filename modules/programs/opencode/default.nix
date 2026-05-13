@@ -13,6 +13,7 @@ delib.module {
     inherit (lib.attrsets) recursiveUpdate;
     inherit (lib.attrsets) nameValuePair;
     readAgentPrompt = name: builtins.readFile (./prompts + "/${name}.md");
+    readSharedPrompt = name: builtins.readFile (./prompts/shared + "/${name}.md");
     renderAgentPrompt = name: replacements: let
       placeholders = builtins.attrNames replacements;
     in
@@ -108,184 +109,12 @@ delib.module {
       }
       tempWorkspacePermission;
 
-    testSpecFormatContract = ''
-      `test-spec` output format (strict, exact):
-
-      # Test Spec: <title>
-
-      ## Summary
-      - **Target**: <module or function under test>
-      - **Type**: new | modification | both
-      - **Behavior**: <one-line description of behavior being tested>
-      - **Framework**: <test framework and relevant utilities>
-      - **Run command**: `<exact command to run these tests>`
-
-      ## Existing Test Context
-      <!-- omit section entirely if Type is "new" -->
-      - **File**: <path to existing test file>
-      - **What changes**: <one-line: what about existing tests needs to change and why>
-
-      ## Test Matrix
-
-      | ID | Category | Input / Condition | Expected Outcome |
-      |----|----------|-------------------|------------------|
-      | 1  | happy    | ...               | ...              |
-      | 2  | edge     | ...               | ...              |
-      | 3  | error    | ...               | ...              |
-
-      ## Setup
-      - **Fixtures**: <list with one-line description each>
-      - **Mocks**: <what to mock and why, one-line each>
-      - **Environment**: <env vars, config, or preconditions>
-
-      ## Constraints
-      - <hard constraint, one per line>
-
-      ## Pass/Fail Criteria
-      - <criterion, one per line>
-    '';
-
-    bugReportFormatContract = ''
-      `bug-report` output format (strict, exact):
-
-      # Bug Report: <title>
-
-      ## Summary
-      - **Symptom**: <one-line observed behavior>
-      - **Expected**: <one-line expected behavior>
-      - **Root cause**: <one-line hypothesis with confidence: confirmed | probable | uncertain>
-      - **Fix direction**: <one-line recommended approach>
-      - **Affected files**: <comma-separated paths>
-
-      ## Reproduction
-      1. <step>
-      2. <step>
-      - **Minimal command**: `<single command that triggers the bug>`
-
-      ## Root Cause Analysis
-      - **Entry point**: <file:line where the fault originates>
-      - **Mechanism**: <2-3 sentences max: what goes wrong and why>
-      - **Impact radius**: <what else could break - list affected callers/dependents>
-
-      ## Fix Specification
-      - **Target files**: <path - one per line>
-      - **What to change**: <one-line per file: specific change needed>
-      - **What NOT to change**: <guard rails - one per line>
-      - **Regression check**: `<command to verify fix>`
-
-      ## Unknowns
-      - <anything unverified, one per line - empty section if none>
-    '';
-
-    reportFilenamePolicy = ''
-      Filename policy (strict):
-      - Create a NEW timestamped file:
-        `.agents/reports/YYYYMMDD-HHMM-<kebab-task-slug>.md`
-      - Never overwrite existing files.
-      - If collision occurs, append `-v2`, `-v3`, etc.
-    '';
-
-    reviewReportFormatContract = ''
-      `review-report` output format (strict, exact):
-
-      # Review Report: <title>
-
-      ## Summary
-      - **Target**: <path, directory, PR, commit, commit range, patch, or diff reviewed>
-      - **Target type**: path | directory | PR | commit | commit-range | patch | diff | other
-      - **Overall verdict**: blocking-findings | non-blocking-findings | no-findings | inconclusive
-      - **Highest severity**: critical | high | medium | low | none
-      - **Finding counts**: critical <N>, high <N>, medium <N>, low <N>
-      - **Target context used**: <PR body, linked issue, commit message, plan, user rationale, or none>
-      - **External research used**: yes | no
-
-      ## Findings
-
-      ### Critical
-
-      #### <finding title>
-      - **Impact**: <one-line user/system impact>
-      - **Evidence**: <file:line or concrete observed evidence>
-      - **Diff provenance**: <how the target diff introduced/exposed/worsened this, or non-diff target scope reason>
-      - **Why it matters**: <one concise explanation>
-      - **Suggested fix direction**: <one concrete direction>
-
-      ### High
-
-      #### <finding title>
-      - **Impact**: <one-line user/system impact>
-      - **Evidence**: <file:line or concrete observed evidence>
-      - **Diff provenance**: <how the target diff introduced/exposed/worsened this, or non-diff target scope reason>
-      - **Why it matters**: <one concise explanation>
-      - **Suggested fix direction**: <one concrete direction>
-
-      ### Medium
-
-      #### <finding title>
-      - **Impact**: <one-line user/system impact>
-      - **Evidence**: <file:line or concrete observed evidence>
-      - **Diff provenance**: <how the target diff introduced/exposed/worsened this, or non-diff target scope reason>
-      - **Why it matters**: <one concise explanation>
-      - **Suggested fix direction**: <one concrete direction>
-
-      ### Low
-
-      #### <finding title>
-      - **Impact**: <one-line user/system impact>
-      - **Evidence**: <file:line or concrete observed evidence>
-      - **Diff provenance**: <how the target diff introduced/exposed/worsened this, or non-diff target scope reason>
-      - **Why it matters**: <one concise explanation>
-      - **Suggested fix direction**: <one concrete direction>
-
-      ## Perspective Results
-      - **Correctness/regression**: <attempted | skipped> — <concise result or skip reason>
-      - **Security/privacy/secrets**: <attempted | skipped> — <concise result or skip reason>
-      - **Maintainability/simplicity**: <attempted | skipped> — <concise result or skip reason>
-      - **Architecture/ownership**: <attempted | skipped> — <concise result or skip reason>
-      - **Tests/validation**: <attempted | skipped> — <concise result or skip reason>
-      - **Domain-specific**: <attempted | skipped> — <concise result or skip reason>
-
-      ## Delegation Log
-      - **Git state preparation**: <git preparation status or skip reason>
-      - **explore**: <used | skipped> — <outcome or reason>
-      - **internet_research**: <used | skipped> — <research file path if used, otherwise reason>
-      - **code_reviewer**: <used | skipped> — <outcome or reason>
-      - **tester**: <used | skipped> — <commands/results or failure-report path if used, otherwise reason>
-      - **Other subagents**: <list or none>
-
-      ## Verification Suggestions
-      - `<command or manual check>` — <why this verifies risk>
-
-      ## Residual Risks
-      - <risk or uncertainty, one per line; use `none` if none>
-
-      ## Out of Scope
-      - <explicitly unreviewed area, one per line; use `none` if none>
-
-      ## Recommended Next Step
-      - <exactly one concrete action>
-    '';
-
-    testSpecFilenamePolicy = ''
-      Filename policy (strict):
-      - Create a NEW timestamped file:
-        `.agents/plans/YYYYMMDD-HHMM-<kebab-task-slug>.md`
-      - Never overwrite existing files.
-      - If collision occurs, append `-v2`, `-v3`, etc.
-    '';
-
-    dividableTaskStructure = ''
-      Required task-dividable structure:
-      - Include a "Task Breakdown" section with task IDs (`T1`, `T2`, ...).
-      - For each task include:
-        - target file(s) to edit
-        - what to change in each target file
-        - documentation update targets (required: list affected doc files such as `CLAUDE.md`, `README*`, or doc comments; use `none` if no update is needed)
-        - files to refer (optional) and why they are needed
-        - task dependency graph/prerequisites (optional)
-        - completion criteria
-      - Headings may vary, but all fields are mandatory per task.
-    '';
+    testSpecFormatContract = readSharedPrompt "test-spec-format";
+    bugReportFormatContract = readSharedPrompt "bug-report-format";
+    reportFilenamePolicy = readSharedPrompt "report-filename-policy";
+    reviewReportFormatContract = readSharedPrompt "review-report-format";
+    testSpecFilenamePolicy = readSharedPrompt "test-spec-filename-policy";
+    dividableTaskStructure = readSharedPrompt "task-breakdown-structure";
 
     noCommandPermission = {
       bash = "deny";
@@ -314,60 +143,10 @@ delib.module {
       }
       readOnlyPermission;
 
-    failureReportFormatContract = ''
-      `failure-report` output format (strict, exact):
-
-      # Failure Report: <title>
-
-      ## Summary
-      - **Scope**: <what was run - command and test scope>
-      - **Result**: <X passed, Y failed, Z skipped>
-      - **Classification**: regression | flaky | test-bug | env-issue | unknown
-      - **Likely owner**: implementation | test-code | infrastructure
-
-      ## Failures
-
-      ### <test identifier>
-      - **Error**: <one-line error message or assertion failure>
-      - **Stack**: <file:line of innermost relevant frame>
-      - **Repro**: `<minimal command to reproduce this single failure>`
-      - **Flaky check**: deterministic | flaky (<N/M passes on re-run>)
-
-      ### <test identifier>
-      ...
-
-      ## Evidence
-      - **Commands run**: <numbered list of commands and their exit codes>
-      - **Environment**: <OS, runtime version, relevant config>
-
-      ## Recommended Next Step
-      - <one specific action, e.g. "fix assertion in X" or "investigate regression in Y">
-    '';
-
-    draftFilenamePolicy = ''
-      Filename policy (strict):
-      - Create a NEW timestamped file:
-        `.agents/plans/draft/YYYYMMDD-HHMM-<kebab-task-slug>.draft.md`
-      - Never overwrite existing files.
-      - If collision occurs, append `-v2`, `-v3`, etc.
-    '';
-
-    researchFilenamePolicy = ''
-      Filename policy (strict):
-      - Create a NEW timestamped file:
-        `.agents/research/YYYYMMDD-HHMM-<kebab-task-slug>.md`
-      - Never overwrite existing files.
-      - If collision occurs, append `-v2`, `-v3`, etc.
-    '';
-
-    draftFailureProtocol = ''
-      Failure protocol:
-      - If write fails, return:
-        - Write status: failed
-        - attempted path
-        - exact error
-      - Do not fall back to chat-only plan text.
-    '';
+    failureReportFormatContract = readSharedPrompt "failure-report-format";
+    draftFilenamePolicy = readSharedPrompt "draft-filename-policy";
+    researchFilenamePolicy = readSharedPrompt "research-filename-policy";
+    draftFailureProtocol = readSharedPrompt "draft-failure-protocol";
   in {
     programs.opencode = {
       enable = true;
@@ -392,23 +171,7 @@ delib.module {
         };
         plugin = [];
       };
-      context = ''
-
-        ## OpenCode-Specific Guidance
-
-        ### Notes
-        - If you are unable to run commands in background, use `nohup` command.
-        - Make sure to terminate your nohup process.
-
-        ### Agent Switching
-        - Primary agents `spec`, `debugger`, `reviewer`, and `build` should proactively delegate to appropriate subagents on a best-effort basis.
-        - For fast planning, use `spec` and choose `instant` review strictness after the final plan file is written; then switch to `build` with the plan file path.
-        - After implementation, run review with `reviewer` for orchestrated review or `code_reviewer` for a focused read-only subagent review.
-        - `spec` must complete specification elicitation and resolve/default material ambiguities before draft planning.
-        - Ignore backward compatibility unless explicitly specified.
-        - When reading `test-spec`, `failure-report`, or `bug-report` files, read the `## Summary` block first.
-        - Read detail sections only when implementation-level context is needed for delegation.
-      '';
+      context = readSharedPrompt "opencode-context";
     };
 
     programs.opencode.settings.agent = {
