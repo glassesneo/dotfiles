@@ -49,6 +49,9 @@ delib.module {
           template = "${homeConfig.xdg.configHome}/git/.gitmsg";
           gpgsign = true;
         };
+        push = {
+          default = "nothing";
+        };
         tag = {
           gpgsign = true;
         };
