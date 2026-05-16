@@ -10,6 +10,10 @@ delib.module {
   options.programs.pay-respects = with delib; {
     enable = boolOption true;
     useSl = boolOption true;
+    slOptions = listOfOption str [
+      "-a"
+      "-F"
+    ];
   };
 
   home.ifEnabled = {cfg, ...}: {
@@ -21,7 +25,7 @@ delib.module {
 
     programs.zsh.initContent = lib.mkIf cfg.useSl (lib.mkAfter ''
       command_not_found_handler() {
-        "${lib.getExe pkgs.sl}"
+        command ${lib.getExe pkgs.sl} ${lib.escapeShellArgs cfg.slOptions}
         return 127
       }
     '');
