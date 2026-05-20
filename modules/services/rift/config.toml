@@ -25,11 +25,17 @@ haptic_pattern = "level_change"
 
 [settings.layout.scrolling]
 animate = true
-alignment = "center"
+
+column_width_ratio = 0.5
+min_column_width_ratio = 0.5
+max_column_width_ratio = 0.5
+alignment = "left"
 focus_navigation_style = "niri"
-column_width_ratio = 0.6
-min_column_width_ratio = 0.25
-max_column_width_ratio = 0.75
+# alignment = "center"
+# focus_navigation_style = "niri"
+# column_width_ratio = 0.6
+# min_column_width_ratio = 0.25
+# max_column_width_ratio = 0.75
 
 [settings.layout.gaps.outer]
 top = 4
@@ -48,7 +54,9 @@ auto_assign_windows = true
 preserve_focus_per_workspace = true
 workspace_auto_back_and_forth = false
 reapply_app_rules_on_title_change = false
-workspace_rules = []
+workspace_rules = [
+  { workspace = 0, layout = "scrolling" },
+]
 workspace_names = ["1", "2", "3", "4", "5"]
 app_rules = [
   { app_id = "com.apple.finder", manage = false },
