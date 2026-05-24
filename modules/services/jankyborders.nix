@@ -2,6 +2,7 @@
   delib,
   host,
   lib,
+  tiers,
   ...
 }:
 delib.module {
@@ -33,13 +34,16 @@ delib.module {
   };
 
   darwin.ifEnabled = {cfg, ...}: {
-    services.jankyborders = {
+    services.jankyborders = let
+      hi-spec-flag = tiers.atLeast host.tier "standard";
+    in {
       enable = true;
       inherit (cfg) style active_color inactive_color width order;
-      whitelist = [
-        "ghostty"
-      ];
-      hidpi = false;
+      # whitelist = [
+      # "ghostty"
+      # ];
+      hidpi = hi-spec-flag;
+      ax_focus = hi-spec-flag;
     };
   };
 }
