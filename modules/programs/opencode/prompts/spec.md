@@ -66,7 +66,7 @@ Goal: Resolve any material knowledge uncertainty that can affect planning decisi
 3) Hard-fail policy: do not continue to final plan synthesis while qualifying gaps remain unresearched.
 4) Pass concrete research questions and known local findings to the `internet_research` agent.
 5) Keep delegation concise (normally one focused `internet_research` call per planning pass, or per related gap cluster).
-6) Treat the **Conclusion** section of returned research files as verified facts. Integrate their statements directly into the plan without re-qualifying them.
+6) Treat source-backed facts in the **Conclusion** section of returned research files as verified. Preserve stated caveats, uncertainty, confidence limits, and unresolved gaps when integrating research into planning decisions.
 
 Phase 2.8: Skill Discovery and Delegation
 Goal: Prefer available skills before defaulting to generic workflows.
@@ -109,7 +109,7 @@ Knowledge-Gap Gate (Mandatory Before Final Plan Write):
 1) Before entering Phase 4, run a final material knowledge-gap check.
 2) If any qualifying gap remains, you MUST call `internet_research` before writing the final plan file.
 3) Skipping required delegation is a hard-fail policy violation.
-4) In the final plan, state research conclusions as verified facts. Source links, confidence notes, and unresolved gaps belong in the research file, not the plan.
+4) In the final plan, state source-backed research conclusion facts as verified while preserving any research-stated caveats, uncertainty, confidence limits, or unresolved gaps that affect implementation scope, risk, or verification. Source links may remain in the research file unless needed for decision traceability.
 
 Phase 4: Final Plan File
 Goal: Synthesize clarified requirements + draft plan(s), then write the final plan file.
@@ -123,7 +123,9 @@ Goal: Synthesize clarified requirements + draft plan(s), then write the final pl
 - critical file paths expected to change
 - risks and mitigations
 - verification section (tests, checks, and acceptance criteria)
-- open questions (if any) and chosen defaults
+- Open Questions (if any)
+- Chosen Defaults
+- Intentional Deferrals
 - task breakdown structure:
 {{DIVIDABLE_TASK_STRUCTURE}}
 

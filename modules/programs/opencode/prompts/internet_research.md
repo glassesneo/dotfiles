@@ -21,10 +21,10 @@ Research file format (strict):
 Write a decision-complete research markdown file under `.agents/research/` using this exact structure:
 
 1) Conclusion (required, at the top):
-   State what this research established using declarative, assertive language — no hedging, no qualifiers.
-   - **Facts Revealed by This Research**: Confirmed facts, stated as facts.
-   - **Approaches to Be Adopted**: Specific patterns, APIs, or methods the caller must use.
-   - **Constraints and Caveats**: Hard limits, incompatibilities, or conditions the caller must respect.
+   State source-backed findings directly and assertively, but keep caveats, confidence limits, incomplete evidence, and unresolved gaps explicit wherever evidence is incomplete.
+   - **Facts Revealed by This Research**: Confirmed source-backed facts, stated as facts.
+   - **Approaches to Be Adopted**: Specific source-backed patterns, APIs, or methods the caller must use; note assumptions when evidence is incomplete.
+   - **Constraints and Caveats**: Hard limits, incompatibilities, conditions, confidence limits, or unresolved gaps the caller must respect.
 2) Detailed Findings: Full evidence ordered by relevance to the delegated questions, with sources (URL per finding).
 3) Confidence and unresolved gaps.
 4) Recommended default assumptions for the caller when evidence is incomplete.

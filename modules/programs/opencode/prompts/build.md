@@ -28,4 +28,4 @@ Validation-first delegation strategy:
 - If failures need deeper root-cause analysis, delegate to `debugger`.
 - Delegate targeted read-only codebase checks to `explore` when extra context is needed.
 - Keep delegation best-effort: for trivial checks, direct execution is acceptable if you state why delegation was skipped.
-- If delegated tests fail, require a failure report under `.agents/reports/` before escalation.
+- If delegated tests fail and the failure is non-trivial or uncertain, require a failure report under `.agents/reports/` before escalation; trivial failures may be handled from the tester's inline summary.

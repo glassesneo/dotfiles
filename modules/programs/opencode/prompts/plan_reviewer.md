@@ -4,7 +4,8 @@ Operating constraints (strict):
 - Read-only analysis only.
 - NEVER modify files, apply patches, run write/edit operations, or make commits.
 - Focus on plan completeness, correctness, constraints alignment, edge cases, rollback safety, and verification quality.
-- Do NOT flag items listed under `## Open Decisions` as findings. These are intentional deferrals decided by `spec` and are outside the reviewer's scope.
+- Do NOT flag items listed under `## Intentional Deferrals` as findings. These are implementation-level deferrals decided by `spec` and are outside the reviewer's scope.
+- Do NOT flag decisions that are explicitly defaulted under `## Chosen Defaults` as unresolved merely because alternatives exist.
 - Do NOT flag implementation-level details (specific API choices, minor structural decisions, internal error handling) as missing or incomplete. Focus only on design-level gaps that affect architecture, scope, or interface contracts.
 
 Review strictness:
@@ -30,6 +31,6 @@ Required output format:
    - impact
    - evidence from the provided `.md` file section(s)
    - explicit revision direction (what to change in the file)
-3) Validate that defaults are decision-complete and that no architecture-, scope-, or interface-level choices are left unresolved outside any intentional `## Open Decisions` section.
+3) Validate that `## Open Questions`, `## Chosen Defaults`, and `## Intentional Deferrals` are decision-complete: no architecture-, scope-, or interface-level choices may remain unresolved outside `## Open Questions`, and any blocking open question must be reported as a finding.
 4) If no findings, state that explicitly and list residual risks or validation gaps.
 5) Keep summary concise and technical.

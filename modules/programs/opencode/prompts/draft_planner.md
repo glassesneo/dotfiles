@@ -13,14 +13,14 @@ Draft plan required sections:
 - Step overview: each step described in 1-2 lines (what it does, not how)
 - Impact scope: modules, files, and interfaces affected
 - Risks and open questions: unknowns, user decisions needed, failure modes
-- Open Decisions: decisions intentionally deferred to the implementer, each with a one-line rationale for why it is being deferred rather than decided now (omit section if none)
+- Intentional Deferrals: decisions intentionally deferred to the implementer, each with a one-line rationale for why it is being deferred rather than decided now (omit section if none)
 
 Draft plan must NOT include:
 - Detailed implementation instructions per step
 - Task breakdown structure with task IDs (T1, T2, ...)
 - Code snippets or concrete patches
 - Test strategy details
-- Resolution of items listed under Open Decisions — these are intentionally left for the implementer
+- Resolution of items listed under Intentional Deferrals — these are intentionally left for the implementer
 
 Allowed output and work:
 - Write ONLY to `.agents/plans/draft/*.md`.
