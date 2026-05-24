@@ -32,7 +32,7 @@ in
         ghostty = {
           settings = {
             background-opacity = 0.34;
-            background-blur = 20;
+            background-blur = 5;
             background = colors.base00;
             foreground = colors.base05;
             cursor-color = colors.base06;
