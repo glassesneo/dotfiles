@@ -14,18 +14,71 @@ delib.module {
   home.ifEnabled = let
     inherit (pkgs) lib;
     cat = pkgs.lib.getExe' pkgs.coreutils "cat";
+    tomlFormat = pkgs.formats.toml {};
     codexConfigMerger = pkgs.python3.withPackages (pythonPackages: [
       pythonPackages.tomlkit
     ]);
+    readAgentPrompt = name: builtins.readFile (./prompts + "/${name}.md");
+    mkAgent = {
+      name,
+      description,
+      model,
+      modelReasoningEffort,
+      sandboxMode,
+    }:
+      tomlFormat.generate "codex-agent-${name}.toml" {
+        inherit name description model;
+        developer_instructions = readAgentPrompt name;
+        model_reasoning_effort = modelReasoningEffort;
+        sandbox_mode = sandboxMode;
+      };
+    agents = {
+      explorer = mkAgent {
+        name = "explorer";
+        description = "Read-only repository explorer for targeted evidence gathering and ownership mapping.";
+        model = "gpt-5.4-mini";
+        modelReasoningEffort = "medium";
+        sandboxMode = "read-only";
+      };
+      internet_research = mkAgent {
+        name = "internet_research";
+        description = "Source-backed external researcher that writes decision-ready findings to .agents/research/.";
+        model = "gpt-5.5";
+        modelReasoningEffort = "medium";
+        sandboxMode = "workspace-write";
+      };
+      reviewer = mkAgent {
+        name = "reviewer";
+        description = "Evidence-first reviewer that writes a scoped review report to .agents/reports/.";
+        model = "gpt-5.5";
+        modelReasoningEffort = "high";
+        sandboxMode = "workspace-write";
+      };
+      tester = mkAgent {
+        name = "tester";
+        description = "Validation runner and failure triager that reports non-trivial failures in .agents/reports/.";
+        model = "gpt-5.4-mini";
+        modelReasoningEffort = "high";
+        sandboxMode = "workspace-write";
+      };
+      debugger = mkAgent {
+        name = "debugger";
+        description = "Command-driven bug investigator that writes a root-cause report to .agents/reports/.";
+        model = "gpt-5.5";
+        modelReasoningEffort = "high";
+        sandboxMode = "workspace-write";
+      };
+    };
     secretPath = name: sopsSecretPaths.${name} or "/run/secrets/${name}";
     codexConfigPath =
       if homeConfig.home.preferXdgDirectories
       then "${homeConfig.xdg.configHome}/codex/config.toml"
       else "${homeConfig.home.homeDirectory}/.codex/config.toml";
-    codexConfigTarget =
+    codexConfigDirTarget =
       if homeConfig.home.preferXdgDirectories
-      then "${lib.removePrefix "${homeConfig.home.homeDirectory}/" homeConfig.xdg.configHome}/codex/config.toml"
-      else ".codex/config.toml";
+      then "${lib.removePrefix "${homeConfig.home.homeDirectory}/" homeConfig.xdg.configHome}/codex"
+      else ".codex";
+    codexConfigTarget = "${codexConfigDirTarget}/config.toml";
     codexConfigSeed = (pkgs.formats.toml {}).generate "codex-config" homeConfig.programs.codex.settings;
 
     codexWrapped = pkgs.symlinkJoin {
@@ -46,8 +99,11 @@ delib.module {
       package = codexWrapped;
       context = ./GLOBAL_AGENTS.md;
       settings = {
-        multi-agent = true;
-        search_tool = true;
+        features.multi_agent = true;
+        agents = {
+          max_threads = 6;
+          max_depth = 1;
+        };
         model_providers = {
           openrouter = {
             name = "OpenRouter";
@@ -85,7 +141,13 @@ delib.module {
       };
     };
 
-    home.file.${codexConfigTarget}.enable = lib.mkForce false;
+    home.file =
+      lib.mapAttrs' (name: source:
+        lib.nameValuePair "${codexConfigDirTarget}/agents/${name}.toml" {inherit source;})
+      agents
+      // {
+        ${codexConfigTarget}.enable = lib.mkForce false;
+      };
 
     # Codex persists project trust and small UI notices into config.toml, so the
     # target must be a writable file instead of a Home Manager store symlink.
