@@ -185,7 +185,7 @@ delib.module {
       spec = {
         mode = "primary";
         description = "Primary planning agent that handles both ambiguous and well-scoped requests through iterative specification elicitation and systematic planning workflow.";
-        model = "openai/gpt-5.4-fast";
+        model = "openai/gpt-5.5";
         reasoningEffort = "high";
         prompt = renderAgentPrompt "spec" {
           "{{DIVIDABLE_TASK_STRUCTURE}}" = dividableTaskStructure;
@@ -194,7 +194,7 @@ delib.module {
       };
 
       build = {
-        model = "openai/gpt-5.4-fast";
+        model = "openai/gpt-5.5";
         reasoningEffort = "medium";
         description = "Primary build/validation agent with proactive best-effort delegation to testing and debugging subagents.";
         prompt = readAgentPrompt "build";
@@ -203,7 +203,7 @@ delib.module {
 
       reviewer = {
         mode = "primary";
-        model = "openai/gpt-5.4-fast";
+        model = "openai/gpt-5.5";
         reasoningEffort = "high";
         description = "Primary orchestrated reviewer for code written by others, with exploration, optional research, multi-perspective subreviews, and report output.";
         prompt = renderAgentPrompt "reviewer" {
@@ -220,7 +220,7 @@ delib.module {
 
       debugger = {
         mode = "all";
-        model = "openai/gpt-5.4-fast";
+        model = "openai/gpt-5.5";
         reasoningEffort = "medium";
         description = "Performs command-driven bug investigation with reproduction, root-cause analysis, and evidence-only reporting.";
         prompt = renderAgentPrompt "debugger" {
@@ -268,7 +268,7 @@ delib.module {
 
       plan_reviewer = {
         mode = "subagent";
-        model = "openai/gpt-5.4-fast";
+        model = "openai/gpt-5.5";
         description = "Performs strict read-only review of final plan and test-spec files (`*.md`) with actionable revisions.";
         reasoningEffort = "low";
         prompt = readAgentPrompt "plan_reviewer";
@@ -277,7 +277,7 @@ delib.module {
 
       code_reviewer = {
         mode = "subagent";
-        model = "openai/gpt-5.4-fast";
+        model = "openai/gpt-5.5";
         description = "Performs strict read-only code review with severity-ordered findings and concrete file/line evidence.";
         reasoningEffort = "medium";
         prompt = readAgentPrompt "code_reviewer";
@@ -286,7 +286,7 @@ delib.module {
 
       internet_research = {
         mode = "subagent";
-        model = "openai/gpt-5.4-fast";
+        model = "openai/gpt-5.5";
         reasoningEffort = "medium";
         description = "Performs targeted internet research when primary planning agents have material knowledge uncertainty.";
         prompt = renderAgentPrompt "internet_research" {
