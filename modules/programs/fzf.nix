@@ -1,13 +1,14 @@
 {
   delib,
   homeConfig,
+  host,
   lib,
   ...
 }:
 delib.module {
   name = "programs.fzf";
 
-  options = delib.singleEnableOption true;
+  options = delib.singleEnableOption host.devCoreFeatured;
 
   home.ifEnabled = {myconfig, ...}: {
     programs.fzf = let

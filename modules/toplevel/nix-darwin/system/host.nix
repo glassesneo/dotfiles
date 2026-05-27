@@ -1,8 +1,12 @@
-{delib, ...}:
+{
+  delib,
+  pkgs,
+  ...
+}:
 delib.module {
   name = "nix-darwin.system.host";
 
-  options = delib.singleEnableOption true;
+  options = delib.singleEnableOption pkgs.stdenv.isDarwin;
 
   darwin.ifEnabled = {myconfig, ...}: {
     system = {

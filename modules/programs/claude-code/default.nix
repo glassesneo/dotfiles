@@ -1,5 +1,6 @@
 {
   delib,
+  host,
   llm-agents,
   pkgs,
   sopsSecretPaths,
@@ -8,7 +9,7 @@
 delib.module {
   name = "programs.claude-code";
 
-  options = delib.singleEnableOption true;
+  options = delib.singleEnableOption host.devCoreFeatured;
 
   home.ifEnabled = let
     cat = pkgs.lib.getExe' pkgs.coreutils "cat";

@@ -1,5 +1,6 @@
 {
   delib,
+  host,
   llm-agents,
   pkgs,
   ...
@@ -7,7 +8,7 @@
 delib.module {
   name = "programs.agent-browser";
 
-  options = delib.singleEnableOption true;
+  options = delib.singleEnableOption host.devCoreFeatured;
 
   home.ifEnabled = let
     playwrightBrowsersPath = pkgs.playwright-driver.browsers;

@@ -1,8 +1,12 @@
-{delib, ...}:
+{
+  delib,
+  pkgs,
+  ...
+}:
 delib.module {
   name = "nix-darwin.preferences.accessibility.hot-corner";
 
-  options = delib.singleEnableOption true;
+  options = delib.singleEnableOption pkgs.stdenv.isDarwin;
 
   darwin.ifEnabled = {
     system.defaults.dock = {

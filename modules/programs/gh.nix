@@ -1,12 +1,13 @@
 {
   delib,
+  host,
   pkgs,
   ...
 }:
 delib.module {
   name = "programs.gh";
 
-  options = delib.singleEnableOption true;
+  options = delib.singleEnableOption host.devCoreFeatured;
 
   home.ifEnabled.programs.gh = {
     enable = true;

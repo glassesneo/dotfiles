@@ -10,7 +10,7 @@
     flake-parts.lib.mkFlake {inherit inputs;} {
       imports = [inputs.treefmt-nix.flakeModule];
 
-      systems = ["aarch64-darwin" "x86_64-linux"];
+      systems = ["aarch64-darwin" "x86_64-linux" "aarch64-linux"];
 
       # ----------------------------------------------------------------
       # System-agnostic outputs: denix-generated configurations

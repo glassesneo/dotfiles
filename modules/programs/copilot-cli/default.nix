@@ -6,7 +6,7 @@
 delib.module {
   name = "programs.copilot-cli";
 
-  options = delib.singleEnableOption true;
+  options = delib.singleEnableOption false;
 
   home.ifEnabled = {
     home.packages = [

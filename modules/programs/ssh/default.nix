@@ -9,7 +9,7 @@ delib.module {
   name = "programs.ssh";
 
   options.programs.ssh = with delib; {
-    enable = boolOption true;
+    enable = boolOption host.devCoreFeatured;
     mainIdentity = readOnly (strOption "~/.ssh/id_ed25519_personal");
   };
 

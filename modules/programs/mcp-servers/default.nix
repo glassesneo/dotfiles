@@ -58,7 +58,7 @@ in
     name = "programs.mcp-servers-nix";
 
     options.programs.mcp-servers-nix = with delib; {
-      enable = boolOption true;
+      enable = boolOption host.devCoreFeatured;
 
       # Shared server catalog — centralized definitions consumed by all targets.
       catalog = lib.mkOption {

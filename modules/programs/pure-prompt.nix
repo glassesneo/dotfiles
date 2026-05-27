@@ -1,6 +1,7 @@
 {
   delib,
   homeConfig,
+  host,
   pkgs,
   lib,
   ...
@@ -8,7 +9,7 @@
 delib.module {
   name = "programs.pure-prompt";
 
-  options = delib.singleEnableOption true;
+  options = delib.singleEnableOption host.devCoreFeatured;
 
   home.ifEnabled = {
     programs.zsh = {

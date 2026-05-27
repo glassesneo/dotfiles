@@ -7,7 +7,7 @@
 delib.module {
   name = "programs.autoraise";
 
-  options = delib.singleEnableOption true;
+  options = delib.singleEnableOption (pkgs.stdenv.isDarwin && host.guiShellFeatured);
 
   home.ifEnabled = {
     home = {

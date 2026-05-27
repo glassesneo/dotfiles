@@ -1,6 +1,7 @@
 {
   delib,
   homeConfig,
+  host,
   pkgs,
   ...
 }:
@@ -8,7 +9,7 @@ delib.module {
   name = "programs.git";
 
   options.programs.git = with delib; {
-    enable = boolOption true;
+    enable = boolOption host.devCoreFeatured;
     enableLFS = boolOption true;
     ignore_names = readOnly (listOfOption str [
       ".agents"

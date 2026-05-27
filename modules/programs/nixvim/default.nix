@@ -1,5 +1,6 @@
 {
   delib,
+  host,
   inputs,
   # pkgs,
   ...
@@ -8,7 +9,7 @@ delib.module {
   name = "programs.nixvim";
 
   options.programs.nixvim = with delib; {
-    enable = boolOption true;
+    enable = boolOption host.devCoreFeatured;
 
     defaultEditor = boolOption true;
   };

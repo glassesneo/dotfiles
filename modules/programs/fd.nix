@@ -1,8 +1,12 @@
-{delib, ...}:
+{
+  delib,
+  host,
+  ...
+}:
 delib.module {
   name = "programs.fd";
 
-  options = delib.singleEnableOption true;
+  options = delib.singleEnableOption host.devCoreFeatured;
 
   home.ifEnabled.programs.fd = {
     enable = true;

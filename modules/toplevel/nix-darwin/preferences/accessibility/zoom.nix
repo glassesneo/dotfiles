@@ -7,7 +7,7 @@ delib.module {
   name = "nix-darwin.preferences.accessibility.zoom";
 
   options.nix-darwin.preferences.accessibility.zoom = with delib; {
-    enable = boolOption true;
+    enable = boolOption pkgs.stdenv.isDarwin;
     pipWidth = readOnly (intOption 2200);
     pipHeight = readOnly (intOption 1440);
   };

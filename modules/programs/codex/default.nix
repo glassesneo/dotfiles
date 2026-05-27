@@ -1,6 +1,7 @@
 {
   delib,
   homeConfig,
+  host,
   llm-agents,
   pkgs,
   sopsSecretPaths,
@@ -9,7 +10,7 @@
 delib.module {
   name = "programs.codex";
 
-  options = delib.singleEnableOption true;
+  options = delib.singleEnableOption host.devCoreFeatured;
 
   home.ifEnabled = let
     inherit (pkgs) lib;

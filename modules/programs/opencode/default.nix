@@ -1,5 +1,6 @@
 {
   delib,
+  host,
   lib,
   llm-agents,
   ...
@@ -7,7 +8,7 @@
 delib.module {
   name = "programs.opencode";
 
-  options = delib.singleEnableOption true;
+  options = delib.singleEnableOption host.devCoreFeatured;
 
   home.ifEnabled = let
     inherit (lib.attrsets) recursiveUpdate;

@@ -1,5 +1,6 @@
 {
   delib,
+  host,
   lib,
   pkgs,
   ...
@@ -8,7 +9,7 @@ delib.module {
   name = "programs.pay-respects";
 
   options.programs.pay-respects = with delib; {
-    enable = boolOption true;
+    enable = boolOption host.devCoreFeatured;
     useSl = boolOption true;
     slOptions = listOfOption str [
       "-a"

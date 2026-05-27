@@ -1,6 +1,7 @@
 {
   delib,
   homeConfig,
+  host,
   lib,
   pkgs,
   ...
@@ -8,7 +9,7 @@
 delib.module {
   name = "programs.reload";
 
-  options = delib.singleEnableOption true;
+  options = delib.singleEnableOption host.devCoreFeatured;
 
   home.ifEnabled = {myconfig, ...}: {
     home.packages = let

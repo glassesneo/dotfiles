@@ -1,5 +1,6 @@
 {
   delib,
+  host,
   lib,
   pkgs,
   sopsSecretPaths,
@@ -8,7 +9,7 @@
 delib.module {
   name = "programs.nushell";
 
-  options = delib.singleEnableOption true;
+  options = delib.singleEnableOption host.devCoreFeatured;
 
   home.ifEnabled = let
     plugin_names = [

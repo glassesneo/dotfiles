@@ -7,7 +7,7 @@
 delib.module {
   name = "programs.pi";
 
-  options = delib.singleEnableOption true;
+  options = delib.singleEnableOption false;
 
   home.ifEnabled = {
     home.packages = [

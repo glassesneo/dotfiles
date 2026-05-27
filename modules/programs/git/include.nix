@@ -1,6 +1,7 @@
 {
   delib,
   homeConfig,
+  host,
   ...
 }:
 delib.module {
@@ -8,7 +9,7 @@ delib.module {
 
   # Context-specific overlay on top of the base git module rather than a
   # separate git owner. Keeps work-only behavior independently toggleable.
-  options = delib.singleEnableOption true;
+  options = delib.singleEnableOption host.devCoreFeatured;
 
   home.ifEnabled = {
     programs.git = {

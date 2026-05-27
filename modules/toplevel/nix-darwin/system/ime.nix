@@ -1,13 +1,14 @@
 {
   delib,
   lib,
+  pkgs,
   ...
 }:
 delib.module {
   name = "nix-darwin.system.ime";
 
   options.nix-darwin.system.ime = with delib; {
-    enable = boolOption true;
+    enable = boolOption pkgs.stdenv.isDarwin;
 
     # Central aggregation interface for com.apple.HIToolbox input-source arrays.
     # Feature modules (e.g. AquaSKK) contribute entries here; this module is the

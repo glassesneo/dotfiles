@@ -7,7 +7,7 @@
 delib.module {
   name = "brew-nix";
 
-  options = delib.singleEnableOption true;
+  options = delib.singleEnableOption pkgs.stdenv.isDarwin;
 
   darwin.always = {
     imports = [

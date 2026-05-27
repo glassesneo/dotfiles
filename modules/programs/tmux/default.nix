@@ -1,5 +1,6 @@
 {
   delib,
+  host,
   lib,
   pkgs,
   ...
@@ -8,7 +9,7 @@ delib.module {
   name = "programs.tmux";
 
   options.programs.tmux = with delib; {
-    enable = boolOption true;
+    enable = boolOption host.devCoreFeatured;
     # Rice-aware theming configuration
     theme = {
       plugin = strOption ""; # e.g., "catppuccin" - plugin name from tmuxPlugins

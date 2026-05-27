@@ -1,5 +1,6 @@
 {
   delib,
+  host,
   inputs,
   llm-agents,
   ...
@@ -7,7 +8,7 @@
 delib.module {
   name = "programs.skills-deployer";
 
-  options = delib.singleEnableOption true;
+  options = delib.singleEnableOption host.devCoreFeatured;
 
   home.always.imports = [
     inputs.skills-deployer.homeManagerModules.skills-deployer
