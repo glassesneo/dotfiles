@@ -10,9 +10,13 @@
 delib.module {
   name = "programs.codex";
 
-  options = delib.singleEnableOption host.devCoreFeatured;
+  options = with delib;
+    moduleOptions {
+      enable = boolOption host.devCoreFeatured;
+      sandboxMode = enumOption ["workspace-write" "danger-full-access"] "workspace-write";
+    };
 
-  home.ifEnabled = let
+  home.ifEnabled = {myconfig, ...}: let
     inherit (pkgs) lib;
     cat = pkgs.lib.getExe' pkgs.coreutils "cat";
     tomlFormat = pkgs.formats.toml {};
@@ -60,14 +64,14 @@ delib.module {
         description = "Validation runner and failure triager that reports non-trivial failures in .agents/reports/.";
         model = "gpt-5.4-mini";
         modelReasoningEffort = "high";
-        sandboxMode = "workspace-write";
+        sandboxMode = myconfig.programs.codex.sandboxMode;
       };
       debugger = mkAgent {
         name = "debugger";
         description = "Command-driven bug investigator that writes a root-cause report to .agents/reports/.";
         model = "gpt-5.5";
         modelReasoningEffort = "high";
-        sandboxMode = "workspace-write";
+        sandboxMode = myconfig.programs.codex.sandboxMode;
       };
     };
     secretPath = name: sopsSecretPaths.${name} or "/run/secrets/${name}";
@@ -119,7 +123,7 @@ delib.module {
             model_reasoning_effort = "medium";
             plan_mode_reasoning_effort = "medium";
             approval_policy = "never";
-            sandbox_mode = "workspace-write";
+            sandbox_mode = myconfig.programs.codex.sandboxMode;
             sandbox_workspace_write.network_access = true;
             sandbox_workspace_write.writable_roots = [
               "/tmp/agent-browser"

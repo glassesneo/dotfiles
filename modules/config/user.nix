@@ -10,4 +10,13 @@ delib.module {
       home = "/Users/${username}";
     };
   };
+
+  nixos.always = {myconfig, ...}: let
+    inherit (myconfig.constants) username;
+  in {
+    users.users.${username} = {
+      name = username;
+      home = "/home/${username}";
+    };
+  };
 }

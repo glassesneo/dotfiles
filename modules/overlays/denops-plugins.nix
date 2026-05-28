@@ -8,6 +8,6 @@ delib.overlayModule {
 
   overlay = inputs.denops-plugins.overlays.default;
 
-  targets = ["home" "darwin"];
+  targets = ["home" "darwin" "nixos"];
   enabled = true;
 }

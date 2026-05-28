@@ -7,7 +7,7 @@
 delib.module {
   name = "programs.zsh";
 
-  options = delib.singleEnableOption host.guiShellFeatured;
+  options = delib.singleEnableOption host.devCoreFeatured;
 
   home.ifEnabled = {
     programs.zsh = let

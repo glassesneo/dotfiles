@@ -30,7 +30,7 @@ in
   delib.module {
     name = "nix";
 
-    # nixos.always = shared;
+    nixos.always = shared;
     home.always = shared;
     darwin.always = shared;
   }

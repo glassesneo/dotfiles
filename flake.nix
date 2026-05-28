@@ -62,7 +62,7 @@
             };
           };
       in {
-        # nixosConfigurations = mkConfigurations "nixos";
+        nixosConfigurations = mkConfigurations "nixos";
         homeConfigurations = mkConfigurations "home";
         darwinConfigurations = mkConfigurations "darwin";
       };

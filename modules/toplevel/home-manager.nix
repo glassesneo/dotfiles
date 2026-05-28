@@ -21,6 +21,7 @@ in
       else config.home-manager.users.${homeManagerUser};
 
     darwin.always.home-manager = shared;
+    nixos.always.home-manager = shared;
 
     home.always = {myconfig, ...}: let
       inherit (myconfig.constants) username;

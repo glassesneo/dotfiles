@@ -8,6 +8,6 @@ delib.overlayModule {
 
   overlay = inputs.bun2nix.overlays.default;
 
-  targets = ["home" "darwin"];
+  targets = ["home" "darwin" "nixos"];
   enabled = true;
 }

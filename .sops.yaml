@@ -4,6 +4,7 @@ creation_rules:
       - age:
           - age1r990kv2jq2vd4fxhf6znzmqqg6w2wfhllw9s9uzjun6tvcd43e3san06yu
           - age1jaf2jhvqsvdrwr5purlmea0uy0jauw000pllpz6ehe5eq5edg5dqc2dscd
+          - age1cwfytgvhlf23kxyt4r4et76uwva9jpudy7kdjgpgwtu287cvrawsw09t73
   - path_regex: ^secrets/kurogane\.yaml$
     key_groups:
       - age:
