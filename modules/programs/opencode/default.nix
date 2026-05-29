@@ -123,6 +123,30 @@ delib.module {
 
     boundedEditPermission = fullAccessPermission // noCommandPermission;
 
+    readOnlyGitInspectionPermission =
+      readOnlyPermission
+      // {
+        bash =
+          denyAll
+          // ask [
+            "git diff*"
+            "git log*"
+            "git merge-base*"
+            "git rev-list*"
+            "git rev-parse*"
+            "git show*"
+            "git status*"
+          ]
+          // deny [
+            "git *&&*"
+            "git *>*"
+            "git *|*"
+            "git *;*"
+            "git *--output*"
+          ];
+        question = "allow";
+      };
+
     draftPlansOnlyPermission =
       withScope {
         name = "draftPlans";
@@ -200,6 +224,15 @@ delib.module {
         description = "Primary build/validation agent with proactive best-effort delegation to testing and debugging subagents.";
         prompt = readAgentPrompt "build";
         permission = fullAccessPermission;
+      };
+
+      sensei = {
+        mode = "primary";
+        model = "openai/gpt-5.5";
+        reasoningEffort = "medium";
+        description = "Primary explanation agent that teaches reports and git revisions/ranges to project outsiders after calibrating user understanding.";
+        prompt = readAgentPrompt "sensei";
+        permission = readOnlyGitInspectionPermission;
       };
 
       reviewer = {
