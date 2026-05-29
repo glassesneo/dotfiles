@@ -6,7 +6,72 @@
     denix,
     nixpkgs,
     ...
-  }:
+  }: let
+    lib = nixpkgs.lib;
+    homeManagerUser = "neo";
+    riceNames = ["catppuccin" "everforest" "monochrome"];
+
+    filterConfigurationsByHostNames = hostNames: configs: let
+      hostConfigurationNames = hostName:
+        [hostName]
+        ++ map (riceName: "${hostName}-${riceName}") riceNames;
+
+      homeConfigurationNames = hostName:
+        ["${homeManagerUser}@${hostName}"]
+        ++ map (riceName: "${homeManagerUser}@${hostName}-${riceName}") riceNames;
+
+      allowedNames = lib.concatMap (hostName:
+        hostConfigurationNames hostName ++ homeConfigurationNames hostName)
+      hostNames;
+    in
+      lib.filterAttrs (name: _: builtins.elem name allowedNames) configs;
+
+    mkConfigurations = moduleSystem:
+      denix.lib.configurations rec {
+        inherit moduleSystem;
+        inherit homeManagerUser;
+
+        paths = [
+          ./hosts
+          ./modules
+          ./rices
+        ];
+
+        extensions = with denix.lib.extensions; [
+          args
+          (base.withConfig {
+            args.enable = true;
+            rices.enable = true;
+            hosts.type.types = ["laptop" "server" "virtual"];
+            hosts.features.features = ["guiShell" "windowManagement" "devCore"];
+            hosts.features.defaultByHostType = {
+              laptop = ["guiShell" "windowManagement" "devCore"];
+              server = ["devCore"];
+              virtual = ["devCore"];
+            };
+            hosts.extraSubmodules = [
+              ({lib, ...}: {
+                options.tier = lib.mkOption {
+                  type = lib.types.enum ["minimal" "basic" "standard" "full"];
+                  default = "standard";
+                  description = "Performance tier of this host. Ordered: minimal < basic < standard < full.";
+                };
+                options.hasNotch = lib.mkOption {
+                  type = lib.types.bool;
+                  default = false;
+                  description = "Whether this host has a display notch (e.g. MacBook Pro). Drives bar position and notch-aware layout defaults.";
+                };
+              })
+            ];
+          })
+          overlays
+        ];
+
+        specialArgs = {
+          inherit inputs moduleSystem homeManagerUser;
+        };
+      };
+  in
     flake-parts.lib.mkFlake {inherit inputs;} {
       imports = [inputs.treefmt-nix.flakeModule];
 
@@ -15,56 +80,15 @@
       # ----------------------------------------------------------------
       # System-agnostic outputs: denix-generated configurations
       # ----------------------------------------------------------------
-      flake = let
-        mkConfigurations = moduleSystem:
-          denix.lib.configurations rec {
-            inherit moduleSystem;
-            homeManagerUser = "neo";
-
-            paths = [
-              ./hosts
-              ./modules
-              ./rices
-            ];
-
-            extensions = with denix.lib.extensions; [
-              args
-              (base.withConfig {
-                args.enable = true;
-                rices.enable = true;
-                hosts.type.types = ["laptop" "server" "virtual"];
-                hosts.features.features = ["guiShell" "windowManagement" "devCore"];
-                hosts.features.defaultByHostType = {
-                  laptop = ["guiShell" "windowManagement" "devCore"];
-                  server = ["devCore"];
-                  virtual = ["devCore"];
-                };
-                hosts.extraSubmodules = [
-                  ({lib, ...}: {
-                    options.tier = lib.mkOption {
-                      type = lib.types.enum ["minimal" "basic" "standard" "full"];
-                      default = "standard";
-                      description = "Performance tier of this host. Ordered: minimal < basic < standard < full.";
-                    };
-                    options.hasNotch = lib.mkOption {
-                      type = lib.types.bool;
-                      default = false;
-                      description = "Whether this host has a display notch (e.g. MacBook Pro). Drives bar position and notch-aware layout defaults.";
-                    };
-                  })
-                ];
-              })
-              overlays
-            ];
-
-            specialArgs = {
-              inherit inputs moduleSystem homeManagerUser;
-            };
-          };
-      in {
-        nixosConfigurations = mkConfigurations "nixos";
-        homeConfigurations = mkConfigurations "home";
-        darwinConfigurations = mkConfigurations "darwin";
+      flake = {
+        # Keep Linux NixOS hosts out of the standard flake output so Darwin
+        # `nix flake check` does not try to evaluate Linux-only derivations.
+        # VM validation lives in `checks.aarch64-linux.nixos-seiran-vm0` below.
+        nixosConfigurations = {};
+        homeConfigurations =
+          filterConfigurationsByHostNames ["seiran" "kurogane"] (mkConfigurations "home");
+        darwinConfigurations =
+          filterConfigurationsByHostNames ["seiran" "kurogane"] (mkConfigurations "darwin");
       };
 
       # ----------------------------------------------------------------
@@ -78,28 +102,36 @@
       }: {
         treefmt = import ./treefmt.nix {inherit pkgs;};
 
-        checks = lib.optionalAttrs (system == "aarch64-darwin") (let
-          homeConfigs = inputs.self.homeConfigurations;
+        checks =
+          lib.optionalAttrs (system == "aarch64-darwin") (let
+            homeConfigs = inputs.self.homeConfigurations;
 
-          hmChecks =
-            pkgs.lib.mapAttrs' (name: config: {
-              name = "hm-" + builtins.replaceStrings ["@"] ["_at_"] name;
-              value = config.activationPackage;
-            })
-            homeConfigs;
+            hmChecks =
+              pkgs.lib.mapAttrs' (name: config: {
+                name = "hm-" + builtins.replaceStrings ["@"] ["_at_"] name;
+                value = config.activationPackage;
+              })
+              homeConfigs;
 
-          nixvimChecks =
-            pkgs.lib.mapAttrs' (name: config: {
-              name = "nixvim-" + builtins.replaceStrings ["@"] ["_at_"] name;
-              value = config.config.programs.nixvim.build.test;
-            }) (pkgs.lib.filterAttrs (
-                name: _:
-                  name == "neo@kurogane" || name == "neo@kurogane-catppuccin"
-              )
-              homeConfigs);
-        in
-          hmChecks
-          // nixvimChecks);
+            nixvimChecks =
+              pkgs.lib.mapAttrs' (name: config: {
+                name = "nixvim-" + builtins.replaceStrings ["@"] ["_at_"] name;
+                value = config.config.programs.nixvim.build.test;
+              }) (pkgs.lib.filterAttrs (
+                  name: _:
+                    name == "neo@kurogane" || name == "neo@kurogane-catppuccin"
+                )
+                homeConfigs);
+          in
+            hmChecks
+            // nixvimChecks)
+          // lib.optionalAttrs (system == "aarch64-linux") (let
+            nixosConfigs = filterConfigurationsByHostNames ["seiran-vm0"] (mkConfigurations "nixos");
+          in {
+            # On the VM, `nix flake check` builds the NixOS system closure.
+            # On Darwin, this check is omitted as an incompatible system.
+            nixos-seiran-vm0 = nixosConfigs.seiran-vm0.config.system.build.toplevel;
+          });
 
         devShells = lib.optionalAttrs (system == "aarch64-darwin") (let
           dotfiles = pkgs.mkShellNoCC {

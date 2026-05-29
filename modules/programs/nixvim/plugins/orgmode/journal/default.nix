@@ -46,11 +46,11 @@ delib.module {
       };
     };
 
-    programs.nixvim.extraConfigLua = builtins.readFile (
-      pkgs.replaceVars ./today.lua {
-        journal-path = journal;
-      }
-    );
+    programs.nixvim.extraConfigLua =
+      builtins.replaceStrings
+      ["@journal-path@"]
+      [journal]
+      (builtins.readFile ./today.lua);
 
     home.packages = let
       today = pkgs.writeShellScriptBin "today" "nvim -c 'Today'";
