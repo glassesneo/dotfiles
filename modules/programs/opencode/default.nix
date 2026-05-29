@@ -177,6 +177,7 @@ delib.module {
       enable = true;
       package = llm-agents.opencode;
       settings = {
+        lsp = true;
         command = {
           review = {
             template = ''
