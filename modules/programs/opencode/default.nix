@@ -73,14 +73,22 @@ delib.module {
         addRulesToOps ops (allow scopes.${name}.files) perm
       );
 
+    taskDelegationPermissionForSubagent =
+      denyAll
+      // {
+        "explore" = "allow";
+      };
+
     readOnlyPermission = {
       edit = denyAll;
       write = denyAll;
+      task = allowAll;
     };
 
     fullAccessPermission = {
       edit = allowAll;
       write = allowAll;
+      task = allowAll;
     };
 
     tempWorkspacePermission = let
@@ -90,6 +98,7 @@ delib.module {
       merge readablePermission {
         edit = denyAll // allow ["/tmp/**" "/private/tmp/**"];
         write = denyAll // allow ["/tmp/**" "/private/tmp/**"];
+        task = allowAll;
       };
 
     plansOnlyPermission =
@@ -292,7 +301,7 @@ delib.module {
           "{{DRAFT_FILENAME_POLICY}}" = draftFilenamePolicy;
           "{{DRAFT_FAILURE_PROTOCOL}}" = draftFailureProtocol;
         };
-        permission = draftPlansOnlyPermission;
+        permission = draftPlansOnlyPermission // {task = taskDelegationPermissionForSubagent;};
       };
 
       explore = {
@@ -300,7 +309,7 @@ delib.module {
         reasoningEffort = "high";
         description = "Read-only exploration agent that uses relevant skills provided by primary-agent delegation context.";
         prompt = readAgentPrompt "explore";
-        permission = readOnlyPermission;
+        permission = readOnlyPermission // {task = taskDelegationPermissionForSubagent;};
       };
 
       plan_reviewer = {
@@ -318,7 +327,7 @@ delib.module {
         description = "Performs strict read-only code review with severity-ordered findings and concrete file/line evidence.";
         reasoningEffort = "medium";
         prompt = readAgentPrompt "code_reviewer";
-        permission = readOnlyPermission;
+        permission = readOnlyPermission // {task = taskDelegationPermissionForSubagent;};
       };
 
       researcher = {
