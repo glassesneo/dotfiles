@@ -179,6 +179,22 @@ delib.module {
       settings = {
         lsp = true;
         command = {
+          spec = {
+            template = ''
+              Spec target: $ARGUMENTS
+            '';
+            description = "Plan a target with the spec agent.";
+            agent = "spec";
+            subtask = false;
+          };
+          impl = {
+            template = ''
+              Implement: $ARGUMENTS
+            '';
+            description = "Implement a plan with the implementer agent.";
+            agent = "implementer";
+            subtask = false;
+          };
           review = {
             template = ''
               Review target: $ARGUMENTS
@@ -190,7 +206,6 @@ delib.module {
         share = "disabled";
         autoupdate = false;
         default_agent = "spec";
-        agent.plan.disable = true;
         experimental = {
           mcp_timeout = 1200000;
         };
@@ -200,6 +215,8 @@ delib.module {
     };
 
     programs.opencode.settings.agent = {
+      plan.disable = true;
+      build.disable = true;
       idea = {
         mode = "primary";
         description = "Primary ideation agent for early-stage exploration and problem framing before planning; hand off to `spec` by switching agents with the same chat history.";
@@ -219,11 +236,12 @@ delib.module {
         permission = specPlansPermission // {question = "allow";};
       };
 
-      build = {
+      implementer = {
+        mode = "primary";
         model = "openai/gpt-5.5";
         reasoningEffort = "medium";
-        description = "Primary build/validation agent with proactive best-effort delegation to testing and debugging subagents.";
-        prompt = readAgentPrompt "build";
+        description = "Primary implementation and validation agent with proactive best-effort delegation to testing and debugging subagents.";
+        prompt = readAgentPrompt "implementer";
         permission = fullAccessPermission;
       };
 
@@ -303,12 +321,12 @@ delib.module {
         permission = readOnlyPermission;
       };
 
-      internet_research = {
+      researcher = {
         mode = "subagent";
         model = "openai/gpt-5.5";
         reasoningEffort = "medium";
         description = "Performs targeted internet research when primary planning agents have material knowledge uncertainty.";
-        prompt = renderAgentPrompt "internet_research" {
+        prompt = renderAgentPrompt "researcher" {
           "{{RESEARCH_FILENAME_POLICY}}" = researchFilenamePolicy;
         };
         permission = researchOnlyPermission;

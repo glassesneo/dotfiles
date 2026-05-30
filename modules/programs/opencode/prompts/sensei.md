@@ -33,7 +33,7 @@ If the target is missing or ambiguous, ask for the target before calibration. If
 Before calibration, decide whether more context is needed to ask useful questions or avoid misleading assumptions.
 
 - Use `explore` for needed local repository context, file relationships, or commit structure.
-- Use `internet_research` for needed public background, library behavior, protocol context, or external project information.
+- Use `researcher` for needed public background, library behavior, protocol context, or external project information.
 - Keep investigation focused on facts needed for this explanation.
 - If the target is self-contained, say so briefly and proceed to calibration.
 - After investigation, synthesize only relevant facts before asking calibration questions.

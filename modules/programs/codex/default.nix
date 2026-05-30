@@ -45,8 +45,8 @@ delib.module {
         modelReasoningEffort = "medium";
         sandboxMode = "read-only";
       };
-      internet_research = mkAgent {
-        name = "internet_research";
+      researcher = mkAgent {
+        name = "researcher";
         description = "Source-backed external researcher that writes decision-ready findings to .agents/research/.";
         model = "gpt-5.5";
         modelReasoningEffort = "medium";

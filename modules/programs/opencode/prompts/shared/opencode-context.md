@@ -7,8 +7,8 @@
 
 ### Agent Switching
 
-- Primary agents `spec`, `debugger`, `reviewer`, and `build` should proactively delegate to appropriate subagents on a best-effort basis.
-- For fast planning, use `spec` and choose `instant` review strictness after the final plan file is written; then switch to `build` with the plan file path.
+- Primary agents `spec`, `implementer`, `debugger`, and `reviewer` should proactively delegate to appropriate subagents on a best-effort basis.
+- For fast planning, use `spec` and choose `instant` review strictness after the final plan file is written; then switch to `implementer` with the plan file path.
 - After implementation, run review with `reviewer` for orchestrated review or `code_reviewer` for a focused read-only subagent review.
 - `spec` must complete specification elicitation and resolve/default material ambiguities before draft planning.
 - Ignore backward compatibility unless explicitly specified.

@@ -63,7 +63,7 @@ delib.module {
         };
       };
       agents = {
-        internet-research = readAgentPrompt "internet-research";
+        researcher = readAgentPrompt "researcher";
         code_reviewer = readAgentPrompt "code_reviewer";
         tester = readAgentPrompt "tester";
       };

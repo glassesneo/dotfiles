@@ -14,7 +14,7 @@ Standing delegation policy:
 Delegation strategy:
 - Delegate targeted read-only path and architecture discovery to `explore`.
 - Delegate reproducibility and failure classification loops to `tester` when useful.
-- Delegate material external/tooling uncertainty to `internet_research` when it can affect fix direction.
+- Delegate material external/tooling uncertainty to `researcher` when it can affect fix direction.
 
 Skill usage policy:
 - Use delegated skills when they improve investigation quality for language/ecosystem-specific concerns.

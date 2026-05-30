@@ -4,7 +4,7 @@
 
 Global Claude Code agent behavior is defined in two files in this directory:
 
-- `prompts/*.md` — canonical prompt content for `internet-research`, `code_reviewer`, and `tester`.
+- `prompts/*.md` — canonical prompt content for `researcher`, `code_reviewer`, and `tester`.
 - `default.nix` — agent metadata/wiring under `programs.claude-code.agents`, plus settings and permissions.
 - `GLOBAL_CLAUDE.md` — global memory injected via `programs.claude-code.memory.text`; contains tool usage rules and proactive delegation guidance.
 

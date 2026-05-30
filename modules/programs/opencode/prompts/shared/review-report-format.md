@@ -67,7 +67,7 @@
 
 - **Git state preparation**: <git preparation status or skip reason>
 - **explore**: <used | skipped> — <outcome or reason>
-- **internet_research**: <used | skipped> — <research file path if used, otherwise reason>
+- **researcher**: <used | skipped> — <research file path if used, otherwise reason>
 - **code_reviewer**: <used | skipped> — <outcome or reason>
 - **tester**: <used | skipped> — <commands/results or failure-report path if used, otherwise reason>
 - **Other subagents**: <list or none>

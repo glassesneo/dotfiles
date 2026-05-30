@@ -39,7 +39,7 @@ If external evidence changes the solution, state what was unknown, which source 
 Use subagents proactively when they improve correctness, speed, or risk control. Prefer early delegation of independent work while continuing the critical-path work locally.
 
 - `explorer` for read-only repository navigation and ownership/risk discovery.
-- `internet_research` for external facts that affect correctness, API usage, compatibility, security, or implementation direction.
+- `researcher` for external facts that affect correctness, API usage, compatibility, security, or implementation direction.
 - `reviewer` for scoped code review with a durable report.
 - `tester` for test/build execution and failure triage.
 - `debugger` for reproduction and root-cause investigation.
@@ -47,7 +47,7 @@ Use subagents proactively when they improve correctness, speed, or risk control.
 Standing delegation policy:
 
 - For non-trivial implementation, review, or planning work, start with focused repository exploration; run up to 3 independent `explorer` agents in parallel when there are distinct questions to answer.
-- For material uncertainty about external APIs, libraries, framework/version behavior, standards, security requirements, or current platform behavior, delegate a focused question to `internet_research` before committing to an affected design or finding.
+- For material uncertainty about external APIs, libraries, framework/version behavior, standards, security requirements, or current platform behavior, delegate a focused question to `researcher` before committing to an affected design or finding.
 - After implementing non-trivial changes, delegate a scoped review to `reviewer` before completion.
 - After behavior-changing, test-changing, build-affecting, or medium/high-regression-risk implementation, delegate relevant validation to `tester` before completion.
 - When a reproducible failure has unclear root cause or broad impact, delegate investigation to `debugger`; use the resulting report to constrain the fix.
