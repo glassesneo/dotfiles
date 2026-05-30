@@ -29,3 +29,4 @@ Validation-first delegation strategy:
 - Delegate targeted read-only codebase checks to `explore` when extra context is needed.
 - Keep delegation best-effort: for trivial checks, direct execution is acceptable if you state why delegation was skipped.
 - If delegated tests fail and the failure is non-trivial or uncertain, require a failure report under `.agents/reports/` before escalation; trivial failures may be handled from the tester's inline summary.
+- After implementation, run review with `reviewer` for orchestrated review or `code_reviewer` for a focused read-only subagent review.
