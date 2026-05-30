@@ -277,22 +277,6 @@ delib.module {
         permission = draftPlansOnlyPermission;
       };
 
-      editor = {
-        mode = "subagent";
-        model = "zai-coding-plan/glm-5-turbo";
-        description = "Instruction-following editor subagent for bounded file edits with minimal required context reads.";
-        prompt = readAgentPrompt "editor";
-        permission = boundedEditPermission;
-      };
-
-      general = {
-        mode = "subagent";
-        model = "zai-coding-plan/glm-5.1";
-        description = "General implementation subagent for delegated file edits plus targeted path exploration.";
-        prompt = readAgentPrompt "general";
-        permission = boundedEditPermission;
-      };
-
       explore = {
         model = "github-copilot/gpt-5.4-mini";
         reasoningEffort = "high";
