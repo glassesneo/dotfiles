@@ -209,6 +209,13 @@ delib.module {
               Review target: $ARGUMENTS
             '';
             agent = "reviewer";
+            subtask = true;
+          };
+          primary-review = {
+            template = ''
+              Review target: $ARGUMENTS
+            '';
+            agent = "reviewer";
             subtask = false;
           };
         };
@@ -264,7 +271,7 @@ delib.module {
       };
 
       reviewer = {
-        mode = "primary";
+        mode = "all";
         model = "openai/gpt-5.5";
         reasoningEffort = "high";
         description = "Primary orchestrated reviewer for code written by others, with exploration, optional research, multi-perspective subreviews, and report output.";
