@@ -228,6 +228,13 @@ delib.module {
         plugin = [];
       };
       context = readSharedPrompt "opencode-context";
+      tui = {
+        attention = {
+          enabled = true;
+          notifications = true;
+          sound = false;
+        };
+      };
     };
 
     programs.opencode.settings.agent = {

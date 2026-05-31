@@ -57,6 +57,7 @@ in
           ];
           auto-update = "off";
           font-feature = "-dlig";
+          desktop-notifications = true;
           window-inherit-working-directory = false;
           macos-titlebar-style = "hidden";
           background-opacity-cells = true;
