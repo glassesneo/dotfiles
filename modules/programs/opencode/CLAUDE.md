@@ -5,6 +5,7 @@
 - `prompts/*.md` contains runtime prompt content for reusable OpenCode agents in this module.
 - `prompts/shared/*.md` contains canonical shared prompt fragments, contracts, policies, and context snippets.
 - `default.nix` owns agent metadata, permissions, shared fragment loading, placeholder rendering/wiring, and command-specific runtime instructions.
+- Permission presets in `default.nix` are organized under `perm.*` by concern; compose new agent permissions from those filesystem, bash, task, interaction, and scope helpers instead of hand-building ad hoc bundles.
 - Keep explanatory notes about this dotfiles module in this file; keep instructions that should be shown to OpenCode agents in `prompts/*.md` or command templates.
 
 ## Local Agents
