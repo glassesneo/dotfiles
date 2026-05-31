@@ -32,9 +32,17 @@ delib.module {
 
     denyAll = deny ["*"];
     allowAll = allow ["*"];
-    askAll = ask ["*"];
 
     merge = a: b: recursiveUpdate a b;
+    mergeMany = builtins.foldl' merge {};
+    denyShellOperatorsFor = prefixes:
+      builtins.concatMap (prefix: [
+        "${prefix}?*&&*"
+        "${prefix}?*>*"
+        "${prefix}?*|*"
+        "${prefix}?*;*"
+      ])
+      prefixes;
 
     addRulesToOps = ops: rules: perm:
       builtins.foldl' (
@@ -79,42 +87,72 @@ delib.module {
       );
 
     perm = {
-      fs = {
-        readOnly = {
+      read = {
+        workspace =
+          addRulesToOps ["read" "glob" "grep" "list" "lsp"] allowAll {};
+      };
+
+      write = {
+        none = {
           edit = denyAll;
-          task = allowAll;
         };
 
-        fullWrite = {
+        full = {
           edit = allowAll;
-          task = allowAll;
         };
 
         tempWorkspace = let
-          externalDirPermission = grantExternalDirs [
+          tempDirs = [
             "/tmp/*"
             "/private/tmp/*"
             "/nix/store"
             "/nix/store/*"
-          ] {};
-          readablePermission =
-            addRulesToOps ["read"] (allow [
-              "/tmp/*"
-              "/private/tmp/*"
-              "/nix/store"
-              "/nix/store/*"
-            ])
-            externalDirPermission;
+          ];
+          tempFiles = [
+            "/tmp/*"
+            "/tmp/**"
+            "/private/tmp/*"
+            "/private/tmp/**"
+            "/nix/store"
+            "/nix/store/*"
+          ];
         in
-          merge readablePermission {
-            edit = denyAll // allow ["/tmp/**" "/private/tmp/**"];
-            task = allowAll;
-          };
+          mergeMany [
+            (grantExternalDirs tempDirs {})
+            (addRulesToOps ["read"] (allow tempFiles) {})
+            {
+              edit = denyAll // allow ["/tmp/**" "/private/tmp/**"];
+            }
+          ];
       };
 
-      bash = {
+      execute = {
         none = {
           bash = "deny";
+        };
+
+        testAndDebug = let
+          commandPrefixes = [
+            "just"
+            "nix"
+            "nh"
+            "deno"
+            "uv"
+            "npm"
+            "pnpm"
+            "bun"
+            "python"
+            "make"
+          ];
+        in {
+          bash =
+            denyAll
+            // ask (map (prefix: "${prefix}*") commandPrefixes)
+            // deny (denyShellOperatorsFor commandPrefixes);
+        };
+
+        full = {
+          bash = "allow";
         };
 
         # OpenCode evaluates granular permission rules with the last matching
@@ -143,21 +181,80 @@ delib.module {
         };
       };
 
-      task = {
+      delegate = {
+        none = {
+          task = denyAll;
+        };
+
+        all = {
+          task = allowAll;
+        };
+
+        only = agents: {
+          task = denyAll // allow agents;
+        };
+
         # Same order-sensitive OpenCode rule model as `bash.safeGitInspection`:
         # deny delegation broadly, then allow the dedicated read-only explorer.
-        delegateExploreOnly = {
-          task =
-            denyAll
-            // {
-              "explore" = "allow";
-            };
+        exploreOnly = {
+          task = denyAll // allow ["explore"];
         };
       };
 
-      interaction = {
+      interact = {
+        none = {
+          question = "deny";
+          todowrite = "deny";
+        };
+
         question = {
           question = "allow";
+        };
+
+        todo = {
+          todowrite = "allow";
+        };
+
+        all = {
+          question = "allow";
+          todowrite = "allow";
+        };
+      };
+
+      network = {
+        none = {
+          webfetch = "deny";
+          websearch = "deny";
+          repo_clone = denyAll;
+          repo_overview = denyAll;
+        };
+
+        web = {
+          webfetch = "allow";
+          websearch = "allow";
+        };
+
+        full = {
+          webfetch = "allow";
+          websearch = "allow";
+          repo_clone = allowAll;
+          repo_overview = allowAll;
+        };
+      };
+
+      context = {
+        none = {
+          skill = denyAll;
+        };
+
+        full = {
+          skill = allowAll;
+        };
+      };
+
+      safety = {
+        externalAll = {
+          external_directory = allowAll;
         };
       };
 
@@ -200,21 +297,74 @@ delib.module {
     };
 
     agentPerm = rec {
-      plansOnly = perm.scope.plans ["edit"] perm.fs.readOnly;
+      pureRead = mergeMany [
+        perm.read.workspace
+        perm.write.none
+        perm.execute.none
+        perm.delegate.none
+        perm.interact.none
+        perm.network.none
+        perm.context.none
+      ];
 
-      specPlans = perm.scope.draftPlans ["read"] plansOnly;
+      agentsOnly = perm.scope.agents ["read" "edit"] pureRead;
 
-      tempWorkspaceWithReports = perm.scope.reports ["read" "edit"] perm.fs.tempWorkspace;
+      plannerFull = mergeMany [
+        agentsOnly
+        perm.interact.question
+        (perm.delegate.only ["explore" "draft_planner" "researcher" "plan_reviewer"])
+      ];
 
-      agentsOnly = perm.scope.agents ["read" "edit"] perm.fs.readOnly;
+      composedFull = mergeMany [
+        perm.read.workspace
+        perm.write.full
+        perm.execute.full
+        perm.delegate.all
+        perm.interact.all
+        perm.network.full
+        perm.context.full
+        perm.safety.externalAll
+      ];
 
-      readOnlyGitInspection = merge (merge perm.fs.readOnly perm.bash.safeGitInspection) perm.interaction.question;
+      tempWorkspaceWithReports =
+        perm.scope.reports ["read" "edit"]
+        (mergeMany [
+          pureRead
+          perm.write.tempWorkspace
+        ]);
 
-      draftPlansOnly = perm.scope.draftPlans ["edit"] perm.fs.readOnly;
+      debugSandbox = mergeMany [
+        tempWorkspaceWithReports
+        perm.execute.testAndDebug
+        perm.interact.question
+      ];
 
-      researchOnly = perm.scope.research ["edit"] perm.fs.readOnly;
+      testRunner = mergeMany [
+        tempWorkspaceWithReports
+        perm.execute.testAndDebug
+      ];
 
-      reportsOnly = perm.scope.reports ["edit"] perm.fs.readOnly;
+      readOnlyGitInspection = mergeMany [
+        pureRead
+        perm.execute.safeGitInspection
+        perm.interact.question
+      ];
+
+      draftPlansOnly = perm.scope.draftPlans ["edit"] pureRead;
+
+      researchOnly = perm.scope.research ["edit"] pureRead;
+
+      networkResearch = mergeMany [
+        researchOnly
+        perm.network.web
+      ];
+
+      reportsOnly = perm.scope.reports ["edit"] pureRead;
+
+      reviewReport = mergeMany [
+        reportsOnly
+        perm.execute.safeGitInspection
+      ];
     };
 
     testSpecFormatContract = readSharedPrompt "test-spec-format";
@@ -308,7 +458,7 @@ delib.module {
       #   description = "Primary ideation agent for early-stage exploration and problem framing before planning; hand off to `spec` by switching agents with the same chat history.";
       #   model = "github-copilot/claude-opus-4.5";
       #   prompt = readAgentPrompt "idea";
-      #   permission = merge perm.fs.readOnly perm.interaction.question;
+      #   permission = merge agentPerm.pureRead perm.interact.question;
       # };
 
       spec = {
@@ -319,7 +469,7 @@ delib.module {
         prompt = renderAgentPrompt "spec" {
           "{{DIVIDABLE_TASK_STRUCTURE}}" = dividableTaskStructure;
         };
-        permission = merge agentPerm.specPlans perm.interaction.question;
+        permission = agentPerm.plannerFull;
       };
 
       taskmaster-write = {
@@ -328,7 +478,7 @@ delib.module {
         reasoningEffort = "medium";
         description = "Command-directed implementation agent for source-changing workflows, validation, triage, and post-implementation review delegation.";
         prompt = readAgentPrompt "taskmaster-write";
-        permission = merge perm.fs.fullWrite perm.interaction.question;
+        permission = agentPerm.composedFull;
       };
 
       taskmaster-read = {
@@ -339,8 +489,8 @@ delib.module {
         prompt = readAgentPrompt "taskmaster-read";
         permission =
           merge
-          (merge agentPerm.agentsOnly perm.bash.safeGitInspection)
-          perm.interaction.question;
+          (merge agentPerm.agentsOnly perm.execute.safeGitInspection)
+          perm.interact.question;
       };
 
       reviewer = {
@@ -353,10 +503,7 @@ delib.module {
           "{{REVIEW_REPORT_FORMAT_CONTRACT}}" = reviewReportFormatContract;
           "{{REPORT_FILENAME_POLICY}}" = reportFilenamePolicy;
         };
-        permission =
-          merge
-          (merge agentPerm.reportsOnly perm.bash.safeGitInspection)
-          perm.interaction.question;
+        permission = agentPerm.reviewReport;
       };
 
       sensei = {
@@ -377,27 +524,29 @@ delib.module {
           "{{BUG_REPORT_FORMAT_CONTRACT}}" = bugReportFormatContract;
           "{{REPORT_FILENAME_POLICY}}" = reportFilenamePolicy;
         };
-        permission = agentPerm.tempWorkspaceWithReports;
+        permission = agentPerm.debugSandbox;
       };
 
       draft_planner = {
         mode = "subagent";
-        model = "github-copilot/gpt-5.4-mini";
+        # model = "github-copilot/gpt-5.4-mini";
+        model = "openai/gpt-5.4-mini";
         reasoningEffort = "high";
         description = "Creates direction-setting draft plan files for user approval before detailed final planning.";
         prompt = renderAgentPrompt "draft_planner" {
           "{{DRAFT_FILENAME_POLICY}}" = draftFilenamePolicy;
           "{{DRAFT_FAILURE_PROTOCOL}}" = draftFailureProtocol;
         };
-        permission = agentPerm.draftPlansOnly // perm.task.delegateExploreOnly;
+        permission = merge agentPerm.draftPlansOnly perm.delegate.exploreOnly;
       };
 
       explore = {
-        model = "github-copilot/gpt-5.4-mini";
-        reasoningEffort = "high";
+        # model = "github-copilot/gpt-5.4-mini";
+        model = "openai/gpt-5.4-mini";
+        reasoningEffort = "low";
         description = "Read-only exploration agent for delegated repository and filesystem context gathering.";
         prompt = readAgentPrompt "explore";
-        permission = perm.fs.readOnly // perm.task.delegateExploreOnly;
+        permission = agentPerm.pureRead;
       };
 
       plan_reviewer = {
@@ -406,7 +555,7 @@ delib.module {
         description = "Performs strict read-only review of final plan and test-spec files (`*.md`) with actionable revisions.";
         reasoningEffort = "low";
         prompt = readAgentPrompt "plan_reviewer";
-        permission = perm.fs.readOnly;
+        permission = agentPerm.pureRead;
       };
 
       code_reviewer = {
@@ -415,7 +564,7 @@ delib.module {
         description = "Performs strict read-only code review with severity-ordered findings and concrete file/line evidence.";
         reasoningEffort = "medium";
         prompt = readAgentPrompt "code_reviewer";
-        permission = perm.fs.readOnly // perm.task.delegateExploreOnly;
+        permission = merge agentPerm.pureRead perm.execute.safeGitInspection;
       };
 
       researcher = {
@@ -426,21 +575,20 @@ delib.module {
         prompt = renderAgentPrompt "researcher" {
           "{{RESEARCH_FILENAME_POLICY}}" = researchFilenamePolicy;
         };
-        permission = agentPerm.researchOnly;
+        permission = agentPerm.networkResearch;
       };
 
       tester = {
         mode = "subagent";
-        model = "github-copilot/gpt-5.4-mini";
+        # model = "github-copilot/gpt-5.4-mini";
+        model = "openai/gpt-5.4-mini";
         reasoningEffort = "high";
         description = "Read-only test runner that triages failures and writes failure-report files when suites fail.";
         prompt = renderAgentPrompt "tester" {
           "{{FAILURE_REPORT_FORMAT_CONTRACT}}" = failureReportFormatContract;
           "{{REPORT_FILENAME_POLICY}}" = reportFilenamePolicy;
         };
-        permission = merge agentPerm.tempWorkspaceWithReports {
-          edit = askAll;
-        };
+        permission = agentPerm.testRunner;
       };
     };
   };
