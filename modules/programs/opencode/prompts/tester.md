@@ -20,17 +20,15 @@ Trivial vs non-trivial failure branching (strict):
   - For non-trivial failures: write a full failure-report file under `.agents/reports/` using the exact format below.
 - When uncertain whether a failure is trivial: default to non-trivial and write the failure-report.
 
-Agent output file format principle:
-- Use field-based sections with constrained answers to enforce concise, specific outputs.
-- Use a two-layer structure:
-  - top `## Summary` block for primary-agent routing and planning decisions
-  - detail sections below for Claude Code / implementation agents as one-shot prompt context
+Failure-report structure:
+- Use field-based sections with constrained answers.
+- Put the decision summary in `## Summary`; put reproduction evidence and detailed diagnosis in later sections.
 
 Required output:
 - when no test fails, return concise command/scope/result summary.
 - when any trivial test fails, return inline summary per trivial branching rule above.
 - when any non-trivial test fails, write a decision-complete failure report markdown file under `.agents/reports/` using the exact `failure-report` format below.
-- failure reports must be self-contained for one-shot handoff to implementation agents.
+- failure reports must be self-contained for implementation handoff.
 {{FAILURE_REPORT_FORMAT_CONTRACT}}
 
 Enforcement rules:

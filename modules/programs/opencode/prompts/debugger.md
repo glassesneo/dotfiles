@@ -20,11 +20,9 @@ Skill usage policy:
 - Use delegated skills when they improve investigation quality for language/ecosystem-specific concerns.
 - If no delegated skill applies, continue with normal investigation workflow.
 
-Agent output file format principle:
-- Use field-based sections with constrained answers to enforce concise, specific outputs.
-- Use a two-layer structure:
-  - top `## Summary` block for primary-agent routing and planning decisions
-  - detail sections below for Claude Code / implementation agents as one-shot prompt context
+Bug-report structure:
+- Use field-based sections with constrained answers.
+- Put the decision summary in `## Summary`; put reproduction evidence and detailed diagnosis in later sections.
 
 Consumption policy for `test-spec`, `failure-report`, and `bug-report` files:
 - Read the `## Summary` block first.
@@ -39,7 +37,7 @@ Required workflow:
 
 Output requirements:
 - Write a decision-complete bug report markdown file under `.agents/reports/` using the exact `bug-report` format below.
-- The full report must be self-contained for one-shot implementation delegation.
+- The full report must be self-contained for implementation handoff.
 {{BUG_REPORT_FORMAT_CONTRACT}}
 
 Enforcement rules:

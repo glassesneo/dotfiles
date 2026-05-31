@@ -3,6 +3,7 @@
   host,
   lib,
   llm-agents,
+  sopsSecretPaths,
   ...
 }:
 delib.module {
@@ -47,6 +48,10 @@ delib.module {
       merge perm {external_directory = allow dirs;};
 
     scopes = {
+      agents = {
+        dirs = [".agents"];
+        files = [".agents/**"];
+      };
       plans = {
         dirs = [".agents/plans"];
         files = [".agents/plans/*.md"];
@@ -119,12 +124,20 @@ delib.module {
       }
       tempWorkspacePermission;
 
+    agentsOnlyPermission =
+      withScope {
+        name = "agents";
+        ops = ["read" "edit" "write"];
+      }
+      readOnlyPermission;
+
     testSpecFormatContract = readSharedPrompt "test-spec-format";
     bugReportFormatContract = readSharedPrompt "bug-report-format";
     reportFilenamePolicy = readSharedPrompt "report-filename-policy";
     reviewReportFormatContract = readSharedPrompt "review-report-format";
     testSpecFilenamePolicy = readSharedPrompt "test-spec-filename-policy";
     dividableTaskStructure = readSharedPrompt "task-breakdown-structure";
+    reviewWorkflow = readSharedPrompt "review-workflow";
 
     noCommandPermission = {
       bash = "deny";
@@ -181,6 +194,22 @@ delib.module {
     draftFilenamePolicy = readSharedPrompt "draft-filename-policy";
     researchFilenamePolicy = readSharedPrompt "research-filename-policy";
     draftFailureProtocol = readSharedPrompt "draft-failure-protocol";
+    secretPath = name: sopsSecretPaths.${name} or "/run/secrets/${name}";
+    reviewCommandTemplate = ''
+      ${builtins.readFile ./prompts/commands/review.md}
+      ${reviewWorkflow}
+      ${reviewReportFormatContract}
+
+      Enforcement rules:
+      - The report must start with `# Review Report: <title>` followed by `## Summary`.
+      - Every finding must include concrete evidence or explicitly say `Evidence: not confirmed` with a reason.
+      - Every finding must include `Diff provenance` confirming how the issue relates to the reviewed diff or stating why diff provenance could not be established for a non-diff target.
+      - `## Perspective Results` must include every perspective attempted and every perspective intentionally skipped.
+      - `## Delegation Log` must list subagents used and concise outcomes.
+      - `## Recommended Next Step` must contain exactly one concrete action.
+
+      ${reportFilenamePolicy}
+    '';
   in {
     programs.opencode = {
       enable = true;
@@ -197,25 +226,19 @@ delib.module {
             subtask = false;
           };
           impl = {
-            template = ''
-              Implement: $ARGUMENTS
-            '';
-            description = "Implement a plan with the implementer agent.";
-            agent = "implementer";
+            template = builtins.readFile ./prompts/commands/impl.md;
+            description = "Implement a plan or target with taskmaster-write using the implementation workflow.";
+            agent = "taskmaster-write";
             subtask = false;
           };
           review = {
-            template = ''
-              Review target: $ARGUMENTS
-            '';
-            agent = "reviewer";
+            template = reviewCommandTemplate;
+            agent = "taskmaster-read";
             subtask = true;
           };
           primary-review = {
-            template = ''
-              Review target: $ARGUMENTS
-            '';
-            agent = "reviewer";
+            template = reviewCommandTemplate;
+            agent = "taskmaster-read";
             subtask = false;
           };
         };
@@ -226,6 +249,11 @@ delib.module {
           mcp_timeout = 1200000;
         };
         plugin = [];
+        provider = {
+          openrouter = {
+            apiKey = "{file:${secretPath "openrouter-api-key"}}";
+          };
+        };
       };
       context = readSharedPrompt "opencode-context";
       tui = {
@@ -240,13 +268,13 @@ delib.module {
     programs.opencode.settings.agent = {
       plan.disable = true;
       build.disable = true;
-      idea = {
-        mode = "primary";
-        description = "Primary ideation agent for early-stage exploration and problem framing before planning; hand off to `spec` by switching agents with the same chat history.";
-        model = "github-copilot/claude-opus-4.5";
-        prompt = readAgentPrompt "idea";
-        permission = readOnlyPermission // {question = "allow";};
-      };
+      # idea = {
+      #   mode = "primary";
+      #   description = "Primary ideation agent for early-stage exploration and problem framing before planning; hand off to `spec` by switching agents with the same chat history.";
+      #   model = "github-copilot/claude-opus-4.5";
+      #   prompt = readAgentPrompt "idea";
+      #   permission = readOnlyPermission // {question = "allow";};
+      # };
 
       spec = {
         mode = "primary";
@@ -259,13 +287,45 @@ delib.module {
         permission = specPlansPermission // {question = "allow";};
       };
 
-      implementer = {
-        mode = "primary";
+      taskmaster-write = {
+        mode = "all";
         model = "openai/gpt-5.5";
         reasoningEffort = "medium";
-        description = "Primary implementation and validation agent with proactive best-effort delegation to testing and debugging subagents.";
-        prompt = readAgentPrompt "implementer";
+        description = "Command-directed implementation agent for source-changing workflows, validation, triage, and post-implementation review delegation.";
+        prompt = readAgentPrompt "taskmaster-write";
         permission = fullAccessPermission;
+      };
+
+      taskmaster-read = {
+        mode = "all";
+        model = "openai/gpt-5.5";
+        reasoningEffort = "medium";
+        description = "Command-directed read/report agent for review and other source-read-only workflows.";
+        prompt = readAgentPrompt "taskmaster-read";
+        permission =
+          agentsOnlyPermission
+          // {
+            bash = readOnlyGitInspectionPermission.bash;
+            question = "allow";
+          };
+      };
+
+      reviewer = {
+        mode = "subagent";
+        model = "openai/gpt-5.5";
+        reasoningEffort = "high";
+        description = "Autonomous review subagent for orchestrated evidence-first code review with report output.";
+        prompt = renderAgentPrompt "reviewer" {
+          "{{REVIEW_WORKFLOW}}" = reviewWorkflow;
+          "{{REVIEW_REPORT_FORMAT_CONTRACT}}" = reviewReportFormatContract;
+          "{{REPORT_FILENAME_POLICY}}" = reportFilenamePolicy;
+        };
+        permission =
+          reportsOnlyPermission
+          // {
+            bash = readOnlyGitInspectionPermission.bash;
+            question = "allow";
+          };
       };
 
       sensei = {
@@ -275,23 +335,6 @@ delib.module {
         description = "Primary explanation agent that teaches reports and git revisions/ranges to project outsiders after calibrating user understanding.";
         prompt = readAgentPrompt "sensei";
         permission = readOnlyGitInspectionPermission;
-      };
-
-      reviewer = {
-        mode = "all";
-        model = "openai/gpt-5.5";
-        reasoningEffort = "high";
-        description = "Primary orchestrated reviewer for code written by others, with exploration, optional research, multi-perspective subreviews, and report output.";
-        prompt = renderAgentPrompt "reviewer" {
-          "{{REVIEW_REPORT_FORMAT_CONTRACT}}" = reviewReportFormatContract;
-          "{{REPORT_FILENAME_POLICY}}" = reportFilenamePolicy;
-        };
-        permission =
-          reportsOnlyPermission
-          // {
-            bash = "allow";
-            question = "allow";
-          };
       };
 
       debugger = {
@@ -321,7 +364,7 @@ delib.module {
       explore = {
         model = "github-copilot/gpt-5.4-mini";
         reasoningEffort = "high";
-        description = "Read-only exploration agent that uses relevant skills provided by primary-agent delegation context.";
+        description = "Read-only exploration agent for delegated repository and filesystem context gathering.";
         prompt = readAgentPrompt "explore";
         permission = readOnlyPermission // {task = taskDelegationPermissionForSubagent;};
       };

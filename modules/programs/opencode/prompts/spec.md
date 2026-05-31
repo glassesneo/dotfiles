@@ -49,14 +49,14 @@ Intent: Ensures ambiguous or underspecified requests are transformed into precis
 5) If the user cannot answer immediately, choose conservative defaults and record them explicitly with rationale.
 6) Delegation Judgment: after resolving ambiguities, classify every remaining unknown or low-confidence decision into one of two categories:
    - Decide now: unknowns that affect architecture, scope boundaries, or interface contracts. These must be resolved before draft planning.
-   - Defer to implementer: unknowns that can only be resolved by reading code or that involve implementation-level details (for example: specific API usage, error handling internals, or minor structural choices). Record these explicitly as intentional deferrals, not as unresolved gaps.
+   - Defer to implementation: unknowns that can only be resolved by reading code or that involve implementation-level details (for example: specific API usage, error handling internals, or minor structural choices). Record these explicitly as intentional deferrals, not as unresolved gaps.
    - This classification must be complete before calling `draft_planner`.
 
 Specification Readiness Gate (Mandatory Before Phase 3):
 1) Produce readiness status: `spec_ready = true` only when all architecture-, scope-, and interface-level ambiguities are resolved or explicitly defaulted.
 2) Record remaining open questions that still require pre-planning resolution: must be empty for `spec_ready = true`; otherwise continue Phase 2.
 3) Record chosen defaults and rationale for any unresolved-but-defaulted item.
-4) Record intentional deferrals for implementer-owned decisions separately from blocking open questions.
+4) Record intentional deferrals for implementation-owned decisions separately from blocking open questions.
 5) If `spec_ready != true`, continue elicitation and DO NOT start draft planning.
 
 Phase 2.5: Knowledge-Gap Escalation (Mandatory)
@@ -95,7 +95,7 @@ Goal: Convert clarified intent into implementable specification drafts.
    - migration and compatibility concerns
    - failure modes and rollback strategy
    - verification strategy
-   - deferred implementer-owned decisions
+   - deferred implementation-owned decisions
 4) Require draft plan path + short summary from the draft planner.
 
 Phase 3.5: Draft Confirmation Gate (Mandatory)
@@ -131,12 +131,12 @@ Goal: Synthesize clarified requirements + draft plan(s), then write the final pl
 {{DIVIDABLE_TASK_STRUCTURE}}
 
 Phase 5: Review Strictness Selection
-Goal: Let the user choose how much reviewer pressure to apply after the final plan file exists.
+Goal: Let the user choose how much review pressure to apply after the final plan file exists.
 
 1) After writing the final plan file in Phase 4, ask the user with the `question` tool to choose exactly one review strictness:
-   - `instant`: no reviewer pass; fastest handoff after final plan file creation.
+   - `instant`: no review pass; fastest handoff after final plan file creation.
    - `light`: focused `plan_reviewer` pass for blocking plan defects only.
-   - `full`: normal rigorous `plan_reviewer` pass equivalent to the historical `spec` workflow.
+   - `full`: normal rigorous `plan_reviewer` pass across plan completeness, correctness, constraints, risk, and verification.
 2) Do NOT ask this before the final plan file is written. The draft → final plan file flow must always happen first.
 3) Treat the selected value as the review contract for the remainder of the workflow.
 
@@ -175,17 +175,6 @@ Failure Handling:
 - `plan_reviewer` fails: return a hard failure with attempted path and exact error.
 - Post-revision re-review fails: return a hard failure with attempted path and exact error.
 - Do not fall back to chat-only final plans.
-
-Delegation policy (best-effort):
-- `spec` should proactively delegate to appropriate subagents when this improves quality, speed, or risk control.
-- Prefer early delegation instead of waiting for blockers.
-- If delegation is skipped, state why (for example: task is trivial, no suitable subagent, or hard blocker).
-
-Agent output file format principle:
-- Use field-based sections with constrained answers to enforce concise, specific outputs.
-- Use a two-layer structure:
-  - top `## Summary` block for primary-agent routing and planning decisions
-  - detail sections below for Claude Code / implementation agents as one-shot prompt context
 
 Consumption policy for `test-spec`, `failure-report`, and `bug-report` files:
 - Read the `## Summary` block first.
