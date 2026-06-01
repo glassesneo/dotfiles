@@ -94,11 +94,11 @@ delib.module {
 
       write = {
         none = {
-          edit = denyAll;
+          "edit*" = denyAll;
         };
 
         full = {
-          edit = allowAll;
+          "edit*" = allowAll;
         };
 
         tempWorkspace = let
@@ -121,7 +121,7 @@ delib.module {
             (grantExternalDirs tempDirs {})
             (addRulesToOps ["read"] (allow tempFiles) {})
             {
-              edit = denyAll // allow ["/tmp/**" "/private/tmp/**"];
+              "edit*" = denyAll // allow ["/tmp/**" "/private/tmp/**"];
             }
           ];
       };
@@ -307,7 +307,7 @@ delib.module {
         perm.context.none
       ];
 
-      agentsOnly = perm.scope.agents ["read" "edit"] pureRead;
+      agentsOnly = perm.scope.agents ["read" "edit*"] pureRead;
 
       plannerFull = mergeMany [
         agentsOnly
@@ -327,7 +327,7 @@ delib.module {
       ];
 
       tempWorkspaceWithReports =
-        perm.scope.reports ["read" "edit"]
+        perm.scope.reports ["read" "edit*"]
         (mergeMany [
           pureRead
           perm.write.tempWorkspace
@@ -350,16 +350,16 @@ delib.module {
         perm.interact.question
       ];
 
-      draftPlansOnly = perm.scope.draftPlans ["edit"] pureRead;
+      draftPlansOnly = perm.scope.draftPlans ["edit*"] pureRead;
 
-      researchOnly = perm.scope.research ["edit"] pureRead;
+      researchOnly = perm.scope.research ["edit*"] pureRead;
 
       networkResearch = mergeMany [
         researchOnly
         perm.network.web
       ];
 
-      reportsOnly = perm.scope.reports ["edit"] pureRead;
+      reportsOnly = perm.scope.reports ["edit*"] pureRead;
 
       reviewReport = mergeMany [
         reportsOnly
