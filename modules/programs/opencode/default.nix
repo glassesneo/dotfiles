@@ -144,11 +144,43 @@ delib.module {
             "python"
             "make"
           ];
+          unsafeCommandPatterns = [
+            "just?*apply*"
+            "just?*clean*"
+            "just?*fmt*"
+            "just?*home*"
+            "just?*switch*"
+            "just?*update*"
+            "nix?*fmt*"
+            "nix?*flake?*lock*"
+            "nix?*flake?*update*"
+            "nix?*--update-input*"
+            "npm?*install*"
+            "npm?*publish*"
+            "npm?*version*"
+            "pnpm?*add*"
+            "pnpm?*install*"
+            "pnpm?*publish*"
+            "pnpm?*remove*"
+            "pnpm?*version*"
+            "bun?*add*"
+            "bun?*install*"
+            "bun?*publish*"
+            "bun?*remove*"
+            "bun?*x*"
+            "deno?*install*"
+            "uv?*add*"
+            "uv?*lock*"
+            "uv?*remove*"
+            "uv?*sync*"
+            "python?*-c*"
+            "make?*clean*"
+          ];
         in {
           bash =
             denyAll
             // ask (map (prefix: "${prefix}*") commandPrefixes)
-            // deny (denyShellOperatorsFor commandPrefixes);
+            // deny (denyShellOperatorsFor commandPrefixes ++ unsafeCommandPatterns);
         };
 
         full = {
@@ -333,15 +365,38 @@ delib.module {
           perm.write.tempWorkspace
         ]);
 
+      safeEvidenceCollection = mergeMany [
+        perm.execute.testAndDebug
+        perm.execute.safeGitInspection
+      ];
+
+      scoutFull = mergeMany [
+        agentsOnly
+        perm.write.tempWorkspace
+        safeEvidenceCollection
+        perm.interact.question
+        (perm.delegate.only [
+          "explore"
+          "draft_planner"
+          "researcher"
+          "plan_reviewer"
+          "reviewer"
+          "debugger"
+          "code_reviewer"
+          "tester"
+        ])
+      ];
+
       debugSandbox = mergeMany [
         tempWorkspaceWithReports
-        perm.execute.testAndDebug
+        safeEvidenceCollection
         perm.interact.question
+        perm.delegate.exploreOnly
       ];
 
       testRunner = mergeMany [
         tempWorkspaceWithReports
-        perm.execute.testAndDebug
+        safeEvidenceCollection
       ];
 
       readOnlyGitInspection = mergeMany [
@@ -395,6 +450,21 @@ delib.module {
 
       ${reportFilenamePolicy}
     '';
+    debuggerPrompt = renderAgentPrompt "debugger" {
+      "{{BUG_REPORT_FORMAT_CONTRACT}}" = bugReportFormatContract;
+      "{{REPORT_FILENAME_POLICY}}" = reportFilenamePolicy;
+    };
+    debugCommandWorkflow =
+      builtins.replaceStrings [
+        "You are the `debugger` specialist subagent."
+      ] [
+        "For this command, you are the `scout` agent executing the debugger workflow."
+      ]
+      debuggerPrompt;
+    debugCommandTemplate = ''
+      ${builtins.readFile ./prompts/commands/debug.md}
+      ${debugCommandWorkflow}
+    '';
     specCommandTemplate = builtins.replaceStrings ["{{DIVIDABLE_TASK_STRUCTURE}}"] [dividableTaskStructure] (
       builtins.readFile ./prompts/commands/spec.md
     );
@@ -427,6 +497,12 @@ delib.module {
             template = builtins.readFile ./prompts/commands/impl.md;
             description = "Implement a plan or target with taskmaster using the implementation workflow.";
             agent = "taskmaster";
+            subtask = false;
+          };
+          debug = {
+            template = debugCommandTemplate;
+            description = "Investigate a bug with scout using the debug workflow.";
+            agent = "scout";
             subtask = false;
           };
           review = {
@@ -480,14 +556,9 @@ delib.module {
         mode = "all";
         model = "openai/gpt-5.5";
         reasoningEffort = "medium";
-        description = "Source-read-only agent for planning, review, inspection, and report workflows.";
+        description = "Non-source-writing agent for planning, review, debug, inspection, and report workflows.";
         prompt = readAgentPrompt "scout";
-        permission = mergeMany [
-          agentPerm.agentsOnly
-          perm.execute.safeGitInspection
-          perm.interact.question
-          (perm.delegate.only ["explore" "draft_planner" "researcher" "plan_reviewer"])
-        ];
+        permission = agentPerm.scoutFull;
       };
 
       reviewer = {
@@ -504,14 +575,11 @@ delib.module {
       };
 
       debugger = {
-        mode = "all";
+        mode = "subagent";
         model = "openai/gpt-5.5";
         reasoningEffort = "medium";
         description = "Performs bug investigation with reproduction, root-cause analysis, and evidence-only reporting.";
-        prompt = renderAgentPrompt "debugger" {
-          "{{BUG_REPORT_FORMAT_CONTRACT}}" = bugReportFormatContract;
-          "{{REPORT_FILENAME_POLICY}}" = reportFilenamePolicy;
-        };
+        prompt = debuggerPrompt;
         permission = agentPerm.debugSandbox;
       };
 
