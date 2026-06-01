@@ -529,9 +529,8 @@ delib.module {
 
       draft_planner = {
         mode = "subagent";
-        # model = "github-copilot/gpt-5.4-mini";
-        model = "openai/gpt-5.4-mini";
-        reasoningEffort = "high";
+        model = "openai/gpt-5.5";
+        reasoningEffort = "medium";
         description = "Creates direction-setting draft plan files for user approval before detailed final planning.";
         prompt = renderAgentPrompt "draft_planner" {
           "{{DRAFT_FILENAME_POLICY}}" = draftFilenamePolicy;
@@ -541,9 +540,8 @@ delib.module {
       };
 
       explore = {
-        # model = "github-copilot/gpt-5.4-mini";
-        model = "openai/gpt-5.4-mini";
-        reasoningEffort = "low";
+        model = "github-copilot/gpt-5.4-mini";
+        reasoningEffort = "medium";
         description = "Read-only exploration agent for delegated repository and filesystem context gathering.";
         prompt = readAgentPrompt "explore";
         permission = agentPerm.pureRead;
@@ -580,9 +578,8 @@ delib.module {
 
       tester = {
         mode = "subagent";
-        # model = "github-copilot/gpt-5.4-mini";
-        model = "openai/gpt-5.4-mini";
-        reasoningEffort = "high";
+        model = "github-copilot/gpt-5.4-mini";
+        reasoningEffort = "medium";
         description = "Read-only test runner that triages failures and writes failure-report files when suites fail.";
         prompt = renderAgentPrompt "tester" {
           "{{FAILURE_REPORT_FORMAT_CONTRACT}}" = failureReportFormatContract;
