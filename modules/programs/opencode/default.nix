@@ -375,6 +375,7 @@ delib.module {
         perm.write.tempWorkspace
         safeEvidenceCollection
         perm.interact.question
+        perm.context.full
         (perm.delegate.only [
           "explore"
           "draft_planner"
@@ -592,7 +593,11 @@ delib.module {
           "{{DRAFT_FILENAME_POLICY}}" = draftFilenamePolicy;
           "{{DRAFT_FAILURE_PROTOCOL}}" = draftFailureProtocol;
         };
-        permission = merge agentPerm.draftPlansOnly perm.delegate.exploreOnly;
+        permission = mergeMany [
+          agentPerm.draftPlansOnly
+          perm.delegate.exploreOnly
+          perm.context.full
+        ];
       };
 
       explore = {
@@ -609,7 +614,7 @@ delib.module {
         description = "Performs strict read-only review of final plan and test-spec files (`*.md`) with actionable revisions.";
         reasoningEffort = "low";
         prompt = readAgentPrompt "plan_reviewer";
-        permission = agentPerm.pureRead;
+        permission = merge agentPerm.pureRead perm.context.full;
       };
 
       code_reviewer = {
@@ -618,7 +623,11 @@ delib.module {
         description = "Performs strict read-only code review with severity-ordered findings and concrete file/line evidence.";
         reasoningEffort = "medium";
         prompt = readAgentPrompt "code_reviewer";
-        permission = merge agentPerm.pureRead perm.execute.safeGitInspection;
+        permission = mergeMany [
+          agentPerm.pureRead
+          perm.execute.safeGitInspection
+          perm.context.full
+        ];
       };
 
       researcher = {

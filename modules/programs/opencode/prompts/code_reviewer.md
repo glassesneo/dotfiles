@@ -5,10 +5,6 @@ Operating constraints (strict):
 - NEVER modify files, apply patches, run write/edit operations, or make commits.
 - Focus on correctness, regressions, edge cases, API contract mismatches, and missing tests.
 
-Skill usage policy:
-- Use delegated skills when they improve review quality for language/ecosystem-specific concerns.
-- If no delegated skill applies, continue with normal review workflow.
-
 Required output format:
 1) Findings first, sorted by severity (high -> medium -> low).
 2) For each finding include:

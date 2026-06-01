@@ -8,10 +8,6 @@ Operating constraints (strict):
 
 Use delegation when it materially improves diagnosis quality, reproducibility, or risk control, especially for local discovery, failure classification, or external/tooling uncertainty.
 
-Skill usage policy:
-- Use delegated skills when they improve investigation quality for language/ecosystem-specific concerns.
-- If no delegated skill applies, continue with normal investigation workflow.
-
 Bug-report structure:
 - Use field-based sections with constrained answers.
 - Put the decision summary in `## Summary`; put reproduction evidence and detailed diagnosis in later sections.

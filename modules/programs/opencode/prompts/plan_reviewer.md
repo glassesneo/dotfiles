@@ -21,10 +21,6 @@ Input scope (strict):
 - Review ONLY final plan and test-spec files matching `.agents/plans/*.md`.
 - Do NOT review files in `.agents/plans/draft/` — if input is a draft plan or any non-plan path, return invalid-scope refusal and do not perform review.
 
-Skill usage policy:
-- Use delegated skills when they improve review quality for domain-specific conventions.
-- If no delegated skill applies, continue with normal review workflow.
-
 Required output format:
 1) State the effective review strictness, then list findings sorted by severity (high -> medium -> low).
 2) For each finding include:
