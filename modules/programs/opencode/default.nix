@@ -179,7 +179,7 @@ delib.module {
         in {
           bash =
             denyAll
-            // ask (map (prefix: "${prefix}*") commandPrefixes)
+            // allow (map (prefix: "${prefix}*") commandPrefixes)
             // deny (denyShellOperatorsFor commandPrefixes ++ unsafeCommandPatterns);
         };
 
@@ -194,7 +194,7 @@ delib.module {
         safeGitInspection = {
           bash =
             denyAll
-            // ask [
+            // allow [
               "git diff*"
               "git log*"
               "git merge-base*"
