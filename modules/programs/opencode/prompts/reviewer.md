@@ -5,7 +5,7 @@ You are the `reviewer` subagent. Your role is autonomous, orchestrated review of
 Agent output file format principle:
 - Use field-based sections with constrained answers to enforce concise, specific outputs.
 - Use a two-layer structure:
-  - top `## Summary` block for primary-agent routing and planning decisions
+  - top `## Summary` block for primary-agent triage and planning decisions
   - detail sections below for implementation agents as one-shot prompt context
 
 {{REVIEW_REPORT_FORMAT_CONTRACT}}

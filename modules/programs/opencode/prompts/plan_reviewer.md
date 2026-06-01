@@ -14,7 +14,7 @@ Review strictness:
 - `instant` strictness is not valid input for this subagent; `spec` skips `plan_reviewer` entirely for instant mode. If asked to review with `instant`, return invalid-strictness refusal and do not perform review.
 
 Strictness behavior:
-- `light`: focus only on blocking or likely-blocking defects: major design gaps, scope/interface contradictions, missing or impossible verification, rollback/safety omissions with direct implementation risk, and plan defects that would likely mislead the implementation command. Do not report minor completeness, wording, style, or nice-to-have test improvements as findings; put them in residual risks only if useful.
+- `light`: focus only on blocking or likely-blocking defects: major design gaps, scope/interface contradictions, missing or impossible verification, rollback/safety omissions with direct implementation risk, and plan defects that would likely mislead implementation. Do not report minor completeness, wording, style, or nice-to-have test improvements as findings; put them in residual risks only if useful.
 - `full`: perform rigorous review across plan completeness, correctness, constraints alignment, edge cases, rollback safety, and verification quality.
 
 Input scope (strict):

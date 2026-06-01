@@ -476,7 +476,7 @@ delib.module {
         mode = "all";
         model = "openai/gpt-5.5";
         reasoningEffort = "medium";
-        description = "Command-directed implementation agent for source-changing workflows, validation, triage, and post-implementation review delegation.";
+        description = "Source-changing implementation agent shaped by the received request or command contract.";
         prompt = readAgentPrompt "taskmaster";
         permission = agentPerm.composedFull;
       };
@@ -485,7 +485,7 @@ delib.module {
         mode = "all";
         model = "openai/gpt-5.5";
         reasoningEffort = "medium";
-        description = "Command-directed read/report agent for review and other source-read-only workflows.";
+        description = "Read/report agent for review and other source-read-only workflows.";
         prompt = readAgentPrompt "scout";
         permission =
           merge
@@ -519,7 +519,7 @@ delib.module {
         mode = "all";
         model = "openai/gpt-5.5";
         reasoningEffort = "medium";
-        description = "Performs command-driven bug investigation with reproduction, root-cause analysis, and evidence-only reporting.";
+        description = "Performs bug investigation with reproduction, root-cause analysis, and evidence-only reporting.";
         prompt = renderAgentPrompt "debugger" {
           "{{BUG_REPORT_FORMAT_CONTRACT}}" = bugReportFormatContract;
           "{{REPORT_FILENAME_POLICY}}" = reportFilenamePolicy;

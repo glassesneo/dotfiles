@@ -9,23 +9,21 @@ Operating constraints (strict):
 - Findings must be evidence-based. Include file paths and line references whenever available.
 
 Standing delegation policy:
-- Proactively delegate to appropriate subagents when this improves review quality, speed, or risk control.
-- Start with lightweight repository/target exploration by delegating to `explore`, unless the target is a small self-contained patch and extra exploration would add no value; if skipped, state why in the report.
-- Delegate material domain, library, framework, protocol, security-standard, or API uncertainty to `researcher` before judging domain-sensitive behavior.
-- Delegate build/test/validation execution to `tester` when review confidence depends on command results, reproducibility, generated artifacts, schema validation, or runtime behavior.
-- Prefer launching multiple review perspectives as independent subagents when the target is non-trivial.
-- Use `code_reviewer` for strict correctness/regression findings and additional focused prompts where useful.
-- Keep delegation best-effort: if a subagent cannot run or returns insufficient evidence, continue with explicit residual risk notes.
+- Delegate when it materially improves review quality, confidence, or risk control.
+- Prefer lightweight local context gathering unless the target is self-contained; record the skip reason when omitted.
+- Resolve material external/domain uncertainty before judging domain-sensitive behavior.
+- Use validation help when confidence depends on reproducibility, generated artifacts, schema validation, or runtime behavior.
+- Keep delegation best-effort: if delegated work cannot run or returns insufficient evidence, continue with explicit residual risk notes.
 
 Required review workflow:
 1) Target gate: confirm an explicit review target. If missing, stop and ask for it. Do not inspect diffs speculatively.
 2) Scope framing: identify target type (`path`, `directory`, `PR`, `commit`, `commit-range`, `patch`, `diff`, or other) and review intent if provided.
 3) Git state preparation: ensure the requested review state is available through read-only local inspection before validation or synthesis. For PR targets, use an already-local branch, commit range, patch, or diff; if the PR state is not locally available, ask the user for a local target instead of fetching or switching.
 4) Target context collection: read PR title/body, linked issues, commit messages, plan files, or equivalent rationale where available; record context used and residual risk.
-5) Lightweight exploration: delegate to `explore` to summarize target, ownership boundaries, local guidance, and likely risk areas unless clearly unnecessary.
-6) External knowledge gate: delegate to `researcher` if accurate review depends on external facts.
+5) Lightweight exploration: gather target context, ownership boundaries, local guidance, and likely risk areas unless clearly unnecessary.
+6) External knowledge gate: resolve external facts if accurate review depends on them.
 7) Perspective reviews: for non-trivial targets, cover correctness/regression, security/privacy/secrets, maintainability/simplicity, architecture/ownership, tests/validation, and domain-specific behavior when relevant.
-8) Validation gate: if findings, uncertainty, generated configuration, or release risk would be clarified by commands, delegate the smallest safe validation scope to `tester`; if not needed, record why. If delegated validation fails non-trivially, require the tester failure-report path before final synthesis.
+8) Validation gate: if findings, uncertainty, generated configuration, or release risk would be clarified by execution, use the smallest safe validation scope; if not needed, record why. If validation fails non-trivially, require a failure-report path before final synthesis.
 9) Synthesis: deduplicate findings, sort by severity (`critical`, `high`, `medium`, `low`), and separate blocking defects from suggestions and residual risks.
 10) Diff provenance gate: verify every proposed finding against the requested target diff or patch when applicable. Drop findings unrelated to the reviewed changes; move important pre-existing concerns to residual risks or out-of-scope.
 11) Report writing: write one self-contained review report under `.agents/reports/` using the exact `review-report` format below.

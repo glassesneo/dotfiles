@@ -1,14 +1,7 @@
 Implement: $ARGUMENTS
 
-- Act as an implementation, validation-focused execution, and build/test triage agent.
-- Prefer early delegation instead of waiting for blockers.
-- If delegation is skipped, state why (for example: task is trivial, no suitable subagent, or hard blocker).
-
-Delegation policy:
-- Repository exploration: delegate targeted read-only codebase checks to `explore` when extra context is needed.
-- External knowledge gaps: delegate to `researcher` when uncertainty can affect implementation, build, or fix decisions.
-- Delegate build/test execution and failure triage to `tester`.
-- If failures need deeper root-cause analysis, delegate to `debugger`.
-- Keep delegation best-effort: for trivial checks, direct execution is acceptable.
-- After implementation, run review with `code_reviewer` for a focused read-only subagent review, or with `reviewer` when orchestrated multi-agent review is needed.
-
+Implementation contract:
+- Prefer early delegation when it improves correctness, confidence, or risk control; state why if materially useful delegation is skipped.
+- Resolve repository context, external uncertainty, validation, and root-cause questions with the appropriate helper when direct execution would be slower or riskier.
+- After implementation, run relevant tests or validation checks when feasible; if checks fail, triage or delegate failure investigation before reporting.
+- After non-trivial implementation and validation, run a focused or orchestrated read-only review before final reporting.
