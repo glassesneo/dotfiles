@@ -18,6 +18,3 @@
 - `spec` remains the primary planning agent, and `sensei` remains the primary explanation agent for teaching reports and git revisions/ranges to project outsiders.
 - `idea` is currently disabled/commented out in `default.nix`; keep `prompts/idea.md` available for a later redesign.
 
-## SketchyBar Integration
-
-This module does not deploy a SketchyBar plugin.
