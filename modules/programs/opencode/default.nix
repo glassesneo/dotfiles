@@ -412,18 +412,18 @@ delib.module {
           };
           impl = {
             template = builtins.readFile ./prompts/commands/impl.md;
-            description = "Implement a plan or target with taskmaster-write using the implementation workflow.";
-            agent = "taskmaster-write";
+            description = "Implement a plan or target with taskmaster using the implementation workflow.";
+            agent = "taskmaster";
             subtask = false;
           };
           review = {
             template = reviewCommandTemplate;
-            agent = "taskmaster-read";
+            agent = "scout";
             subtask = true;
           };
           primary-review = {
             template = reviewCommandTemplate;
-            agent = "taskmaster-read";
+            agent = "scout";
             subtask = false;
           };
         };
@@ -472,21 +472,21 @@ delib.module {
         permission = agentPerm.plannerFull;
       };
 
-      taskmaster-write = {
+      taskmaster = {
         mode = "all";
         model = "openai/gpt-5.5";
         reasoningEffort = "medium";
         description = "Command-directed implementation agent for source-changing workflows, validation, triage, and post-implementation review delegation.";
-        prompt = readAgentPrompt "taskmaster-write";
+        prompt = readAgentPrompt "taskmaster";
         permission = agentPerm.composedFull;
       };
 
-      taskmaster-read = {
+      scout = {
         mode = "all";
         model = "openai/gpt-5.5";
         reasoningEffort = "medium";
         description = "Command-directed read/report agent for review and other source-read-only workflows.";
-        prompt = readAgentPrompt "taskmaster-read";
+        prompt = readAgentPrompt "scout";
         permission =
           merge
           (merge agentPerm.agentsOnly perm.execute.safeGitInspection)
