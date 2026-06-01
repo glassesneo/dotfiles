@@ -395,6 +395,9 @@ delib.module {
 
       ${reportFilenamePolicy}
     '';
+    specCommandTemplate = builtins.replaceStrings ["{{DIVIDABLE_TASK_STRUCTURE}}"] [dividableTaskStructure] (
+      builtins.readFile ./prompts/commands/spec.md
+    );
   in {
     programs.opencode = {
       enable = true;
@@ -403,11 +406,21 @@ delib.module {
         lsp = true;
         command = {
           spec = {
-            template = ''
-              Spec target: $ARGUMENTS
-            '';
-            description = "Plan a target with the spec agent.";
-            agent = "spec";
+            template = specCommandTemplate;
+            description = "Plan a target with scout using the specification workflow.";
+            agent = "scout";
+            subtask = false;
+          };
+          sensei = {
+            template = builtins.readFile ./prompts/commands/sensei.md;
+            description = "Explain reports, files, commits, or git ranges with calibrated teaching.";
+            agent = "scout";
+            subtask = false;
+          };
+          idea = {
+            template = builtins.readFile ./prompts/commands/idea.md;
+            description = "Explore rough ideas conversationally before planning.";
+            agent = "scout";
             subtask = false;
           };
           impl = {
@@ -429,7 +442,7 @@ delib.module {
         };
         share = "disabled";
         autoupdate = false;
-        default_agent = "spec";
+        default_agent = "scout";
         experimental = {
           mcp_timeout = 1200000;
         };
@@ -453,24 +466,6 @@ delib.module {
     programs.opencode.settings.agent = {
       plan.disable = true;
       build.disable = true;
-      # idea = {
-      #   mode = "primary";
-      #   description = "Primary ideation agent for early-stage exploration and problem framing before planning; hand off to `spec` by switching agents with the same chat history.";
-      #   model = "github-copilot/claude-opus-4.5";
-      #   prompt = readAgentPrompt "idea";
-      #   permission = merge agentPerm.pureRead perm.interact.question;
-      # };
-
-      spec = {
-        mode = "primary";
-        description = "Primary planning agent that handles both ambiguous and well-scoped requests through iterative specification elicitation and systematic planning workflow.";
-        model = "openai/gpt-5.5";
-        reasoningEffort = "high";
-        prompt = renderAgentPrompt "spec" {
-          "{{DIVIDABLE_TASK_STRUCTURE}}" = dividableTaskStructure;
-        };
-        permission = agentPerm.plannerFull;
-      };
 
       taskmaster = {
         mode = "all";
@@ -485,12 +480,14 @@ delib.module {
         mode = "all";
         model = "openai/gpt-5.5";
         reasoningEffort = "medium";
-        description = "Read/report agent for review and other source-read-only workflows.";
+        description = "Source-read-only agent for planning, review, inspection, and report workflows.";
         prompt = readAgentPrompt "scout";
-        permission =
-          merge
-          (merge agentPerm.agentsOnly perm.execute.safeGitInspection)
-          perm.interact.question;
+        permission = mergeMany [
+          agentPerm.agentsOnly
+          perm.execute.safeGitInspection
+          perm.interact.question
+          (perm.delegate.only ["explore" "draft_planner" "researcher" "plan_reviewer"])
+        ];
       };
 
       reviewer = {
@@ -504,15 +501,6 @@ delib.module {
           "{{REPORT_FILENAME_POLICY}}" = reportFilenamePolicy;
         };
         permission = agentPerm.reviewReport;
-      };
-
-      sensei = {
-        mode = "primary";
-        model = "openai/gpt-5.5";
-        reasoningEffort = "medium";
-        description = "Primary explanation agent that teaches reports and git revisions/ranges to project outsiders after calibrating user understanding.";
-        prompt = readAgentPrompt "sensei";
-        permission = agentPerm.readOnlyGitInspection;
       };
 
       debugger = {
@@ -569,7 +557,7 @@ delib.module {
         mode = "subagent";
         model = "openai/gpt-5.5";
         reasoningEffort = "medium";
-        description = "Performs targeted internet research when primary planning agents have material knowledge uncertainty.";
+        description = "Performs targeted internet research when planning workflows have material knowledge uncertainty.";
         prompt = renderAgentPrompt "researcher" {
           "{{RESEARCH_FILENAME_POLICY}}" = researchFilenamePolicy;
         };

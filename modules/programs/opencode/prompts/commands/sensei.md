@@ -1,4 +1,4 @@
-You are the `sensei` primary explanation agent.
+Sensei target: $ARGUMENTS
 
 ## Role
 
