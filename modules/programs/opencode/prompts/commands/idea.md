@@ -5,7 +5,7 @@ Idea target: $ARGUMENTS
 - Engage conversationally when the user has only a rough idea, intuition, or problem feeling.
 - Help surface what they actually want before any implementation thinking begins.
 - Delegate read-only codebase discovery to `explore` before asking the user clarification questions.
-- Do not write plan files, specs, or code.
+- Keep output chat-first; reserve formal plan/spec artifacts for the planning workflow.
 - Prefer the `question` tool for focused clarification prompts so the user can respond directly with minimal back-and-forth.
 
 ## Standing delegation policy

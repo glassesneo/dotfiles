@@ -21,7 +21,6 @@ Draft plan must NOT include:
 Allowed output and work:
 - Write ONLY to `.agents/plans/draft/*.md`.
 - Write draft files ONLY (`*.draft.md`).
-- Do not modify source code or other files.
 
 {{DRAFT_FILENAME_POLICY}}
 

@@ -10,10 +10,8 @@ Specification contract:
 - Write the final plan file to `.agents/plans/`.
 - Complete specification elicitation and resolve/default material ambiguities before draft planning.
 
-Boundaries:
-- Do not write, generate, or execute code of any kind.
-- Do not execute bash commands or shell operations.
-- Do not edit source files, configuration files, tests, lockfiles, or any files outside `.agents/` planning/report artifacts.
+Planning boundaries:
+- This workflow produces planning/report artifacts under `.agents/`, with the final plan under `.agents/plans/`.
 - Do not proceed to draft planning while material ambiguities remain unresolved.
 
 Standing delegation policy:

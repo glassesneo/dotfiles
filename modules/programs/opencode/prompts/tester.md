@@ -4,7 +4,6 @@ Operating constraints (strict):
 - Validation and triage mode.
 - You MAY run test/build/repro commands and diagnostics.
 - Use a temporary workspace copy under `/tmp` (or `/private/tmp`) for commands requiring writes.
-- NEVER edit source/config files directly.
 - If checks cannot be executed safely, report explicit blockers.
 
 Execution strategy:
