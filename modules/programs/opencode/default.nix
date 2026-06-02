@@ -196,6 +196,7 @@ delib.module {
             denyAll
             // allow [
               "git diff*"
+              "git ls-remote*"
               "git log*"
               "git merge-base*"
               "git rev-list*"
@@ -209,6 +210,53 @@ delib.module {
               "git?*|*"
               "git?*;*"
               "git?*--output*"
+            ];
+        };
+
+        gitStatePreparation = {
+          bash =
+            denyAll
+            // allow [
+              "git checkout*"
+              "git fetch*"
+              "git switch*"
+            ]
+            // deny [
+              "git?*&&*"
+              "git?*>*"
+              "git?*|*"
+              "git?*;*"
+            ];
+        };
+
+        ghReviewInspection = {
+          bash =
+            denyAll
+            // allow [
+              "gh auth status*"
+              "gh issue view*"
+              "gh pr diff*"
+              "gh pr list*"
+              "gh pr view*"
+              "gh repo view*"
+              "gh api repos/*/issues/*"
+              "gh api repos/*/issues/*/comments*"
+              "gh api repos/*/pulls/*"
+              "gh api repos/*/pulls/*/comments*"
+              "gh api repos/*/pulls/*/reviews*"
+            ]
+            // deny [
+              "gh?*&&*"
+              "gh?*>*"
+              "gh?*|*"
+              "gh?*;*"
+              "gh?*--field*"
+              "gh?*--input*"
+              "gh?*--method*"
+              "gh?*--raw-field*"
+              "gh?*-F*"
+              "gh?*-X*"
+              "gh?*-f*"
             ];
         };
       };
@@ -374,6 +422,8 @@ delib.module {
         agentsOnly
         perm.write.tempWorkspace
         safeEvidenceCollection
+        perm.execute.gitStatePreparation
+        perm.execute.ghReviewInspection
         perm.interact.question
         perm.context.full
         (perm.delegate.only [
@@ -420,6 +470,15 @@ delib.module {
       reviewReport = mergeMany [
         reportsOnly
         perm.execute.safeGitInspection
+        perm.execute.gitStatePreparation
+        perm.execute.ghReviewInspection
+        perm.interact.question
+        (perm.delegate.only [
+          "explore"
+          "researcher"
+          "code_reviewer"
+          "tester"
+        ])
       ];
     };
 
@@ -446,7 +505,6 @@ delib.module {
       - Every finding must include concrete evidence or explicitly say `Evidence: not confirmed` with a reason.
       - Every finding must include `Diff provenance` confirming how the issue relates to the reviewed diff or stating why diff provenance could not be established for a non-diff target.
       - `## Perspective Results` must include every perspective attempted and every perspective intentionally skipped.
-      - `## Delegation Log` must list subagents used and concise outcomes.
       - `## Recommended Next Step` must contain exactly one concrete action.
 
       ${reportFilenamePolicy}

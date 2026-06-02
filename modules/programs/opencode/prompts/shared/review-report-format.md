@@ -63,15 +63,6 @@
 - **Tests/validation**: <attempted | skipped> — <concise result or skip reason>
 - **Domain-specific**: <attempted | skipped> — <concise result or skip reason>
 
-## Delegation Log
-
-- **Git state preparation**: <git preparation status or skip reason>
-- **explore**: <used | skipped> — <outcome or reason>
-- **researcher**: <used | skipped> — <research file path if used, otherwise reason>
-- **code_reviewer**: <used | skipped> — <outcome or reason>
-- **tester**: <used | skipped> — <commands/results or failure-report path if used, otherwise reason>
-- **Other subagents**: <list or none>
-
 ## Verification Suggestions
 
 - `<command or manual check>` — <why this verifies risk>

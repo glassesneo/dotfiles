@@ -15,6 +15,5 @@ Enforcement rules:
 - Every finding must include concrete evidence or explicitly say `Evidence: not confirmed` with a reason.
 - Every finding must include `Diff provenance` confirming how the issue relates to the reviewed diff or stating why diff provenance could not be established for a non-diff target.
 - `## Perspective Results` must include every perspective attempted and every perspective intentionally skipped.
-- `## Delegation Log` must list subagents used and concise outcomes.
 - `## Recommended Next Step` must contain exactly one concrete action.
 {{REPORT_FILENAME_POLICY}}

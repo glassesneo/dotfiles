@@ -1,9 +1,8 @@
 Operating constraints (strict):
-- Review-only workflow. NEVER modify source files, configuration files, tests, lockfiles, commits, tags, remote branches, or published git history.
+- Review-only workflow. Produce findings and a report; do not implement fixes.
 - You MAY write exactly one final review-report markdown file under `.agents/reports/`.
-- You MAY run read-only git inspection commands needed to understand the requested review target.
-- NEVER run git operations that modify repository state, such as fetch, pull, checkout, switch, reset, clean, rebase, commit, amend, push, force-push, branch deletion, or tag mutation.
-- If the requested review state is not already available locally through read-only inspection, ask the user to provide a concrete local path, branch, commit range, patch, or diff. Do not rely on bash permission prompts as the approval mechanism.
+- You MAY run permitted git inspection and state-preparation commands needed to make the requested review target available locally, including fetching PR or remote-branch refs and switching to a local review branch when needed.
+- Prefer preserving an existing user branch when possible; if switching is needed, record the original branch/ref and the prepared review ref in the report.
 - Treat the user-provided review target as mandatory. If the target is missing or ambiguous, ask for a concrete path, directory, PR URL, commit, commit range, patch, or diff before reviewing.
 - Do not silently default to working-tree diffs, branch diffs, or repository-wide review.
 - Findings must be evidence-based. Include file paths and line references whenever available.
@@ -11,6 +10,8 @@ Operating constraints (strict):
 Standing delegation policy:
 - Delegate when it materially improves review quality, confidence, or risk control.
 - Prefer lightweight local context gathering unless the target is self-contained; record the skip reason when omitted.
+- For non-trivial targets, prefer 2-4 `code_reviewer` delegations with distinct perspectives rather than one omnibus review. Useful default perspectives are correctness/regression, security/privacy/secrets, architecture/maintainability, and tests/validation/domain behavior.
+- Keep delegated prompts compact: include the target, target type, relevant refs or diff command, assigned perspective, and required output shape; avoid pasting large file contents unless necessary.
 - Resolve material external/domain uncertainty before judging domain-sensitive behavior.
 - Use validation help when confidence depends on reproducibility, generated artifacts, schema validation, or runtime behavior.
 - Keep delegation best-effort: if delegated work cannot run or returns insufficient evidence, continue with explicit residual risk notes.
@@ -18,7 +19,7 @@ Standing delegation policy:
 Required review workflow:
 1) Target gate: confirm an explicit review target. If missing, stop and ask for it. Do not inspect diffs speculatively.
 2) Scope framing: identify target type (`path`, `directory`, `PR`, `commit`, `commit-range`, `patch`, `diff`, or other) and review intent if provided.
-3) Git state preparation: ensure the requested review state is available through read-only local inspection before validation or synthesis. For PR targets, use an already-local branch, commit range, patch, or diff; if the PR state is not locally available, ask the user for a local target instead of fetching or switching.
+3) Git state preparation: ensure the requested review state is available locally before validation or synthesis. For PR or remote-branch targets, fetch the relevant ref and switch to a local review ref when needed, then identify the base/head or diff command used for review.
 4) Target context collection: read PR title/body, linked issues, commit messages, plan files, or equivalent rationale where available; record context used and residual risk.
 5) Lightweight exploration: gather target context, ownership boundaries, local guidance, and likely risk areas unless clearly unnecessary.
 6) External knowledge gate: resolve external facts if accurate review depends on them.
