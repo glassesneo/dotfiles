@@ -68,6 +68,10 @@ delib.module {
         dirs = [".agents/plans/draft"];
         files = [".agents/plans/draft/*.md"];
       };
+      specs = {
+        dirs = [".agents/specs"];
+        files = [".agents/specs/*.md"];
+      };
       reports = {
         dirs = [".agents/reports"];
         files = [".agents/reports/*.md"];
@@ -367,6 +371,13 @@ delib.module {
           }
           base;
 
+        specs = ops: base:
+          grantScope {
+            name = "specs";
+            inherit ops;
+          }
+          base;
+
         reports = ops: base:
           grantScope {
             name = "reports";
@@ -471,7 +482,7 @@ delib.module {
         perm.interact.question
       ];
 
-      draftPlansOnly = perm.scope.draftPlans ["edit*"] pureRead;
+      specsOnly = perm.scope.specs ["edit*"] pureRead;
 
       researchOnly = perm.scope.research ["edit*"] pureRead;
 
@@ -501,12 +512,13 @@ delib.module {
     bugReportFormatContract = readSharedPrompt "bug-report-format";
     reportFilenamePolicy = readSharedPrompt "report-filename-policy";
     reviewReportFormatContract = readSharedPrompt "review-report-format";
+    implementationReportFormatContract = readSharedPrompt "implementation-report-format";
     testSpecFilenamePolicy = readSharedPrompt "test-spec-filename-policy";
     dividableTaskStructure = readSharedPrompt "task-breakdown-structure";
     reviewWorkflow = readSharedPrompt "review-workflow";
 
     failureReportFormatContract = readSharedPrompt "failure-report-format";
-    draftFilenamePolicy = readSharedPrompt "draft-filename-policy";
+    specFilenamePolicy = readSharedPrompt "spec-filename-policy";
     researchFilenamePolicy = readSharedPrompt "research-filename-policy";
     draftFailureProtocol = readSharedPrompt "draft-failure-protocol";
     secretPath = name: sopsSecretPaths.${name} or "/run/secrets/${name}";
@@ -542,6 +554,10 @@ delib.module {
     specCommandTemplate = builtins.replaceStrings ["{{DIVIDABLE_TASK_STRUCTURE}}"] [dividableTaskStructure] (
       builtins.readFile ./prompts/commands/spec.md
     );
+    implCommandTemplate = renderAgentPrompt "commands/impl" {
+      "{{IMPLEMENTATION_REPORT_FORMAT_CONTRACT}}" = implementationReportFormatContract;
+      "{{REPORT_FILENAME_POLICY}}" = reportFilenamePolicy;
+    };
   in {
     programs.opencode = {
       enable = true;
@@ -568,7 +584,7 @@ delib.module {
             subtask = false;
           };
           impl = {
-            template = builtins.readFile ./prompts/commands/impl.md;
+            template = implCommandTemplate;
             description = "Implement a plan or target with taskmaster using the implementation workflow.";
             agent = "taskmaster";
             subtask = false;
@@ -622,7 +638,10 @@ delib.module {
         model = "openai/gpt-5.5";
         reasoningEffort = "medium";
         description = "Source-changing implementation agent shaped by the received request or command contract.";
-        prompt = readAgentPrompt "taskmaster";
+        prompt = renderAgentPrompt "taskmaster" {
+          "{{IMPLEMENTATION_REPORT_FORMAT_CONTRACT}}" = implementationReportFormatContract;
+          "{{REPORT_FILENAME_POLICY}}" = reportFilenamePolicy;
+        };
         permission = agentPerm.composedFull;
       };
 
@@ -661,13 +680,13 @@ delib.module {
         mode = "subagent";
         model = "openai/gpt-5.5";
         reasoningEffort = "medium";
-        description = "Creates direction-setting draft plan files for user approval before detailed final planning.";
+        description = "Creates decision-ready spec draft files for user approval before detailed final planning.";
         prompt = renderAgentPrompt "draft_planner" {
-          "{{DRAFT_FILENAME_POLICY}}" = draftFilenamePolicy;
+          "{{SPEC_FILENAME_POLICY}}" = specFilenamePolicy;
           "{{DRAFT_FAILURE_PROTOCOL}}" = draftFailureProtocol;
         };
         permission = mergeMany [
-          agentPerm.draftPlansOnly
+          agentPerm.specsOnly
           perm.delegate.exploreOnly
           perm.context.full
         ];

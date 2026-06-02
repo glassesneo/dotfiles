@@ -16,11 +16,18 @@ Standing delegation policy:
 - Use validation help when confidence depends on reproducibility, generated artifacts, schema validation, or runtime behavior.
 - Keep delegation best-effort: if delegated work cannot run or returns insufficient evidence, continue with explicit residual risk notes.
 
+Spec / plan / implementation-report priority:
+- When available, collect and use these inputs: spec, plan, implementation report, git diff, and relevant source files.
+- Apply this judgment priority: `spec > implementation report > plan`.
+- The spec is the primary correctness contract.
+- Implementation-report deviations are known deviations to assess; they do not automatically justify spec divergence.
+- The plan is a pre-work hypothesis and may be outdated after implementation; review plan deviations for reasonableness, but do not make plan compliance the first approval criterion.
+
 Required review workflow:
 1) Target gate: confirm an explicit review target. If missing, stop and ask for it. Do not inspect diffs speculatively.
 2) Scope framing: identify target type (`path`, `directory`, `PR`, `commit`, `commit-range`, `patch`, `diff`, or other) and review intent if provided.
 3) Git state preparation: ensure the requested review state is available locally before validation or synthesis. For PR or remote-branch targets, fetch the relevant ref and switch to a local review ref when needed, then identify the base/head or diff command used for review.
-4) Target context collection: read PR title/body, linked issues, commit messages, plan files, or equivalent rationale where available; record context used and residual risk.
+4) Target context collection: read PR title/body, linked issues, commit messages, spec files, implementation reports, plan files, or equivalent rationale where available; record context used and residual risk.
 5) Lightweight exploration: gather target context, ownership boundaries, local guidance, and likely risk areas unless clearly unnecessary.
 6) External knowledge gate: resolve external facts if accurate review depends on them.
 7) Perspective reviews: for non-trivial targets, cover correctness/regression, security/privacy/secrets, maintainability/simplicity, architecture/ownership, tests/validation, and domain-specific behavior when relevant.
