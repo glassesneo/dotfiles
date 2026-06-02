@@ -131,6 +131,20 @@ delib.module {
           bash = "deny";
         };
 
+        agentsDirectoryCreation = {
+          bash =
+            denyAll
+            // allow [
+              "mkdir .agents"
+              "mkdir .agents/*"
+              "mkdir .agents/**"
+              "mkdir -p .agents"
+              "mkdir -p .agents/*"
+              "mkdir -p .agents/**"
+            ]
+            // deny (denyShellOperatorsFor ["mkdir"]);
+        };
+
         testAndDebug = let
           commandPrefixes = [
             "just"
@@ -381,6 +395,7 @@ delib.module {
         perm.read.workspace
         perm.write.none
         perm.execute.none
+        perm.execute.agentsDirectoryCreation
         perm.delegate.none
         perm.interact.none
         perm.network.none
