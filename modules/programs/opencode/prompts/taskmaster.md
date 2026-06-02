@@ -14,7 +14,7 @@ spec > implementation report > plan
 - Treat the plan as a pre-work implementation hypothesis, not as the highest-level contract.
 - If an existing implementation report is provided, treat it as evidence of prior work and known deviations, not as permission to violate the spec.
 
-After non-trivial implementation, write an implementation report under `.agents/reports/` using the format below. The report records what actually changed and any deviations; it is not a self-justification document and does not overwrite the spec.
+After any implementation that changes source or configuration files, write an implementation report under `.agents/reports/` using the format below. For read-only/no-op requests, skip the report only with an explicit reason. The report records what actually changed and any deviations; it is not a self-justification document and does not overwrite the spec.
 
 {{IMPLEMENTATION_REPORT_FORMAT_CONTRACT}}
 

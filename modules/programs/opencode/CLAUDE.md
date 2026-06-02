@@ -17,9 +17,9 @@
 
 - Commands are explicit user entrypoints. Command entries in `default.nix` route user entrypoints to agents; command templates under `prompts/commands/` own the user-facing workflow contract.
 - Subagents are autonomous delegation units. They should be invoked by another agent when they improve correctness, speed, or risk control; users do not need to enter command syntax for delegation.
-- Review intentionally exists both as `/review` and `reviewer`: `/review` and `/primary-review` are command-owned user entrypoints routed through `scout`, while `reviewer` is the autonomous subagent for orchestrated review delegation.
+- Review intentionally exists both as `/review` and `reviewer`: `/review` and `/primary-review` are command-owned user entrypoints routed through `reviewer` with read/diff-only permissions; `reviewer` also serves autonomous review delegation.
 - Debug intentionally exists both as `/debug` and `debugger`: `/debug` is a command-owned user entrypoint routed through `scout` with the debugger workflow in the command prompt, while `debugger` is the autonomous subagent for delegated bug investigation.
 - `taskmaster` handles implementation-oriented command workflows such as `/impl`, including source edits, validation, triage, and post-implementation review delegation.
-- `scout` handles non-source-writing planning/read/report/investigation command workflows such as `/spec`, `/sensei`, `/idea`, `/debug`, `/review`, and `/primary-review`; its permissions are scoped for `.agents/` artifacts plus `/tmp` or `/private/tmp` diagnostic sandboxes.
+- `scout` handles non-source-writing planning/read/report/investigation command workflows such as `/spec`, `/sensei`, `/idea`, and `/debug`; its permissions are scoped for `.agents/` artifacts plus `/tmp` or `/private/tmp` diagnostic sandboxes.
 - `/sensei` is the supported explanation entrypoint for teaching reports and git revisions/ranges to project outsiders.
 - `/idea` is the supported early ideation entrypoint for conversational problem framing before planning.

@@ -64,10 +64,6 @@ delib.module {
         dirs = [".agents/plans"];
         files = [".agents/plans/*.md"];
       };
-      draftPlans = {
-        dirs = [".agents/plans/draft"];
-        files = [".agents/plans/draft/*.md"];
-      };
       specs = {
         dirs = [".agents/specs"];
         files = [".agents/specs/*.md"];
@@ -214,7 +210,9 @@ delib.module {
             denyAll
             // allow [
               "git diff*"
+              "git branch --show-current*"
               "git ls-remote*"
+              "git ls-files*"
               "git log*"
               "git merge-base*"
               "git rev-list*"
@@ -231,19 +229,28 @@ delib.module {
             ];
         };
 
-        gitStatePreparation = {
+        safeValidation = {
           bash =
             denyAll
             // allow [
-              "git checkout*"
-              "git fetch*"
-              "git switch*"
+              "git diff --check*"
+              "nix flake check --no-build*"
+              "nix flake show*"
+              "nix-instantiate --parse*"
             ]
             // deny [
               "git?*&&*"
               "git?*>*"
               "git?*|*"
               "git?*;*"
+              "nix?*&&*"
+              "nix?*>*"
+              "nix?*|*"
+              "nix?*;*"
+              "nix-instantiate?*&&*"
+              "nix-instantiate?*>*"
+              "nix-instantiate?*|*"
+              "nix-instantiate?*;*"
             ];
         };
 
@@ -364,13 +371,6 @@ delib.module {
           }
           base;
 
-        draftPlans = ops: base:
-          grantScope {
-            name = "draftPlans";
-            inherit ops;
-          }
-          base;
-
         specs = ops: base:
           grantScope {
             name = "specs";
@@ -415,12 +415,6 @@ delib.module {
 
       agentsOnly = perm.scope.agents ["read" "edit*"] pureRead;
 
-      plannerFull = mergeMany [
-        agentsOnly
-        perm.interact.question
-        (perm.delegate.only ["explore" "draft_planner" "researcher" "plan_reviewer"])
-      ];
-
       composedFull = mergeMany [
         perm.read.workspace
         perm.write.full
@@ -448,13 +442,11 @@ delib.module {
         agentsOnly
         perm.write.tempWorkspace
         safeEvidenceCollection
-        perm.execute.gitStatePreparation
         perm.execute.ghReviewInspection
         perm.interact.question
         perm.context.full
         (perm.delegate.only [
           "explore"
-          "draft_planner"
           "researcher"
           "plan_reviewer"
           "reviewer"
@@ -473,7 +465,8 @@ delib.module {
 
       testRunner = mergeMany [
         tempWorkspaceWithReports
-        safeEvidenceCollection
+        perm.execute.safeGitInspection
+        perm.execute.safeValidation
       ];
 
       readOnlyGitInspection = mergeMany [
@@ -481,8 +474,6 @@ delib.module {
         perm.execute.safeGitInspection
         perm.interact.question
       ];
-
-      specsOnly = perm.scope.specs ["edit*"] pureRead;
 
       researchOnly = perm.scope.research ["edit*"] pureRead;
 
@@ -496,7 +487,6 @@ delib.module {
       reviewReport = mergeMany [
         reportsOnly
         perm.execute.safeGitInspection
-        perm.execute.gitStatePreparation
         perm.execute.ghReviewInspection
         perm.interact.question
         (perm.delegate.only [
@@ -513,14 +503,13 @@ delib.module {
     reportFilenamePolicy = readSharedPrompt "report-filename-policy";
     reviewReportFormatContract = readSharedPrompt "review-report-format";
     implementationReportFormatContract = readSharedPrompt "implementation-report-format";
-    testSpecFilenamePolicy = readSharedPrompt "test-spec-filename-policy";
+    planFilenamePolicy = readSharedPrompt "test-spec-filename-policy";
     dividableTaskStructure = readSharedPrompt "task-breakdown-structure";
     reviewWorkflow = readSharedPrompt "review-workflow";
 
     failureReportFormatContract = readSharedPrompt "failure-report-format";
     specFilenamePolicy = readSharedPrompt "spec-filename-policy";
     researchFilenamePolicy = readSharedPrompt "research-filename-policy";
-    draftFailureProtocol = readSharedPrompt "draft-failure-protocol";
     secretPath = name: sopsSecretPaths.${name} or "/run/secrets/${name}";
     reviewCommandTemplate = ''
       ${builtins.readFile ./prompts/commands/review.md}
@@ -551,7 +540,7 @@ delib.module {
       ${builtins.readFile ./prompts/commands/debug.md}
       ${debugCommandWorkflow}
     '';
-    specCommandTemplate = builtins.replaceStrings ["{{DIVIDABLE_TASK_STRUCTURE}}"] [dividableTaskStructure] (
+    specCommandTemplate = builtins.replaceStrings ["{{DIVIDABLE_TASK_STRUCTURE}}" "{{SPEC_FILENAME_POLICY}}" "{{PLAN_FILENAME_POLICY}}"] [dividableTaskStructure specFilenamePolicy planFilenamePolicy] (
       builtins.readFile ./prompts/commands/spec.md
     );
     implCommandTemplate = renderAgentPrompt "commands/impl" {
@@ -597,12 +586,12 @@ delib.module {
           };
           review = {
             template = reviewCommandTemplate;
-            agent = "scout";
+            agent = "reviewer";
             subtask = true;
           };
           primary-review = {
             template = reviewCommandTemplate;
-            agent = "scout";
+            agent = "reviewer";
             subtask = false;
           };
         };
@@ -655,7 +644,7 @@ delib.module {
       };
 
       reviewer = {
-        mode = "subagent";
+        mode = "all";
         model = "openai/gpt-5.5";
         reasoningEffort = "high";
         description = "Autonomous review subagent for orchestrated evidence-first code review with report output.";
@@ -674,22 +663,6 @@ delib.module {
         description = "Performs bug investigation with reproduction, root-cause analysis, and evidence-only reporting.";
         prompt = debuggerPrompt;
         permission = agentPerm.debugSandbox;
-      };
-
-      draft_planner = {
-        mode = "subagent";
-        model = "openai/gpt-5.5";
-        reasoningEffort = "medium";
-        description = "Creates decision-ready spec draft files for user approval before detailed final planning.";
-        prompt = renderAgentPrompt "draft_planner" {
-          "{{SPEC_FILENAME_POLICY}}" = specFilenamePolicy;
-          "{{DRAFT_FAILURE_PROTOCOL}}" = draftFailureProtocol;
-        };
-        permission = mergeMany [
-          agentPerm.specsOnly
-          perm.delegate.exploreOnly
-          perm.context.full
-        ];
       };
 
       explore = {

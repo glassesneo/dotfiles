@@ -9,6 +9,14 @@ Plan: <path-to-plan>
 
 - <concise outcome summary>
 
+## Changed Files
+
+- <path>: <what changed>
+
+## Spec Alignment
+
+- <how the implementation satisfies the referenced spec, or `not assessed` with reason>
+
 ## What Was Implemented
 
 - <actual changes made>
@@ -25,6 +33,18 @@ Plan: <path-to-plan>
 ## Reason for Deviations
 
 - <reason, or `not applicable`>
+
+## Validation Results
+
+- <commands/checks run and outcomes, or `not run` with reason>
+
+## Unresolved Items
+
+- <open issue, or `none`>
+
+## Reviewer Notes
+
+- <specific attention points for reviewer/tester, or `none`>
 
 ## Known Risks
 

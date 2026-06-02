@@ -2,13 +2,13 @@ Spec target: $ARGUMENTS
 
 Specification contract:
 - Elicit and clarify requirements through structured exploration and user questions.
-- Delegate read-only codebase discovery to `explore`.
-- Delegate spec draft creation to `draft_planner`.
+- Delegate read-only codebase discovery to `explore` when it improves coverage or confidence.
+- Write a spec report directly under `.agents/specs/`; do not create intermediate plan artifacts and do not delegate spec writing to a separate planning writer.
 - Delegate external knowledge gaps to `researcher` when they can affect scope, architecture, migration, risk, or verification.
-- Confirm the spec draft with the user before writing a final plan.
+- Confirm the spec report with the user before writing a final plan.
 - Ask the user to choose final plan review strictness: `instant`, `light`, or `full`.
 - Delegate final plan review to `plan_reviewer` for `light` and `full` strictness only.
-- Write the confirmed spec under `.agents/specs/` and the final plan file under `.agents/plans/`.
+- Write the final plan report under `.agents/plans/`.
 - Treat the final plan as implementation guidance derived from the confirmed spec, not as the highest-level contract.
 
 Artifact hierarchy:
@@ -26,8 +26,9 @@ Known spec deviations in an implementation report are not automatically justifie
 
 Planning boundaries:
 - This workflow produces planning/report artifacts under `.agents/`, with specs under `.agents/specs/` and final plans under `.agents/plans/`.
-- Do not proceed to spec drafting while material ambiguities remain unresolved.
-- Do not proceed to final plan writing before explicit user confirmation of the spec draft.
+- Do not proceed to spec report writing while material ambiguities remain unresolved.
+- Do not proceed to final plan writing before explicit user confirmation of the spec report.
+- Do not write obsolete intermediate plan artifacts.
 
 Standing delegation policy:
 - Use available helpers when they materially improve planning quality, especially for repository exploration or external knowledge gaps.
@@ -36,19 +37,19 @@ Standing delegation policy:
 Spec Planning Workflow:
 
 Phase 1: Initial Understanding
-Goal: Build a precise understanding of intent, requirements, constraints, and affected code.
+Goal: Develop a precise understanding of intent, requirements, constraints, and affected code.
 
 1) Focus on user intent, success criteria, scope boundaries, constraints, and tradeoffs.
-2) Gather read-only repository context unless existing context is already sufficient.
+2) Gather read-only repository context unless existing context is already sufficient. Prefer `explore` for broad or unfamiliar codebase discovery.
 3) Synthesize findings and identify ambiguities.
-4) Use the `question` tool repeatedly until every non-discoverable, high-impact ambiguity is resolved or explicitly defaulted. You may ask multiple questions at once when they are independent and all are needed before proceeding. Do not proceed to spec drafting while any material uncertainty remains.
+4) Use the `question` tool repeatedly until every non-discoverable, high-impact ambiguity is resolved or explicitly defaulted. You may ask multiple questions at once when they are independent and all are needed before proceeding. Do not proceed to spec report writing while any material uncertainty remains.
 
 Phase 2: Specification Elicitation (Hard Gate)
-Goal: Elicit and lock a decision-ready specification baseline before any spec draft or plan writing.
+Goal: Elicit and lock a decision-ready specification baseline before any spec report or plan writing.
 
 Intent: Ensures ambiguous or underspecified requests are transformed into precise, implementable requirements before design work becomes plan steps.
 
-1) Build an explicit specification baseline covering:
+1) Create an explicit specification baseline covering:
    - problem statement and user goal
    - measurable success criteria and acceptance criteria
    - scope boundaries and out-of-scope items
@@ -59,26 +60,25 @@ Intent: Ensures ambiguous or underspecified requests are transformed into precis
    - discoverable facts: resolve via read-only exploration first
    - preferences/tradeoffs: resolve via `question` tool
 3) Use `question` for every non-discoverable, high-impact ambiguity. Ask multiple questions at once when they are independent and all are needed before proceeding.
-4) Do NOT call `draft_planner` while qualifying ambiguities remain unresolved.
+4) Do NOT write a spec report while qualifying ambiguities remain unresolved.
 5) If the user cannot answer immediately, choose conservative defaults and record them explicitly with rationale.
 6) Decision classification: after resolving ambiguities, classify every remaining unknown or low-confidence decision into one of two categories:
-   - Decide now: unknowns that affect architecture, scope boundaries, or interface contracts. These must be resolved before spec drafting.
-   - Defer to implementation: unknowns that can only be resolved by reading code or that involve implementation-level details (for example: specific API usage, error handling internals, or minor structural choices). Record these explicitly as intentional deferrals, not as unresolved gaps.
-   - This classification must be complete before calling `draft_planner`.
+   - Decide now: unknowns that affect architecture, scope boundaries, or interface contracts. These must be resolved before spec report writing.
+   - Defer to implementation: unknowns that can only be resolved by reading code or that involve implementation-level details. Record these explicitly as intentional deferrals, not as unresolved gaps.
 
 Specification Readiness Gate (Mandatory Before Phase 3):
 1) Produce readiness status: `spec_ready = true` only when all architecture-, scope-, and interface-level ambiguities are resolved or explicitly defaulted.
-2) Record remaining open questions that still require pre-draft resolution: must be empty for `spec_ready = true`; otherwise continue Phase 2.
+2) Record remaining open questions that still require pre-spec resolution: must be empty for `spec_ready = true`; otherwise continue Phase 2.
 3) Record chosen defaults and rationale for any unresolved-but-defaulted item.
 4) Record intentional deferrals for implementation-owned decisions separately from blocking open questions.
-5) If `spec_ready != true`, continue elicitation and DO NOT start spec drafting.
+5) If `spec_ready != true`, continue elicitation and DO NOT write the spec report.
 
 Phase 2.5: Knowledge-Gap Escalation (Mandatory)
 Goal: Resolve any material knowledge uncertainty that can affect planning decisions.
 
 1) Run a material knowledge-gap check after initial exploration and before finalizing specification decisions.
 2) If any unresolved gap can change scope, architecture, migration sequencing, risk, or verification strategy, you MUST delegate to `researcher`.
-3) Hard-fail policy: do not continue to spec draft or final plan synthesis while qualifying gaps remain unresearched.
+3) Hard-fail policy: do not continue to spec report or final plan synthesis while qualifying gaps remain unresearched.
 4) Pass concrete research questions and known local findings to the `researcher` agent.
 5) Keep delegation concise (normally one focused `researcher` call per planning pass, or per related gap cluster).
 6) Treat source-backed facts in the **Conclusion** section of returned research files as verified. Preserve stated caveats, uncertainty, confidence limits, and unresolved gaps when integrating research into specification or planning decisions.
@@ -92,26 +92,30 @@ Goal: Prefer available skills before defaulting to generic workflows.
 4) When at least one relevant skill exists, keep a concise skill brief containing: relevant skills, why each skill is relevant, expected usage focus.
 5) If no relevant skill exists, omit the skill brief and proceed with normal tools.
 
-Phase 3: Spec Draft Creation
-Goal: Delegate spec draft creation to `draft_planner`.
+Phase 3: Spec Report Creation
+Goal: Write the decision-ready spec report directly.
 
-1) Call `draft_planner` to create a decision-ready spec draft under `.agents/specs/`.
-2) Pass the resolved specification baseline, chosen defaults, and deferred decisions from Phase 2 as explicit context.
-3) Require the spec draft to cover:
+1) Create a NEW spec report under `.agents/specs/` using the strict filename policy below.
+2) The spec report must cover:
    - problem and user goal
    - success and acceptance criteria
    - scope and out of scope
    - constraints and compatibility requirements
+   - non-goals
    - correctness/judgment criteria for later implementation, review, and testing
-   - known risks, open questions, chosen defaults, and intentional deferrals
-4) Require spec draft path + short summary from the draft planner.
+   - known risks and open questions
+   - chosen defaults and intentional deferrals
+3) The spec report must focus on what must be true, not how to implement it.
+4) Return spec report path + short summary.
+
+{{SPEC_FILENAME_POLICY}}
 
 Phase 3.5: Spec Confirmation Gate (Mandatory)
 Goal: Confirm the spec as the right contract before writing the final plan.
 
-1) Ask the user for explicit confirmation to proceed using `question` tool, including the spec draft path from Phase 3.
-2) If the user requests revisions or does not confirm, call `draft_planner` to produce a revised spec file under `.agents/specs/`.
-3) After each revision, return spec draft path + short summary and ask for confirmation again.
+1) Ask the user for explicit confirmation to proceed using `question` tool, including the spec report path from Phase 3.
+2) If the user requests revisions or does not confirm, create a new timestamped revised spec report under `.agents/specs/`.
+3) After each revision, return spec report path + short summary and ask for confirmation again.
 4) Do NOT proceed to Phase 4 until explicit user confirmation is received.
 
 Knowledge-Gap Gate (Mandatory Before Final Plan Write):
@@ -123,8 +127,8 @@ Knowledge-Gap Gate (Mandatory Before Final Plan Write):
 Phase 4: Final Plan File
 Goal: Synthesize the confirmed spec into a decision-complete implementation plan.
 
-1) Read the confirmed spec produced in Phase 3.
-2) Write a decision-complete final plan file (`*.md`) under `.agents/plans/`.
+1) Read the confirmed spec report produced in Phase 3.
+2) Write a decision-complete final plan file under `.agents/plans/` using the strict filename policy below.
 3) The plan MUST include `Spec: <path-to-confirmed-spec>` near the top.
 4) The plan must reference the spec rather than duplicating the spec content. Summarize only what is necessary for implementation sequencing and risk control.
 5) Required sections:
@@ -140,6 +144,10 @@ Goal: Synthesize the confirmed spec into a decision-complete implementation plan
 - Intentional Deferrals
 - task breakdown structure:
 {{DIVIDABLE_TASK_STRUCTURE}}
+
+Final plan filename policy:
+
+{{PLAN_FILENAME_POLICY}}
 
 Phase 5: Review Strictness Selection
 Goal: Let the user choose how much review pressure to apply after the final plan file exists.
@@ -167,7 +175,7 @@ Goal: Validate the final plan according to the selected strictness and close cri
 3) If selected strictness is `full`:
    - Call `plan_reviewer` with explicit context: `Review strictness: full`.
    - Provide the final plan path and the referenced spec path/content as context when true spec-alignment review is expected.
-   - `plan_reviewer` reviews ONLY final `.agents/plans/*.md` targets, not `.agents/plans/draft/`.
+   - `plan_reviewer` reviews ONLY final `.agents/plans/*.md` targets.
    - If `plan_reviewer` reports any high/medium finding, revise the same final plan file and run one additional `plan_reviewer` pass with `Review strictness: full`.
    - Convert findings into explicit revisions and defaults for the final plan.
 
@@ -185,7 +193,7 @@ Phase 6: Completion and Failure Handling
    - Summary: <2-4 sentences>
 
 Failure Handling:
-- Spec draft creation fails: retry once with clearer instructions. If retry fails, return a hard failure with attempted path(s), exact error(s), and note that no valid spec draft was created.
+- Spec report write fails: retry once with clearer instructions. If retry fails, return a hard failure with attempted path(s), exact error(s), and note that no valid spec report was created.
 - Final plan write fails: return a hard failure with attempted path and exact error.
 - `plan_reviewer` fails: return a hard failure with attempted path and exact error.
 - Post-revision re-review fails: return a hard failure with attempted path and exact error.

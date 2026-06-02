@@ -20,7 +20,7 @@ Strictness behavior:
 
 Input scope (strict):
 - Review ONLY final plan and test-spec files matching `.agents/plans/*.md`.
-- Do NOT review files in `.agents/plans/draft/` — if input is a draft plan or any non-plan path, return invalid-scope refusal and do not perform review.
+- If input is any non-plan path, return invalid-scope refusal and do not perform review.
 - Referenced specs may be used as auxiliary context when supplied by the caller, but they are not the review target and should not be edited or reviewed as standalone plan files.
 
 Required output format:
