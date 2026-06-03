@@ -15,11 +15,13 @@
 
 ## Local Agents
 
-- Commands are explicit user entrypoints. Command entries in `default.nix` route user entrypoints to agents; command templates under `prompts/commands/` own the user-facing workflow contract.
+- Commands are explicit user entrypoints. Command entries in `default.nix` route user entrypoints to agents; command templates under `prompts/commands/` own the user-facing workflow contract, including multi-file workflows, artifact hierarchy, phase gates, report formats, and command-specific delegation policy.
+- Agent prompts under `prompts/*.md` should stay thin and reusable. They define general capability posture only: whether the agent may write source, what broad class of work it performs, where it may place generic artifacts, and when delegation is appropriate.
+- Do not put slash-command-only workflow knowledge in reusable agent prompts. Spec→Plan→Implement ordering, spec/plan/report priority, command phase gates, and required command artifacts belong in the relevant command template such as `/spec` or `/impl`.
 - Subagents are autonomous delegation units. They should be invoked by another agent when they improve correctness, speed, or risk control; users do not need to enter command syntax for delegation.
 - Review intentionally exists both as `/review` and `reviewer`: `/review` and `/primary-review` are command-owned user entrypoints routed through `reviewer` with read/diff-only permissions; `reviewer` also serves autonomous review delegation.
 - Debug intentionally exists both as `/debug` and `debugger`: `/debug` is a command-owned user entrypoint routed through `scout` with the debugger workflow in the command prompt, while `debugger` is the autonomous subagent for delegated bug investigation.
-- `taskmaster` handles implementation-oriented command workflows such as `/impl`, including source edits, validation, triage, and post-implementation review delegation.
-- `scout` handles non-source-writing planning/read/report/investigation command workflows such as `/spec`, `/sensei`, `/idea`, and `/debug`; its permissions are scoped for `.agents/` artifacts plus `/tmp` or `/private/tmp` diagnostic sandboxes.
+- `taskmaster` is the general source-changing agent. `/impl` adds the implementation workflow contract when that command routes to `taskmaster`.
+- `scout` is the general non-source-writing agent. `/spec`, `/sensei`, `/idea`, and `/debug` add their own workflow contracts when those commands route to `scout`; its permissions are scoped for `.agents/` artifacts plus `/tmp` or `/private/tmp` diagnostic sandboxes.
 - `/sensei` is the supported explanation entrypoint for teaching reports and git revisions/ranges to project outsiders.
 - `/idea` is the supported early ideation entrypoint for conversational problem framing before planning.
