@@ -426,6 +426,13 @@ delib.module {
         perm.safety.externalAll
       ];
 
+      unrestrictedCommandReadWrite = mergeMany [
+        perm.read.workspace
+        perm.write.full
+        perm.execute.full
+        perm.safety.externalAll
+      ];
+
       tempWorkspaceWithReports =
         perm.scope.reports ["read" "edit*"]
         (mergeMany [
@@ -656,6 +663,20 @@ delib.module {
           "{{REPORT_FILENAME_POLICY}}" = reportFilenamePolicy;
         };
         permission = agentPerm.composedFull;
+      };
+
+      ultra-ai-xhigh-pro-max = {
+        mode = "all";
+        model = "openai/gpt-5.5";
+        reasoningEffort = "high";
+        description = "Primary agent with unrestricted external command execution plus read/write access.";
+        prompt = ''
+          You are the `ultra-ai-xhigh-pro-max` agent.
+
+          You may execute external commands without OpenCode permission restrictions and may read/write files as requested.
+          Follow the user's concrete request and report concisely.
+        '';
+        permission = agentPerm.unrestrictedCommandReadWrite;
       };
 
       scout = {
