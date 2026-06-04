@@ -621,7 +621,9 @@ delib.module {
         plugin = [];
         provider = {
           openrouter = {
-            apiKey = "{file:${secretPath "openrouter-api-key"}}";
+            options = {
+              apiKey = "{file:${secretPath "openrouter-api-key"}}";
+            };
           };
           ollama = {
             npm = "@ai-sdk/openai-compatible";
@@ -747,7 +749,7 @@ delib.module {
       };
 
       explore = {
-        model = "poolside/laguna-xs.2:free";
+        model = "openrouter/poolside/laguna-xs.2:free";
         reasoningEffort = "medium";
         description = "Read-only exploration agent for delegated repository and filesystem context gathering.";
         prompt = readAgentPrompt "explore";
