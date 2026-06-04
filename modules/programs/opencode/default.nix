@@ -737,7 +737,7 @@ delib.module {
       };
 
       explore = {
-        model = "github-copilot/gpt-5.4-mini";
+        model = "poolside/laguna-xs.2:free";
         reasoningEffort = "medium";
         description = "Read-only exploration agent for delegated repository and filesystem context gathering.";
         prompt = readAgentPrompt "explore";
@@ -768,8 +768,8 @@ delib.module {
 
       researcher = {
         mode = "subagent";
-        model = "openai/gpt-5.5";
-        reasoningEffort = "medium";
+        model = "github-copilot/gpt-5.4-mini";
+        reasoningEffort = "high";
         description = "Performs targeted internet research when planning workflows have material knowledge uncertainty.";
         prompt = renderAgentPrompt "researcher" {
           "{{RESEARCH_FILENAME_POLICY}}" = researchFilenamePolicy;
@@ -779,7 +779,7 @@ delib.module {
 
       tester = {
         mode = "subagent";
-        model = "github-copilot/gpt-5.4-mini";
+        model = "opencode/deepseek-v4-flash-free";
         reasoningEffort = "medium";
         description = "Read-only test runner that triages failures and writes failure-report files when suites fail.";
         prompt = renderAgentPrompt "tester" {
