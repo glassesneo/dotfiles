@@ -145,6 +145,15 @@ delib.module {
             // deny (denyShellOperatorsFor ["mkdir"]);
         };
 
+        agentsDateFetch = {
+          bash =
+            denyAll
+            // allow [
+              "date +%Y%m%d-%H%M"
+            ]
+            // deny (denyShellOperatorsFor ["date"]);
+        };
+
         testAndDebug = let
           commandPrefixes = [
             "just"
@@ -407,6 +416,7 @@ delib.module {
         perm.write.none
         perm.execute.none
         perm.execute.agentsDirectoryCreation
+        perm.execute.agentsDateFetch
         perm.delegate.none
         perm.interact.none
         perm.network.none
