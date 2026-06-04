@@ -9,7 +9,8 @@
 delib.module {
   name = "programs.claude-code";
 
-  options = delib.singleEnableOption host.devCoreFeatured;
+  # options = delib.singleEnableOption host.devCoreFeatured;
+  options = delib.singleEnableOption false;
 
   home.ifEnabled = let
     cat = pkgs.lib.getExe' pkgs.coreutils "cat";
