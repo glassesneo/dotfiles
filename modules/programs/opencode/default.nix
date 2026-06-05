@@ -550,6 +550,9 @@ delib.module {
     specCommandTemplate = builtins.replaceStrings ["{{DIVIDABLE_TASK_STRUCTURE}}" "{{SPEC_FILENAME_POLICY}}" "{{PLAN_FILENAME_POLICY}}"] [dividableTaskStructure specFilenamePolicy planFilenamePolicy] (
       builtins.readFile ./prompts/commands/spec.md
     );
+    actCommandTemplate = renderAgentPrompt "commands/act" {
+      "{{PLAN_FILENAME_POLICY}}" = planFilenamePolicy;
+    };
     implCommandTemplate = renderAgentPrompt "commands/impl" {
       "{{IMPLEMENTATION_REPORT_FORMAT_CONTRACT}}" = implementationReportFormatContract;
       "{{REPORT_FILENAME_POLICY}}" = reportFilenamePolicy;
@@ -578,6 +581,12 @@ delib.module {
             description = "Explore rough ideas conversationally before planning.";
             agent = "scout";
             model = "opencode/deepseek-v4-flash-free";
+            subtask = false;
+          };
+          act = {
+            template = actCommandTemplate;
+            description = "Plan, approve, and implement a small task with taskmaster.";
+            agent = "taskmaster";
             subtask = false;
           };
           impl = {

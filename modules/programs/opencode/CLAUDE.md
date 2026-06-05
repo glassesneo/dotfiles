@@ -20,7 +20,7 @@
 - Do not put slash-command-only workflow knowledge in reusable agent prompts. Spec→Plan→Implement ordering, spec/plan/report priority, command phase gates, and required command artifacts belong in the relevant command template such as `/spec` or `/impl`.
 - Subagents are autonomous delegation units. They should be invoked by another agent when they improve correctness, speed, or risk control; users do not need to enter command syntax for delegation.
 - Review/debug inspection is owned by `inspector`: `/review`, `/primary-review`, and `/debug` are command-owned user entrypoints routed through `inspector`, which loads concise skills and delegates strict code-review viewpoints to `reviewer1`/`reviewer2`.
-- `taskmaster` is the general source-changing agent. `/impl` adds the implementation workflow contract when that command routes to `taskmaster`.
+- `taskmaster` is the general source-changing agent. `/act` adds a lightweight plan → approval → execute workflow for smaller tasks; `/impl` adds the implementation workflow contract when that command routes to `taskmaster`.
 - `scout` is the general non-source-writing agent. `/spec`, `/sensei`, and `/idea` add their own workflow contracts when those commands route to `scout`; its permissions are scoped for `.agents/` artifacts plus `/tmp` or `/private/tmp` diagnostic sandboxes.
 - `/sensei` is the supported explanation entrypoint for teaching reports and git revisions/ranges to project outsiders.
 - `/idea` is the supported early ideation entrypoint for conversational problem framing before planning.
