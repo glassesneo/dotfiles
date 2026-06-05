@@ -466,9 +466,9 @@ delib.module {
           "explore"
           "researcher"
           "plan_reviewer"
-          "reviewer"
-          "debugger"
-          "code_reviewer"
+          "inspector"
+          "reviewer1"
+          "reviewer2"
           "tester"
         ])
       ];
@@ -501,15 +501,17 @@ delib.module {
 
       reportsOnly = perm.scope.reports ["edit*"] pureRead;
 
-      reviewReport = mergeMany [
+      inspector = mergeMany [
         reportsOnly
         perm.execute.safeGitInspection
         perm.execute.ghReviewInspection
         perm.interact.question
+        perm.context.full
         (perm.delegate.only [
           "explore"
           "researcher"
-          "code_reviewer"
+          "reviewer1"
+          "reviewer2"
           "tester"
         ])
       ];
@@ -522,15 +524,12 @@ delib.module {
     implementationReportFormatContract = readSharedPrompt "implementation-report-format";
     planFilenamePolicy = readSharedPrompt "test-spec-filename-policy";
     dividableTaskStructure = readSharedPrompt "task-breakdown-structure";
-    reviewWorkflow = readSharedPrompt "review-workflow";
-
     failureReportFormatContract = readSharedPrompt "failure-report-format";
     specFilenamePolicy = readSharedPrompt "spec-filename-policy";
     researchFilenamePolicy = readSharedPrompt "research-filename-policy";
     secretPath = name: sopsSecretPaths.${name} or "/run/secrets/${name}";
     reviewCommandTemplate = ''
       ${builtins.readFile ./prompts/commands/review.md}
-      ${reviewWorkflow}
       ${reviewReportFormatContract}
 
       Enforcement rules:
@@ -542,20 +541,11 @@ delib.module {
 
       ${reportFilenamePolicy}
     '';
-    debuggerPrompt = renderAgentPrompt "debugger" {
-      "{{BUG_REPORT_FORMAT_CONTRACT}}" = bugReportFormatContract;
-      "{{REPORT_FILENAME_POLICY}}" = reportFilenamePolicy;
-    };
-    debugCommandWorkflow =
-      builtins.replaceStrings [
-        "You are the `debugger` specialist subagent."
-      ] [
-        "For this command, you are the `scout` agent executing the debugger workflow."
-      ]
-      debuggerPrompt;
     debugCommandTemplate = ''
       ${builtins.readFile ./prompts/commands/debug.md}
-      ${debugCommandWorkflow}
+      ${bugReportFormatContract}
+
+      ${reportFilenamePolicy}
     '';
     specCommandTemplate = builtins.replaceStrings ["{{DIVIDABLE_TASK_STRUCTURE}}" "{{SPEC_FILENAME_POLICY}}" "{{PLAN_FILENAME_POLICY}}"] [dividableTaskStructure specFilenamePolicy planFilenamePolicy] (
       builtins.readFile ./prompts/commands/spec.md
@@ -597,18 +587,20 @@ delib.module {
           };
           debug = {
             template = debugCommandTemplate;
-            description = "Investigate a bug with scout using the debug workflow.";
-            agent = "scout";
+            description = "Investigate a bug with inspector using the debug skill.";
+            agent = "inspector";
             subtask = false;
           };
           review = {
             template = reviewCommandTemplate;
-            agent = "reviewer";
+            description = "Review a target with inspector using the review skill.";
+            agent = "inspector";
             subtask = true;
           };
           primary-review = {
             template = reviewCommandTemplate;
-            agent = "reviewer";
+            description = "Review a target with inspector using the review skill.";
+            agent = "inspector";
             subtask = false;
           };
         };
@@ -695,7 +687,7 @@ delib.module {
         mode = "all";
         model = "openai/gpt-5.5";
         reasoningEffort = "medium";
-        description = "Non-source-writing agent for planning, review, debug, inspection, and report workflows.";
+        description = "Non-source-writing agent for planning, inspection, and report workflows.";
         prompt = readAgentPrompt "scout";
         permission = agentPerm.scoutFull;
       };
@@ -726,26 +718,13 @@ delib.module {
         '';
         permission = agentPerm.pureRead;
       };
-      reviewer = {
+      inspector = {
         mode = "all";
         model = "openai/gpt-5.5";
         reasoningEffort = "high";
-        description = "Autonomous review subagent for orchestrated evidence-first code review with report output.";
-        prompt = renderAgentPrompt "reviewer" {
-          "{{REVIEW_WORKFLOW}}" = reviewWorkflow;
-          "{{REVIEW_REPORT_FORMAT_CONTRACT}}" = reviewReportFormatContract;
-          "{{REPORT_FILENAME_POLICY}}" = reportFilenamePolicy;
-        };
-        permission = agentPerm.reviewReport;
-      };
-
-      debugger = {
-        mode = "subagent";
-        model = "openai/gpt-5.5";
-        reasoningEffort = "medium";
-        description = "Performs bug investigation with reproduction, root-cause analysis, and evidence-only reporting.";
-        prompt = debuggerPrompt;
-        permission = agentPerm.debugSandbox;
+        description = "Shared review/debug orchestration entrypoint with skill-led read-only inspection.";
+        prompt = readAgentPrompt "inspector";
+        permission = agentPerm.inspector;
       };
 
       explore = {
@@ -765,12 +744,25 @@ delib.module {
         permission = merge agentPerm.pureRead perm.context.full;
       };
 
-      code_reviewer = {
+      reviewer1 = {
         mode = "subagent";
         model = "openai/gpt-5.5";
         description = "Performs strict read-only code review with severity-ordered findings and concrete file/line evidence.";
         reasoningEffort = "medium";
-        prompt = readAgentPrompt "code_reviewer";
+        prompt = readAgentPrompt "strict_reviewer";
+        permission = mergeMany [
+          agentPerm.pureRead
+          perm.execute.safeGitInspection
+          perm.context.full
+        ];
+      };
+
+      reviewer2 = {
+        mode = "subagent";
+        model = "opencode/nemotron-3-super-free";
+        description = "Performs strict read-only code review with severity-ordered findings and concrete file/line evidence.";
+        reasoningEffort = "medium";
+        prompt = readAgentPrompt "strict_reviewer";
         permission = mergeMany [
           agentPerm.pureRead
           perm.execute.safeGitInspection
