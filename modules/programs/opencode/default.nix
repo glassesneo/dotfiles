@@ -9,9 +9,13 @@
 delib.module {
   name = "programs.opencode";
 
-  options = delib.singleEnableOption host.devCoreFeatured;
+  options = with delib;
+    moduleOptions {
+      enable = boolOption host.devCoreFeatured;
+      commandExecutionMode = enumOption ["restricted" "full"] "restricted";
+    };
 
-  home.ifEnabled = let
+  home.ifEnabled = {myconfig, ...}: let
     inherit (lib.attrsets) recursiveUpdate;
     inherit (lib.attrsets) nameValuePair;
     readAgentPrompt = name: builtins.readFile (./prompts + "/${name}.md");
@@ -517,6 +521,11 @@ delib.module {
       ];
     };
 
+    applyCommandExecutionMode = base:
+      if myconfig.programs.opencode.commandExecutionMode == "full"
+      then merge base perm.execute.full
+      else base;
+
     testSpecFormatContract = readSharedPrompt "test-spec-format";
     bugReportFormatContract = readSharedPrompt "bug-report-format";
     reportFilenamePolicy = readSharedPrompt "report-filename-policy";
@@ -676,7 +685,7 @@ delib.module {
           "{{IMPLEMENTATION_REPORT_FORMAT_CONTRACT}}" = implementationReportFormatContract;
           "{{REPORT_FILENAME_POLICY}}" = reportFilenamePolicy;
         };
-        permission = agentPerm.composedFull;
+        permission = applyCommandExecutionMode agentPerm.composedFull;
       };
 
       ultra-ai-xhigh-pro-max = {
@@ -690,7 +699,7 @@ delib.module {
           You may execute external commands without OpenCode permission restrictions and may read/write files as requested.
           Follow the user's concrete request and report concisely.
         '';
-        permission = agentPerm.unrestrictedCommandReadWrite;
+        permission = applyCommandExecutionMode agentPerm.unrestrictedCommandReadWrite;
       };
 
       scout = {
@@ -699,7 +708,7 @@ delib.module {
         reasoningEffort = "medium";
         description = "Non-source-writing agent for planning, inspection, and report workflows.";
         prompt = readAgentPrompt "scout";
-        permission = agentPerm.scoutFull;
+        permission = applyCommandExecutionMode agentPerm.scoutFull;
       };
 
       eyes = {
@@ -726,7 +735,7 @@ delib.module {
           - Risks or unknowns
           - Suggested next action, only if obvious
         '';
-        permission = agentPerm.pureRead;
+        permission = applyCommandExecutionMode agentPerm.pureRead;
       };
       inspector = {
         mode = "all";
@@ -734,7 +743,7 @@ delib.module {
         reasoningEffort = "high";
         description = "Shared review/debug orchestration entrypoint with skill-led read-only inspection.";
         prompt = readAgentPrompt "inspector";
-        permission = agentPerm.inspector;
+        permission = applyCommandExecutionMode agentPerm.inspector;
       };
 
       explore = {
@@ -743,7 +752,7 @@ delib.module {
         reasoningEffort = "medium";
         description = "Read-only exploration agent for delegated repository and filesystem context gathering.";
         prompt = readAgentPrompt "explore";
-        permission = agentPerm.pureRead;
+        permission = applyCommandExecutionMode agentPerm.pureRead;
       };
 
       plan_reviewer = {
@@ -752,7 +761,7 @@ delib.module {
         description = "Performs strict read-only review of final plan and test-spec files (`*.md`) with actionable revisions.";
         reasoningEffort = "low";
         prompt = readAgentPrompt "plan_reviewer";
-        permission = merge agentPerm.pureRead perm.context.full;
+        permission = applyCommandExecutionMode (merge agentPerm.pureRead perm.context.full);
       };
 
       reviewer1 = {
@@ -761,11 +770,11 @@ delib.module {
         description = "Performs strict read-only code review with severity-ordered findings and concrete file/line evidence.";
         reasoningEffort = "medium";
         prompt = readAgentPrompt "strict_reviewer";
-        permission = mergeMany [
+        permission = applyCommandExecutionMode (mergeMany [
           agentPerm.pureRead
           perm.execute.safeGitInspection
           perm.context.full
-        ];
+        ]);
       };
 
       reviewer2 = {
@@ -774,11 +783,11 @@ delib.module {
         description = "Performs strict read-only code review with severity-ordered findings and concrete file/line evidence.";
         reasoningEffort = "medium";
         prompt = readAgentPrompt "strict_reviewer";
-        permission = mergeMany [
+        permission = applyCommandExecutionMode (mergeMany [
           agentPerm.pureRead
           perm.execute.safeGitInspection
           perm.context.full
-        ];
+        ]);
       };
 
       researcher = {
@@ -789,7 +798,7 @@ delib.module {
         prompt = renderAgentPrompt "researcher" {
           "{{RESEARCH_FILENAME_POLICY}}" = researchFilenamePolicy;
         };
-        permission = agentPerm.networkResearch;
+        permission = applyCommandExecutionMode agentPerm.networkResearch;
       };
 
       tester = {
@@ -801,7 +810,7 @@ delib.module {
           "{{FAILURE_REPORT_FORMAT_CONTRACT}}" = failureReportFormatContract;
           "{{REPORT_FILENAME_POLICY}}" = reportFilenamePolicy;
         };
-        permission = agentPerm.testRunner;
+        permission = applyCommandExecutionMode agentPerm.testRunner;
       };
     };
   };
