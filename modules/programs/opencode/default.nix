@@ -729,7 +729,8 @@ delib.module {
       };
 
       explore = {
-        model = "openrouter/poolside/laguna-xs.2:free";
+        # model = "openrouter/poolside/laguna-xs.2:free";
+        model = "openai/gpt-5.4-mini";
         reasoningEffort = "medium";
         description = "Read-only exploration agent for delegated repository and filesystem context gathering.";
         prompt = readAgentPrompt "explore";
