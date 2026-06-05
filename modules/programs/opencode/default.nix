@@ -752,7 +752,10 @@ delib.module {
         reasoningEffort = "medium";
         description = "Read-only exploration agent for delegated repository and filesystem context gathering.";
         prompt = readAgentPrompt "explore";
-        permission = applyCommandExecutionMode agentPerm.pureRead;
+        permission = applyCommandExecutionMode (mergeMany [
+          agentPerm.pureRead
+          perm.execute.safeGitInspection
+        ]);
       };
 
       plan_reviewer = {
