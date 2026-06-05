@@ -577,6 +577,7 @@ delib.module {
             template = builtins.readFile ./prompts/commands/idea.md;
             description = "Explore rough ideas conversationally before planning.";
             agent = "scout";
+            model = "opencode/deepseek-v4-flash-free";
             subtask = false;
           };
           impl = {
