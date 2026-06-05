@@ -782,7 +782,7 @@ delib.module {
 
       reviewer2 = {
         mode = "subagent";
-        model = "opencode/nemotron-3-super-free";
+        model = "opencode/nemotron-3-ultra-free";
         description = "Performs strict read-only code review with severity-ordered findings and concrete file/line evidence.";
         reasoningEffort = "medium";
         prompt = readAgentPrompt "strict_reviewer";
