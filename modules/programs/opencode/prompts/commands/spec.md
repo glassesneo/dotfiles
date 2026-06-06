@@ -6,8 +6,8 @@ Specification contract:
 - Write a spec report directly under `.agents/specs/`; do not create intermediate plan artifacts and do not delegate spec writing to a separate planning writer.
 - Delegate external knowledge gaps to `researcher` when they can affect scope, architecture, migration, risk, or verification.
 - Confirm the spec report with the user before writing a final plan.
-- Ask the user to choose final plan review strictness: `instant`, `light`, or `full`.
-- Delegate final plan review to `plan_reviewer` for `light` and `full` strictness only.
+- Ask the user whether to skip final plan review or run final plan review.
+- Delegate final plan review to `plan_reviewer` only when review is not skipped.
 - Write the final plan report under `.agents/plans/`.
 - After the final plan is complete, ask whether to proceed directly to implementation.
 - If approved, delegate implementation to `taskmaster` as a subagent and provide both the confirmed spec file and final plan file.
@@ -34,6 +34,7 @@ Planning boundaries:
 
 Standing delegation policy:
 - Use available helpers when they materially improve planning quality, especially for repository exploration or external knowledge gaps.
+- Delegate to `challenger` when request framing, draft spec quality, assumptions, constraints, or proposed solution direction would benefit from calibrated critique before moving forward.
 - Do not finalize planning while unresolved gaps can affect scope, architecture, migration sequencing, risk, or verification strategy.
 
 Spec Planning Workflow:
@@ -151,39 +152,33 @@ Final plan filename policy:
 
 {{PLAN_FILENAME_POLICY}}
 
-Phase 5: Review Strictness Selection
-Goal: Let the user choose how much review pressure to apply after the final plan file exists.
+Phase 5: Final Plan Review Decision
+Goal: Let the user choose whether to skip or run final plan review after the final plan file exists.
 
-1) After writing the final plan file in Phase 4, ask the user with the `question` tool to choose exactly one review strictness:
-   - `instant`: no review pass; fastest handoff after final plan file creation.
-   - `light`: focused `plan_reviewer` pass for blocking plan defects only.
-   - `full`: normal rigorous `plan_reviewer` pass across plan completeness, correctness, constraints, risk, and verification.
+1) After writing the final plan file in Phase 4, ask the user with the `question` tool to choose exactly one option:
+   - Skip final plan review.
+   - Run final plan review.
 2) Do NOT ask this before the final plan file is written. The spec confirmation → final plan file flow must always happen first.
-3) Treat the selected value as the review contract for the remainder of the workflow.
+3) Treat the selected value as a binary review gate for the remainder of the workflow.
 
 Phase 5.5: Review Execution
-Goal: Validate the final plan according to the selected strictness and close critical gaps before reporting.
+Goal: Validate the final plan when requested and close critical gaps before reporting.
 
-1) If selected strictness is `instant`:
-    - Do NOT call `plan_reviewer`.
-    - Do NOT do any extra review pass.
+1) If the user chooses to skip final plan review:
+     - Do NOT call `plan_reviewer`.
+     - Do NOT do any extra review pass.
    - Proceed directly to the implementation handoff gate in Phase 6.
-2) If selected strictness is `light`:
-   - Call `plan_reviewer` with explicit context: `Review strictness: light`.
-   - Provide the final plan path and the referenced spec path/content as context when true spec-alignment review is expected.
-   - Tell `plan_reviewer` to focus on blocking design gaps, scope/interface contradictions, impossible or missing verification, and plan defects that would likely mislead implementation.
-   - If `plan_reviewer` reports any high finding, revise the same final plan file and run one additional `plan_reviewer` pass with `Review strictness: light`.
-   - Treat medium/low findings as optional unless they point to a concrete implementation blocker; convert accepted findings into explicit revisions/defaults.
-3) If selected strictness is `full`:
-   - Call `plan_reviewer` with explicit context: `Review strictness: full`.
-   - Provide the final plan path and the referenced spec path/content as context when true spec-alignment review is expected.
+2) If the user chooses to run final plan review:
+   - Call `plan_reviewer` once with explicit context that this is a spec-grounded final-plan procedure review.
+   - Provide the final plan path and the referenced spec path/content.
+   - Tell `plan_reviewer` to focus on final plan step feasibility, correctness, ordering, prerequisites, contradictions with the spec, and verification viability.
    - `plan_reviewer` reviews ONLY final `.agents/plans/*.md` targets.
-   - If `plan_reviewer` reports any high/medium finding, revise the same final plan file and run one additional `plan_reviewer` pass with `Review strictness: full`.
-   - Convert findings into explicit revisions and defaults for the final plan.
+   - If `plan_reviewer` reports any high/medium finding, revise the same final plan file and run one additional `plan_reviewer` pass with the same final plan path and referenced spec context.
+   - Convert accepted findings into explicit revisions and defaults for the final plan.
 
 Phase 6: Implementation Handoff Gate and Failure Handling
 1) Do NOT request an additional final-plan confirmation before Phase 5.5 is complete.
-2) After the final plan write and any selected review pass are complete, ask the user with the `question` tool whether to proceed directly to implementation in this same session. Include both the confirmed spec file path and final plan file path in the question text.
+2) After the final plan write and any review gate outcome is complete, ask the user with the `question` tool whether to proceed directly to implementation in this same session. Include both the confirmed spec file path and final plan file path in the question text.
 3) Offer clear choices:
    - Proceed with implementation.
    - Stop after planning.
@@ -192,10 +187,10 @@ Phase 6: Implementation Handoff Gate and Failure Handling
    - Plan file: <path>
    - Implementation: not started
 5) If the user approves proceeding, delegate to `taskmaster` as a subagent. The task prompt MUST include:
-   - the confirmed spec file path
-   - the final plan file path
-   - the selected review strictness and review result, if applicable
-   - instruction to read the spec first, then the plan
+    - the confirmed spec file path
+    - the final plan file path
+    - whether final plan review was skipped or run, plus the review result if applicable
+    - instruction to read the spec first, then the plan
    - instruction to keep implementation within the confirmed spec and plan unless a material mismatch requires pausing for user approval
    - instruction to run focused validation when feasible and report changed files, validation, residual risks, and deviations
 6) After `taskmaster` returns, provide a concise completion summary including:

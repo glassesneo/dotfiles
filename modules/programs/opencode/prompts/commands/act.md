@@ -23,6 +23,7 @@ Act target: $ARGUMENTS
 - Do not over-ask about implementation details that can safely be discovered or decided during implementation; record those as assumptions or intentional deferrals instead.
 - If a material external knowledge gap could change the approach, scope, risk, or verification, resolve it before approval using appropriate web, documentation, or research helpers.
 - Delegating to `researcher` is allowed when it is materially useful; any `.agents/research/` artifact it writes is the sole allowed pre-approval write and does not require switching to `/spec`.
+- Delegating to `challenger` is allowed when ambiguous framing, risky assumptions, or premature solution constraints could materially affect the lightweight plan; use it opportunistically, not as a mandatory review gate.
 
 ## Escalation to `/spec`
 

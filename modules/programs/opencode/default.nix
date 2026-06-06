@@ -469,6 +469,7 @@ delib.module {
         (perm.delegate.only [
           "explore"
           "researcher"
+          "challenger"
           "taskmaster"
           "plan_reviewer"
           "inspector"
@@ -495,6 +496,16 @@ delib.module {
         pureRead
         perm.execute.safeGitInspection
         perm.interact.question
+      ];
+
+      challenger = mergeMany [
+        pureRead
+        perm.execute.safeGitInspection
+        perm.context.full
+        (perm.delegate.only [
+          "explore"
+          "researcher"
+        ])
       ];
 
       researchOnly = perm.scope.research ["edit*"] pureRead;
@@ -763,10 +774,19 @@ delib.module {
       plan_reviewer = {
         mode = "subagent";
         model = "openai/gpt-5.5";
-        description = "Performs strict read-only review of final plan and test-spec files (`*.md`) with actionable revisions.";
+        description = "Reviews final plan steps against the referenced spec for feasibility and correctness.";
         reasoningEffort = "low";
         prompt = readAgentPrompt "plan_reviewer";
         permission = applyCommandExecutionMode (merge agentPerm.pureRead perm.context.full);
+      };
+
+      challenger = {
+        mode = "subagent";
+        model = "openai/gpt-5.5";
+        description = "Challenges request/spec framing and assumptions with calibrated evidence checks.";
+        reasoningEffort = "medium";
+        prompt = readAgentPrompt "challenger";
+        permission = applyCommandExecutionMode agentPerm.challenger;
       };
 
       reviewer1 = {
