@@ -627,12 +627,6 @@ delib.module {
             template = reviewCommandTemplate;
             description = "Review a target with inspector using the review skill.";
             agent = "inspector";
-            subtask = true;
-          };
-          primary-review = {
-            template = reviewCommandTemplate;
-            description = "Review a target with inspector using the review skill.";
-            agent = "inspector";
             subtask = false;
           };
         };
