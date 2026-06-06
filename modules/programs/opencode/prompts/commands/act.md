@@ -14,8 +14,7 @@
 
 ## Standing delegation and uncertainty policy
 
-- For obvious, narrow edits, inspect the known files directly.
-- When affected files are not obvious, repository context is unfamiliar, or confidence would improve, delegate read-only discovery to `explore` before proposing the plan.
+- Apply the shared repository exploration and validation guidance within `/act`'s pre-approval and approval-gated boundaries.
 - Proactively clarify material ambiguities before proposing the plan. Do not wait for ambiguity to become strictly blocking when a user preference, scope boundary, tradeoff, acceptance criterion, or risk tolerance could change the plan.
 - Prefer the `question` tool for focused choices. Ask multiple independent questions at once when that is the fastest way to make the plan decision-ready.
 - Do not over-ask about implementation details that can safely be discovered or decided during implementation; record those as assumptions or intentional deferrals instead.
@@ -35,7 +34,7 @@
 ### Phase 1: Quick understanding
 
 1. Understand the user target and likely affected area.
-2. Perform read-only repository exploration directly or through `explore` when context is not already obvious.
+2. Perform any needed read-only repository exploration according to the shared exploration guidance.
 3. Synthesize what is known, then identify plan-shaping ambiguities:
    - user intent and success criteria;
    - scope boundaries, non-goals, and acceptable tradeoffs;
@@ -97,7 +96,7 @@ Plan filename policy:
 1. Implement the approved plan using `taskmaster` capabilities.
 2. Keep changes within the approved scope unless the user approves a scope change.
 3. If implementation reveals a material mismatch with the approved plan, pause and ask the user before continuing.
-4. Run relevant focused validation when feasible. If validation fails, triage enough to report the cause or ask for a scope/approach decision.
+4. Run relevant focused validation when feasible, following the shared validation guidance. If validation fails, triage enough to report the cause or ask for a scope/approach decision.
 
 ### Phase 6: Completion
 
