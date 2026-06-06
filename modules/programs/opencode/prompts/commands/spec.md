@@ -33,7 +33,7 @@ Question and delegation policy:
 
 * Use `question` whenever user input is needed before finalizing an artifact.
 * Questions may happen at any point before the relevant file is complete.
-* Prefer batching related questions. When practical, ask about three at once.
+* Prefer batching related questions. When practical, ask three or more at once.
 * Ask immediately when one blocking question prevents useful progress.
 * Resolve discoverable facts through read-only exploration before asking.
 * Use conservative defaults only when safe, reversible, and explicitly recorded.
