@@ -818,8 +818,8 @@ delib.module {
       pruner = {
         mode = "subagent";
         model = "openai/gpt-5.4-mini";
+        reasoningEffort = "high";
         description = "Finds commonization opportunities, dead code, and stale implementation residue with concrete evidence.";
-        reasoningEffort = "medium";
         prompt = readAgentPrompt "pruner";
         permission = applyCommandExecutionMode (mergeMany [
           agentPerm.pureRead
