@@ -469,6 +469,7 @@ delib.module {
         (perm.delegate.only [
           "explore"
           "researcher"
+          "taskmaster"
           "plan_reviewer"
           "inspector"
           "reviewer1"

@@ -9,6 +9,8 @@ Specification contract:
 - Ask the user to choose final plan review strictness: `instant`, `light`, or `full`.
 - Delegate final plan review to `plan_reviewer` for `light` and `full` strictness only.
 - Write the final plan report under `.agents/plans/`.
+- After the final plan is complete, ask whether to proceed directly to implementation.
+- If approved, delegate implementation to `taskmaster` as a subagent and provide both the confirmed spec file and final plan file.
 - Treat the final plan as implementation guidance derived from the confirmed spec, not as the highest-level contract.
 
 Artifact hierarchy:
@@ -163,9 +165,9 @@ Phase 5.5: Review Execution
 Goal: Validate the final plan according to the selected strictness and close critical gaps before reporting.
 
 1) If selected strictness is `instant`:
-   - Do NOT call `plan_reviewer`.
-   - Do NOT do any extra review pass.
-   - Proceed directly to completion with the minimal output described in Phase 6.
+    - Do NOT call `plan_reviewer`.
+    - Do NOT do any extra review pass.
+   - Proceed directly to the implementation handoff gate in Phase 6.
 2) If selected strictness is `light`:
    - Call `plan_reviewer` with explicit context: `Review strictness: light`.
    - Provide the final plan path and the referenced spec path/content as context when true spec-alignment review is expected.
@@ -179,24 +181,35 @@ Goal: Validate the final plan according to the selected strictness and close cri
    - If `plan_reviewer` reports any high/medium finding, revise the same final plan file and run one additional `plan_reviewer` pass with `Review strictness: full`.
    - Convert findings into explicit revisions and defaults for the final plan.
 
-Phase 6: Completion and Failure Handling
-1) Do NOT request an additional final-plan confirmation after Phase 4 or Phase 5.5.
-2) For `instant`, return only:
+Phase 6: Implementation Handoff Gate and Failure Handling
+1) Do NOT request an additional final-plan confirmation before Phase 5.5 is complete.
+2) After the final plan write and any selected review pass are complete, ask the user with the `question` tool whether to proceed directly to implementation in this same session. Include both the confirmed spec file path and final plan file path in the question text.
+3) Offer clear choices:
+   - Proceed with implementation.
+   - Stop after planning.
+4) If the user does not approve proceeding, stop immediately with a short response containing only:
    - Spec file: <path>
    - Plan file: <path>
-   - Review: skipped (instant)
-   - Summary: <1-2 sentences>
-3) For `light` or `full`, report completion after final write and review are complete:
+   - Implementation: not started
+5) If the user approves proceeding, delegate to `taskmaster` as a subagent. The task prompt MUST include:
+   - the confirmed spec file path
+   - the final plan file path
+   - the selected review strictness and review result, if applicable
+   - instruction to read the spec first, then the plan
+   - instruction to keep implementation within the confirmed spec and plan unless a material mismatch requires pausing for user approval
+   - instruction to run focused validation when feasible and report changed files, validation, residual risks, and deviations
+6) After `taskmaster` returns, provide a concise completion summary including:
    - Spec file: <path>
    - Plan file: <path>
-   - Review strictness: <light|full>
-   - Summary: <2-4 sentences>
+   - Implementation: delegated to taskmaster
+   - Summary: <2-4 sentences grounded in the taskmaster result>
 
 Failure Handling:
 - Spec report write fails: retry once with clearer instructions. If retry fails, return a hard failure with attempted path(s), exact error(s), and note that no valid spec report was created.
 - Final plan write fails: return a hard failure with attempted path and exact error.
 - `plan_reviewer` fails: return a hard failure with attempted path and exact error.
 - Post-revision re-review fails: return a hard failure with attempted path and exact error.
+- `taskmaster` delegation fails: return a hard failure with spec path, plan path, attempted delegation target, and exact error.
 - Do not fall back to chat-only spec or final plans.
 
 Consumption policy for `test-spec`, `failure-report`, and `bug-report` files:
