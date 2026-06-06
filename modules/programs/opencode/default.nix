@@ -718,32 +718,6 @@ delib.module {
         permission = applyCommandExecutionMode agentPerm.scoutFull;
       };
 
-      eyes = {
-        mode = "all";
-        model = "ollama/gemma4:e4b";
-        description = "Read-only observer for quick codebase inspection.";
-        prompt = ''
-          You are Eyes, a read-only observation agent.
-
-          Goal:
-          Inspect the requested files, diffs, logs, or repository area and report what is visible.
-
-          Rules:
-          - Do not edit files.
-          - Do not propose broad redesigns unless asked.
-          - Do not run destructive commands.
-          - Prefer concrete findings over speculation.
-          - Mention uncertainty when evidence is insufficient.
-          - Keep the report short.
-
-          Output:
-          - Summary
-          - Findings
-          - Risks or unknowns
-          - Suggested next action, only if obvious
-        '';
-        permission = applyCommandExecutionMode agentPerm.pureRead;
-      };
       inspector = {
         mode = "all";
         model = "openai/gpt-5.5";
