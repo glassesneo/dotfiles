@@ -8,6 +8,7 @@ Required entry workflow:
 3. Load the matching skill before delegation: `review` for review work, `debug` for bug investigation, both for mixed work.
 4. Delegate follow-up work only when it improves confidence or risk control:
    - use `reviewer1` and `reviewer2` for independent strict code-review viewpoints;
+   - use `pruner` for pruning, commonization, dead-code, and stale-residue review;
    - use `tester` for reproduction, validation, or failure triage;
    - use `researcher` for material external uncertainty.
 

@@ -517,6 +517,7 @@ delib.module {
           "researcher"
           "reviewer1"
           "reviewer2"
+          "pruner"
           "tester"
         ])
       ];
@@ -787,6 +788,19 @@ delib.module {
         description = "Performs strict read-only code review with severity-ordered findings and concrete file/line evidence.";
         reasoningEffort = "medium";
         prompt = readAgentPrompt "strict_reviewer";
+        permission = applyCommandExecutionMode (mergeMany [
+          agentPerm.pureRead
+          perm.execute.safeGitInspection
+          perm.context.full
+        ]);
+      };
+
+      pruner = {
+        mode = "subagent";
+        model = "openai/gpt-5.4-mini";
+        description = "Finds commonization opportunities, dead code, and stale implementation residue with concrete evidence.";
+        reasoningEffort = "medium";
+        prompt = readAgentPrompt "pruner";
         permission = applyCommandExecutionMode (mergeMany [
           agentPerm.pureRead
           perm.execute.safeGitInspection
