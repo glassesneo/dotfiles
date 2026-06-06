@@ -43,6 +43,7 @@ delib.module {
         user = {
           name = myconfig.constants.username;
           email = myconfig.constants.useremail;
+          useConfigOnly = true;
           signingkey = myconfig.programs.ssh.mainIdentity;
         };
         commit = {
