@@ -1,5 +1,3 @@
-Act target: $ARGUMENTS
-
 ## Role
 
 - Fill the lightweight gap between `/idea`, `/spec`, and `/impl`: quickly understand, propose a small implementation plan, get explicit approval, then implement in the same session.
@@ -111,3 +109,5 @@ Return a concise completion summary in chat. Include:
 - Residual risks or follow-up suggestions.
 
 Do not write an implementation report unless the user explicitly asks for one.
+
+Act target: $ARGUMENTS

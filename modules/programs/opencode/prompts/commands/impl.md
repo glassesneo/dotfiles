@@ -1,5 +1,3 @@
-Implement: $ARGUMENTS
-
 Implementation contract:
 - Prefer early delegation when it improves correctness, confidence, or risk control; state why if materially useful delegation is skipped.
 - Resolve repository context, external uncertainty, validation, and root-cause questions with the appropriate helper when direct execution would be slower or riskier.
@@ -16,3 +14,5 @@ Implementation report contract:
 {{IMPLEMENTATION_REPORT_FORMAT_CONTRACT}}
 
 {{REPORT_FILENAME_POLICY}}
+
+Implement: $ARGUMENTS

@@ -1,5 +1,3 @@
-Idea target: $ARGUMENTS
-
 ## Role
 
 - Engage conversationally when the user has only a rough idea, intuition, or problem feeling.
@@ -58,3 +56,5 @@ When the idea is clear enough to hand off, summarize in this format and stop:
 - After the user confirms the idea feels right, or explicitly asks for the summary, produce the `## Idea Summary` using both repository findings and user-provided clarification.
 - Recommend handing off to planning while keeping the same chat history so context is preserved.
 - Do not produce this summary until the user confirms the idea feels right or explicitly asks for it.
+
+Idea target: $ARGUMENTS

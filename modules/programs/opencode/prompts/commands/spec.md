@@ -1,5 +1,3 @@
-Spec target: $ARGUMENTS
-
 Specification contract:
 - Elicit and clarify requirements through structured exploration and user questions.
 - Delegate read-only codebase discovery to `explore` when it improves coverage or confidence.
@@ -210,3 +208,5 @@ Failure Handling:
 Consumption policy for `test-spec`, `failure-report`, and `bug-report` files:
 - Read the `## Summary` block first.
 - Read detail sections only when implementation-level context is needed for delegation or execution.
+
+Spec target: $ARGUMENTS
