@@ -18,7 +18,9 @@ Act target: $ARGUMENTS
 
 - For obvious, narrow edits, inspect the known files directly.
 - When affected files are not obvious, repository context is unfamiliar, or confidence would improve, delegate read-only discovery to `explore` before proposing the plan.
-- Ask only necessary clarification questions before planning, and prefer the `question` tool for focused choices.
+- Proactively clarify material ambiguities before proposing the plan. Do not wait for ambiguity to become strictly blocking when a user preference, scope boundary, tradeoff, acceptance criterion, or risk tolerance could change the plan.
+- Prefer the `question` tool for focused choices. Ask multiple independent questions at once when that is the fastest way to make the plan decision-ready.
+- Do not over-ask about implementation details that can safely be discovered or decided during implementation; record those as assumptions or intentional deferrals instead.
 - If a material external knowledge gap could change the approach, scope, risk, or verification, resolve it before approval using appropriate web, documentation, or research helpers.
 - Delegating to `researcher` is allowed when it is materially useful; any `.agents/research/` artifact it writes is the sole allowed pre-approval write and does not require switching to `/spec`.
 
@@ -35,8 +37,14 @@ Act target: $ARGUMENTS
 
 1. Understand the user target and likely affected area.
 2. Perform read-only repository exploration directly or through `explore` when context is not already obvious.
-3. Ask only blocking clarification questions.
-4. Check whether `/spec` escalation is more appropriate.
+3. Synthesize what is known, then identify plan-shaping ambiguities:
+   - user intent and success criteria;
+   - scope boundaries, non-goals, and acceptable tradeoffs;
+   - compatibility, migration, security, data-loss, or risk constraints;
+   - verification expectations or acceptance criteria.
+4. Ask the user about every non-discoverable, plan-shaping ambiguity before planning. Use concise `question` prompts with recommended defaults when helpful.
+5. If the user cannot or does not want to answer immediately, choose conservative defaults only when safe, and make those defaults explicit in the plan.
+6. Check whether `/spec` escalation is more appropriate.
 
 ### Phase 2: Lightweight plan proposal
 
@@ -49,6 +57,7 @@ Present a concise, decision-ready plan in chat. Include at minimum:
 - Implementation steps.
 - Verification approach.
 - Notable risks or assumptions.
+- Any open questions, conservative defaults, or intentional deferrals that remain after clarification.
 
 Do not create a spec report. Do not call `plan_reviewer`.
 
