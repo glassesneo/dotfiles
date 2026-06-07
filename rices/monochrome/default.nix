@@ -15,7 +15,7 @@ in
     inherits = ["laptop"];
 
     myconfig.colorscheme = config.myconfig.colorschemes.monochrome.default;
-    myconfig.wallpaper = "roses";
+    myconfig.config.wallpapers.wallpaper = "roses";
     myconfig.programs.ghostty.quick-terminal.background = colors.base00;
 
     myconfig.services = {

@@ -1,9 +1,4 @@
-{
-  delib,
-  host,
-  homeConfig,
-  ...
-}:
+{delib, ...}:
 # desktoppr: macOS wallpaper utility
 # WORKAROUND: home-manager's desktoppr module writes to the wrong preference domain
 # ("desktoppr" instead of "com.scriptingosx.desktoppr"). We fix this by copying
@@ -12,16 +7,17 @@
 delib.module {
   name = "programs.desktoppr";
 
-  options.programs.desktoppr = with delib; {
-    enable = boolOption host.guiShellFeatured;
-  };
+  options = with delib;
+    moduleOptions {
+      enable = boolOption false;
+      wallpaper = strOption "";
+    };
 
-  home.ifEnabled = {myconfig, ...}: let
-    wallpaperSet = myconfig.wallpaper != null;
-  in {
+  home.ifEnabled = {cfg, ...}: rec {
     programs.desktoppr = {
-      enable = wallpaperSet;
+      enable = true;
       settings = {
+        picture = cfg.wallpaper;
         setOnlyOnce = false;
       };
     };
@@ -29,7 +25,7 @@ delib.module {
     # Fix: home-manager writes to "desktoppr" but the tool reads from
     # "com.scriptingosx.desktoppr". Mirror the settings to the correct domain.
     targets.darwin.defaults = {
-      "com.scriptingosx.desktoppr" = homeConfig.programs.desktoppr.settings;
+      "com.scriptingosx.desktoppr" = programs.desktoppr.settings;
     };
   };
 }

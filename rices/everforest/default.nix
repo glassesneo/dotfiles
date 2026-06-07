@@ -16,7 +16,7 @@ in
 
     myconfig = {
       colorscheme = colors;
-      wallpaper = "forest";
+      config.wallpapers.wallpaper = "forest";
       programs.ghostty.quick-terminal.background = colors.base00;
 
       services = {

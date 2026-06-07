@@ -155,7 +155,7 @@ in
     };
     myconfig = {
       colorscheme = colors;
-      wallpaper = "sakura";
+      config.wallpapers.wallpaper = "sakura";
       programs.ghostty = {
         shader-profile = "sakura_ink_ripple";
         quick-terminal.background = colors.base01;

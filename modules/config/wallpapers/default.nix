@@ -1,7 +1,7 @@
 {
   delib,
+  host,
   inputs,
-  lib,
   ...
 }: let
   wallpapers = {
@@ -15,15 +15,16 @@ in
   delib.module {
     name = "config.wallpapers";
 
-    options = {
-      wallpaper = lib.mkOption {
-        type = lib.types.nullOr (lib.types.enum (builtins.attrNames wallpapers));
-        default = null;
-        description = "Path to the wallpaper image to set.";
+    options = with delib;
+      moduleOptions {
+        enable = boolOption host.guiShellFeatured;
+        wallpaper = enumOption (builtins.attrNames wallpapers) "shape";
       };
-    };
 
-    home.always = {myconfig, ...}: {
-      programs.desktoppr.settings.picture = wallpapers.${myconfig.wallpaper};
+    myconfig.ifEnabled = {cfg, ...}: {
+      programs.desktoppr = {
+        enable = true;
+        wallpaper = wallpapers.${cfg.wallpaper};
+      };
     };
   }
