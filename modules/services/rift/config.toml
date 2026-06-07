@@ -10,8 +10,9 @@ auto_focus_blacklist = []
 run_on_start = []
 hot_reload = true
 
-[settings.layout]
-mode = "scrolling"
+[settings.ui.mission_control]
+enabled = true
+fade_enabled = true
 
 [settings.gestures]
 enabled = true
@@ -23,19 +24,26 @@ distance_pct = 0.08
 haptics_enabled = false
 haptic_pattern = "level_change"
 
+[settings.layout]
+mode = "traditional"
+
 [settings.layout.scrolling]
 animate = true
 
 column_width_ratio = 0.5
-min_column_width_ratio = 0.5
-max_column_width_ratio = 0.5
+min_column_width_ratio = 0.3
+max_column_width_ratio = 1.0
 alignment = "left"
 focus_navigation_style = "niri"
-# alignment = "center"
-# focus_navigation_style = "niri"
-# column_width_ratio = 0.6
-# min_column_width_ratio = 0.25
-# max_column_width_ratio = 0.75
+
+[settings.layout.stack]
+default_orientation = "horizontal"
+
+[settings.layout.master_stack]
+master_side = "left"
+master_ratio = 0.6
+master_count = 1
+new_window_placement = "stack"
 
 [settings.layout.gaps.outer]
 top = 4
@@ -55,31 +63,19 @@ preserve_focus_per_workspace = true
 workspace_auto_back_and_forth = false
 reapply_app_rules_on_title_change = false
 workspace_rules = [
-  { workspace = 0, layout = "scrolling" },
+  { workspace = 0, layout = "master_stack" },
+  { workspace = 1, layout = "stack" },
 ]
 workspace_names = ["1", "2", "3", "4", "5"]
 app_rules = [
   { app_id = "com.apple.finder", manage = false },
+  { app_id = "com.apple.systempreferences", manage = false },
 ]
 
 [modifier_combinations]
 move = "Alt + Shift"
 
 [keys]
-"Alt + Z" = "toggle_space_activated"
-"Alt + Shift + D" = "debug"
-"Alt + Ctrl + S" = "serialize"
-
-# "Alt + H" = { move_focus = "left" }
-# "Alt + J" = { move_focus = "down" }
-# "Alt + K" = { move_focus = "up" }
-# "Alt + L" = { move_focus = "right" }
-
-# "move + H" = { move_node = "left" }
-# "move + J" = { move_node = "down" }
-# "move + K" = { move_node = "up" }
-# "move + L" = { move_node = "right" }
-
 "Alt + 1" = { switch_to_workspace = 0 }
 "Alt + 2" = { switch_to_workspace = 1 }
 "Alt + 3" = { switch_to_workspace = 2 }
@@ -92,12 +88,14 @@ move = "Alt + Shift"
 "move + 4" = { move_window_to_workspace = 3 }
 "move + 5" = { move_window_to_workspace = 4 }
 
+"Alt + Z" = "toggle_space_activated"
+
+"move + Tab" = "show_mission_control_all"
+"Alt + Escape" = "dismiss_mission_control"
+
 "Alt + Tab" = "switch_to_last_workspace"
 
-"Alt + Comma" = "toggle_stack"
-"Alt + Slash" = "toggle_orientation"
-"Alt + Ctrl + E" = "unjoin_windows"
-
+"Alt + Space" = "toggle_focus_floating"
 "Alt + Shift + Space" = "toggle_window_floating"
 "Alt + F" = "toggle_fullscreen_within_gaps"
 
