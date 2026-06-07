@@ -13,10 +13,19 @@ Theme palettes are owned by `@modules/config/colorschemes/`.
 - Access a palette: `config.myconfig.colorschemes.<scheme>.<variant>` (e.g., `colorschemes.catppuccin.macchiato`, `colorschemes.everforest."dark-medium"`, `colorschemes.monochrome.default`).
 - Active selection: `myconfig.colorscheme` — a resolved `paletteType` object set by the active rice.
 - Shared export for consumers: `myconfig.always.args.shared.colorscheme`
-- Wallpaper handoff: `myconfig.wallpaper` (consumed by `modules/programs/desktoppr`)
 
 Add/update palette files under `@modules/config/colorschemes/schemes/*.nix`.
 Keep values as pure data (`#RRGGBB` + `polarity`), and keep cross-module package logic out of this directory.
+
+## Wallpaper Registry
+
+Wallpaper choices are owned by `@modules/config/wallpaper/`.
+
+- Registry option: `myconfig.wallpaper.wallpapers` — read-only wallpaper title to image path mapping.
+- Active selection: `myconfig.wallpaper.title` — symbolic wallpaper title set by the active rice (e.g., `"forest"`, `"sakura"`, `"roses"`).
+- Program handoff: the wallpaper module resolves the selected title to a concrete path and passes it to `myconfig.programs.desktoppr.picture`.
+
+Rices should select wallpapers by title only. Do not write `home.programs.desktoppr.settings.picture` or pass concrete wallpaper paths from rice files; `modules/programs/desktoppr/default.nix` owns the desktoppr-specific wiring.
 
 ## Host Tier Helpers
 

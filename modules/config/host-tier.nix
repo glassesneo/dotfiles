@@ -1,6 +1,6 @@
 {delib, ...}:
 delib.module {
-  name = "config.host-tier";
+  name = "host-tier";
 
   myconfig.always.args.shared.tiers = let
     ordered = ["minimal" "basic" "standard" "full"];

@@ -10,14 +10,14 @@ delib.module {
   options = with delib;
     moduleOptions {
       enable = boolOption false;
-      wallpaper = strOption "";
+      picture = allowNull (allowStr (pathOption null));
     };
 
   home.ifEnabled = {cfg, ...}: rec {
     programs.desktoppr = {
       enable = true;
       settings = {
-        picture = cfg.wallpaper;
+        inherit (cfg) picture;
         setOnlyOnce = false;
       };
     };
