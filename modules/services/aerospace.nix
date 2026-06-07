@@ -9,14 +9,11 @@ delib.module {
   name = "services.aerospace";
 
   options = with delib;
-    moduleOptions ({myconfig, ...}: {
+    moduleOptions {
       # Aerospace activation is derived from the host-selected window-manager
       # backend so exactly one WM provider is active per host. To switch a host
-      # off Aerospace, change services.windowManagement.backend, not this flag.
-      enable = boolOption (
-        myconfig.services.windowManagement.enable
-        && myconfig.services.windowManagement.backend == "aerospace"
-      );
+      # off Aerospace, change darwin.window-manager.backend, not this flag.
+      enable = boolOption false;
       # Apps that should default to tiling layout (most apps float by default)
       tilingApps = lib.mkOption {
         type = lib.types.listOf lib.types.str;
@@ -43,7 +40,7 @@ delib.module {
         default = 42;
         description = "Size of the reserved-edge outer gap in pixels. Should match the SketchyBar bar height.";
       };
-    });
+    };
 
   darwin.ifEnabled = {cfg, ...}: {
     services.aerospace = {

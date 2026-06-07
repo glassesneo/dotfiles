@@ -9,7 +9,7 @@ delib.module {
   name = "services.jankyborders";
 
   options.services.jankyborders = with delib; {
-    enable = boolOption host.windowManagementFeatured;
+    enable = boolOption host.guiShellFeatured;
     style = lib.mkOption {
       type = lib.types.enum ["round" "square"];
       default = "round";

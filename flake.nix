@@ -43,9 +43,9 @@
             args.enable = true;
             rices.enable = true;
             hosts.type.types = ["laptop" "server" "virtual"];
-            hosts.features.features = ["guiShell" "windowManagement" "devCore"];
+            hosts.features.features = ["guiShell" "devCore"];
             hosts.features.defaultByHostType = {
-              laptop = ["guiShell" "windowManagement" "devCore"];
+              laptop = ["guiShell" "devCore"];
               server = ["devCore"];
               virtual = ["devCore"];
             };

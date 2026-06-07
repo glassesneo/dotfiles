@@ -58,7 +58,7 @@ in
 
     options = with delib;
       moduleOptions {
-        enable = boolOption (pkgs.stdenv.isDarwin && host.windowManagementFeatured);
+        enable = boolOption (pkgs.stdenv.isDarwin && host.guiShellFeatured);
         nushellPackage = packageOption pkgs.nushell;
         colors = lib.mkOption {
           type = lib.types.submodule {

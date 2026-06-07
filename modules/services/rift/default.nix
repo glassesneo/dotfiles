@@ -41,16 +41,12 @@ in
     name = "services.rift";
 
     options = with delib;
-      moduleOptions ({myconfig, ...}: {
+      moduleOptions {
         # Rift activation is derived from the host-selected window-manager
         # backend so exactly one WM provider is active per host.
-        enable = boolOption (
-          pkgs.stdenv.isDarwin
-          && myconfig.services.windowManagement.enable
-          && myconfig.services.windowManagement.backend == "rift"
-        );
+        enable = boolOption false;
         package = readOnly (packageOption rift);
-      });
+      };
 
     darwin.ifEnabled = {
       cfg,
