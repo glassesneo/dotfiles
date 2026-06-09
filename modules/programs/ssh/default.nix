@@ -19,43 +19,42 @@ delib.module {
     ...
   }: {
     programs.ssh = let
-      otherHosts = lib.filter (h: h != host.name) (builtins.attrNames myconfig.hosts);
+      # otherHosts = lib.filter (h: h != host.name) (builtins.attrNames myconfig.hosts);
     in {
       enable = true;
       enableDefaultConfig = false;
 
-      matchBlocks = lib.mkMerge [
-        {
-          "*" = {
-            extraOptions = lib.mkMerge [
-              {
-                AddKeysToAgent = "yes";
-                IdentitiesOnly = "yes";
-                SetEnv = "TERM=xterm-256color";
-              }
-              (lib.mkIf pkgs.stdenv.hostPlatform.isDarwin {
-                UseKeychain = "yes";
-              })
-            ];
-          };
-          "github.com" = {
-            hostname = "github.com";
-            user = "git";
-            identityFile = cfg.mainIdentity;
-          };
+      settings = {
+        "github.com" = {
+          HostName = "github.com";
+          User = "git";
+          IdentityFile = cfg.mainIdentity;
+        };
 
-          "github-company" = {
-            hostname = "github.com";
-            user = "git";
-            identityFile = "~/.ssh/id_ed25519_company";
-          };
-        }
-        (lib.genAttrs otherHosts (host: {
-          hostname = "${host}.local";
-          user = myconfig.constants.username;
-          identityFile = cfg.mainIdentity;
-        }))
-      ];
+        "github-company" = {
+          HostName = "github.com";
+          User = "git";
+          IdentityFile = "~/.ssh/id_ed25519_company";
+        };
+        "*" = lib.mkMerge [
+          {
+            AddKeysToAgent = "yes";
+            IdentitiesOnly = "yes";
+            # SetEnv = "TERM=xterm-256color";
+          }
+          (lib.mkIf pkgs.stdenv.hostPlatform.isDarwin {
+            UseKeychain = "yes";
+          })
+        ];
+      };
+
+      # matchBlocks = lib.mkMerge [
+      # (lib.genAttrs otherHosts (host: {
+      # HostName = "${host}.local";
+      # User = myconfig.constants.Username;
+      # IdentityFile = cfg.mainIdentity;
+      # }))
+      # ];
     };
   };
 }
