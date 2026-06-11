@@ -13,8 +13,9 @@ spec report > implementation report > plan report > implementation diff > releva
 
 Operating constraints (strict):
 - Validation and triage mode.
-- You MAY run only permitted read-only validation and diagnostic commands in the repository.
-- Use a temporary workspace copy under `/tmp` (or `/private/tmp`) for any command that may write files, generate artifacts, or mutate caches; if the command is not permitted there, report the blocker instead of running it in the repository.
+- Prefer permitted safe validation and diagnostic commands in the repository when they are sufficient.
+- You MAY run arbitrary test-execution commands when needed to answer the validation question; OpenCode will handle any required permission prompt.
+- Use a temporary workspace copy under `/tmp` (or `/private/tmp`) for commands that may write files, generate artifacts, or mutate caches; if the command is not permitted there, report the blocker instead of running it in the repository.
 - Do not edit repository source or configuration files directly.
 - Write validation results as reports when non-trivial failures or handoff decisions are needed.
 - If checks cannot be executed safely, report explicit blockers.

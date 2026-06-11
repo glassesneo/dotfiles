@@ -36,6 +36,53 @@ delib.module {
 
     denyAll = deny ["*"];
     allowAll = allow ["*"];
+    askAll = ask ["*"];
+
+    testCommandPrefixes = [
+      "just"
+      "nix"
+      "nh"
+      "deno"
+      "uv"
+      "npm"
+      "pnpm"
+      "bun"
+      "python"
+      "make"
+    ];
+
+    unsafeTestCommandPatterns = [
+      "just?*apply*"
+      "just?*clean*"
+      "just?*fmt*"
+      "just?*home*"
+      "just?*switch*"
+      "just?*update*"
+      "nix?*fmt*"
+      "nix?*flake?*lock*"
+      "nix?*flake?*update*"
+      "nix?*--update-input*"
+      "npm?*install*"
+      "npm?*publish*"
+      "npm?*version*"
+      "pnpm?*add*"
+      "pnpm?*install*"
+      "pnpm?*publish*"
+      "pnpm?*remove*"
+      "pnpm?*version*"
+      "bun?*add*"
+      "bun?*install*"
+      "bun?*publish*"
+      "bun?*remove*"
+      "bun?*x*"
+      "deno?*install*"
+      "uv?*add*"
+      "uv?*lock*"
+      "uv?*remove*"
+      "uv?*sync*"
+      "python?*-c*"
+      "make?*clean*"
+    ];
 
     merge = a: b: recursiveUpdate a b;
     mergeMany = builtins.foldl' merge {};
@@ -158,56 +205,26 @@ delib.module {
             // deny (denyShellOperatorsFor ["date"]);
         };
 
-        testAndDebug = let
-          commandPrefixes = [
-            "just"
-            "nix"
-            "nh"
-            "deno"
-            "uv"
-            "npm"
-            "pnpm"
-            "bun"
-            "python"
-            "make"
-          ];
-          unsafeCommandPatterns = [
-            "just?*apply*"
-            "just?*clean*"
-            "just?*fmt*"
-            "just?*home*"
-            "just?*switch*"
-            "just?*update*"
-            "nix?*fmt*"
-            "nix?*flake?*lock*"
-            "nix?*flake?*update*"
-            "nix?*--update-input*"
-            "npm?*install*"
-            "npm?*publish*"
-            "npm?*version*"
-            "pnpm?*add*"
-            "pnpm?*install*"
-            "pnpm?*publish*"
-            "pnpm?*remove*"
-            "pnpm?*version*"
-            "bun?*add*"
-            "bun?*install*"
-            "bun?*publish*"
-            "bun?*remove*"
-            "bun?*x*"
-            "deno?*install*"
-            "uv?*add*"
-            "uv?*lock*"
-            "uv?*remove*"
-            "uv?*sync*"
-            "python?*-c*"
-            "make?*clean*"
-          ];
-        in {
+        testAndDebug = {
           bash =
             denyAll
-            // allow (map (prefix: "${prefix}*") commandPrefixes)
-            // deny (denyShellOperatorsFor commandPrefixes ++ unsafeCommandPatterns);
+            // allow (map (prefix: "${prefix}*") testCommandPrefixes)
+            // deny (denyShellOperatorsFor testCommandPrefixes ++ unsafeTestCommandPatterns);
+        };
+
+        testExecutionAsk = {
+          bash =
+            askAll
+            // allow (map (prefix: "${prefix}*") testCommandPrefixes)
+            // ask (
+              denyShellOperatorsFor (testCommandPrefixes
+                ++ [
+                  "git"
+                  "nix-instantiate"
+                ])
+              ++ unsafeTestCommandPatterns
+              ++ ["git?*--output*"]
+            );
         };
 
         full = {
@@ -240,6 +257,16 @@ delib.module {
               "git?*;*"
               "git?*--output*"
             ];
+        };
+
+        gitBranchPreparation = {
+          bash =
+            denyAll
+            // allow [
+              "git fetch*"
+              "git switch*"
+            ]
+            // deny (denyShellOperatorsFor ["git"] ++ ["git?*--output*"]);
         };
 
         safeValidation = {
@@ -490,6 +517,8 @@ delib.module {
         tempWorkspaceWithReports
         perm.execute.safeGitInspection
         perm.execute.safeValidation
+        perm.execute.testAndDebug
+        perm.execute.testExecutionAsk
       ];
 
       readOnlyGitInspection = mergeMany [
@@ -520,6 +549,7 @@ delib.module {
       inspector = mergeMany [
         reportsOnly
         perm.execute.safeGitInspection
+        perm.execute.gitBranchPreparation
         perm.execute.ghReviewInspection
         perm.interact.question
         perm.context.full
