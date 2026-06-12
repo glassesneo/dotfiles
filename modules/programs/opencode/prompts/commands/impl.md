@@ -1,6 +1,6 @@
 Implementation contract:
 - Apply the shared repository exploration and validation guidance during implementation.
-- After implementation, run relevant tests or validation checks when feasible; if checks fail, triage enough to report the cause before final reporting.
+- After implementation, arrange relevant tests or validation checks when feasible; prefer a `tester` delegation for validation and failure triage, then use the outcome before final reporting.
 - After non-trivial implementation and validation, run a focused or orchestrated read-only review before final reporting.
 - When a spec, plan, or implementation report is provided, preserve this priority: `spec > implementation report > plan`.
 - Treat implementation-report spec deviations as known deviations for reviewer/tester attention, not as automatic approval to diverge from the spec.

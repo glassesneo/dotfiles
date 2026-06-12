@@ -96,7 +96,7 @@ Plan filename policy:
 1. Implement the approved plan using `taskmaster` capabilities.
 2. Keep changes within the approved scope unless the user approves a scope change.
 3. If implementation reveals a material mismatch with the approved plan, pause and ask the user before continuing.
-4. Run relevant focused validation when feasible, following the shared validation guidance. If validation fails, triage enough to report the cause or ask for a scope/approach decision.
+4. Arrange relevant focused validation when feasible, following the shared validation guidance. Prefer a `tester` delegation for tests, checks, reproduction, and failure triage; use the validation outcome to report the cause or ask for a scope/approach decision.
 
 ### Phase 6: Completion
 
