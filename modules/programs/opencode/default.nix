@@ -758,8 +758,7 @@ delib.module {
       };
 
       explore = {
-        # model = "openrouter/poolside/laguna-xs.2:free";
-        model = "openai/gpt-5.4-mini";
+        model = "opencode/deepseek-v4-flash-free";
         reasoningEffort = "medium";
         description = "Read-only exploration agent for delegated repository and filesystem context gathering.";
         prompt = readAgentPrompt "explore";
@@ -828,7 +827,7 @@ delib.module {
 
       researcher = {
         mode = "subagent";
-        model = "github-copilot/gpt-5.4-mini";
+        model = "opencode/nemotron-3-ultra-free";
         reasoningEffort = "high";
         description = "Performs targeted internet research when planning workflows have material knowledge uncertainty.";
         prompt = renderAgentPrompt "researcher" {
