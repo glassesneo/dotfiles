@@ -40,6 +40,13 @@ delib.module {
           ".claude/skills"
         ];
       };
+      implement-via-cursor = {
+        source = ./skills/implement-via-cursor;
+        targetDirs = [
+          ".agents/skills"
+          ".claude/skills"
+        ];
+      };
     };
   };
 }

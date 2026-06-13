@@ -6,8 +6,7 @@ Specification workflow contract:
 * Confirm the spec with the user before writing the final plan.
 * After the final plan exists, ask whether to skip or run final plan review.
 * Delegate final plan review to `plan_reviewer` only when review is not skipped.
-* After the review gate, ask whether to proceed to implementation.
-* If approved, delegate implementation to `taskmaster` with the confirmed spec and final plan.
+* After the review gate, stop with planning-complete output; do not delegate implementation.
 * Do not fall back to chat-only specs or plans.
 
 Artifact priority:
@@ -140,46 +139,22 @@ If review is requested:
 5. If high or medium findings appear, revise the same plan and run one additional review pass.
 6. Apply accepted findings as explicit plan revisions or defaults.
 
-Phase 6: Implementation handoff
-After the review gate, ask whether to proceed to implementation.
+Phase 6: Planning complete
+After the review gate, respond with planning-complete output only.
 
 Include:
 
-* confirmed spec path
-* final plan path
-
-Choices:
-
-* Proceed with implementation.
-* Stop after planning.
-
-If the user stops, respond only with:
-
 * Spec file: <path>
 * Plan file: <path>
+* Review gate: <skipped | completed with no high/medium findings | completed with revisions applied>
 * Implementation: not started
 
-If the user approves, delegate to `taskmaster` with:
-
-* confirmed spec path
-* final plan path
-* review gate result
-* instruction to read the spec first, then the plan
-* instruction to stay within the confirmed spec and plan
-* instruction to pause for user approval on material mismatch
-* instruction to validate when feasible and report changed files, validation, risks, and deviations
-
-After `taskmaster` returns, summarize:
-
-* Spec file: <path>
-* Plan file: <path>
-* Implementation: delegated to taskmaster
-* Summary: <2-4 sentences grounded in the taskmaster result>
+Do not ask whether to proceed to implementation. Do not delegate implementation from `/spec`.
 
 Failure handling:
 
 * Retry artifact writing once only when the failure appears recoverable.
-* If spec, plan, review, re-review, or taskmaster delegation fails, report the attempted path or target and exact error.
+* If spec, plan, review, or re-review fails, report the attempted path or target and exact error.
 * Do not replace failed artifact creation with chat-only artifacts.
 
 Input report consumption:
