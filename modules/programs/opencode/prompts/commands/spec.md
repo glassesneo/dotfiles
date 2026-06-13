@@ -149,7 +149,7 @@ Include:
 * Review gate: <skipped | completed with no high/medium findings | completed with revisions applied>
 * Implementation: not started
 
-Do not ask whether to proceed to implementation. Do not delegate implementation from `/spec`.
+Do not ask whether to proceed to implementation. Do not delegate implementation from this workflow.
 
 Failure handling:
 

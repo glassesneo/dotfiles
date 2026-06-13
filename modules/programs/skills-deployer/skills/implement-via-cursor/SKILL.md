@@ -13,10 +13,10 @@ All of the following must be true before invoking Cursor CLI:
 
 1. A confirmed spec exists under `.agents/specs/`.
 2. A final plan exists under `.agents/plans/` and references that spec.
-3. The user explicitly chose Cursor CLI for implementation (for example after `/spec` planning is complete).
+3. The user explicitly chose Cursor CLI for implementation after planning is complete.
 4. The final plan is detailed enough to constrain scope, file targets, and verification.
 
-Do not use this skill from `/spec` itself. `/spec` is planning-only.
+Do not use this skill from a planning-only workflow.
 
 ## Invocation
 

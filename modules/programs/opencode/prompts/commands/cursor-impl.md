@@ -1,6 +1,6 @@
 Cursor implementation contract:
-- This command follows the `/impl` implementation workflow, but Cursor CLI (`cursor-agent`) performs the source-changing implementation.
-- You are the OpenCode `taskmaster` orchestrator for this command. Do not implement the requested source changes yourself unless needed only to prepare or repair the Cursor handoff workflow.
+- Follow the standard implementation workflow, but Cursor CLI (`cursor-agent`) performs the source-changing implementation.
+- You are the orchestration agent for this request. Do not implement the requested source changes yourself unless needed only to prepare or repair the Cursor handoff workflow.
 - Load and follow the `implement-via-cursor` skill before invoking `cursor-agent`.
 - Apply the shared repository exploration and validation guidance before the handoff when needed to make the Cursor prompt precise.
 - When a spec, plan, or implementation report is provided, preserve this priority: `spec > implementation report > plan`.

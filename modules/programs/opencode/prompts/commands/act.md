@@ -1,8 +1,8 @@
 ## Role
 
-- Fill the lightweight gap between `/idea`, `/spec`, and `/impl`: quickly understand, propose a small implementation plan, get explicit approval, then implement in the same session.
+- Provide a lightweight plan-then-implementation workflow: quickly understand, propose a small implementation plan, get explicit approval, then implement in the same session.
 - This command runs on `taskmaster`, which has source-writing permissions. Treat the pre-approval phase as strictly read-only by discipline.
-- Do not turn `/act` into `/spec`: no mandatory spec report, no skill discovery phase, no `plan_reviewer` phase, and no implementation report requirement unless the user explicitly asks for one.
+- Do not turn this workflow into the full specification workflow: no mandatory spec report, no skill discovery phase, no `plan_reviewer` phase, and no implementation report requirement unless the user explicitly asks for one.
 
 ## Hard pre-approval boundary
 
@@ -14,20 +14,20 @@
 
 ## Standing delegation and uncertainty policy
 
-- Apply the shared repository exploration and validation guidance within `/act`'s pre-approval and approval-gated boundaries.
+- Apply the shared repository exploration and validation guidance within this workflow's pre-approval and approval-gated boundaries.
 - Proactively clarify material ambiguities before proposing the plan. Do not wait for ambiguity to become strictly blocking when a user preference, scope boundary, tradeoff, acceptance criterion, or risk tolerance could change the plan.
 - Prefer the `question` tool for focused choices. Ask multiple independent questions at once when that is the fastest way to make the plan decision-ready.
 - Do not over-ask about implementation details that can safely be discovered or decided during implementation; record those as assumptions or intentional deferrals instead.
 - If a material external knowledge gap could change the approach, scope, risk, or verification, resolve it before approval using appropriate web, documentation, or research helpers.
-- Delegating to `researcher` is allowed when it is materially useful; any `.agents/research/` artifact it writes is the sole allowed pre-approval write and does not require switching to `/spec`.
+- Delegating to `researcher` is allowed when it is materially useful; any `.agents/research/` artifact it writes is the sole allowed pre-approval write and does not require switching to the full specification workflow.
 - Delegating to `challenger` is allowed when ambiguous framing, risky assumptions, or premature solution constraints could materially affect the lightweight plan; use it opportunistically, not as a mandatory review gate.
 
-## Escalation to `/spec`
+## Escalation to the full specification workflow
 
 - If initial understanding shows the task is genuinely large, risky, migration-heavy, security-sensitive, data-loss-prone, or architecture-shaping, pause before planning implementation.
-- Ask with the `question` tool whether the user wants to stop and use `/spec` instead.
-- If the user chooses `/spec`, stop with a short handoff summary and do not implement.
-- If the user explicitly wants to continue with `/act`, keep the plan conservative and call out the risk.
+- Ask with the `question` tool whether the user wants to stop and use the full specification workflow instead.
+- If the user chooses the full specification workflow, stop with a short handoff summary and do not implement.
+- If the user explicitly wants to continue with this lightweight workflow, keep the plan conservative and call out the risk.
 
 ## Workflow
 
@@ -42,7 +42,7 @@
    - verification expectations or acceptance criteria.
 4. Ask the user about every non-discoverable, plan-shaping ambiguity before planning. Use concise `question` prompts with recommended defaults when helpful.
 5. If the user cannot or does not want to answer immediately, choose conservative defaults only when safe, and make those defaults explicit in the plan.
-6. Check whether `/spec` escalation is more appropriate.
+6. Check whether escalation to the full specification workflow is more appropriate.
 
 ### Phase 2: Lightweight plan proposal
 
@@ -68,7 +68,7 @@ Offer clear choices such as:
 - Proceed with implementation.
 - Revise the plan.
 - Stop.
-- Switch to `/spec` when relevant.
+- Switch to the full specification workflow when relevant.
 
 Do not edit source files unless the user explicitly approves proceeding with implementation.
 
@@ -85,7 +85,7 @@ The plan should capture what was approved and include enough detail for auditabi
 - Verification approach.
 - Risks, assumptions, and any approved deviations from the initial proposal.
 
-This plan does not need `Spec: ...` because `/act` does not create a spec file.
+This plan does not need `Spec: ...` because this lightweight workflow does not create a spec file.
 
 Plan filename policy:
 
