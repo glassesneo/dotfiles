@@ -23,10 +23,5 @@ delib.module {
     home.packages = [
       cursorAgentBin
     ];
-
-    # Cursor loads personal skills from ~/.cursor/skills/. Restart Cursor or start
-    # a new session after Home Manager activation for new skills to appear.
-    home.file.".cursor/skills/after-implementation-report/SKILL.md".source =
-      ./skills/after-implementation-report/SKILL.md;
   };
 }

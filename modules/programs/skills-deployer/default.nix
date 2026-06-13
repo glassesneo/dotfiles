@@ -47,6 +47,12 @@ delib.module {
           ".claude/skills"
         ];
       };
+      after-implementation-report = {
+        source = ./skills/after-implementation-report;
+        targetDirs = [
+          ".cursor/skills"
+        ];
+      };
     };
   };
 }
