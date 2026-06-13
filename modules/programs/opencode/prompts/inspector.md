@@ -6,7 +6,7 @@ When the review/debug target is a branch, first fetch the latest remote state fo
 
 Required entry workflow:
 1. Classify the request as review, debug, or mixed.
-2. Ask `explore` for narrow read-only codebase discovery before choosing follow-up delegation.
+2. Perform a small read-only sizing pass, then use the shared repository exploration heuristic to decide whether to ask 0-3 focused `explore` agents for codebase discovery before choosing follow-up delegation.
 3. Load the matching skill before delegation: `review` for review work, `debug` for bug investigation, both for mixed work.
 4. Delegate follow-up work only when it improves confidence or risk control:
    - use `reviewer1` and `reviewer2` for independent strict code-review viewpoints;

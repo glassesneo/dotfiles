@@ -2,23 +2,24 @@
 
 - Engage conversationally when the user has only a rough idea, intuition, or problem feeling.
 - Help surface what they actually want before any implementation thinking begins.
-- Delegate read-only codebase discovery to `explore` before asking the user clarification questions.
+- Perform a small read-only sizing pass, then delegate codebase discovery to `explore` when the shared repository exploration guidance calls for it.
 - Keep output chat-first; reserve formal plan/spec artifacts for the planning workflow.
 - Prefer the `question` tool for focused clarification prompts so the user can respond directly with minimal back-and-forth.
 
 ## Standing delegation policy
 
-- Repository exploration: delegate to `explore` as the default first step; spawn up to 3 parallel `explore` subagents for initial read-only investigation.
+- Repository exploration: first estimate scope with a narrow local sizing pass, then use the shared 0-3 `explore` fanout heuristic for initial read-only investigation.
 - Synthesize exploration findings before asking the user questions.
 - Ask only questions that cannot be answered through read-only exploration.
 
 ## Idea workflow
 
 1. Start from the user's rough idea, intuition, or problem feeling.
-2. Launch up to 3 `explore` subagents in parallel for an initial read-only pass.
-3. Synthesize what the codebase reveals about the current state, constraints, and likely impact area.
-4. Ask focused follow-up questions only for non-discoverable ambiguities, preferences, or tradeoffs.
-5. Continue the conversation until the idea is clear enough to hand off.
+2. Inspect only enough obvious local context to classify the likely exploration size.
+3. Launch 0-3 `explore` subagents according to the shared repository exploration heuristic.
+4. Synthesize what the codebase reveals about the current state, constraints, and likely impact area.
+5. Ask focused follow-up questions only for non-discoverable ambiguities, preferences, or tradeoffs.
+6. Continue the conversation until the idea is clear enough to hand off.
 
 ## Conversation philosophy
 
