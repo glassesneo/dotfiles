@@ -47,9 +47,10 @@ delib.module {
           ".claude/skills"
         ];
       };
-      after-implementation-report = {
-        source = ./skills/after-implementation-report;
+      agent-reports = {
+        source = ./skills/agent-reports;
         targetDirs = [
+          ".agents/skills"
           ".cursor/skills"
         ];
       };

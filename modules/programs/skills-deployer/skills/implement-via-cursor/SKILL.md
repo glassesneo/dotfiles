@@ -70,7 +70,7 @@ Build `$PROMPT` to include:
 - instruction to stay within the confirmed spec and plan
 - instruction to pause and report on material mismatch instead of silently diverging
 - instruction to validate when feasible
-- instruction to write an implementation report under `.agents/reports/` using the `after-implementation-report` Cursor skill contract
+- instruction to write an implementation report under `.agents/reports/` using the `agent-reports` skill (implementation report format)
 
 ## Resume Session
 
@@ -108,7 +108,7 @@ After implementation, Cursor must produce an implementation report compatible wi
 - sections: Summary, Changed Files, Spec Alignment, What Was Implemented, Plan Deviations, Spec Deviations, Reason for Deviations, Validation Results, Unresolved Items, Reviewer Notes, Known Risks, Follow-up Required
 - spec and plan paths at the top
 
-Ensure the Cursor `after-implementation-report` skill is available in `~/.cursor/skills/after-implementation-report/` (reload Cursor or start a new session after Home Manager deploys it).
+Ensure the Cursor `agent-reports` skill is available in `~/.cursor/skills/agent-reports/` (reload Cursor or start a new session after Home Manager deploys it).
 
 ## Post-handoff Summary
 
