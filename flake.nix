@@ -185,6 +185,10 @@
       url = "github:nix-community/nixvim/main";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    nvf = {
+      url = "github:notashelf/nvf";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     # neovim-nightly-overlay = {
     # url = "github:nix-community/neovim-nightly-overlay";
     # inputs.nixpkgs.follows = "nixpkgs";
