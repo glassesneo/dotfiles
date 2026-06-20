@@ -32,6 +32,12 @@ delib.module {
               inc_rename = true;
               long_message_to_split = true;
             };
+            lsp = {
+              enabled = false;
+              progress = {
+                enabled = false;
+              };
+            };
             cmdline = {
               enabled = true;
               view = "cmdline_popup";
