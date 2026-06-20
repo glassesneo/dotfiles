@@ -1,14 +1,14 @@
 {delib, ...}:
 delib.module {
-  name = "programs.nvf.nix";
+  name = "programs.nvf.languages.nix";
 
   options = delib.singleCascadeEnableOption;
 
-  home.ifEnabled = {
+  home.ifEnabled = {myconfig, ...}: {
     programs.nvf = {
       settings.vim.languages.nix = {
         enable = true;
-        treesitter.enable = true;
+        treesitter.enable = myconfig.programs.nvf.treesitter.enable;
         lsp = {
           servers = ["nixd"];
         };
