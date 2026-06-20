@@ -219,6 +219,10 @@
       url = "github:glassesneo/skills-deployer";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    japanese-tech-writing-skill = {
+      url = "git+https://gist.github.com/k16shikano/fd287c3133457c4fd8f5601d34aa817d";
+      flake = false;
+    };
     tree-sitter-moonbit = {
       url = "github:moonbitlang/tree-sitter-moonbit/a5a7e0b9cb2db740cfcc4232b2f16493b42a0c82";
       flake = false;

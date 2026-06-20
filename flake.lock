@@ -439,6 +439,22 @@
         "type": "github"
       }
     },
+    "japanese-tech-writing-skill": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1781587188,
+        "narHash": "sha256-+3k6/lvdMCEUEbtWM4O8uyNQhDgNOVXxQgWulzT/eF4=",
+        "ref": "refs/heads/main",
+        "rev": "5ed08e4475365fd233aa0d3ab71c19b87e1a5732",
+        "revCount": 4,
+        "type": "git",
+        "url": "https://gist.github.com/k16shikano/fd287c3133457c4fd8f5601d34aa817d"
+      },
+      "original": {
+        "type": "git",
+        "url": "https://gist.github.com/k16shikano/fd287c3133457c4fd8f5601d34aa817d"
+      }
+    },
     "kanata-darwin": {
       "inputs": {
         "kanata-tray": "kanata-tray",
@@ -856,6 +872,7 @@
         "denops-plugins": "denops-plugins",
         "flake-parts": "flake-parts_3",
         "home-manager": "home-manager",
+        "japanese-tech-writing-skill": "japanese-tech-writing-skill",
         "kanata-darwin": "kanata-darwin",
         "llm-agents": "llm-agents",
         "mcp-servers-nix": "mcp-servers-nix",

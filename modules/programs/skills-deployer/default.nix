@@ -18,12 +18,26 @@ delib.module {
     enable = true;
     defaultTargetDir = ".agents/skills";
     skills = {
+      japanese-tech-writing = {
+        source = "${inputs.japanese-tech-writing-skill}";
+        targetDirs = [
+          ".agents/skills"
+          ".claude/skills"
+        ];
+      };
       agent-browser = {
         source = "${llm-agents.agent-browser}";
         subdir = "share/agent-browser/skills/agent-browser";
         targetDirs = [
           ".agents/skills"
           ".claude/skills"
+        ];
+      };
+      agent-reports = {
+        source = ./skills/agent-reports;
+        targetDirs = [
+          ".agents/skills"
+          ".cursor/skills"
         ];
       };
       review = {
@@ -45,13 +59,6 @@ delib.module {
         targetDirs = [
           ".agents/skills"
           ".claude/skills"
-        ];
-      };
-      agent-reports = {
-        source = ./skills/agent-reports;
-        targetDirs = [
-          ".agents/skills"
-          ".cursor/skills"
         ];
       };
     };
