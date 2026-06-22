@@ -37,7 +37,7 @@ alignment = "left"
 focus_navigation_style = "niri"
 
 [settings.layout.stack]
-default_orientation = "horizontal"
+default_orientation = "vertical"
 
 [settings.layout.master_stack]
 master_side = "left"
