@@ -30,9 +30,13 @@ delib.module {
           "DONE"
           "CANCELLED"
         ];
+        org_adapt_indentation = false;
+        org_startup_indented = true;
         mappings = {
+          org_return_uses_meta_return = false;
           org = {
             org_open_at_point = false;
+            org_return = false;
           };
           capture = {
             org_capture_kill = "<C-c>";
@@ -81,6 +85,27 @@ delib.module {
         };
       };
     };
+
+    programs.nixvim.autoCmd = [
+      {
+        event = ["FileType"];
+        pattern = ["org"];
+        callback.__raw = ''
+          function()
+            vim.keymap.set(
+              'i',
+              '<S-CR>',
+              '<cmd>lua require("orgmode").action("org_mappings.meta_return")<CR>',
+              {
+                silent = true,
+                buffer = true,
+                desc = 'Org meta return',
+              }
+            )
+          end
+        '';
+      }
+    ];
 
     home.packages = let
       org = pkgs.writeShellScriptBin "org" ''(cd ${entrypoint} && nvim .)'';
