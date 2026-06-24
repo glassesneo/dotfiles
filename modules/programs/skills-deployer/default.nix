@@ -40,6 +40,13 @@ delib.module {
           ".cursor/skills"
         ];
       };
+      skill-architect = {
+        source = ./skills/skill-architect;
+        targetDirs = [
+          ".agents/skills"
+          ".claude/skills"
+        ];
+      };
       review = {
         source = ./skills/review;
         targetDirs = [
