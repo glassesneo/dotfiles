@@ -767,7 +767,7 @@ delib.module {
       };
 
       explore = {
-        model = "opencode/deepseek-v4-flash-free";
+        model = "openai/gpt-5.4-mini";
         reasoningEffort = "medium";
         description = "Read-only exploration agent for delegated repository and filesystem context gathering.";
         prompt = readAgentPrompt "explore";
@@ -810,7 +810,7 @@ delib.module {
 
       reviewer2 = {
         mode = "subagent";
-        model = "opencode/nemotron-3-ultra-free";
+        model = "opencode/deepseek-v4-flash-free";
         description = "Performs strict read-only code review with severity-ordered findings and concrete file/line evidence.";
         reasoningEffort = "medium";
         prompt = readAgentPrompt "strict_reviewer";
