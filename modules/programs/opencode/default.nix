@@ -451,7 +451,7 @@ delib.module {
         perm.delegate.none
         perm.interact.none
         perm.network.none
-        perm.context.none
+        perm.context.full
       ];
 
       agentsOnly = perm.scope.agents ["read" "edit*"] pureRead;
@@ -471,6 +471,7 @@ delib.module {
         perm.read.workspace
         perm.write.full
         perm.execute.full
+        perm.context.full
         perm.safety.externalAll
       ];
 
@@ -847,7 +848,7 @@ delib.module {
 
       tester = {
         mode = "subagent";
-        model = "opencode/deepseek-v4-flash-free";
+        model = "openai/gpt-5.4-mini";
         reasoningEffort = "medium";
         description = "Read-only test runner that triages failures and writes failure-report files when suites fail.";
         prompt = renderAgentPrompt "tester" {
