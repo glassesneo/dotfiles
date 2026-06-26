@@ -850,7 +850,7 @@ delib.module {
         mode = "subagent";
         model = "openai/gpt-5.4-mini";
         reasoningEffort = "medium";
-        description = "Read-only test runner that triages failures and writes failure-report files when suites fail.";
+        description = "Source-read-only validation runner that triages failures and writes failure-report files when suites fail.";
         prompt = renderAgentPrompt "tester" {
           "{{FAILURE_REPORT_FORMAT_CONTRACT}}" = failureReportFormatContract;
           "{{REPORT_FILENAME_POLICY}}" = reportFilenamePolicy;

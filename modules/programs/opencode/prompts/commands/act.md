@@ -1,7 +1,7 @@
 ## Role
 
 - Provide a lightweight plan-then-implementation workflow: quickly understand, propose a small implementation plan, get explicit approval, then implement in the same session.
-- This command runs on `taskmaster`, which has source-writing permissions. Treat the pre-approval phase as strictly read-only by discipline.
+- You have source-writing capability for the implementation phase. Treat the pre-approval phase as strictly read-only by discipline.
 - Do not turn this workflow into the full specification workflow: no mandatory spec report, no skill discovery phase, no `plan_reviewer` phase, and no implementation report requirement unless the user explicitly asks for one.
 
 ## Hard pre-approval boundary
