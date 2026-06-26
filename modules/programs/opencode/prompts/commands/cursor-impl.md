@@ -5,7 +5,7 @@ Cursor implementation contract:
 - Apply the shared repository exploration and validation guidance before the handoff when needed to make the Cursor prompt precise.
 - When a spec, plan, or implementation report is provided, preserve this priority: `spec > implementation report > plan`.
 - Treat implementation-report spec deviations as known deviations for reviewer/tester attention, not as automatic approval to diverge from the spec.
-- Require Cursor to write the implementation report under `.agents/reports/` using the `agent-reports` skill (implementation report format). If Cursor cannot produce the report, write an orchestration report explaining why and mark implementation report production as failed.
+- Include the implementation-report contract below in the Cursor handoff prompt and require Cursor to write the report under `.agents/reports/`. If Cursor cannot produce the report, write an orchestration report explaining why and mark implementation report production as failed.
 - After Cursor returns, arrange relevant validation checks when feasible; prefer a `tester` delegation for validation and failure triage, then use the outcome before final reporting.
 - After non-trivial implementation and validation, delegate read-only review to `review-orchestrator` before final reporting when feasible.
 
