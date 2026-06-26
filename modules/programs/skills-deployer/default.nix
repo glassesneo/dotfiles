@@ -47,6 +47,13 @@ delib.module {
           ".claude/skills"
         ];
       };
+      prompt-interface-design = {
+        source = ./skills/prompt-interface-design;
+        targetDirs = [
+          ".agents/skills"
+          ".claude/skills"
+        ];
+      };
       refactor-maintainability = {
         source = ./skills/refactor-maintainability;
         targetDirs = [
