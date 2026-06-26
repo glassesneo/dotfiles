@@ -737,7 +737,7 @@ delib.module {
 
       focused-reviewer = {
         mode = "subagent";
-        model = "openai/gpt-5.5";
+        model = "openai/gpt-5.4-mini";
         reasoningEffort = "medium";
         description = "Performs injected-perspective read-only code review with evidence-grounded findings.";
         prompt = readAgentPrompt "focused_reviewer";
@@ -750,7 +750,7 @@ delib.module {
 
       dissent-reviewer = {
         mode = "subagent";
-        model = "openai/gpt-5.5";
+        model = "opencode/nemotron-3-ultra-free";
         reasoningEffort = "medium";
         description = "Validates review outputs for misses, overreach, severity, and alternate interpretations.";
         prompt = readAgentPrompt "dissent_reviewer";
