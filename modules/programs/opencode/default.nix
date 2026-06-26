@@ -499,9 +499,7 @@ delib.module {
           "researcher"
           "challenger"
           "plan_reviewer"
-          "inspector"
-          "reviewer1"
-          "reviewer2"
+          "review-orchestrator"
           "tester"
         ])
       ];
@@ -546,7 +544,7 @@ delib.module {
 
       reportsOnly = perm.scope.reports ["edit*"] pureRead;
 
-      inspector = mergeMany [
+      reviewOrchestrator = mergeMany [
         reportsOnly
         perm.execute.safeGitInspection
         perm.execute.gitBranchPreparation
@@ -556,9 +554,8 @@ delib.module {
         (perm.delegate.only [
           "explore"
           "researcher"
-          "reviewer1"
-          "reviewer2"
-          "pruner"
+          "focused-reviewer"
+          "dissent-reviewer"
           "tester"
         ])
       ];
@@ -570,7 +567,6 @@ delib.module {
       else base;
 
     testSpecFormatContract = readSharedPrompt "test-spec-format";
-    bugReportFormatContract = readSharedPrompt "bug-report-format";
     reportFilenamePolicy = readSharedPrompt "report-filename-policy";
     reviewReportFormatContract = readSharedPrompt "review-report-format";
     implementationReportFormatContract = readSharedPrompt "implementation-report-format";
@@ -580,25 +576,6 @@ delib.module {
     specFilenamePolicy = readSharedPrompt "spec-filename-policy";
     researchFilenamePolicy = readSharedPrompt "research-filename-policy";
     secretPath = name: sopsSecretPaths.${name} or "/run/secrets/${name}";
-    reviewCommandTemplate = ''
-      ${builtins.readFile ./prompts/commands/review.md}
-      ${reviewReportFormatContract}
-
-      Enforcement rules:
-      - The report must start with `# Review Report: <title>` followed by `## Summary`.
-      - Every finding must include concrete evidence or explicitly say `Evidence: not confirmed` with a reason.
-      - Every finding must include `Diff provenance` confirming how the issue relates to the reviewed diff or stating why diff provenance could not be established for a non-diff target.
-      - `## Perspective Results` must include every perspective attempted and every perspective intentionally skipped.
-      - `## Recommended Next Step` must contain exactly one concrete action.
-
-      ${reportFilenamePolicy}
-    '';
-    debugCommandTemplate = ''
-      ${builtins.readFile ./prompts/commands/debug.md}
-      ${bugReportFormatContract}
-
-      ${reportFilenamePolicy}
-    '';
     specCommandTemplate = builtins.replaceStrings ["{{DIVIDABLE_TASK_STRUCTURE}}" "{{SPEC_FILENAME_POLICY}}" "{{PLAN_FILENAME_POLICY}}"] [dividableTaskStructure specFilenamePolicy planFilenamePolicy] (
       builtins.readFile ./prompts/commands/spec.md
     );
@@ -655,18 +632,6 @@ delib.module {
             template = cursorImplCommandTemplate;
             description = "Implement a spec or plan through Cursor CLI, orchestrated by taskmaster.";
             agent = "taskmaster";
-            subtask = false;
-          };
-          debug = {
-            template = debugCommandTemplate;
-            description = "Investigate a bug with inspector using the debug skill.";
-            agent = "inspector";
-            subtask = false;
-          };
-          review = {
-            template = reviewCommandTemplate;
-            description = "Review a target with inspector using the review skill.";
-            agent = "inspector";
             subtask = false;
           };
         };
@@ -758,13 +723,42 @@ delib.module {
         permission = applyCommandExecutionMode agentPerm.scoutFull;
       };
 
-      inspector = {
+      review-orchestrator = {
         mode = "all";
         model = "openai/gpt-5.5";
         reasoningEffort = "high";
-        description = "Shared review/debug orchestration entrypoint with skill-led read-only inspection.";
-        prompt = readAgentPrompt "inspector";
-        permission = applyCommandExecutionMode agentPerm.inspector;
+        description = "Orchestrates scaled focused code-review perspectives and dissent validation.";
+        prompt = renderAgentPrompt "review_orchestrator" {
+          "{{REVIEW_REPORT_FORMAT_CONTRACT}}" = reviewReportFormatContract;
+          "{{REPORT_FILENAME_POLICY}}" = reportFilenamePolicy;
+        };
+        permission = applyCommandExecutionMode agentPerm.reviewOrchestrator;
+      };
+
+      focused-reviewer = {
+        mode = "subagent";
+        model = "openai/gpt-5.5";
+        reasoningEffort = "medium";
+        description = "Performs injected-perspective read-only code review with evidence-grounded findings.";
+        prompt = readAgentPrompt "focused_reviewer";
+        permission = applyCommandExecutionMode (mergeMany [
+          agentPerm.pureRead
+          perm.execute.safeGitInspection
+          perm.context.full
+        ]);
+      };
+
+      dissent-reviewer = {
+        mode = "subagent";
+        model = "openai/gpt-5.5";
+        reasoningEffort = "medium";
+        description = "Validates review outputs for misses, overreach, severity, and alternate interpretations.";
+        prompt = readAgentPrompt "dissent_reviewer";
+        permission = applyCommandExecutionMode (mergeMany [
+          agentPerm.pureRead
+          perm.execute.safeGitInspection
+          perm.context.full
+        ]);
       };
 
       explore = {
@@ -794,45 +788,6 @@ delib.module {
         reasoningEffort = "medium";
         prompt = readAgentPrompt "challenger";
         permission = applyCommandExecutionMode agentPerm.challenger;
-      };
-
-      reviewer1 = {
-        mode = "subagent";
-        model = "openai/gpt-5.5";
-        description = "Performs strict read-only code review with severity-ordered findings and concrete file/line evidence.";
-        reasoningEffort = "medium";
-        prompt = readAgentPrompt "strict_reviewer";
-        permission = applyCommandExecutionMode (mergeMany [
-          agentPerm.pureRead
-          perm.execute.safeGitInspection
-          perm.context.full
-        ]);
-      };
-
-      reviewer2 = {
-        mode = "subagent";
-        model = "opencode/deepseek-v4-flash-free";
-        description = "Performs strict read-only code review with severity-ordered findings and concrete file/line evidence.";
-        reasoningEffort = "medium";
-        prompt = readAgentPrompt "strict_reviewer";
-        permission = applyCommandExecutionMode (mergeMany [
-          agentPerm.pureRead
-          perm.execute.safeGitInspection
-          perm.context.full
-        ]);
-      };
-
-      pruner = {
-        mode = "subagent";
-        model = "openai/gpt-5.4-mini";
-        reasoningEffort = "high";
-        description = "Finds commonization opportunities, dead code, and stale implementation residue with concrete evidence.";
-        prompt = readAgentPrompt "pruner";
-        permission = applyCommandExecutionMode (mergeMany [
-          agentPerm.pureRead
-          perm.execute.safeGitInspection
-          perm.context.full
-        ]);
       };
 
       researcher = {

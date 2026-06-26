@@ -61,20 +61,6 @@ delib.module {
           ".claude/skills"
         ];
       };
-      review = {
-        source = ./skills/review;
-        targetDirs = [
-          ".agents/skills"
-          ".claude/skills"
-        ];
-      };
-      debug = {
-        source = ./skills/debug;
-        targetDirs = [
-          ".agents/skills"
-          ".claude/skills"
-        ];
-      };
       implement-via-cursor = {
         source = ./skills/implement-via-cursor;
         targetDirs = [
