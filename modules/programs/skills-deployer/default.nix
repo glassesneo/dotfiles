@@ -47,6 +47,13 @@ delib.module {
           ".claude/skills"
         ];
       };
+      skill-architect = {
+        source = ./skills/skill-architect;
+        targetDirs = [
+          ".agents/skills"
+          ".claude/skills"
+        ];
+      };
       refactor-maintainability = {
         source = ./skills/refactor-maintainability;
         targetDirs = [
