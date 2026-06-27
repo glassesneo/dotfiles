@@ -1,6 +1,13 @@
 ---
 name: agent-reports
-description: Use when writing .agents/reports/ implementation, review, bug, or failure reports for agentic workflows.
+description: >-
+  Use when writing or updating durable handoff reports under .agents/reports/
+  for agentic workflows. Trigger when the user asks for an implementation
+  report, review report, bug report, or failure/triage report, or when a task
+  needs a post-work record of what changed, what evidence exists, and what
+  remains unresolved. Do not use for spec or plan authoring, for inline PR
+  review comments, for commit messages, or for ordinary status updates that do
+  not need a persisted report file.
 ---
 
 # Agent Reports

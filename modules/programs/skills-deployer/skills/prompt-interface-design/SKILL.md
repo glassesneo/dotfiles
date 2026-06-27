@@ -1,6 +1,6 @@
 ---
 name: prompt-interface-design
-description: Use when writing, revising, or reviewing prompts that will be consumed by another model, agent, subagent, workflow runner, reusable prompt template, or system that expands or passes prompts to a model. Trigger for model-facing command prompts, AGENTS.md files, agent instruction files, subagent handoffs, agent role prompts, reviewer prompts, planner prompts, implementation prompts, and reusable prompt templates. Use to define what the receiving model will actually see, place instructions in the correct layer, delegate existing skills, reduce prompt bloat, avoid unnecessary negative constraints, and specify clear output contracts. Out of scope: ordinary end-user answers, domain-specific coding guidance, general writing style advice, security-specific prompt-injection analysis, and skill-authoring mechanics that are only about packaging, file layout, or metadata conventions rather than the model-facing prompt interface.
+description: Use when writing, revising, or reviewing prompts that will be consumed by another model, agent, subagent, reusable prompt template, or system that expands or passes prompts to a model. Trigger for model-facing command prompts, AGENTS.md files, agent instruction files, subagent handoffs, and reusable prompt templates. Use to define what the receiving model will actually see, place instructions in the correct layer, delegate existing skills, reduce prompt bloat, avoid unnecessary negative constraints, and specify clear output contracts. Out of scope: ordinary end-user answers, domain-specific coding guidance, general writing style advice, and security-specific prompt-injection analysis.
 ---
 
 # Prompt Interface Design Skill
@@ -213,71 +213,21 @@ When asked to write a prompt:
 
 ## Prompt Review Procedure
 
-When asked to review or revise a prompt, check for:
+When asked to review or revise a prompt, run the checklist in
+`references/review-checklist.md`, then return observed issues, a revised
+prompt, and a short rationale. A prompt review output is requester-facing
+unless the user asks for only the revised prompt.
 
-- receiver mismatch
-- hidden assumptions
-- command or UI leakage
-- wrapper responsibility assigned to the model
-- duplicated skill workflow
-- excessive self-contained explanation
-- excessive negative constraints
-- missing output contract
-- missing insufficiency behavior
-- user mechanism treated as mandatory without justification
-- irrelevant context injection
-- local fix generalized into a broad rule
-- missing stop condition for delegated work
+When producing a prompt for direct use, output the prompt itself. Include
+design notes only when the user asks for review or explanation, boundary
+assumptions affect correctness, the user's proposed mechanism should be
+challenged, or the prompt depends on external skills, tools, or prompt
+expansion.
 
-A prompt review output is requester-facing unless the user asks for only the revised prompt.
+## References
 
-Return:
-
-- observed issues
-- revised prompt
-- short rationale for the revision
-
-## Output Guidance
-
-When producing a prompt for direct use, output the prompt itself.
-
-Include design notes only when:
-
-- the user asks for review or explanation
-- boundary assumptions affect correctness
-- the user's proposed mechanism should be challenged
-- the prompt depends on external skills, tools, or prompt expansion
-
-Keep design notes outside the model-facing prompt.
-
-## Minimal Examples
-
-### Expanded command prompt
-
-Good:
-
-`Prepare an implementation plan for the expanded user request. Use available project context and relevant skills. Prefer the smallest behavior-correct change. Return affected areas, implementation steps, risks, and verification commands.`
-
-Avoid:
-
-`You are running the /impl command. Do not mention slash commands. Do not repeat the implementation workflow.`
-
-### Subagent handoff prompt
-
-Good:
-
-`Inspect the authentication module for authorization boundary risks related to this change. Use read-only analysis. Return concrete findings with file references, severity, and recommended fixes. Stop after the review report.`
-
-Avoid:
-
-`Help the main agent implement the whole feature. Remember the overall plan and decide what to do next.`
-
-### Prompt review output
-
-Good:
-
-`Issue: The prompt assumes the receiver can see command mechanics. Revision: Replace command references with the post-expansion task objective.`
-
-Avoid:
-
-`This is a bad prompt. Do not do many things.`
+- `references/examples.md`: use when you need good/bad patterns for command
+  prompts, subagent handoffs, agent profiles, reviewer prompts, or review
+  output.
+- `references/review-checklist.md`: use when reviewing, revising, or
+  generalizing prompt rules.
