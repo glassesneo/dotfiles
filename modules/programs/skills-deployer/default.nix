@@ -37,6 +37,7 @@ delib.module {
         source = ./skills/agent-reports;
         targetDirs = [
           ".agents/skills"
+          ".claude/skills"
           ".cursor/skills"
         ];
       };
@@ -45,6 +46,7 @@ delib.module {
         targetDirs = [
           ".agents/skills"
           ".claude/skills"
+          ".cursor/skills"
         ];
       };
       prompt-interface-design = {
@@ -66,13 +68,7 @@ delib.module {
         targetDirs = [
           ".agents/skills"
           ".claude/skills"
-        ];
-      };
-      implement-via-cursor = {
-        source = ./skills/implement-via-cursor;
-        targetDirs = [
-          ".agents/skills"
-          ".claude/skills"
+          ".cursor/skills"
         ];
       };
     };

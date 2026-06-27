@@ -52,4 +52,3 @@ Expected behavior: ask or record scope if accessibility/UX impact is unclear and
 
 - The skill must not package secrets, private endpoints, hidden behavioral overrides, or executable scripts.
 - Required execution behavior belongs in `SKILL.md`; this reference must stay optional.
-- Deployment defaults are `.agents/skills` and `.claude/skills` unless a separate spec changes them.
