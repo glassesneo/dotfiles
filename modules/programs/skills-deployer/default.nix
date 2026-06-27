@@ -40,6 +40,13 @@ delib.module {
           ".cursor/skills"
         ];
       };
+      accessibility-ux = {
+        source = ./skills/accessibility-ux;
+        targetDirs = [
+          ".agents/skills"
+          ".claude/skills"
+        ];
+      };
       prompt-interface-design = {
         source = ./skills/prompt-interface-design;
         targetDirs = [
