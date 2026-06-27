@@ -36,7 +36,7 @@ Split when outputs are structurally different.
 
 Examples:
 
-- Skill creation outputs frontmatter, `SKILL.md`, references, assets, and eval cases.
+- Skill creation outputs frontmatter, `SKILL.md`, and any needed references, assets, or scripts.
 - Code review outputs findings with severity and evidence.
 - Implementation outputs source changes and validation results.
 
@@ -69,7 +69,7 @@ Keep skills separate when one skill defines how to package guidance and another 
 
 Example:
 
-- Artifact-structural skill: decides frontmatter, references, assets, scripts, and eval cases.
+- Artifact-structural skill: decides frontmatter, references, assets, and scripts.
 - Domain-specific skill: defines how to perform testing, security review, refactoring, architecture review, or requirements work.
 
 The artifact-structural skill may help convert domain guidance into a reusable skill.

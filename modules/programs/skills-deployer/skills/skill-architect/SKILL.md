@@ -25,7 +25,7 @@ The future agent must be able to decide:
 - revising `SKILL.md`, frontmatter, references, assets, or scripts
 - deciding whether guidance should become a skill
 - splitting, merging, or de-duplicating skills
-- designing examples, eval cases, or quality gates for a skill
+- designing examples or quality gates for a skill
 - converting domain guidance into a reusable skill
 
 ## Do Not Use This Skill For
@@ -108,10 +108,7 @@ If requested behavior is unsafe or deceptive, refuse that behavior and offer a s
 6. Choose the artifact layout.
    Decide what belongs in `SKILL.md`, references, assets, and scripts.
 
-7. Add evaluation cases.
-   Include positive trigger cases, negative trigger cases, and edge cases.
-
-8. Review for ambiguity and bloat.
+7. Review for ambiguity and bloat.
    Remove generic teaching, duplicated domain guidance, vague instructions, and unenforceable constraints.
 
 ## Artifact Placement Rules
@@ -135,7 +132,6 @@ Put detailed guidance that is useful only for some tasks:
 - description writing patterns
 - overlap audit criteria
 - artifact placement examples
-- evaluation case patterns
 - domain research summaries
 
 ### assets/
@@ -184,7 +180,6 @@ Output:
 - final file tree
 - contents for each generated reference, asset, or script
 - explicit omissions for references/assets/scripts that are not needed
-- evaluation cases
 - overlap risks
 
 ### Review
@@ -233,7 +228,7 @@ Before finalizing a skill, check:
 - The skill has one routing intent.
 - Required inputs and missing-information behavior are defined.
 - Outputs are concrete.
-- Evaluation cases cover positive triggers, negative triggers, boundary cases, overlap cases, regression cases, malformed cases, safety cases, and packaging cases when the skill is created or materially revised.
+- Routing and execution boundaries are concrete enough to check with examples when needed.
 - References are optional extensions, not required for basic operation.
 - Assets are reusable materials, not hidden instructions.
 - If scripts exist, they are executable, tested, and documented with side effects and failure behavior.
@@ -260,5 +255,4 @@ Before finalizing a skill, check:
 - Read `references/description-patterns.md` when writing or materially revising frontmatter descriptions.
 - Read `references/granularity-and-overlap.md` when splitting, merging, or auditing nearby skills.
 - Read `references/artifact-placement.md` when deciding file placement or detecting hidden instructions.
-- Read `references/evaluation-cases.md` when creating a skill, materially revising a skill, or designing evals, regression cases, or quality gates.
 - Use `assets/SKILL_TEMPLATE.md` as a thin starting point for new skills.

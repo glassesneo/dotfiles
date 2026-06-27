@@ -36,7 +36,6 @@ Put these in references:
 - description writing patterns
 - overlap audit criteria
 - artifact placement examples
-- evaluation case patterns
 - domain research summaries that are not always needed
 
 Example: description pattern -> reference.

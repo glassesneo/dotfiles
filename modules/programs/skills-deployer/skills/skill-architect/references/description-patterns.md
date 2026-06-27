@@ -93,10 +93,9 @@ When revising a description, output:
 - after description
 - what became more specific
 - what was excluded
-- trigger eval changes
+- routing impact
 
-Use trigger evals to show the routing effect of the revision.
-Include at least a few should-trigger and should-not-trigger examples when the description change is material.
+Use concise before/after notes or examples to show the routing effect of the revision when the description change is material.
 
 ## Examples
 
@@ -140,7 +139,7 @@ Problems:
 ### Good: Narrow Domain Packaging
 
 ```yaml
-description: Use when converting existing accessibility review guidance into a reusable Agent Skill package. Trigger when the user asks to define accessibility skill frontmatter, SKILL.md workflow, references, assets, or eval cases. Do not use to perform an accessibility review unless the task is to package that review process as a skill.
+description: Use when converting existing accessibility review guidance into a reusable Agent Skill package. Trigger when the user asks to define accessibility skill frontmatter, SKILL.md workflow, references, assets, or scripts. Do not use to perform an accessibility review unless the task is to package that review process as a skill.
 ```
 
 Why it works:

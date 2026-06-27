@@ -217,7 +217,3 @@ Use high severity when users cannot complete a core task, keyboard users are tra
 - Responsive layout changes reading or focus order incorrectly.
 - Infinite scroll or dynamic updates lose position or announce too much.
 - Automated checks pass and the work is incorrectly treated as fully accessible.
-
-## Evaluation Cases
-
-Read `references/evaluation-cases.md` when creating or revising this skill, checking routing behavior, or validating that future agents would select the skill for the intended tasks.

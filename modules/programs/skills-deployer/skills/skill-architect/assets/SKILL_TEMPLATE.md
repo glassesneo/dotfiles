@@ -50,11 +50,6 @@ Return:
 
 - <check before finalizing>
 
-## Evaluation Cases
-
-- Should trigger: <query> -> <expected behavior>
-- Should not trigger: <query> -> <expected behavior>
-
 ## References and Assets
 
 - <when to read optional references>
