@@ -4,7 +4,7 @@ Required task-dividable structure:
 - For each task include:
   - target file(s) to edit
   - what to change in each target file
-  - documentation update targets (required: list affected doc files such as `CLAUDE.md`, `README*`, or doc comments; use `none` if no update is needed)
+  - documentation update targets (required: list affected doc files such as `AGENTS.md`, `README*`, or doc comments; use `none` if no update is needed)
   - files to refer (optional) and why they are needed
   - task dependency graph/prerequisites (optional)
   - completion criteria

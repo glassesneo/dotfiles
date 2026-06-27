@@ -41,11 +41,6 @@ Do not add a shared keymap registry unless there is a real cross-editor contract
 ## MCP Node Package Management (bun2nix)
 
 MCP server npm packages are managed via bun2nix in `node-packages/`.
-To add, update, or remove packages:
-```bash
-cd node-packages
-# Edit package.json
-bun install && bun2nix -o bun.nix
-git add package.json bun.lock bun.nix
-nh home switch
-```
+When adding, updating, or removing packages, update the package manifest, lockfile,
+and generated bun2nix output together; stage all generated files before Nix
+evaluation because flakes only read git-tracked files.

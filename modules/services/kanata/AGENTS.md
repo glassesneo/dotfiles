@@ -3,12 +3,12 @@
 This subtree owns the local Kanata configuration and its darwin/home-manager wiring.
 Prefer this file over parent guidance for Kanata-specific changes.
 
-## Files
+## Ownership Boundaries
 
-- `default.nix`: Nix wiring for the Kanata service, declarative injection selection, and the generated root config that includes profile fragments.
-- `common.kbd`: Rift-independent aliases, fakekeys, and chord definitions shared by all profiles.
-- `profiles/<name>.kbd`: Canonical superset `defsrc` plus the first-defined `base` layer for that keyboard profile.
-- `injections/<name>.kbd`: Injection-specific aliases, sparse overlay base layers, extra layers, and command bindings.
+- The Nix module owns service wiring, declarative injection selection, and generation of the root Kanata config.
+- The common keyboard layer owns Rift-independent aliases, fakekeys, and chord definitions shared by profiles.
+- Profiles own the canonical superset `defsrc` plus the first-defined `base` layer for each keyboard profile.
+- Injections own sparse overlay behavior, injection-specific aliases, extra layers, and command bindings.
 
 ## How To Validate
 

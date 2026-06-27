@@ -6,10 +6,10 @@ Nushell configuration with custom plugins, completions, and API integrations. En
 
 ## Architecture
 
-- `config.nu` is minimal (3 lines) — real configuration lives in `default.nix` (Nix controls what loads).
+- `config.nu` stays minimal — real configuration lives in the Nix module, which controls what loads.
 - `env.nu` is empty — environment setup delegated to Nix `extraEnv`.
 - Plugin binaries (`gstat`, `query`) injected into `$PATH` by Nix, not manually in config.
-- 19 completions auto-imported from `nu_scripts` via `concatMapStrings`.
+- Completions are auto-imported from `nu_scripts` through the Nix module.
 - Files deployed to `~/.config/nushell/` via XDG config.
 
 ## Custom Modules

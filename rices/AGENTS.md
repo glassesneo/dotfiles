@@ -15,8 +15,6 @@ options.programs.tmux.theme = {
 };
 ```
 
-**Key files**: `modules/programs/tmux/default.nix`, `rices/*.nix`
-
 **Validation**: Modules assert plugin names exist in `pkgs.*Plugins` with helpful error messages.
 
 ## Theme Selection Responsibilities
@@ -24,4 +22,4 @@ options.programs.tmux.theme = {
 Rices now select theme data instead of owning palette definitions:
 
 - Set active scheme with `myconfig.colorscheme = config.myconfig.colorschemes.<scheme>.<variant>` (e.g., `colorschemes.catppuccin.macchiato`).
-- Set wallpaper with `myconfig.wallpaper.title = <path>;`.
+- Set wallpaper with `myconfig.wallpaper.title = "<symbolic-title>";`; the wallpaper registry resolves titles to concrete paths.

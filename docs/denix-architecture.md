@@ -241,13 +241,12 @@ Use this order when entering the repo cold:
 
 1. `README.org` for the repository overview
 2. this guide for Denix-specific architecture and splitting rules
-3. the nearest local `CLAUDE.md` for subtree-local constraints
+3. the nearest local `AGENTS.md` for subtree-local constraints
 4. the target module and one reference pattern from this guide
 
 ## Related Docs
 
 - Canonical doc policy: `docs/documentation-policy.md`
 - Root agent entry: `AGENTS.md`
-- Root Claude entry: `CLAUDE.md`
-- Module subtree router: `modules/CLAUDE.md`
-- Rice-specific constraints: `rices/CLAUDE.md`
+- Module subtree router: `modules/AGENTS.md`
+- Rice-specific constraints: `rices/AGENTS.md`

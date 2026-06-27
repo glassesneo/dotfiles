@@ -1,12 +1,12 @@
 # modules/programs/nixvim/
 
-## Overview
+## Ownership
 
-Full Neovim configuration via nixvim. Module name: `programs.nixvim`.
+`programs.nixvim` owns the full Neovim configuration via nixvim. Treat it as a
+feature module with several internal ownership seams, not as a directory map.
 
 ## Architecture
 
-- **65+ files** across plugins, LSP, AI workflows, and denops-backed plugins.
 - `wrapRc = false` — nixvim injects init.lua directly via Home Manager, no wrapper script.
 - Large Lua blocks live in `.lua` files, inlined via `builtins.readFile`.
 - `pkgs.replaceVars` used for path injection (SKK dicts, etc.).
@@ -35,7 +35,7 @@ Full Neovim configuration via nixvim. Module name: `programs.nixvim`.
 
 ## LSP Configuration
 
-- LSP ownership now lives in `modules/programs/nixvim/lsp/CLAUDE.md`; read that file before adding or moving a server.
+- LSP ownership now lives in `modules/programs/nixvim/lsp/AGENTS.md`; read that file before adding or moving a server.
 - `modules/programs/nixvim/lsp/default.nix` is the shared contract and Lua assembly root, not the place for every server definition.
 - PATH-gated schema-backed servers keep their executable manifest in Nix and runtime activation in `modules/programs/nixvim/lsp/activation.lua`.
 
@@ -47,15 +47,7 @@ Full Neovim configuration via nixvim. Module name: `programs.nixvim`.
 - `<C-j>` SKK (Japanese input) enable
 - Non-plugin Neovim keymaps such as `<Space>h/j/k/l`, `<S-h>/<S-l>`, `M`, `q`, and `<Space>w` live directly in `extra_config.lua`. Plugin-specific mappings remain in their plugin modules.
 
-## Key Files
+## Local Guidance
 
-- Entry: @modules/programs/nixvim/default.nix
-- Shared conventions: @modules/programs/nixvim/plugins/helpers.nix
-- Editor options: @modules/programs/nixvim/config.nix
-- Filetypes: @modules/programs/nixvim/filetype.nix
-- Custom keymaps: @modules/programs/nixvim/extra_config.lua
-- LSP guide: @modules/programs/nixvim/lsp/CLAUDE.md
-- LSP root: @modules/programs/nixvim/lsp/default.nix
-- AI workflows: @modules/programs/nixvim/plugins/ai/
-- Orgmode base: @modules/programs/nixvim/plugins/orgmode/default.nix
-- Orgmode journal: @modules/programs/nixvim/plugins/orgmode/journal/default.nix
+- Read `modules/programs/nixvim/lsp/AGENTS.md` before changing LSP ownership.
+- Keep this guidance focused on stable ownership seams and cross-module contracts. Use direct inspection for file inventories.

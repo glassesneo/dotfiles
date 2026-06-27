@@ -200,11 +200,10 @@ tool-state directories, not the main declarative source of truth.
 
 - Denix architecture and module-splitting guide: =docs/denix-architecture.md=
 - Documentation policy: =docs/documentation-policy.md=
-- Claude Code entry guidance: =CLAUDE.md=
-- Other coding agents entry guidance: =AGENTS.md=
-- Module tree guidance: =modules/CLAUDE.md=
-- Config-specific notes: =modules/config/CLAUDE.md=
-- Toplevel/secrets notes: =modules/toplevel/CLAUDE.md=
+- Coding agents entry guidance: =AGENTS.md=
+- Module tree guidance: =modules/AGENTS.md=
+- Config-specific notes: =modules/config/AGENTS.md=
+- Toplevel/secrets notes: =modules/toplevel/AGENTS.md=
 
 * License
 

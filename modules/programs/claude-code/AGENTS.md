@@ -2,7 +2,7 @@
 
 ## Agent Source of Truth
 
-Global Claude Code agent behavior is defined in two files in this directory:
+Global Claude Code agent behavior is defined by these sources in this directory:
 
 - `prompts/*.md` — canonical prompt content for `researcher`, `code_reviewer`, and `tester`.
 - `default.nix` — agent metadata/wiring under `programs.claude-code.agents`, plus settings and permissions.
