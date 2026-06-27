@@ -1,6 +1,6 @@
 ---
 name: skill-architect
-description: Use when designing, reviewing, revising, splitting, merging, or packaging Agent Skill artifacts for coding agents or model-driven workflows. Trigger when the user asks to create a skill, improve a skill, define skill structure, write SKILL.md, design skill frontmatter, decide references/assets/scripts, audit overlap between skills, or turn domain guidance into a reusable skill. Do not use for ordinary end-user answers, one-off prompts that are not reusable skills, domain-specific implementation guidance unless it is being converted into a skill, or prompt-injection/security analysis except as it affects skill artifact boundaries.
+description: Use when designing, reviewing, revising, splitting, merging, or packaging Agent Skill artifacts for coding agents. Trigger when the user asks to create a skill, improve a skill, define skill structure, write SKILL.md, design skill frontmatter, decide references/assets/scripts, audit overlap between skills, or turn domain guidance into a reusable skill. Do not use for ordinary end-user answers, one-off prompts that are not reusable skills, domain-specific implementation guidance unless it is being converted into a skill, or prompt-injection/security analysis except as it affects skill artifact boundaries.
 ---
 
 # Skill Architect
@@ -236,7 +236,7 @@ Before finalizing a skill, check:
 - Evaluation cases cover positive triggers, negative triggers, boundary cases, overlap cases, regression cases, malformed cases, safety cases, and packaging cases when the skill is created or materially revised.
 - References are optional extensions, not required for basic operation.
 - Assets are reusable materials, not hidden instructions.
-- Scripts are executable and tested.
+- If scripts exist, they are executable, tested, and documented with side effects and failure behavior.
 - The skill does not duplicate domain-specific guidance from more specific skills.
 
 ## Anti-Patterns
@@ -257,8 +257,8 @@ Before finalizing a skill, check:
 
 ## References and Assets
 
-- Read `references/description-patterns.md` when frontmatter routing needs detailed revision.
+- Read `references/description-patterns.md` when writing or materially revising frontmatter descriptions.
 - Read `references/granularity-and-overlap.md` when splitting, merging, or auditing nearby skills.
 - Read `references/artifact-placement.md` when deciding file placement or detecting hidden instructions.
-- Read `references/evaluation-cases.md` when designing evals, regression cases, or quality gates.
+- Read `references/evaluation-cases.md` when creating a skill, materially revising a skill, or designing evals, regression cases, or quality gates.
 - Use `assets/SKILL_TEMPLATE.md` as a thin starting point for new skills.
