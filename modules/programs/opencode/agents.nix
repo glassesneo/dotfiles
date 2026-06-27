@@ -116,15 +116,6 @@ delib.module {
         ]);
       };
 
-      plan_reviewer = {
-        mode = "subagent";
-        model = "openai/gpt-5.5";
-        description = "Reviews final plan steps against the referenced spec for feasibility and correctness.";
-        reasoningEffort = "low";
-        prompt = readAgentPrompt "plan_reviewer";
-        permission = applyCommandExecutionMode (merge agentPerm.pureRead perm.context.full);
-      };
-
       challenger = {
         mode = "subagent";
         model = "openai/gpt-5.5";

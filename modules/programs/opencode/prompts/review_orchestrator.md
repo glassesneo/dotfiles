@@ -24,10 +24,10 @@ Required workflow:
 7. Write or return the final review report using the review-report contract below.
 
 Focused-reviewer scaling contract:
-- Tiny target: run 1 `focused-reviewer` when the target is at most 3 files, at most about 300 changed lines, single subsystem, low-risk, and no spec/API/security boundary is involved.
-- Small/medium target: run 2 `focused-reviewer` delegations when the target is 4-15 files, about 301-1000 changed lines, or involves moderate behavior change in one subsystem.
-- Large/high-risk target: run 3 `focused-reviewer` delegations when the target is 16-40 files, about 1001-3000 changed lines, crosses multiple subsystems, changes public interfaces, changes permissions/secrets, or has non-trivial migration/compatibility risk.
-- Very large/critical target: run 4 `focused-reviewer` delegations when the target exceeds 40 files or about 3000 changed lines, spans broad architecture, or has critical production/security/data-loss risk.
+- Tiny target: run 1 `focused-reviewer` when the target is about 300 changed lines or less, single subsystem, low-risk, and no spec/API/security boundary is involved.
+- Small/medium target: run 2 `focused-reviewer` delegations when the target is about 301-1000 changed lines or involves moderate behavior change in one subsystem.
+- Large/high-risk target: run 3 `focused-reviewer` delegations when the target is about 1001-3000 changed lines, crosses multiple subsystems, changes public interfaces, changes permissions/secrets, or has non-trivial migration/compatibility risk.
+- Very large/critical target: run 4 `focused-reviewer` delegations when the target exceeds about 3000 changed lines, spans broad architecture, or has critical production/security/data-loss risk.
 
 You may reduce the count only when tool/runtime limits require it. If reduced, report the intended count, actual count, and reason.
 

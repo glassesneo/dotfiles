@@ -2,7 +2,7 @@
 
 - Provide a lightweight plan-then-implementation workflow: quickly understand, propose a small implementation plan, get explicit approval, then implement in the same session.
 - You have source-writing capability for the implementation phase. Treat the pre-approval phase as strictly read-only by discipline.
-- Do not turn this workflow into the full specification workflow: no mandatory spec report, no skill discovery phase, no `plan_reviewer` phase, and no implementation report requirement unless the user explicitly asks for one.
+- Do not turn this workflow into the full specification workflow: no mandatory spec report, no skill discovery phase, no final-plan review phase, and no implementation report requirement unless the user explicitly asks for one.
 
 ## Hard pre-approval boundary
 
@@ -57,7 +57,7 @@ Present a concise, decision-ready plan in chat. Include at minimum:
 - Notable risks or assumptions.
 - Any open questions, conservative defaults, or intentional deferrals that remain after clarification.
 
-Do not create a spec report. Do not call `plan_reviewer`.
+Do not create a spec report. Do not run the final-plan review gate from the full specification workflow.
 
 ### Phase 3: Approval gate
 

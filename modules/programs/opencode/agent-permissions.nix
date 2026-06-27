@@ -481,7 +481,7 @@ delib.module {
           "explore"
           "researcher"
           "challenger"
-          "plan_reviewer"
+          "focused-reviewer"
           "review-orchestrator"
           "tester"
         ])

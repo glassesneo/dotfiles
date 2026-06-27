@@ -5,7 +5,7 @@ Specification workflow contract:
 * Write final plans under `.agents/plans/`.
 * Confirm the spec with the user before writing the final plan.
 * After the final plan exists, ask whether to skip or run final plan review.
-* Delegate final plan review to `plan_reviewer` only when review is not skipped.
+* Delegate final plan review to `focused-reviewer` only when review is not skipped.
 * After the review gate, stop with planning-complete output; do not delegate implementation.
 * Do not fall back to chat-only specs or plans.
 
@@ -128,16 +128,22 @@ After writing the final plan, ask the user to choose one:
 * Skip final plan review.
 * Run final plan review.
 
-If skipped, do not call `plan_reviewer`.
+If skipped, do not call `focused-reviewer` for final plan review.
 
 If review is requested:
 
-1. Call `plan_reviewer` once.
-2. Provide the final plan path and confirmed spec path/content.
-3. Ask it to review feasibility, ordering, prerequisites, spec contradictions, and verification viability.
-4. `plan_reviewer` reviews only final `.agents/plans/*.md` targets.
-5. If high or medium findings appear, revise the same plan and run one additional review pass.
-6. Apply accepted findings as explicit plan revisions or defaults.
+1. Call `focused-reviewer` once.
+2. Inject this perspective: spec-grounded final-plan procedure review.
+3. Provide the final plan path and confirmed spec path/content.
+4. Ask it to review feasibility, ordering, prerequisites, spec contradictions, and verification viability.
+5. Tell it the review target is the final plan's step-by-step procedure, not the spec as a standalone artifact.
+6. Tell it to review only final plan files matching `.agents/plans/*.md`; referenced specs are auxiliary context and must not be edited or reviewed as standalone spec targets.
+7. Ask it to look for contradictions with the spec, missing implementation prerequisites, impossible or weak verification, sequencing defects, hidden migration/rollback risks, and plan steps that would likely mislead implementation.
+8. Tell it not to flag items listed under `## Intentional Deferrals` as findings, not to flag decisions explicitly defaulted under `## Chosen Defaults` as unresolved merely because alternatives exist, and not to flag implementation-level details unless they affect architecture, scope, or interface contracts.
+9. Ask it to validate that `## Open Questions`, `## Chosen Defaults`, and `## Intentional Deferrals` are decision-complete: no architecture-, scope-, or interface-level choices may remain unresolved outside `## Open Questions`, and any blocking open question must be reported as a finding.
+10. Ask it for findings sorted by severity with impact, evidence from the plan section, and explicit revision direction.
+11. If high or medium findings appear, revise the same plan and run one additional review pass with the same injected perspective.
+12. Apply accepted findings as explicit plan revisions or defaults.
 
 Phase 6: Planning complete
 After the review gate, respond with planning-complete output only.
