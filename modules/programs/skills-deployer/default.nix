@@ -49,6 +49,12 @@ delib.module {
           ".cursor/skills"
         ];
       };
+      branch-me = {
+        source = ./skills/branch-me;
+        targetDirs = [
+          ".agents/skills"
+        ];
+      };
       prompt-interface-design = {
         source = ./skills/prompt-interface-design;
         targetDirs = [
