@@ -27,10 +27,6 @@ delib.module {
       "{{IMPLEMENTATION_REPORT_FORMAT_CONTRACT}}" = implementationReportFormatContract;
       "{{REPORT_FILENAME_POLICY}}" = reportFilenamePolicy;
     };
-    cursorImplCommandTemplate = renderAgentPrompt "commands/cursor-impl" {
-      "{{IMPLEMENTATION_REPORT_FORMAT_CONTRACT}}" = implementationReportFormatContract;
-      "{{REPORT_FILENAME_POLICY}}" = reportFilenamePolicy;
-    };
   in {
     programs.opencode.settings.command = {
       spec = {
@@ -61,12 +57,6 @@ delib.module {
       impl = {
         template = implCommandTemplate;
         description = "Implement a plan or target with taskmaster using the implementation workflow.";
-        agent = "taskmaster";
-        subtask = false;
-      };
-      "cursor-impl" = {
-        template = cursorImplCommandTemplate;
-        description = "Implement a spec or plan through Cursor CLI, orchestrated by taskmaster.";
         agent = "taskmaster";
         subtask = false;
       };
