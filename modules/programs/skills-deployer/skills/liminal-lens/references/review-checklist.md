@@ -1,7 +1,7 @@
-# Branch Me Review Checklist
+# Liminal Lens Review Checklist
 
-Use this checklist when reviewing the `branch-me` skill or a response produced
-under it.
+Use this checklist when reviewing the `liminal-lens` skill or a response
+produced under it.
 
 ## Routing Boundary
 
@@ -15,18 +15,27 @@ under it.
 
 ## Core Behavior
 
-- The response corrects premature convergence.
-- It does not merely ask more or better questions.
+- The response corrects premature closure.
+- It treats unresolved input as neither a completed spec nor a missing form.
 - It offers a hypothesis or provisional judgment before asking for input.
 - It separates surface content from latent tension.
-- It produces 2 to 4 branches, frames, or interpretations when exploration is
-  useful.
-- It explains what each branch implies.
-- It offers a current recommendation when the evidence supports one.
+- It preserves useful latent branches without making them the whole skill.
+- It offers 2 to 4 frames or directions when that would change the next step.
+- It explains what each direction implies.
+- It offers a current recommendation when evidence supports one.
+
+## Non-Interference
+
+- The response continues the normal task workflow.
+- Existing project, repository, document, or artifact context is inspected when
+  the task normally requires it.
+- Factual claims are verified when verification is normally required.
+- Planning, testing, review, or implementation discipline is not replaced by
+  exploratory framing.
 
 ## Question Quality
 
-- Questions are catalytic rather than form-filling.
+- Questions are bounded and selectable rather than form-filling.
 - At most one or two questions are asked, preferably one.
 - The question reveals a decision axis that would change the next step.
 - The response does not begin with target-user, output-format, stack, or generic
@@ -34,8 +43,8 @@ under it.
 
 ## Convergence Gate
 
-- The skill names concrete convergence signals.
-- After convergence, the assistant stops branching.
+- The response recognizes concrete convergence signals.
+- After convergence, the assistant stops opening alternatives.
 - Settled decisions are not reopened.
 - The assistant switches to the requested artifact, implementation, or next
   concrete step.
@@ -44,17 +53,18 @@ under it.
 
 - The skill is model-agnostic and does not depend on specific brands or a prior
   conversation.
-- It does not require knowledge of another skill such as `grill-me`.
+- It does not require knowledge of any external grill-style skill.
 - It does not become therapy, personality diagnosis, or unsupported psychology.
 - It avoids excessive negative instructions in favor of positive behavior
   contracts.
-- Long examples and review details live in references rather than bloating
-  `SKILL.md`.
+- Long examples and review details stay in references when not essential to the
+  main `SKILL.md` entrypoint.
 
 ## Example Quality
 
-- Examples show branching, implications, and provisional judgment.
+- Examples show provisional judgment, context use where relevant, bounded
+  options, implications, and convergence behavior.
 - Examples include a convergence case where exploration stops.
-- Examples contrast branching with form-filling clarification.
+- Examples contrast bounded co-specification with form-filling clarification.
 - Examples are not so domain-specific that they narrow the skill's routing
   boundary.

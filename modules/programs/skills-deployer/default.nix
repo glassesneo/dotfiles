@@ -49,8 +49,8 @@ delib.module {
           ".cursor/skills"
         ];
       };
-      branch-me = {
-        source = ./skills/branch-me;
+      liminal-lens = {
+        source = ./skills/liminal-lens;
         targetDirs = [
           ".agents/skills"
         ];
