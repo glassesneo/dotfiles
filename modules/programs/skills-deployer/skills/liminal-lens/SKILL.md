@@ -288,171 +288,20 @@ Better behavior:
 Continue the normal workflow and use this skill only to present unresolved
 choices in a better dialogue shape.
 
-## Output Patterns
+## Output Guidance
 
-For tasks involving an existing project, repository, document, workflow, or prior
-artifact, generally use this shape:
+Keep responses grounded, compact, and selectable.
 
-```text
-Provisional judgment:
-One-sentence read of what is likely unresolved.
+When useful, include:
 
-Relevant context checked:
-The files, behavior, artifact, or facts used as grounding.
+- a provisional judgment about the unresolved decision
+- the relevant context checked
+- 2 to 4 possible directions with implications
+- a recommended default when evidence supports one
+- one bounded question or the next concrete action
 
-Unresolved decision point:
-The decision that changes the next step.
-
-Possible directions:
-1. Minimal scope — implication.
-2. Natural scope — implication.
-3. Larger cleanup scope — implication.
-
-Recommended default:
-The option that best matches the evidence, if one is justified.
-
-Bounded question / next action:
-One selectable question, or proceed if no answer is needed.
-```
-
-Do not force this exact format onto every response. Use it as guidance for
-keeping context, unresolved decisions, options, recommendation, and next action
-visible without turning the response into a form.
-
-For conceptual design tasks, a compact pattern often works:
-
-```text
-Provisional judgment:
-This is mainly a distinction between X and Y.
-
-Candidate framings:
-1. Frame A — consequence.
-2. Frame B — consequence.
-3. Frame C — consequence.
-
-Recommendation:
-Use Frame B as the center because...
-
-Question:
-Should I develop Frame B into the artifact?
-```
-
-For convergence responses:
-
-```text
-Adopted.
-I will stop opening alternatives and produce the requested artifact in the
-selected direction.
-```
-
-## Review Checklist
-
-Before finalizing a response under this skill, check:
-
-- Did I continue the normal task work required by the request?
-- Did I inspect or verify relevant context when the task required it?
-- Did I identify the real unresolved decision rather than ask for a full spec?
-- Did I avoid prematurely collapsing the prompt into one answer?
-- Did I present 2 to 4 concise directions only when useful?
-- Did each option include its scope or implication?
-- Did I recommend a default only when evidence supports it?
-- Did I ask a bounded question only if the answer changes the next step?
-- Did I stop opening alternatives after convergence?
-
-## Minimal Examples
-
-### Example 1: Existing codebase with unclear scope
-
-User:
-
-```text
-The save flow feels unfinished. Can you fix it?
-```
-
-Good response:
-
-```text
-I checked the save flow and the related API call sites. The current code already
-has loading and error handling in the mutation layer, but the UI only reflects
-success and silently ignores the pending/error states.
-
-Provisional judgment:
-The unresolved decision is scope, not implementation technique.
-
-Possible directions:
-1. Minimal scope — add only the missing pending/error UI state.
-2. Natural scope — add the UI state and align it with the existing API flow.
-3. Larger cleanup scope — also normalize the related validation paths.
-
-I recommend option 2 because it matches the existing structure without turning
-this into a validation cleanup.
-
-Which scope should I use?
-```
-
-Why it works:
-
-- It uses relevant codebase context first.
-- It does not brainstorm in isolation.
-- It turns unresolved scope into selectable options.
-
-### Example 2: Conceptual skill design
-
-User:
-
-```text
-I think this should become a skill, but I do not want it to be just a
-brainstorming helper.
-```
-
-Good response:
-
-```text
-Provisional judgment:
-The central unresolved distinction is whether the skill owns a task workflow or
-only a dialogue stance.
-
-Candidate framings:
-1. Brainstorming skill — expands ideas, but risks replacing the real task.
-2. Requirements-interview skill — extracts missing inputs, but may become a form.
-3. Dialogue-stance skill — keeps unresolved thinking visible while the normal
-   workflow continues.
-
-I recommend framing 3. It preserves the useful in-between phase without making
-the skill responsible for investigation, planning, or implementation.
-
-Should I write it as a dialogue-stance skill?
-```
-
-Why it works:
-
-- It does not ask for a complete specification.
-- It identifies the central design distinction.
-- It offers candidate framings and a recommendation.
-
-### Example 3: Convergence signal
-
-User:
-
-```text
-This is decided. Output the full text.
-```
-
-Good response:
-
-```text
-Adopted.
-I will stop opening alternatives and output the full artifact in the selected
-direction.
-
-[Then produce the requested full text.]
-```
-
-Why it works:
-
-- The user signaled convergence.
-- The assistant does not reopen choices.
-- The assistant produces the requested artifact.
+Do not force a fixed template onto every response. Use the references for
+examples and review calibration when the response shape is unclear.
 
 ## References
 

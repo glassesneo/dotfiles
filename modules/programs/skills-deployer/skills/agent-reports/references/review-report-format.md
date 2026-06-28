@@ -16,6 +16,12 @@ summary fields so downstream agents can triage severity quickly.
 - **Target context used**: <PR body, linked issue, commit message, plan, user rationale, or none>
 - **External research used**: yes | no
 
+## Validation Results
+
+- **Checks run**: <command/manual check and outcome; use `none` if none>
+- **Checks skipped**: <check and reason; use `none` if none>
+- **Validation notes**: <environment limits, rerun notes, or `none`>
+
 ## Findings
 
 ### Critical
