@@ -5,10 +5,16 @@ delib.module {
   options = with delib;
     moduleOptions ({myconfig, ...}: {
       username = readOnly (strOption myconfig.constants.username);
+      uid = intOption 501;
     });
 
   darwin.always = {cfg, ...}: {
+    users.knownUsers = [
+      cfg.username
+    ];
+
     users.users.${cfg.username} = {
+      inherit (cfg) uid;
       name = cfg.username;
       home = "/Users/${cfg.username}";
     };

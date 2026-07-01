@@ -8,4 +8,5 @@ delib.host {
   myconfig.services.kanata.profile = "macbook-us";
   myconfig.darwin.window-manager.backend = "rift";
   myconfig.programs.appcleaner.enable = true;
+  myconfig.user.uid = 501;
 }
