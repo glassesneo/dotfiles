@@ -15,6 +15,7 @@ delib.module {
     implementationReportFormatContract = readSharedPrompt "implementation-report-format";
     planFilenamePolicy = readSharedPrompt "plan-filename-policy";
     reportFilenamePolicy = readSharedPrompt "report-filename-policy";
+    strategyCommandTemplate = builtins.readFile ./prompts/commands/strategy.md;
     specCommandTemplate = builtins.readFile ./prompts/commands/spec.md;
     planCommandTemplate = builtins.readFile ./prompts/commands/plan.md;
     actCommandTemplate = renderAgentPrompt "commands/act" {
@@ -26,6 +27,12 @@ delib.module {
     };
   in {
     programs.opencode.settings.command = {
+      strategy = {
+        template = strategyCommandTemplate;
+        description = "Create a spec, then optionally a plan, with explicit approvals between stages.";
+        agent = "scout";
+        subtask = false;
+      };
       spec = {
         template = specCommandTemplate;
         description = "Create and confirm a spec through the spec subagent.";
