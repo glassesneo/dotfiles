@@ -479,6 +479,8 @@ delib.module {
         perm.context.full
         (perm.delegate.only [
           "explore"
+          "spec"
+          "planner"
           "researcher"
           "challenger"
           "focused-reviewer"
@@ -519,6 +521,28 @@ delib.module {
       ];
 
       researchOnly = perm.scope.research ["edit*"] pureRead;
+
+      specOnly = mergeMany [
+        (perm.scope.specs ["edit*"] pureRead)
+        safeEvidenceCollection
+        perm.interact.question
+        (perm.delegate.only [
+          "explore"
+          "researcher"
+          "challenger"
+        ])
+      ];
+
+      plannerOnly = mergeMany [
+        (perm.scope.plans ["edit*"] pureRead)
+        safeEvidenceCollection
+        perm.interact.question
+        (perm.delegate.only [
+          "explore"
+          "researcher"
+          "challenger"
+        ])
+      ];
 
       networkResearch = mergeMany [
         researchOnly

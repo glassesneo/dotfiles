@@ -13,13 +13,10 @@ delib.module {
       );
 
     implementationReportFormatContract = readSharedPrompt "implementation-report-format";
-    planFilenamePolicy = readSharedPrompt "test-spec-filename-policy";
-    dividableTaskStructure = readSharedPrompt "task-breakdown-structure";
+    planFilenamePolicy = readSharedPrompt "plan-filename-policy";
     reportFilenamePolicy = readSharedPrompt "report-filename-policy";
-    specFilenamePolicy = readSharedPrompt "spec-filename-policy";
-    specCommandTemplate = builtins.replaceStrings ["{{DIVIDABLE_TASK_STRUCTURE}}" "{{SPEC_FILENAME_POLICY}}" "{{PLAN_FILENAME_POLICY}}"] [dividableTaskStructure specFilenamePolicy planFilenamePolicy] (
-      builtins.readFile ./prompts/commands/spec.md
-    );
+    specCommandTemplate = builtins.readFile ./prompts/commands/spec.md;
+    planCommandTemplate = builtins.readFile ./prompts/commands/plan.md;
     actCommandTemplate = renderAgentPrompt "commands/act" {
       "{{PLAN_FILENAME_POLICY}}" = planFilenamePolicy;
     };
@@ -31,7 +28,13 @@ delib.module {
     programs.opencode.settings.command = {
       spec = {
         template = specCommandTemplate;
-        description = "Plan a target with scout using the specification workflow.";
+        description = "Create and confirm a spec through the spec subagent.";
+        agent = "scout";
+        subtask = false;
+      };
+      plan = {
+        template = planCommandTemplate;
+        description = "Create a plan through the planner subagent.";
         agent = "scout";
         subtask = false;
       };

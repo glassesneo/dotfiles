@@ -26,6 +26,9 @@ delib.module {
     implementationReportFormatContract = readSharedPrompt "implementation-report-format";
     reportFilenamePolicy = readSharedPrompt "report-filename-policy";
     failureReportFormatContract = readSharedPrompt "failure-report-format";
+    specFilenamePolicy = readSharedPrompt "spec-filename-policy";
+    planFilenamePolicy = readSharedPrompt "plan-filename-policy";
+    dividableTaskStructure = readSharedPrompt "task-breakdown-structure";
     researchFilenamePolicy = readSharedPrompt "research-filename-policy";
   in {
     programs.opencode.settings.agent = {
@@ -65,6 +68,29 @@ delib.module {
         description = "Non-source-writing agent for planning, inspection, and report workflows.";
         prompt = readAgentPrompt "scout";
         permission = applyCommandExecutionMode agentPerm.scoutFull;
+      };
+
+      spec = {
+        mode = "subagent";
+        model = "openai/gpt-5.5";
+        reasoningEffort = "medium";
+        description = "Produces decision-ready spec artifacts under .agents/specs.";
+        prompt = renderAgentPrompt "spec" {
+          "{{SPEC_FILENAME_POLICY}}" = specFilenamePolicy;
+        };
+        permission = applyCommandExecutionMode agentPerm.specOnly;
+      };
+
+      planner = {
+        mode = "subagent";
+        model = "openai/gpt-5.4-mini";
+        reasoningEffort = "high";
+        description = "Produces implementation plan artifacts under .agents/plans.";
+        prompt = renderAgentPrompt "planner" {
+          "{{DIVIDABLE_TASK_STRUCTURE}}" = dividableTaskStructure;
+          "{{PLAN_FILENAME_POLICY}}" = planFilenamePolicy;
+        };
+        permission = applyCommandExecutionMode agentPerm.plannerOnly;
       };
 
       review-orchestrator = {
