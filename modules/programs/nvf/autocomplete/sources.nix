@@ -6,9 +6,19 @@
 delib.module {
   name = "programs.nvf.autocomplete";
 
-  home.ifEnabled.programs.nvf.settings.vim.autocomplete.blink-cmp = {
-    setupOpts = {
-      sources = {
+  options = with delib;
+    moduleOptions {
+      default_sources = readOnly (listOfOption str [
+        "buffer"
+        "lsp"
+        "cmdline"
+      ]);
+    };
+
+  home.ifEnabled = {cfg, ...}: {
+    programs.nvf.settings.vim.autocomplete.blink-cmp = {
+      setupOpts.sources = {
+        default = cfg.default_sources;
         providers = {
           buffer = {
             override.enabled = lib.generators.mkLuaInline ''
@@ -39,17 +49,18 @@ delib.module {
           cmdline = {
             override.enabled = lib.generators.mkLuaInline ''
               function()
-                return vim.fn.getcmdtype() == ':'
+                local t = vim.fn.getcmdtype()
+                return t == ':' or t == '@'
               end
             '';
             module = "blink.cmp.sources.cmdline";
           };
         };
       };
-    };
-    sourcePlugins = {
-      ripgrep = {
-        enable = true;
+      sourcePlugins = {
+        ripgrep = {
+          enable = true;
+        };
       };
     };
   };
