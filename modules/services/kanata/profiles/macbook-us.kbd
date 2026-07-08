@@ -12,16 +12,8 @@
 
 (deflayer base
   brdn brup prev pp next mute vold volu
-  ;; Caps is immediate Ctrl by default. A quick second press within the
-  ;; double-tap window sends F12 immediately and holds Shift until release.
-  (switch
-    ((input virtual cap-window))
-      (multi (on-press-fakekey cap-prefix tap) (on-press-fakekey cap-shift press) (on-release-fakekey cap-shift release))
-      break
-    ()
-      (multi lctl @cap-window-open)
-      break
-  )
+  ;; Caps taps Escape and holds Control.
+  @cap-esc-ctrl
   d
   ;; Swap ';' and ':' on a US keyboard.
   f
@@ -30,9 +22,11 @@
   t
   '
   h
-  lsft
+  ;; Left Shift is normal Shift by default. A quick second press within the
+  ;; double-tap window reuses the existing F13-equivalent output sequence.
+  @lsft-double-f13
   j k l ,
-  @rsft-esc
+  rsft
   @hyper
   lmet
   rmet

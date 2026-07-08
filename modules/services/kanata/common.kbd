@@ -1,6 +1,15 @@
 (defalias
   hyper (multi lctl lsft lalt lmet)
-  rsft-esc (tap-hold-press 70 70 esc rsft)
+  cap-esc-ctrl (tap-hold-press 70 70 esc lctl)
+  lsft-window-open (hold-for-duration 200 lsft-window)
+  lsft-double-f13 (switch
+    ((input virtual lsft-window))
+      (multi (on-press-fakekey lsft-prefix tap) (on-press-fakekey lsft-shift press) (on-release-fakekey lsft-shift release))
+      break
+    ()
+      (multi lsft @lsft-window-open)
+      break
+  )
 
   ;; Swallow the app hide shortcut while preserving Command chords that add
   ;; other modifiers, plus the separate double-Cmd rift navigation flow.
@@ -16,15 +25,14 @@
       break
   )
 
-  cap-window-open (hold-for-duration 200 cap-window)
   spc-h-edit (multi (macro bspc) (layer-while-held backspace))
 )
 
 (deffakekeys
-  cap-prefix f12
+  lsft-prefix f12
   ;; Internal double-tap detection state only; do not emit a real keycode.
-  cap-window XX
-  cap-shift lsft
+  lsft-window XX
+  lsft-shift lsft
 )
 
 (defchordsv2
