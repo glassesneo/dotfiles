@@ -23,8 +23,8 @@ in
           ];
           org_default_notes_file = inbox_file;
           org_capture_templates = {
-            t = {
-              description = "Inbox Todo";
+            i = {
+              description = "Inbox capture";
               template = [
                 "* TODO %?"
                 ":PROPERTIES:"
