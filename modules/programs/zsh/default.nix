@@ -24,9 +24,11 @@ delib.module {
       };
       dotDir = "${homeConfig.xdg.configHome}/zsh";
       setOptions = [
-        "HIST_IGNORE_ALL_DUPS"
-        "HIST_SAVE_NO_DUPS"
-        "HIST_EXPIRE_DUPS_FIRST"
+        "hist_ignore_all_dups"
+        "hist_save_no_dups"
+        "hist_expire_dups_first"
+        "noclobber"
+        "append_create"
       ];
       history = {
         extended = true;
