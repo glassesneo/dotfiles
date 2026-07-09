@@ -85,7 +85,7 @@ delib.module {
       enable = true;
       git = {
         enable = true;
-        diffToolMode = true;
+        mode = "difftool";
       };
     };
   };

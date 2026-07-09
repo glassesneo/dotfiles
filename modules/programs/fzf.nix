@@ -26,7 +26,7 @@ delib.module {
         "--no-separator"
         "--no-scrollbar"
       ];
-      fileWidgetCommand = "${base-command} ${exclude-dir}";
+      fileWidget.command = "${base-command} ${exclude-dir}";
       tmux = {
         enableShellIntegration = true;
         shellIntegrationOptions = [

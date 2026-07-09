@@ -61,4 +61,7 @@ delib.module {
       ];
     };
   };
+
+  # Zeno depends on fsh
+  myconfig.ifEnabled.programs.zsh.fsh.enable = true;
 }
