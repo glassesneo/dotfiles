@@ -3,7 +3,13 @@
   homeConfig,
   ...
 }: let
-  gtd_dir = "${homeConfig.home.homeDirectory}/gtd";
+  inbox_file = "${homeConfig.home.homeDirectory}/org/inbox.org";
+  gtd_dir = "${homeConfig.home.homeDirectory}/org/gtd";
+  gtd_files = [
+    "${gtd_dir}/tasks.org"
+    "${gtd_dir}/projects.org"
+    "${gtd_dir}/habits.org"
+  ];
 in
   delib.module {
     name = "programs.nvf.orgmode.gtd";
@@ -12,19 +18,11 @@ in
 
     home.ifEnabled = {
       programs.nvf.settings.vim = {
-        notes.orgmode.setupOpts = let
-          inbox_file = "${gtd_dir}/inbox.org";
-        in {
-          org_agenda_files = [
-            inbox_file
-            "${gtd_dir}/tasks.org"
-            "${gtd_dir}/projects.org"
-            "${gtd_dir}/habits.org"
-          ];
-          org_default_notes_file = inbox_file;
+        notes.orgmode.setupOpts = {
+          org_agenda_files = gtd_files;
           org_capture_templates = {
-            i = {
-              description = "Inbox capture";
+            t = {
+              description = "Todo capture";
               template = [
                 "* TODO %?"
                 ":PROPERTIES:"
@@ -32,6 +30,24 @@ in
                 ":END:"
               ];
               target = inbox_file;
+            };
+          };
+
+          org_agenda_custom_commands = {
+            t = {
+              description = "GTD todos";
+              types = [
+                {
+                  type = "tags_todo";
+                  match = ''TODO="TODO"|TODO="NEXT"'';
+                  org_agenda_files = [inbox_file] ++ gtd_files;
+                  org_agenda_overriding_header = "Todo List";
+                  org_agenda_sorting_strategy = [
+                    "todo-state-up"
+                    "priority-down"
+                  ];
+                }
+              ];
             };
           };
           org_todo_keywords = [
