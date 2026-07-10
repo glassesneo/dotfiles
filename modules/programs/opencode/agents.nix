@@ -23,7 +23,6 @@ delib.module {
       else base;
 
     reviewReportFormatContract = readSharedPrompt "review-report-format";
-    implementationReportFormatContract = readSharedPrompt "implementation-report-format";
     reportFilenamePolicy = readSharedPrompt "report-filename-policy";
     failureReportFormatContract = readSharedPrompt "failure-report-format";
     specFilenamePolicy = readSharedPrompt "spec-filename-policy";
@@ -37,34 +36,30 @@ delib.module {
 
       taskmaster = {
         mode = "all";
-        model = "openai/gpt-5.5";
+        model = "openai/gpt-5.6-sol";
         reasoningEffort = "medium";
         description = "Source-changing implementation agent shaped by the received request or command contract.";
-        prompt = renderAgentPrompt "taskmaster" {
-          "{{IMPLEMENTATION_REPORT_FORMAT_CONTRACT}}" = implementationReportFormatContract;
-          "{{REPORT_FILENAME_POLICY}}" = reportFilenamePolicy;
-        };
+        prompt = readAgentPrompt "taskmaster";
         permission = applyCommandExecutionMode agentPerm.composedFull;
       };
 
       ultra-vibe-coding-xhigh-pro-max = {
         mode = "all";
-        model = "openai/gpt-5.5";
-        reasoningEffort = "high";
+        model = "openai/gpt-5.6-sol";
+        reasoningEffort = "medium";
         description = "Primary agent with unrestricted external command execution plus read/write access.";
         prompt = ''
           You are the `ultra-vibe-coding-xhigh-pro-max` agent.
 
-          You may execute external commands without OpenCode permission restrictions and may read/write files as requested.
-          Follow the user's concrete request and report concisely.
+          Execute the received request using the available command and file tools. Make requested source or configuration changes, then report the outcome and any unresolved risk concisely.
         '';
         permission = applyCommandExecutionMode agentPerm.unrestrictedCommandReadWrite;
       };
 
       scout = {
         mode = "all";
-        model = "openai/gpt-5.5";
-        reasoningEffort = "medium";
+        model = "openai/gpt-5.6-sol";
+        reasoningEffort = "high";
         description = "Non-source-writing agent for planning, inspection, and report workflows.";
         prompt = readAgentPrompt "scout";
         permission = applyCommandExecutionMode agentPerm.scoutFull;
@@ -95,7 +90,7 @@ delib.module {
 
       review-orchestrator = {
         mode = "all";
-        model = "openai/gpt-5.5";
+        model = "openai/gpt-5.6-terra";
         reasoningEffort = "high";
         description = "Orchestrates scaled focused code-review perspectives and dissent validation.";
         prompt = renderAgentPrompt "review_orchestrator" {
@@ -153,7 +148,7 @@ delib.module {
 
       researcher = {
         mode = "subagent";
-        model = "opencode/nemotron-3-ultra-free";
+        model = "openai/gpt-5.4-mini";
         reasoningEffort = "high";
         description = "Performs targeted internet research when planning workflows have material knowledge uncertainty.";
         prompt = renderAgentPrompt "researcher" {

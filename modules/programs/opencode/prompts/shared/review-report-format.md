@@ -56,12 +56,9 @@
 
 ## Perspective Results
 
-- **Correctness/regression**: <attempted | skipped> — <concise result or skip reason>
-- **Security/privacy/secrets**: <attempted | skipped> — <concise result or skip reason>
-- **Maintainability/simplicity**: <attempted | skipped> — <concise result or skip reason>
-- **Architecture/ownership**: <attempted | skipped> — <concise result or skip reason>
-- **Tests/validation**: <attempted | skipped> — <concise result or skip reason>
-- **Domain-specific**: <attempted | skipped> — <concise result or skip reason>
+Include one entry for every selected perspective and every perspective that was replaced, skipped, or scaled down:
+
+- **<perspective name>**: <attempted | replaced | skipped | scaled-down> — <selection/handling rationale>; <concise result or gap>
 
 ## Verification Suggestions
 
