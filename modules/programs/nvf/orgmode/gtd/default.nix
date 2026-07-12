@@ -5,21 +5,47 @@
 }: let
   inbox_file = "${homeConfig.home.homeDirectory}/org/inbox.org";
   gtd_dir = "${homeConfig.home.homeDirectory}/org/gtd";
+  tasks_file = "${gtd_dir}/tasks.org";
+  projects_file = "${gtd_dir}/projects.org";
+  habits_file = "${gtd_dir}/habits.org";
+  dates_file = "${gtd_dir}/dates.org";
   gtd_files = [
-    "${gtd_dir}/tasks.org"
-    "${gtd_dir}/projects.org"
-    "${gtd_dir}/habits.org"
+    tasks_file
+    projects_file
+    habits_file
+    dates_file
   ];
 in
   delib.module {
     name = "programs.nvf.orgmode.gtd";
 
-    options = delib.singleCascadeEnableOption;
+    options = with delib;
+      moduleOptions ({parent, ...}: {
+        enable = boolOption parent.enable;
+        org_todo_keywords = readOnly (listOfOption str [
+          "TODO"
+          "NEXT"
+          "WAIT"
+          "|"
+          "DONE"
+          "CANCELLED"
+        ]);
+      });
 
-    home.ifEnabled = {
+    home.ifEnabled = {cfg, ...}: {
       programs.nvf.settings.vim = {
-        notes.orgmode.setupOpts = {
+        notes.orgmode.setupOpts = let
+          allTodoStates =
+            builtins.filter
+            (keyword: keyword != "|")
+            cfg.org_todo_keywords;
+
+          nonTodoMatch =
+            "LEVEL=1/!-"
+            + builtins.concatStringsSep "-" allTodoStates;
+        in {
           org_agenda_files = gtd_files;
+          inherit (cfg) org_todo_keywords;
           org_capture_templates = {
             t = {
               description = "Todo capture";
@@ -31,17 +57,52 @@ in
               ];
               target = inbox_file;
             };
+            d = {
+              description = "Date event capture";
+              template = [
+                "* %?"
+                ":PROPERTIES:"
+                ":CREATED: %U"
+                ":END:"
+              ];
+              target = dates_file;
+            };
           };
 
           org_agenda_custom_commands = {
-            t = {
-              description = "GTD todos";
+            u = {
+              description = "Inbox processing";
               types = [
                 {
                   type = "tags_todo";
-                  match = ''TODO="TODO"|TODO="NEXT"'';
-                  org_agenda_files = [inbox_file] ++ gtd_files;
-                  org_agenda_overriding_header = "Todo List";
+                  match = "LEVEL=1";
+                  org_agenda_files = [inbox_file];
+                  org_agenda_overriding_header = "Unprocessed tasks";
+                  org_agenda_sorting_strategy = [
+                    "todo-state-up"
+                    "priority-down"
+                  ];
+                }
+                {
+                  type = "tags";
+                  match = nonTodoMatch;
+                  org_agenda_files = [inbox_file];
+                  org_agenda_overriding_header = "Non-task captures";
+                }
+              ];
+            };
+            t = {
+              description = "Managed tasks";
+              types = [
+                {
+                  type = "tags_todo";
+                  match = "LEVEL>=1";
+                  org_agenda_files = [
+                    tasks_file
+                    projects_file
+                    habits_file
+                  ];
+                  org_agenda_overriding_header = "Managed tasks";
                   org_agenda_sorting_strategy = [
                     "todo-state-up"
                     "priority-down"
@@ -49,15 +110,25 @@ in
                 }
               ];
             };
+            d = {
+              description = "Date overview";
+              types = [
+                {
+                  type = "agenda";
+                  org_agenda_files = [
+                    inbox_file
+                    tasks_file
+                    projects_file
+                    dates_file
+                    habits_file
+                  ];
+                  org_agenda_overriding_header = "Upcoming dates";
+                  org_agenda_span = 30;
+                  org_agenda_start_on_weekday = false;
+                }
+              ];
+            };
           };
-          org_todo_keywords = [
-            "TODO"
-            "NEXT"
-            "WAIT"
-            "|"
-            "DONE"
-            "CANCEL"
-          ];
           org_todo_repeat_to_state = "TODO";
 
           org_log_done = "time";

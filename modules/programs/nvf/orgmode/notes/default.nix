@@ -5,8 +5,9 @@
 }: let
   inbox_file = "${homeConfig.home.homeDirectory}/org/inbox.org";
   notes_dir = "${homeConfig.home.homeDirectory}/org/notes";
+  incubate_file = "${notes_dir}/incubate.org";
   notes_files = [
-    "${notes_dir}/incubate.org"
+    incubate_file
   ];
 in
   delib.module {
@@ -23,7 +24,7 @@ in
             i = {
               description = "Idea capture";
               template = [
-                "* %? :NOTE:"
+                "* %?"
                 ":PROPERTIES:"
                 ":CREATED: %U"
                 ":END:"
@@ -38,14 +39,8 @@ in
               types = [
                 {
                   type = "tags";
-                  match = ''NOTE'';
-                  org_agenda_files = [inbox_file];
-                  org_agenda_overriding_header = "Raw ideas in inbox";
-                }
-                {
-                  type = "tags";
-                  match = ''NOTE'';
-                  org_agenda_files = notes_files;
+                  match = "LEVEL=1";
+                  org_agenda_files = [incubate_file];
                   org_agenda_overriding_header = "Incubating ideas";
                 }
               ];

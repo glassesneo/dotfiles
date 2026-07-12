@@ -26,6 +26,9 @@ in
             ];
             org_default_notes_file = inbox_file;
             org_startup_indented = true;
+            org_id_link_to_org_use_id = true;
+            org_id_method = "uuid";
+            org_agenda_show_future_repeats = "next";
             win_split_mode = ["float" 0.7];
             win_border = "rounded";
             ui = {
