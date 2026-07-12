@@ -1,73 +1,51 @@
-{delib, ...}:
+{
+  delib,
+  lib,
+  ...
+}:
 delib.module {
   name = "programs.opencode";
 
   home.ifEnabled = let
-    readAgentPrompt = name: builtins.readFile (./prompts + "/${name}.md");
-    readSharedPrompt = name: builtins.readFile (./prompts/shared + "/${name}.md");
-    renderAgentPrompt = name: replacements: let
-      placeholders = builtins.attrNames replacements;
-    in
-      builtins.replaceStrings placeholders (map (_placeholder: replacements.${_placeholder}) placeholders) (
-        readAgentPrompt name
-      );
-
-    implementationReportFormatContract = readSharedPrompt "implementation-report-format";
-    planFilenamePolicy = readSharedPrompt "plan-filename-policy";
-    reportFilenamePolicy = readSharedPrompt "report-filename-policy";
-    strategyCommandTemplate = builtins.readFile ./prompts/commands/strategy.md;
-    specCommandTemplate = builtins.readFile ./prompts/commands/spec.md;
-    planCommandTemplate = builtins.readFile ./prompts/commands/plan.md;
-    actCommandTemplate = renderAgentPrompt "commands/act" {
-      "{{PLAN_FILENAME_POLICY}}" = planFilenamePolicy;
+    readCommandPrompt = name: builtins.readFile (./prompts/commands + "/${name}.md");
+    workflowProfiles = {
+      spec = "spec-only";
+      plan = "plan-only";
+      strategy = "spec-then-plan";
+      act = "plan-then-implement";
+      impl = "implement";
     };
-    implCommandTemplate = renderAgentPrompt "commands/impl" {
-      "{{IMPLEMENTATION_REPORT_FORMAT_CONTRACT}}" = implementationReportFormatContract;
-      "{{REPORT_FILENAME_POLICY}}" = reportFilenamePolicy;
+    workflowDescriptions = {
+      spec = "Coordinate approval-gated specification authoring.";
+      plan = "Coordinate approval-gated implementation planning.";
+      strategy = "Coordinate approved specification and planning stages.";
+      act = "Coordinate an approved lightweight plan and implementation.";
+      impl = "Coordinate authorized implementation from governing context.";
     };
+    workflowCommands = lib.mapAttrs (name: profile: {
+      template = readCommandPrompt name;
+      description = workflowDescriptions.${name};
+      agent = "scout";
+      subtask = false;
+    }) workflowProfiles;
   in {
-    programs.opencode.settings.command = {
-      strategy = {
-        template = strategyCommandTemplate;
-        description = "Create a spec, then optionally a plan, with explicit approvals between stages.";
-        agent = "scout";
-        subtask = false;
-      };
-      spec = {
-        template = specCommandTemplate;
-        description = "Create and confirm a spec through the spec subagent.";
-        agent = "scout";
-        subtask = false;
-      };
-      plan = {
-        template = planCommandTemplate;
-        description = "Create a plan through the planner subagent.";
-        agent = "scout";
-        subtask = false;
-      };
+    assertions = lib.mapAttrsToList (name: profile: {
+      assertion = lib.hasInfix "profile `${profile}`" workflowCommands.${name}.template;
+      message = "OpenCode command `${name}` must select staged workflow profile `${profile}`.";
+    }) workflowProfiles;
+
+    programs.opencode.settings.command = workflowCommands // {
       sensei = {
-        template = builtins.readFile ./prompts/commands/sensei.md;
+        template = readCommandPrompt "sensei";
         description = "Explain reports, files, commits, or git ranges with calibrated teaching.";
         agent = "scout";
         subtask = false;
       };
       idea = {
-        template = builtins.readFile ./prompts/commands/idea.md;
+        template = readCommandPrompt "idea";
         description = "Explore rough ideas conversationally before planning.";
         agent = "scout";
         model = "opencode/deepseek-v4-flash-free";
-        subtask = false;
-      };
-      act = {
-        template = actCommandTemplate;
-        description = "Plan, approve, and implement a small task with taskmaster.";
-        agent = "taskmaster";
-        subtask = false;
-      };
-      impl = {
-        template = implCommandTemplate;
-        description = "Implement a plan or target with taskmaster using the implementation workflow.";
-        agent = "taskmaster";
         subtask = false;
       };
     };

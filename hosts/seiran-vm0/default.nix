@@ -7,7 +7,7 @@ delib.host {
   myconfig.programs.reload.enable = false;
   myconfig.programs.mcp-servers-nix.enable = false;
   myconfig.programs.codex.sandboxMode = "danger-full-access";
-  myconfig.programs.opencode.commandExecutionMode = "full";
+  myconfig.programs.opencode.implementationCommandExecution = "allow";
   myconfig.programs.zsh.zeno.enable = false;
 
   nixos = {

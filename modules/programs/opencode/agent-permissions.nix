@@ -21,52 +21,6 @@ delib.module {
     allowAll = allow ["*"];
     askAll = ask ["*"];
 
-    testCommandPrefixes = [
-      "just"
-      "nix"
-      "nh"
-      "deno"
-      "uv"
-      "npm"
-      "pnpm"
-      "bun"
-      "python"
-      "make"
-    ];
-
-    unsafeTestCommandPatterns = [
-      "just?*apply*"
-      "just?*clean*"
-      "just?*fmt*"
-      "just?*home*"
-      "just?*switch*"
-      "just?*update*"
-      "nix?*fmt*"
-      "nix?*flake?*lock*"
-      "nix?*flake?*update*"
-      "nix?*--update-input*"
-      "npm?*install*"
-      "npm?*publish*"
-      "npm?*version*"
-      "pnpm?*add*"
-      "pnpm?*install*"
-      "pnpm?*publish*"
-      "pnpm?*remove*"
-      "pnpm?*version*"
-      "bun?*add*"
-      "bun?*install*"
-      "bun?*publish*"
-      "bun?*remove*"
-      "bun?*x*"
-      "deno?*install*"
-      "uv?*add*"
-      "uv?*lock*"
-      "uv?*remove*"
-      "uv?*sync*"
-      "python?*-c*"
-      "make?*clean*"
-    ];
-
     merge = a: b: recursiveUpdate a b;
     mergeMany = builtins.foldl' merge {};
     denyShellOperatorsFor = prefixes:
@@ -188,26 +142,8 @@ delib.module {
             // deny (denyShellOperatorsFor ["date"]);
         };
 
-        testAndDebug = {
-          bash =
-            denyAll
-            // allow (map (prefix: "${prefix}*") testCommandPrefixes)
-            // deny (denyShellOperatorsFor testCommandPrefixes ++ unsafeTestCommandPatterns);
-        };
-
         testExecutionAsk = {
-          bash =
-            askAll
-            // allow (map (prefix: "${prefix}*") testCommandPrefixes)
-            // ask (
-              denyShellOperatorsFor (testCommandPrefixes
-                ++ [
-                  "git"
-                  "nix-instantiate"
-                ])
-              ++ unsafeTestCommandPatterns
-              ++ ["git?*--output*"]
-            );
+          bash = askAll;
         };
 
         full = {
@@ -450,6 +386,17 @@ delib.module {
         perm.safety.externalAll
       ];
 
+      implementation = mergeMany [
+        perm.read.workspace
+        perm.write.full
+        perm.execute.testExecutionAsk
+        perm.delegate.all
+        perm.interact.all
+        perm.network.full
+        perm.context.full
+        perm.safety.externalAll
+      ];
+
       unrestrictedCommandReadWrite = mergeMany [
         perm.read.workspace
         perm.write.full
@@ -466,14 +413,14 @@ delib.module {
         ]);
 
       safeEvidenceCollection = mergeMany [
-        perm.execute.testAndDebug
         perm.execute.safeGitInspection
+        perm.execute.safeValidation
       ];
 
       scoutFull = mergeMany [
-        agentsOnly
-        perm.write.tempWorkspace
-        safeEvidenceCollection
+        pureRead
+        perm.execute.safeGitInspection
+        perm.execute.safeValidation
         perm.execute.ghReviewInspection
         perm.interact.question
         perm.context.full
@@ -486,6 +433,7 @@ delib.module {
           "focused-reviewer"
           "review-orchestrator"
           "tester"
+          "taskmaster"
         ])
       ];
 
@@ -500,7 +448,6 @@ delib.module {
         tempWorkspaceWithReports
         perm.execute.safeGitInspection
         perm.execute.safeValidation
-        perm.execute.testAndDebug
         perm.execute.testExecutionAsk
       ];
 
@@ -554,7 +501,6 @@ delib.module {
       reviewOrchestrator = mergeMany [
         reportsOnly
         perm.execute.safeGitInspection
-        perm.execute.gitBranchPreparation
         perm.execute.ghReviewInspection
         perm.interact.question
         perm.context.full

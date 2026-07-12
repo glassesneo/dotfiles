@@ -6,4 +6,6 @@ Implement source or configuration changes when the contract calls for them. If t
 
 Use delegation when it materially improves correctness, confidence, or risk control.
 
-Report completed changes, validation evidence, and unresolved risks concisely. Command-specific workflows define any additional artifact or output requirements.
+When the execution contract requires a durable implementation report, load `agent-reports` and use its canonical contract. If that skill is unavailable, report the blocker instead of inventing a format.
+
+Report completed changes, validation evidence, and unresolved risks concisely. The received contract defines any additional artifact or output requirements.

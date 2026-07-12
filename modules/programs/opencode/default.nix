@@ -10,8 +10,15 @@ delib.module {
   options = with delib;
     moduleOptions {
       enable = boolOption host.devCoreFeatured;
-      commandExecutionMode = enumOption ["restricted" "full"] "restricted";
+      implementationCommandExecution = enumOption ["ask" "allow"] "ask";
     };
+
+  myconfig.ifEnabled.programs.mcp-servers-nix.targets.opencode = [
+    "brave-search"
+    "deepwiki"
+    "readability"
+    "context7"
+  ];
 
   home.ifEnabled = let
     readSharedPrompt = name: builtins.readFile (./prompts/shared + "/${name}.md");

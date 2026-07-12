@@ -36,6 +36,13 @@ when revising local skills.
 - Do not expand it to specs, plans, commit messages, PR comments, inline review notes, or ordinary chat status updates.
 - Drift signal: report production becomes a generic Markdown-summary skill, or template mechanics crowd out evidence and unresolved-risk reporting.
 
+### `staged-agent-workflow`
+
+- Purpose: coordinate approval-gated spec, plan, and implementation profiles through capability-based delegation.
+- Keep runtime-specific command and agent names outside the reusable skill; each consumer maps local agents to the skill's capabilities.
+- Preserve `agent-reports` as the canonical owner of durable report formats and filename policy.
+- Drift signal: the skill becomes tied to one command surface, duplicates specialist artifact templates, or silently substitutes missing capabilities.
+
 ### `liminal-lens`
 
 - Purpose: adjust dialogue posture when the user's request is a compressed, not-yet-finalized thought.

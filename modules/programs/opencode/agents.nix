@@ -17,19 +17,34 @@ delib.module {
         readAgentPrompt name
       );
 
-    applyCommandExecutionMode = base:
-      if myconfig.programs.opencode.commandExecutionMode == "full"
-      then merge base perm.execute.full
-      else base;
+    implementationPermission =
+      if myconfig.programs.opencode.implementationCommandExecution == "allow"
+      then merge agentPerm.implementation perm.execute.full
+      else agentPerm.implementation;
 
-    reviewReportFormatContract = readSharedPrompt "review-report-format";
-    reportFilenamePolicy = readSharedPrompt "report-filename-policy";
-    failureReportFormatContract = readSharedPrompt "failure-report-format";
     specFilenamePolicy = readSharedPrompt "spec-filename-policy";
     planFilenamePolicy = readSharedPrompt "plan-filename-policy";
     dividableTaskStructure = readSharedPrompt "task-breakdown-structure";
     researchFilenamePolicy = readSharedPrompt "research-filename-policy";
   in {
+    assertions = [
+      {
+        assertion = agentPerm.scoutFull.bash != "allow";
+        message = "OpenCode workflow primary must not have unrestricted shell execution.";
+      }
+      {
+        assertion = agentPerm.reviewOrchestrator.bash != "allow" && agentPerm.testRunner.bash != "allow";
+        message = "OpenCode read-only reviewer/tester permissions must not serialize to unrestricted shell execution.";
+      }
+      {
+        assertion =
+          perm.execute.safeGitInspection.bash."git diff*" == "allow"
+          && perm.execute.safeGitInspection.bash."git?*&&*" == "deny"
+          && "git diff*" < "git?*&&*";
+        message = "OpenCode permission ordering must keep narrow git operator denials after broad inspection allowances.";
+      }
+    ];
+
     programs.opencode.settings.agent = {
       plan.disable = true;
       build.disable = true;
@@ -40,7 +55,7 @@ delib.module {
         reasoningEffort = "medium";
         description = "Source-changing implementation agent shaped by the received request or command contract.";
         prompt = readAgentPrompt "taskmaster";
-        permission = applyCommandExecutionMode agentPerm.composedFull;
+        permission = implementationPermission;
       };
 
       ultra-vibe-coding-xhigh-pro-max = {
@@ -53,7 +68,7 @@ delib.module {
 
           Execute the received request using the available command and file tools. Make requested source or configuration changes, then report the outcome and any unresolved risk concisely.
         '';
-        permission = applyCommandExecutionMode agentPerm.unrestrictedCommandReadWrite;
+        permission = agentPerm.unrestrictedCommandReadWrite;
       };
 
       scout = {
@@ -62,7 +77,7 @@ delib.module {
         reasoningEffort = "high";
         description = "Non-source-writing agent for planning, inspection, and report workflows.";
         prompt = readAgentPrompt "scout";
-        permission = applyCommandExecutionMode agentPerm.scoutFull;
+        permission = agentPerm.scoutFull;
       };
 
       spec = {
@@ -73,7 +88,7 @@ delib.module {
         prompt = renderAgentPrompt "spec" {
           "{{SPEC_FILENAME_POLICY}}" = specFilenamePolicy;
         };
-        permission = applyCommandExecutionMode agentPerm.specOnly;
+        permission = agentPerm.specOnly;
       };
 
       planner = {
@@ -85,7 +100,7 @@ delib.module {
           "{{DIVIDABLE_TASK_STRUCTURE}}" = dividableTaskStructure;
           "{{PLAN_FILENAME_POLICY}}" = planFilenamePolicy;
         };
-        permission = applyCommandExecutionMode agentPerm.plannerOnly;
+        permission = agentPerm.plannerOnly;
       };
 
       review-orchestrator = {
@@ -93,11 +108,8 @@ delib.module {
         model = "openai/gpt-5.6-terra";
         reasoningEffort = "high";
         description = "Orchestrates scaled focused code-review perspectives and dissent validation.";
-        prompt = renderAgentPrompt "review_orchestrator" {
-          "{{REVIEW_REPORT_FORMAT_CONTRACT}}" = reviewReportFormatContract;
-          "{{REPORT_FILENAME_POLICY}}" = reportFilenamePolicy;
-        };
-        permission = applyCommandExecutionMode agentPerm.reviewOrchestrator;
+        prompt = readAgentPrompt "review_orchestrator";
+        permission = agentPerm.reviewOrchestrator;
       };
 
       focused-reviewer = {
@@ -106,11 +118,11 @@ delib.module {
         reasoningEffort = "medium";
         description = "Performs injected-perspective read-only code review with evidence-grounded findings.";
         prompt = readAgentPrompt "focused_reviewer";
-        permission = applyCommandExecutionMode (mergeMany [
+        permission = mergeMany [
           agentPerm.pureRead
           perm.execute.safeGitInspection
           perm.context.full
-        ]);
+        ];
       };
 
       dissent-reviewer = {
@@ -119,11 +131,11 @@ delib.module {
         reasoningEffort = "medium";
         description = "Validates review outputs for misses, overreach, severity, and alternate interpretations.";
         prompt = readAgentPrompt "dissent_reviewer";
-        permission = applyCommandExecutionMode (mergeMany [
+        permission = mergeMany [
           agentPerm.pureRead
           perm.execute.safeGitInspection
           perm.context.full
-        ]);
+        ];
       };
 
       explore = {
@@ -131,10 +143,10 @@ delib.module {
         reasoningEffort = "medium";
         description = "Read-only exploration agent for delegated repository and filesystem context gathering.";
         prompt = readAgentPrompt "explore";
-        permission = applyCommandExecutionMode (mergeMany [
+        permission = mergeMany [
           agentPerm.pureRead
           perm.execute.safeGitInspection
-        ]);
+        ];
       };
 
       challenger = {
@@ -143,7 +155,7 @@ delib.module {
         description = "Challenges request/spec framing and assumptions with calibrated evidence checks.";
         reasoningEffort = "medium";
         prompt = readAgentPrompt "challenger";
-        permission = applyCommandExecutionMode agentPerm.challenger;
+        permission = agentPerm.challenger;
       };
 
       researcher = {
@@ -154,7 +166,7 @@ delib.module {
         prompt = renderAgentPrompt "researcher" {
           "{{RESEARCH_FILENAME_POLICY}}" = researchFilenamePolicy;
         };
-        permission = applyCommandExecutionMode agentPerm.networkResearch;
+        permission = agentPerm.networkResearch;
       };
 
       tester = {
@@ -162,11 +174,8 @@ delib.module {
         model = "openai/gpt-5.4-mini";
         reasoningEffort = "medium";
         description = "Source-read-only validation runner that triages failures and writes failure-report files when suites fail.";
-        prompt = renderAgentPrompt "tester" {
-          "{{FAILURE_REPORT_FORMAT_CONTRACT}}" = failureReportFormatContract;
-          "{{REPORT_FILENAME_POLICY}}" = reportFilenamePolicy;
-        };
-        permission = applyCommandExecutionMode agentPerm.testRunner;
+        prompt = readAgentPrompt "tester";
+        permission = agentPerm.testRunner;
       };
     };
   };

@@ -14,9 +14,12 @@ delib.module {
     inputs.skills-deployer.homeManagerModules.skills-deployer
   ];
 
-  home.ifEnabled.programs.skills-deployer = {
-    enable = true;
-    defaultTargetDir = ".agents/skills";
+  home.ifEnabled = let
+    stagedWorkflowTargets = [
+      ".agents/skills"
+      ".claude/skills"
+      ".cursor/skills"
+    ];
     skills = {
       japanese-tech-writing = {
         source = "${inputs.japanese-tech-writing-skill}";
@@ -40,6 +43,10 @@ delib.module {
           ".claude/skills"
           ".cursor/skills"
         ];
+      };
+      staged-agent-workflow = {
+        source = ./skills/staged-agent-workflow;
+        targetDirs = stagedWorkflowTargets;
       };
       accessibility-ux = {
         source = ./skills/accessibility-ux;
@@ -85,6 +92,21 @@ delib.module {
           ".cursor/skills"
         ];
       };
+    };
+  in {
+    assertions = [
+      {
+        assertion =
+          builtins.pathExists ./skills/staged-agent-workflow/SKILL.md
+          && skills.staged-agent-workflow.targetDirs == stagedWorkflowTargets;
+        message = "staged-agent-workflow must be packaged and deployed to the agents, Claude, and Cursor skill directories.";
+      }
+    ];
+
+    programs.skills-deployer = {
+      enable = true;
+      defaultTargetDir = ".agents/skills";
+      inherit skills;
     };
   };
 }
