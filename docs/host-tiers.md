@@ -14,7 +14,6 @@ An unset tier defaults to `standard`. Current declarations are:
 
 | Host | Tier |
 | --- | --- |
-| `kurogane` | `basic` |
 | `seiran` | `full` |
 | `seiran-vm0` | `standard` |
 

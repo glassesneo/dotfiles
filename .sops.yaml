@@ -5,11 +5,6 @@ creation_rules:
           - age1r990kv2jq2vd4fxhf6znzmqqg6w2wfhllw9s9uzjun6tvcd43e3san06yu
           - age1jaf2jhvqsvdrwr5purlmea0uy0jauw000pllpz6ehe5eq5edg5dqc2dscd
           - age1cwfytgvhlf23kxyt4r4et76uwva9jpudy7kdjgpgwtu287cvrawsw09t73
-  - path_regex: ^secrets/kurogane\.yaml$
-    key_groups:
-      - age:
-          - age1r990kv2jq2vd4fxhf6znzmqqg6w2wfhllw9s9uzjun6tvcd43e3san06yu
-
   - path_regex: ^secrets/seiran\.yaml$
     key_groups:
       - age: []

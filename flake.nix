@@ -86,9 +86,9 @@
         # VM validation lives in `checks.aarch64-linux.nixos-seiran-vm0` below.
         nixosConfigurations = {};
         homeConfigurations =
-          filterConfigurationsByHostNames ["seiran" "kurogane"] (mkConfigurations "home");
+          filterConfigurationsByHostNames ["seiran"] (mkConfigurations "home");
         darwinConfigurations =
-          filterConfigurationsByHostNames ["seiran" "kurogane"] (mkConfigurations "darwin");
+          filterConfigurationsByHostNames ["seiran"] (mkConfigurations "darwin");
       };
 
       # ----------------------------------------------------------------
@@ -119,7 +119,7 @@
                 value = config.config.programs.nixvim.build.test;
               }) (pkgs.lib.filterAttrs (
                   name: _:
-                    name == "neo@kurogane" || name == "neo@kurogane-catppuccin"
+                    name == "neo@seiran" || name == "neo@seiran-catppuccin"
                 )
                 homeConfigs);
           in

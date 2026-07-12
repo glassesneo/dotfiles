@@ -84,11 +84,11 @@ backup before rewrapping.
 
 ## Host-specific policy entries
 
-`.sops.yaml` also contains creation rules for `secrets/kurogane.yaml` and
-`secrets/seiran.yaml`, but those encrypted files do not currently exist and are
-not referenced by `modules/toplevel/secrets.nix`. Treat those entries as
-reserved policy, not active secret blobs. If host-specific secrets are added in
-the future, assign every intended recipient to the matching `.sops.yaml` rule
-before creating the encrypted file; the Seiran placeholder currently has no
-recipients and is not usable as-is. Give the encrypted file and declaration a
-clear owner, and update this runbook only when the active rotation model changes.
+`.sops.yaml` also contains a creation rule for `secrets/seiran.yaml`, but that
+encrypted file does not currently exist and is not referenced by
+`modules/toplevel/secrets.nix`. Treat the entry as reserved policy, not an active
+secret blob. If host-specific secrets are added in the future, assign every
+intended recipient to the matching `.sops.yaml` rule before creating the
+encrypted file; the Seiran placeholder currently has no recipients and is not
+usable as-is. Give the encrypted file and declaration a clear owner, and update
+this runbook only when the active rotation model changes.
