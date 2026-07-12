@@ -38,7 +38,8 @@ delib.module {
       }
       {
         assertion =
-          perm.execute.safeGitInspection.bash."git diff*" == "allow"
+          perm.execute.safeGitInspection.bash."git diff*"
+          == "allow"
           && perm.execute.safeGitInspection.bash."git?*&&*" == "deny"
           && "git diff*" < "git?*&&*";
         message = "OpenCode permission ordering must keep narrow git operator denials after broad inspection allowances.";
@@ -82,7 +83,7 @@ delib.module {
 
       spec = {
         mode = "subagent";
-        model = "openai/gpt-5.5";
+        model = "openai/gpt-5.6-terra";
         reasoningEffort = "medium";
         description = "Produces decision-ready spec artifacts under .agents/specs.";
         prompt = renderAgentPrompt "spec" {
@@ -93,8 +94,8 @@ delib.module {
 
       planner = {
         mode = "subagent";
-        model = "openai/gpt-5.4-mini";
-        reasoningEffort = "high";
+        model = "openai/gpt-5.6-terra";
+        reasoningEffort = "medium";
         description = "Produces implementation plan artifacts under .agents/plans.";
         prompt = renderAgentPrompt "planner" {
           "{{DIVIDABLE_TASK_STRUCTURE}}" = dividableTaskStructure;
@@ -105,8 +106,8 @@ delib.module {
 
       review-orchestrator = {
         mode = "all";
-        model = "openai/gpt-5.6-terra";
-        reasoningEffort = "high";
+        model = "openai/gpt-5.6-sol";
+        reasoningEffort = "medium";
         description = "Orchestrates scaled focused code-review perspectives and dissent validation.";
         prompt = readAgentPrompt "review_orchestrator";
         permission = agentPerm.reviewOrchestrator;
@@ -114,7 +115,7 @@ delib.module {
 
       focused-reviewer = {
         mode = "subagent";
-        model = "openai/gpt-5.4-mini";
+        model = "openai/gpt-5.6-terra";
         reasoningEffort = "medium";
         description = "Performs injected-perspective read-only code review with evidence-grounded findings.";
         prompt = readAgentPrompt "focused_reviewer";
@@ -127,7 +128,7 @@ delib.module {
 
       dissent-reviewer = {
         mode = "subagent";
-        model = "openai/gpt-5.4-mini";
+        model = "openai/gpt-5.6-terra";
         reasoningEffort = "medium";
         description = "Validates review outputs for misses, overreach, severity, and alternate interpretations.";
         prompt = readAgentPrompt "dissent_reviewer";
@@ -151,7 +152,7 @@ delib.module {
 
       challenger = {
         mode = "subagent";
-        model = "openai/gpt-5.5";
+        model = "openai/gpt-5.6-terra";
         description = "Challenges request/spec framing and assumptions with calibrated evidence checks.";
         reasoningEffort = "medium";
         prompt = readAgentPrompt "challenger";
