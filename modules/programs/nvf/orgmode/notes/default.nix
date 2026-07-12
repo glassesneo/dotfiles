@@ -38,13 +38,13 @@ in
               types = [
                 {
                   type = "tags";
-                  match = ''+NOTE+TYPE="idea"+IDEA_STATE="raw"'';
+                  match = ''NOTE'';
                   org_agenda_files = [inbox_file];
                   org_agenda_overriding_header = "Raw ideas in inbox";
                 }
                 {
                   type = "tags";
-                  match = ''+NOTE+TYPE="idea"+IDEA_STATE="incubating"'';
+                  match = ''NOTE'';
                   org_agenda_files = notes_files;
                   org_agenda_overriding_header = "Incubating ideas";
                 }
