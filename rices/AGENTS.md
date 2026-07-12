@@ -1,25 +1,8 @@
 # rices/
 
-## Rice-Aware Options Architecture
+## Local Contract
 
-Rices **cannot** reference `pkgs` directly — `pkgs` in `delib.rice` resolves to `x86_64-linux` instead of the host platform (`aarch64-darwin`), causing cross-compilation errors.
-
-**Solution**: Modules define string options that rices set as pure data. Modules then resolve packages using their own `pkgs`:
-
-```nix
-# Module (e.g., modules/programs/tmux/default.nix)
-options.programs.tmux.theme = {
-  plugin = strOption "";
-  pluginConfig = strOption "";
-  extraConfig = strOption "";
-};
-```
-
-**Validation**: Modules assert plugin names exist in `pkgs.*Plugins` with helpful error messages.
-
-## Theme Selection Responsibilities
-
-Rices now select theme data instead of owning palette definitions:
-
-- Set active scheme with `myconfig.colorscheme = config.myconfig.colorschemes.<scheme>.<variant>` (e.g., `colorschemes.catppuccin.macchiato`).
-- Set wallpaper with `myconfig.wallpaper.title = "<symbolic-title>";`; the wallpaper registry resolves titles to concrete paths.
+- Rices select desktop-experience policy only through repository-owned typed interfaces. Feature and toplevel modules own package resolution, upstream options, imports, runtime wiring, and platform behavior.
+- Do not use `pkgs` in `delib.rice`; it does not represent the selected host platform. Select symbolic or typed values and let the owning module resolve packages.
+- Select colors from `myconfig.colorschemes` and wallpapers by symbolic `myconfig.wallpaper.title`; do not define palettes or concrete wallpaper paths here.
+- Keep Nixvim plugin settings, Lua, and autocmds in the Nixvim owner rather than rice policy.

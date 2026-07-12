@@ -64,7 +64,10 @@ delib.module {
             enabled = true;
             win = {
               input.border = "rounded";
-              list.border = lib.mkDefault "solid";
+              list.border =
+                if myconfig.programs.nixvim.appearance.rounded-borders
+                then lib.mkForce "rounded"
+                else lib.mkDefault "solid";
               preview.border = "rounded";
               backdrop = {
                 transparent = true;

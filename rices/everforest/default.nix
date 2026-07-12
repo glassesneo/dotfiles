@@ -1,6 +1,7 @@
 {
   config,
   delib,
+  lib,
   ...
 }: let
   colors = config.myconfig.colorschemes.everforest."dark-medium";
@@ -15,9 +16,28 @@ in
     inherits = ["laptop"];
 
     myconfig = {
+      darwin.window-manager.backend = lib.mkDefault "aerospace";
       colorscheme = colors;
       wallpaper.title = "forest";
-      programs.ghostty.quick-terminal.background = colors.base00;
+      programs.ghostty = {
+        appearance = {
+          background-opacity = 0.4;
+          background-blur = 5;
+          background = colors.base00;
+          foreground = colors.base05;
+          cursor = colors.base05;
+          selection-background = colors.base02;
+          selection-foreground = colors.base05;
+          palette = colorschemeLib.toTerminalPalette colors;
+        };
+        quick-terminal.background = colors.base00;
+      };
+      programs.nixvim.appearance = {
+        theme = "everforest";
+        everforest-background = "medium";
+        transparent = true;
+        transparent-floats = true;
+      };
 
       services = {
         jankyborders = {
@@ -68,108 +88,6 @@ in
           set -g popup-style 'bg=default,fg=${colors.base05}'
           set -g popup-border-style 'fg=${colors.base0B}'
         '';
-      };
-    };
-
-    home = {
-      programs = {
-        nixvim = {
-          colorschemes.everforest = {
-            enable = true;
-            settings = {
-              background = "medium";
-              transparent_background = 2;
-            };
-            lazyLoad.enable = true;
-          };
-          plugins.bufferline.settings = {
-            options = {
-              indicator = {
-                style = "underline";
-              };
-              show_tab_indicators = true;
-            };
-            highlights = {
-              buffer_selected = {
-                fg = "${colors.base07}";
-                bold = true;
-                italic = false;
-                underline = true;
-                sp = "${colors.base0B}";
-              };
-              buffer_visible = {
-                fg = "${colors.base05}";
-              };
-              background = {
-                fg = "${colors.base04}";
-              };
-              indicator_selected = {
-                fg = "${colors.base0B}";
-                sp = "${colors.base0B}";
-                underline = true;
-              };
-              indicator_visible = {
-                fg = "${colors.base04}";
-              };
-              separator = {
-                fg = "${colors.base02}";
-              };
-              separator_selected = {
-                fg = "${colors.base02}";
-              };
-              separator_visible = {
-                fg = "${colors.base02}";
-              };
-              modified_selected = {
-                fg = "${colors.base0B}";
-              };
-              modified_visible = {
-                fg = "${colors.base05}";
-              };
-              modified = {
-                fg = "${colors.base04}";
-              };
-              tab_selected = {
-                fg = "${colors.base07}";
-                bold = true;
-              };
-              tab = {
-                fg = "${colors.base04}";
-              };
-            };
-          };
-          autoCmd = [
-            {
-              event = ["ColorScheme" "VimEnter"];
-              pattern = ["*"];
-              once = false;
-              callback.__raw = ''
-                function()
-                  local groups = {
-                    "Normal", "NormalNC", "NormalFloat",
-                    "SignColumn", "EndOfBuffer", "LineNr", "CursorLineNr",
-                    "Folded", "FoldColumn", "VertSplit", "StatusLine", "StatusLineNC",
-                  }
-                  for _, g in ipairs(groups) do
-                    vim.api.nvim_set_hl(0, g, { bg = "none" })
-                  end
-                end
-              '';
-            }
-          ];
-        };
-        ghostty = {
-          settings = {
-            background-opacity = 0.4;
-            background-blur = 5;
-            background = colors.base00;
-            foreground = colors.base05;
-            cursor-color = colors.base05;
-            selection-background = colors.base02;
-            selection-foreground = colors.base05;
-            palette = colorschemeLib.toGhosttyPalette colors;
-          };
-        };
       };
     };
   }

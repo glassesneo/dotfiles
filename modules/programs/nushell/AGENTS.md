@@ -1,23 +1,9 @@
 # modules/programs/nushell/
 
-## Overview
+## Local Contract
 
-Nushell configuration with custom plugins, completions, and API integrations. Enabled by default.
-
-## Architecture
-
-- `config.nu` stays minimal — real configuration lives in the Nix module, which controls what loads.
-- `env.nu` is empty — environment setup delegated to Nix `extraEnv`.
-- Plugin binaries (`gstat`, `query`) injected into `$PATH` by Nix, not manually in config.
-- Completions are auto-imported from `nu_scripts` through the Nix module.
-- Files deployed to `~/.config/nushell/` via XDG config.
-
-## Custom Modules
-
-- **`plugins/iniad.nu`**: INIAD campus IoT API client (room sensors, locker, IC card management). Auth: `$env.INIAD_ID`, `$env.INIAD_PASSWORD`.
-- **`plugins/ai_mop.nu`**: Unified AI API client for OpenAI/Anthropic via INIAD proxy. Auth: `$env.AI_MOP_API_KEY`. Chat functions accept stdin for message content.
-- **`completions/sketchybar.nu`**: Rich CLI completions for SketchyBar. Dynamically queries running SketchyBar instance for item/event names.
-
-## Key Detail
-
-SketchyBar completions are loaded with qualified namespace (`"sketchybar extern" *`) to prevent naming collisions. INIAD and AI MOP plugins are unqualified (exported directly).
+- Keep `config.nu` minimal; the Nix module owns loaded configuration.
+- Keep `env.nu` empty; Nix `extraEnv` owns environment setup.
+- Nix owns plugin binaries, completion loading, environment injection, and XDG deployment; do not duplicate that wiring in Nushell source files.
+- Keep SketchyBar completions in the qualified `"sketchybar extern" *` namespace to avoid collisions. Locally authored API modules intentionally export their commands unqualified.
+- API credentials are environment inputs supplied by the Nix/secret owner; never embed them in `.nu` files.

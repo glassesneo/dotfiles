@@ -1,46 +1,13 @@
 # modules/config/
 
-## Constants
+## Shared Data Ownership
 
-User metadata is centralized in @modules/config/constants.nix.
-Use `constants.username`, `constants.userfullname`, `constants.useremail` instead of literals.
+- `constants.nix` owns user metadata; consume its exported constants instead of repeating literals.
+- `colorschemes/` owns palette data and validation. Keep palettes as pure color/polarity data; consumers use the selected shared colorscheme rather than redefining it.
+- `wallpaper/` owns the symbolic wallpaper registry and resolves selections for the desktoppr feature. Rices and consumers must not pass concrete wallpaper paths around this boundary.
+- `host-tier.nix` exports the shared `tiers` helper for ordered comparisons; `docs/host-tiers.md` owns the tier semantics.
 
-## Colorscheme Registry
+## Local Decision Rules
 
-Theme palettes are owned by `@modules/config/colorschemes/`.
-
-- Registry option: `myconfig.colorschemes` — nested `attrsOf (attrsOf paletteType)`, keyed by `<scheme>.<variant>`.
-- Access a palette: `config.myconfig.colorschemes.<scheme>.<variant>` (e.g., `colorschemes.catppuccin.macchiato`, `colorschemes.everforest."dark-medium"`, `colorschemes.monochrome.default`).
-- Active selection: `myconfig.colorscheme` — a resolved `paletteType` object set by the active rice.
-- Shared export for consumers: `myconfig.always.args.shared.colorscheme`
-
-Add/update palette files under `@modules/config/colorschemes/schemes/*.nix`.
-Keep values as pure data (`#RRGGBB` + `polarity`), and keep cross-module package logic out of this directory.
-
-## Wallpaper Registry
-
-Wallpaper choices are owned by `@modules/config/wallpaper/`.
-
-- Registry option: `myconfig.wallpaper.wallpapers` — read-only wallpaper title to image path mapping.
-- Active selection: `myconfig.wallpaper.title` — symbolic wallpaper title set by the active rice (e.g., `"forest"`, `"sakura"`, `"roses"`).
-- Program handoff: the wallpaper module resolves the selected title to a concrete path and passes it to `myconfig.programs.desktoppr.picture`.
-
-Rices should select wallpapers by title only. Do not write `home.programs.desktoppr.settings.picture` or pass concrete wallpaper paths from rice files; `modules/programs/desktoppr/default.nix` owns the desktoppr-specific wiring.
-
-## Host Tier Helpers
-
-`modules/config/host-tier.nix` exports the shared arg `tiers` for ordered tier comparisons.
-Full semantics and usage: `docs/host-tiers.md`.
-
-## Editor Keymaps
-
-Editor keymaps are owned by each editor module. Keep concrete Neovim mappings in `modules/programs/nixvim/` and concrete Zed mappings in `modules/programs/zed-editor/`.
-
-Do not add a shared keymap registry unless there is a real cross-editor contract that is simpler than editor-local definitions. Plugin-specific Neovim mappings remain in their plugin modules.
-
-## MCP Node Package Management (bun2nix)
-
-MCP server npm packages are managed via bun2nix in `node-packages/`.
-When adding, updating, or removing packages, update the package manifest, lockfile,
-and generated bun2nix output together; stage all generated files before Nix
-evaluation because flakes only read git-tracked files.
+- Editor modules own their concrete keymaps. Add a shared keymap contract only when a genuine cross-editor abstraction is simpler than editor-local definitions.
+- MCP server npm packages are managed as one bun2nix unit in `node-packages/`; update its manifest, lockfile, and generated output together.

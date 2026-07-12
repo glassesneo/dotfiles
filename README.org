@@ -3,207 +3,50 @@
 
 * Overview
 
-This repository is my declarative macOS setup built with
+This repository is a declarative workstation configuration built with
 [[https://github.com/yunfachi/denix][Denix]], [[https://github.com/nix-darwin/nix-darwin][nix-darwin]], and
-[[https://github.com/nix-community/home-manager][Home Manager]].
+[[https://github.com/nix-community/home-manager][Home Manager]]. It composes host definitions, reusable features, and selectable
+desktop themes (rices) into system and user configurations.
 
-It currently manages two Apple Silicon hosts and uses Denix to compose host
-definitions, reusable modules, and theme variants ("rices") into both
-user-level and system-level configurations. The day-to-day default host is
-=seiran=.
+Denix discovers =.nix= files under =hosts/=, =modules/=, and =rices/=. The
+canonical ownership rules and change checklist are in
+=docs/denix-architecture.md=.
 
-What this repo optimizes for:
+* Getting Started
 
-- reproducible workstation setup with Nix flakes
-- modular configuration without hand-wired import trees
-- themeable desktop and editor setup through reusable rices
-- AI-heavy local tooling, including Codex, Claude Code, OpenCode, and MCP wiring
-- a layout that future me can re-enter without reverse-engineering the whole tree
-
-* Mental Model
-
-Denix auto-discovers =.nix= files under =hosts/=, =modules/=, and =rices/=.
-That gives the repo its shape:
-
-- =hosts/= defines machine-specific facts such as platform, default rice, and host-only wiring
-- =modules/= contains reusable configuration split into =config/=, =programs/=, =services/=, and =toplevel/=
-- =rices/= contains theme variants and inheritance-only theme bases
-
-The important constraints are:
-
-- Do not manually stitch modules together across those Denix discovery trees.
-- Flakes only see git-tracked files, so new files must be added before evaluation or builds.
-- Rices should stay data-oriented. Modules own package resolution and platform-specific wiring.
-- Secrets are consumed through =config.sops.secrets.<key>.path=, not hardcoded paths or plaintext values.
-
-If you are entering the repo cold and need the actual module-boundary and
-splitting rules, read =docs/denix-architecture.md= next. This README keeps the
-high-level map only.
-
-Hosts carry a performance tier (=minimal=, =basic=, =standard=, =full=) that
-modules can use to scale behavior to machine capability. See
-=docs/host-tiers.md= for the full contract.
-
-Current default host/theme reality:
-
-- Host: =seiran=
-- Platform: =aarch64-darwin=
-- Default rice: =catppuccin=
-- Tier: =full=
-- Display: notch-aware laptop layout
-- Other selectable rices: =monochrome=, =everforest=
-
-Other host currently defined:
-
-- =kurogane= — =aarch64-darwin= laptop, default rice =monochrome=, tier =basic=
-
-* Daily Workflows
-
-A =justfile= provides short aliases for all common commands. Run =just= (from
-=nix develop=) to see the full recipe list.
+Enter the development shell, then use =just= to list the maintained workflows:
 
 #+begin_src sh
-just home                      # Home Manager only (fastest)
-just switch                    # Full system (darwin + home-manager)
-just rice catppuccin           # Switch rice
-just apply                     # fmt → check → switch (safe full deploy)
-just check                     # Validate flake
-just fmt                       # Format via treefmt
-just develop                   # Enter dev shell
-just update                    # Update all flake inputs
-just upgrade                   # Update + apply
-just clean                     # Clean generations (keep 5)
-#+end_src
-
-Override the default host or keep count:
-
-#+begin_src sh
-just host=kurogane switch
-just keep=3 clean
-#+end_src
-
-The underlying commands are still available directly:
-
-#+begin_src sh
-nh home switch
-nh darwin switch . -H seiran -Lt
-nix flake check
-nix fmt
 nix develop
+just
+just check
+just home
+just switch
 #+end_src
 
-* Key Subsystems
+New files used by the flake must be git-tracked before evaluation. Prefer the
+Nix-native workflows in this repository over ad hoc package state.
 
-** Theming
+* Repository Orientation
 
-Theme data lives in =modules/config/colorschemes/= and =rices/=.
-Rices choose colors, wallpaper, and theme-oriented option values; modules
-consume those values to configure tools such as Ghostty, tmux, nixvim,
-SketchyBar, and JankyBorders.
+- =hosts/= contains machine facts and host-only bindings.
+- =modules/= contains reusable program, service, shared-data, and toplevel integration modules.
+- =rices/= contains desktop-experience policy selected through repository-owned interfaces.
+- =docs/= contains stable cross-cutting policy and runbooks.
+- =node-packages/= contains bun2nix-managed packages used by Nix wrappers.
 
-The inheritance-only rice at =rices/inheritanceOnly/laptop.nix= holds shared
-laptop defaults. Concrete rices such as =monochrome=, =catppuccin=, and
-=everforest= build on top of it.
+* Operational Pointers
 
-** Secrets
-
-Secrets are declared centrally in =modules/toplevel/secrets.nix= and consumed
-through host-specific secret bindings when a host needs them. The encrypted
-source of truth is managed with
-[[https://github.com/Mic92/sops-nix][sops-nix]].
-
-If you need the exact file paths or the rotation procedure, use
-=docs/secrets-key-rotation.md= rather than expanding the root README.
-
-** AI And Agent Tooling
-
-This repo has first-class configuration for:
-
-- Claude Code
-- Codex
-- OpenCode
-- agent-browser
-- shared MCP server wiring
-
-The MCP source of truth lives in =modules/programs/mcp-servers/default.nix=.
-That module owns server definitions, target-specific adapters, validation
-assertions, and secret-aware runtime wiring.
-
-Some MCP helpers come from =node-packages/=, which is a bun2nix-managed Node
-package set used by the Nix wrappers in =modules/config/node-packages.nix=.
-
-** AquaSKK (Japanese Input)
-
-AquaSKK is installed declaratively via =modules/programs/aquaskk/=. The module
-seeds required AquaSKK preferences at activation time using =defaults write=
-into the =jp.sourceforge.inputmethod.aquaskk= domain. This runs after Home
-Manager's =linkGeneration= phase so that any previously managed symlink is
-cleaned up before the real CFPreferences plist is created.
-
-Input-source registration (=com.apple.HIToolbox=) is owned declaratively by the
-AquaSKK module via the central aggregation interface in
-=modules/toplevel/nix-darwin/system/ime.nix=.
-
-If AquaSKK does not appear in Input Sources after activation:
-
-1. Log out and log back in (macOS discovers input methods on session start).
-2. If it still doesn't appear, go to System Settings → Keyboard → Input Sources
-   → Edit → Add Input Source, then search for "AquaSKK" and add it.
-
-If activation warns about a symlink at
-=~/Library/Preferences/jp.sourceforge.inputmethod.aquaskk.plist=, remove or
-back up the symlink, then re-run activation:
-
-#+begin_src sh
-rm ~/Library/Preferences/jp.sourceforge.inputmethod.aquaskk.plist
-nh home switch
-#+end_src
-
-** Development Environment
-
-The flake defines a small maintenance shell with tools such as =bun=, =deno=,
-=just=, =nickel=, =stylua=, and =emmylua-ls=. A =justfile= at repo root
-provides short aliases for all common workflows. Formatting is configured
-through =treefmt.nix=.
-
-This is a Nix-native repo. Prefer changing the flake and modules over managing
-tool state outside the configuration, unless a local module explicitly requires
-it.
-
-* Repository Map
-
-#+begin_example
-.
-├── docs/           Stable policy docs and runbooks
-├── hosts/          Host-specific definitions and bindings
-├── modules/        Reusable Denix modules
-├── node-packages/  bun2nix-managed Node packages for MCP-related wrappers
-├── nickel/         Nickel experiments and support material
-├── rices/          Theme variants and inheritance-only theme bases
-└── var/            Small repo-local artifacts and planning scratch files
-#+end_example
-
-Within =modules/=:
-
-- =config/= holds shared data and cross-cutting configuration helpers
-- =programs/= configures user-facing tools
-- =services/= configures desktop services such as AeroSpace and SketchyBar
-- =toplevel/= handles broad system/user wiring such as Nix, Home Manager, fonts, and secrets
-  - =toplevel/nix-darwin/system/= — shared OS policy (activation, host, security, IME aggregation)
-  - =toplevel/nix-darwin/preferences/= — shared macOS user preferences (appearance, dock, input, etc.)
-
-You will also see directories such as =.agents/=, =.claude/=,
-=.agent-browser/=, =.opencode/=, and =.crush/=. Those are local runtime or
-tool-state directories, not the main declarative source of truth.
-
-* Pointers
-
-- Denix architecture and module-splitting guide: =docs/denix-architecture.md=
+- Architecture and ownership: =docs/denix-architecture.md=
 - Documentation policy: =docs/documentation-policy.md=
-- Coding agents entry guidance: =AGENTS.md=
-- Module tree guidance: =modules/AGENTS.md=
-- Config-specific notes: =modules/config/AGENTS.md=
-- Toplevel/secrets notes: =modules/toplevel/AGENTS.md=
+- Host performance tiers: =docs/host-tiers.md=
+- SOPS key rotation: =docs/secrets-key-rotation.md=
+- AquaSKK setup and recovery: =modules/programs/aquaskk/README.md=
+- Coding-agent entry guidance: =AGENTS.md=
+
+Secrets are declared by =modules/toplevel/secrets.nix= and consumed through
+=config.sops.secrets.<key>.path=. Never place plaintext credentials in the
+repository.
 
 * License
 

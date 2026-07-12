@@ -8,8 +8,8 @@ delib.module {
 
   options = delib.singleEnableOption true;
 
-  home.ifEnabled.programs.nixvim = {
-    plugins = {
+  home.ifEnabled = {myconfig, ...}: {
+    programs.nixvim.plugins = {
       fugitive = {
         enable = true;
       };
@@ -49,7 +49,10 @@ delib.module {
           max_file_length = 40000; # Disable if file is longer than this (in lines)
           preview_config = {
             # Options passed to nvim_open_win
-            border = lib.mkDefault "single";
+            border =
+              if myconfig.programs.nixvim.appearance.rounded-borders
+              then lib.mkForce "rounded"
+              else lib.mkDefault "single";
             style = "minimal";
             relative = "cursor";
             row = 0;

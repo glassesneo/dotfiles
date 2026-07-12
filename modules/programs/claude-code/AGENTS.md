@@ -2,14 +2,12 @@
 
 ## Agent Source of Truth
 
-Global Claude Code agent behavior is defined by these sources in this directory:
-
-- `prompts/*.md` — canonical prompt content for `researcher`, `code_reviewer`, and `tester`.
-- `default.nix` — agent metadata/wiring under `programs.claude-code.agents`, plus settings and permissions.
-- `GLOBAL_CLAUDE.md` — global memory injected via `programs.claude-code.memory.text`; contains tool usage rules and proactive delegation guidance.
+`prompts/*.md` owns global agent prompt behavior, `default.nix` owns metadata,
+wiring, settings, and permissions, and `GLOBAL_CLAUDE.md` owns global runtime
+memory. Keep each rule at the layer that consumes it.
 
 Project-local `.claude/agents/` definitions can override or shadow these global agents.
 
 ## Tester Artifacts
 
-The `tester` subagent writes non-trivial failure reports to `.agents/reports/` only when the current workspace is a git repo. Outside git repos, it returns structured failure content inline without creating report files.
+The `tester` subagent writes non-trivial failure reports to `.agents/reports/` only when the current workspace is a git repo. Outside git repos, it returns structured failure content inline.

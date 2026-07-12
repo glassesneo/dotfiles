@@ -1,120 +1,59 @@
 # Documentation Policy
 
-## Purpose
+This file is the canonical policy for documentation ownership and placement.
 
-This repository keeps documentation minimal by default. Document stable constraints, safety-critical workflows, and non-obvious local invariants once. Leave volatile details undocumented unless they are required to use or modify the repository safely.
+## Document roles
 
-## Audiences And Owners
+- **Normative documentation** defines durable rules and required boundaries.
+  `docs/denix-architecture.md` is the sole canonical architecture contract;
+  this file is the canonical documentation contract.
+- **Descriptive documentation** orients readers to the current repository
+  without creating rules. `README.org` is the concise human landing page.
+- **Operational documentation** gives a safe procedure for a concrete task.
+  Put cross-cutting runbooks in `docs/` and subsystem runbooks beside their
+  owning source.
+- **Local-contract documentation** records durable, non-obvious constraints for
+  one subtree. Use a local `README.md` for human operation and `AGENTS.md` for
+  agent-facing decision rules.
 
-| Document | Primary audience | Owns |
-| --- | --- | --- |
-| `README.org` | Humans | Repository overview, major directory map, durable onboarding context |
-| `AGENTS.md` | Coding agents | Repo-specific agent entry guidance that is not already owned elsewhere |
-| `docs/documentation-policy.md` | Maintainers and agents editing docs | Canonical rules for what to document, what to omit, and where documentation belongs |
-| Local `AGENTS.md` / `README.md` | People and agents working in a subtree | Module-local invariants, workflows, and examples that do not belong at repo root |
-| Source comments / doc comments | Maintainers editing a file | Non-obvious behavior, invariants, and constraints that are easiest to keep correct next to code |
+Source comments own invariants that are easiest to keep correct beside the
+implementation.
 
-Every statement should have one clear owner. If the same guidance appears in multiple files, keep the canonical copy and replace the rest with a short pointer.
+## Canonical ownership
 
-## Allowed Documentation Locations
+Every durable statement has one canonical owner. Other documents may summarize
+only what their audience needs and must point to that owner for the complete
+rule. When a rule changes, update its owner first and remove contradictory or
+duplicated text in the same change.
 
-- Use `README.org` at repo root for the human landing page.
-- Use root `AGENTS.md` only as the concise agent entry point.
-- Use `docs/` for stable cross-cutting policy or runbooks that are too detailed for root entry-point files.
-- Use local `AGENTS.md` or `README.md` files for subtree-specific guidance.
-- Use comments in `.nix` and support files for local invariants that are hard to infer from structure alone.
+Document a fact when it is stable and at least one of these applies: omitting it
+could cause unsafe or invalid changes; behavior is not evident from source; a
+workflow needs an authoritative owner; or repeated rediscovery is costly.
+Avoid volatile inventories, temporary migration notes, command-help copies, and
+facts obvious from nearby source.
 
-Do not create a new root-level guidance file unless an existing owner cannot reasonably hold the content.
+## Placement
 
-## Root File Boundaries
+- Keep the root `README.org` focused on human orientation and first commands.
+- Keep root and local `AGENTS.md` files focused on agent-facing constraints and
+  local deltas; do not copy architecture policy into them.
+- Use `docs/` for stable cross-cutting contracts and runbooks.
+- Colocate subsystem operations and contracts with their concrete owner.
+- Prefer comments for file-local invariants and external-tool workarounds.
 
-### `README.org`
+Documentation stays physically flat by default. Create a nested document only
+when a concrete subsystem is its owner; do not create another root guidance file
+when an existing owner can hold the content.
 
-Keep:
-- What the repository is
-- Major directories and durable architecture orientation
-- High-level workflows a human needs to get started
+## Maintenance checks
 
-Avoid:
-- Agent-specific prompting guidance
-- Full copies of operational runbooks
-- Long command catalogs that are better kept near the relevant tool or subtree
+- Verify links and referenced paths when editing documentation.
+- Check references before deleting or moving a document.
+- State the audience and owner implicitly through the selected role and
+  location; do not duplicate a repository manual to make a local file complete.
+- Keep operational commands aligned with the source and encrypted-file model
+  they operate on.
 
-### `AGENTS.md`
-
-Keep:
-- Repo-specific guidance needed by coding agents on entry
-- Pointers to canonical docs instead of restating them
-- Stable architecture and ownership boundaries that are not obvious from file listings
-
-Avoid:
-- Repeating the same repository manual found in `README.org`
-- Repeating shared methodology maintained outside this repository
-- Detailed policy text copied from this file
-- Directory inventories that are easier to inspect directly
-
-## What To Document
-
-Document when at least one of these is true:
-
-- The rule is stable and likely to remain true across routine config churn.
-- Missing the rule would cause broken builds, invalid evaluation, or unsafe changes.
-- The behavior is non-obvious from file names, option names, or surrounding code.
-- A human or agent must know where to find the authoritative owner for a workflow.
-- The knowledge is local to a subtree and would be expensive to rediscover repeatedly.
-
-Good examples in this repository:
-
-- Denix auto-discovery constraints
-- The git-tracked-file requirement for flakes
-- Secrets ownership and the canonical runbook location
-- Module-local constraints such as palette data rules or wrapper behavior
-
-## What To Leave Undocumented
-
-Normally do not document:
-
-- Facts obvious from directory names or simple code reading
-- Volatile inventories of modules, packages, or host tweaks that change frequently
-- Step-by-step instructions that merely restate a command's help output
-- Temporary migration notes after the migration is complete
-- Generic agent methodology already maintained in upstream or global instructions
-
-If a detail changes often but still matters, prefer a short pointer to the owning file instead of copying the detail into another doc.
-
-## Colocated Comment Rules
-
-Prefer source comments or doc comments over external docs when the information is tightly bound to one file or expression.
-
-Add comments for:
-- Non-obvious invariants
-- Safety constraints
-- Workarounds for external tool behavior
-- Data-shape assumptions that are easy to break during refactors
-
-Skip comments for:
-- Trivial assignments
-- Repetition of option names
-- Broad repository policy that belongs in this file or a local guide
-
-## Local Documentation Rules
-
-Create a local `AGENTS.md` or `README.md` only when a subtree has stable rules that would distract from root docs.
-
-Local docs should:
-- Focus on that subtree's responsibilities and constraints
-- Prefer architecture ownership and stable invariants over physical file inventories
-- Link to the root policy instead of re-explaining it
-- Avoid repeating root-wide build or secrets guidance unless the subtree changes the rule
-
-## Maintenance Expectations
-
-- When editing docs, remove duplication instead of copying updated text into multiple places.
-- When a rule changes, update the canonical owner first and trim stale copies in the same change.
-- When deleting a doc, first check for references in code and docs.
-- When adding a new doc, state its audience and why an existing owner was insufficient.
-
-## Current Canonical Pointers
-
-- Secrets rotation runbook: `docs/secrets-key-rotation.md`
-- Module-specific guidance examples: `modules/AGENTS.md`, `modules/config/AGENTS.md`, `modules/toplevel/AGENTS.md`
+Current operational owners include `docs/secrets-key-rotation.md` and
+`modules/programs/aquaskk/README.md`. Host tier semantics are described in
+`docs/host-tiers.md`.

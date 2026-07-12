@@ -32,29 +32,29 @@
     rgb = lib.strings.removePrefix "#" normalizedHex;
   in "0x${normalizedAlpha}${rgb}";
 
-  toGhosttyPalette = colors: [
-    "0=${colors.base00}"
-    "1=${colors.base08}"
-    "2=${colors.base0B}"
-    "3=${colors.base0A}"
-    "4=${colors.base0D}"
-    "5=${colors.base0E}"
-    "6=${colors.base0C}"
-    "7=${colors.base05}"
-    "8=${colors.base03}"
-    "9=${colors.base08}"
-    "10=${colors.base0B}"
-    "11=${colors.base0A}"
-    "12=${colors.base0D}"
-    "13=${colors.base0E}"
-    "14=${colors.base0C}"
-    "15=${colors.base07}"
+  toTerminalPalette = colors: [
+    colors.base00
+    colors.base08
+    colors.base0B
+    colors.base0A
+    colors.base0D
+    colors.base0E
+    colors.base0C
+    colors.base05
+    colors.base03
+    colors.base08
+    colors.base0B
+    colors.base0A
+    colors.base0D
+    colors.base0E
+    colors.base0C
+    colors.base07
   ];
 in
   delib.module {
     name = "config.colorschemes.lib";
 
     myconfig.always.args.shared.colorschemeLib = {
-      inherit normalizeHex toArgb toGhosttyPalette;
+      inherit normalizeHex toArgb toTerminalPalette;
     };
   }

@@ -1,75 +1,42 @@
 # Host Performance Tiers
 
-## What a tier represents
+A host tier is a manually assigned capability label that modules may use for
+ordered feature defaults. It does not automatically inspect hardware.
 
-A tier is a single ordered label that describes a host's overall performance capability. Modules use it to decide what to install or enable based on how much the machine can handle.
+The schema in `flake.nix` permits, from least to most capable:
 
-## Tier values
+1. `minimal`
+2. `basic`
+3. `standard`
+4. `full`
 
-The supported values, from least to most capable:
+An unset tier defaults to `standard`. Current declarations are:
 
-1. `minimal` -- headless or heavily constrained environments
-2. `basic` -- low-power machines with limited resources
-3. `standard` -- typical workstations (schema default)
-4. `full` -- high-end machines that can run everything
+| Host | Tier |
+| --- | --- |
+| `kurogane` | `basic` |
+| `seiran` | `full` |
+| `seiran-vm0` | `standard` |
 
-Hosts that do not set `tier` default to `standard`.
+`modules/config/host-tier.nix` exports the shared `tiers` argument:
 
-## Where the tier is declared
+- `tiers.ordered`: the ordered list above
+- `tiers.rank tier`: the zero-based rank
+- `tiers.atLeast current minimum`: whether `current >= minimum`
+- `tiers.atMost current maximum`: whether `current <= maximum`
 
-Each host sets its tier in its Denix host definition:
-
-```nix
-# hosts/<name>/default.nix
-delib.host {
-  name = "seiran";
-  type = "laptop";
-  rice = "catppuccin";
-  tier = "full";
-}
-```
-
-The `tier` option is defined as a Denix host schema extension via `hosts.extraSubmodules` in `flake.nix`.
-
-## How modules consume tiers
-
-Modules receive two args through the shared-arg pattern:
-
-- `host.tier` -- the raw tier string for the current host
-- `tiers` -- an attrset of ordered-comparison helpers
-
-### The `tiers` helper API
-
-| Helper | Signature | Description |
-| --- | --- | --- |
-| `tiers.ordered` | `[string]` | The ordered list: `["minimal" "basic" "standard" "full"]` |
-| `tiers.rank` | `tier -> int` | Returns the integer rank (0-3) |
-| `tiers.atLeast` | `current -> minimum -> bool` | True when `current >= minimum` |
-| `tiers.atMost` | `current -> maximum -> bool` | True when `current <= maximum` |
-
-### Example usage in a future module
+Example:
 
 ```nix
 {delib, host, tiers, ...}:
 delib.module {
   name = "programs.heavy-tool";
-
   options = delib.singleEnableOption (tiers.atLeast host.tier "standard");
-
-  home.ifEnabled.programs.heavy-tool.enable = true;
 }
 ```
 
-This enables the program by default only on `standard` or `full` hosts.
+Modules must opt in explicitly to tier-aware behavior. Extend the enum only for
+a demonstrated capability distinction; do not infer tiers from hardware.
 
-## Non-goals
-
-- This framework does not change any existing module behavior. Modules must explicitly opt in to tier-aware logic.
-- The tier is a manual declaration, not auto-detected from hardware.
-- The four-tier enum is intentionally small. Expand only if real use cases demand it.
-
-## Implementation files
-
-- Schema extension: `flake.nix` (`hosts.extraSubmodules`)
-- Helper export: `modules/config/host-tier.nix`
-- Host value example: `hosts/seiran/default.nix`
+Canonical sources: the schema is in `flake.nix`, comparisons are in
+`modules/config/host-tier.nix`, and host values are in `hosts/*/default.nix`.

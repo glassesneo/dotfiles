@@ -1,7 +1,6 @@
 {
   config,
   delib,
-  inputs,
   lib,
   ...
 }: let
@@ -17,148 +16,37 @@ in
     name = "catppuccin";
     inherits = ["laptop"];
 
-    home = {
-      imports = [
-        inputs.catppuccin.homeModules.catppuccin
-      ];
-      catppuccin = {
+    myconfig = {
+      darwin.window-manager.backend = lib.mkDefault "aerospace";
+      theme.catppuccin = {
         enable = true;
         inherit flavor;
-        nvim.enable = false;
-        tmux.enable = false;
-        firefox.enable = false;
       };
-      programs = {
-        ghostty = {
-          settings = {
-            background-opacity = 0.34;
-            background-blur = 2;
-            background = colors.base00;
-            foreground = colors.base05;
-            cursor-color = colors.base06;
-            selection-background = colors.base02;
-            selection-foreground = colors.base05;
-            window-padding-x = 8;
-            window-padding-y = 6;
-            minimum-contrast = 1.8;
-            custom-shader-animation = true;
-            palette = colorschemeLib.toGhosttyPalette colors;
-          };
-        };
-        nixvim = {
-          colorschemes = {
-            catppuccin = {
-              enable = true;
-              settings = {
-                inherit flavor;
-                transparent_background = true;
-                term_colors = true;
-                integrations = {
-                  dashboard = true;
-                  fidget = true;
-                  gitsigns = true;
-                  navic = {
-                    enabled = true;
-                    custom_bg = "NONE";
-                  };
-                  notify = true;
-                  treesitter = true;
-                };
-              };
-              lazyLoad.enable = true;
-            };
-          };
-          plugins = {
-            bufferline = {
-              settings = {
-                options = {
-                  indicator = {
-                    style = "underline";
-                  };
-                  show_tab_indicators = true;
-                };
-                highlights.__raw = ''
-                  (function()
-                    local theme = require("catppuccin.special.bufferline").get_theme()()
-                    theme.buffer_selected = vim.tbl_extend("force", theme.buffer_selected or {}, {
-                      bold = true,
-                      italic = false,
-                      underline = true,
-                      sp = "${colors.base0E}",
-                    })
-                    theme.indicator_selected = vim.tbl_extend("force", theme.indicator_selected or {}, {
-                      fg = "${colors.base0E}",
-                      sp = "${colors.base0E}",
-                      underline = true,
-                    })
-                    theme.tab_selected = vim.tbl_extend("force", theme.tab_selected or {}, {
-                      fg = "${colors.base07}",
-                      bold = true,
-                    })
-                    return theme
-                  end)()
-                '';
-              };
-            };
-            gitsigns.settings.preview_config.border = lib.mkForce "rounded";
-            snacks.settings.picker.win.list.border = lib.mkForce "rounded";
-          };
-          opts.winborder = lib.mkForce "rounded";
-          highlight = {
-            FloatBorder = {
-              fg = "${colors.base03}";
-              bg = "none";
-            };
-            FloatTitle = {
-              fg = "${colors.base0E}";
-              bg = "none";
-            };
-            FloatShadow.bg = "none";
-            FloatShadowThrough.bg = "none";
-            NormalFloat.bg = "${colors.base01}";
-            Pmenu.bg = "${colors.base01}";
-            Pmenu.fg = "${colors.base05}";
-            PmenuSel.bg = "${colors.base02}";
-            PmenuSel.fg = "${colors.base06}";
-            WinSeparator.fg = "${colors.base03}";
-          };
-          autoCmd = [
-            {
-              event = ["ColorScheme" "VimEnter"];
-              pattern = ["*"];
-              once = false;
-              callback.__raw = ''
-                function()
-                  local transparent = {
-                    "Normal", "NormalNC", "SignColumn", "EndOfBuffer",
-                    "LineNr", "CursorLineNr", "Folded", "FoldColumn",
-                    "StatusLine", "StatusLineNC",
-                  }
-                  for _, group in ipairs(transparent) do
-                    vim.api.nvim_set_hl(0, group, { bg = "none" })
-                  end
-                  vim.api.nvim_set_hl(0, "NormalFloat", { bg = "${colors.base01}" })
-                  vim.api.nvim_set_hl(0, "FloatBorder", { fg = "${colors.base03}", bg = "none" })
-                  vim.api.nvim_set_hl(0, "FloatTitle", { fg = "${colors.base0E}", bg = "none" })
-                  vim.api.nvim_set_hl(0, "FloatShadow", { bg = "none" })
-                  vim.api.nvim_set_hl(0, "FloatShadowThrough", { bg = "none" })
-                  vim.api.nvim_set_hl(0, "Pmenu", { fg = "${colors.base05}", bg = "${colors.base01}" })
-                  vim.api.nvim_set_hl(0, "PmenuSel", { fg = "${colors.base06}", bg = "${colors.base02}" })
-                  vim.api.nvim_set_hl(0, "VertSplit", { fg = "${colors.base03}", bg = "none" })
-                  vim.api.nvim_set_hl(0, "WinSeparator", { fg = "${colors.base03}", bg = "none" })
-                end
-              '';
-            }
-          ];
-        };
-      };
-    };
-    myconfig = {
       colorscheme = colors;
       wallpaper.title = "sakura";
       programs.ghostty = {
+        appearance = {
+          background-opacity = 0.34;
+          background-blur = 2;
+          background = colors.base00;
+          foreground = colors.base05;
+          cursor = colors.base06;
+          selection-background = colors.base02;
+          selection-foreground = colors.base05;
+          padding-x = 8;
+          padding-y = 6;
+          minimum-contrast = 1.8;
+          animate-shaders = true;
+          palette = colorschemeLib.toTerminalPalette colors;
+        };
         shader-profile = "sakura_ink_ripple";
         quick-terminal.background = colors.base01;
+      };
+      programs.nixvim.appearance = {
+        theme = "catppuccin";
+        catppuccin-flavor = flavor;
+        transparent = true;
+        rounded-borders = true;
       };
 
       services = {

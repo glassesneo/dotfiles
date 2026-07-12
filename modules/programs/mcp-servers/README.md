@@ -7,7 +7,6 @@ This module keeps MCP server data and runtime wiring in a single Nix file.
 - **Shared server catalog** — typed option `programs.mcp-servers-nix.catalog` in `modules/programs/mcp-servers/default.nix`. Each entry defines a server's command/URL, args, env, and behavior.
 - **Per-client membership** — typed list options `programs.mcp-servers-nix.targets.<target>` contributed by each client module via `myconfig.ifEnabled`:
   - `modules/programs/claude-code/default.nix` → `targets.claude_code`
-  - `modules/programs/claude-desktop.nix` → `targets.claude_desktop`
   - `modules/programs/codex/default.nix` → `targets.codex`
   - `modules/programs/opencode/default.nix` → `targets.opencode`
 - **Target adapter metadata** — centralized in `modules/programs/mcp-servers/default.nix` (env format, type policies, command behavior per target).

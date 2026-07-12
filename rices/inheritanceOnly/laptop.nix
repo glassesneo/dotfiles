@@ -4,14 +4,8 @@ delib.rice {
 
   inheritanceOnly = true;
 
-  home = {
-    programs = {
-      ghostty = {
-        settings = {
-          font-size = 16;
-          font-family = "UDEV Gothic NFLG";
-        };
-      };
-    };
+  myconfig.programs.ghostty.appearance = {
+    font-size = 16;
+    font-family = "UDEV Gothic NFLG";
   };
 }

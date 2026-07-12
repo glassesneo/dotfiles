@@ -1,103 +1,94 @@
-# SOPS Key Rotation Runbook (Immediate Cutover)
+# SOPS Age Key Rotation Runbook
 
-This runbook rotates the SOPS age key used by this repository without changing secret values.
+This runbook rotates one recipient key for the active shared encrypted blob,
+`secrets/shared.yaml`, without changing secret values. The creation rule is in
+`.sops.yaml`; `modules/toplevel/secrets.nix` declares the shared secrets and key
+file locations.
+
+Do not put plaintext credentials or private keys in the repository. Consumers
+must use `config.sops.secrets.<key>.path`, never a hardcoded decrypted path.
 
 ## Prerequisites
 
 - `age`, `age-keygen`, and `sops` are installed.
-- Existing encrypted file is `hosts/kurogane/secrets.yaml`.
-  Update the host path in the commands below if secret ownership moves to a different host later.
-- Existing SOPS policy file is `.sops.yaml`.
-- You can access the legacy key file path used before this migration.
+- You have the old private key and all private keys needed to decrypt the shared
+  blob.
+- You know which old recipient in the `secrets/shared.yaml` creation rule is
+  being replaced. Preserve recipients belonging to other active machines.
+- The working tree changes to `.sops.yaml` and `secrets/shared.yaml` can be
+  reviewed before deployment.
 
-## 1) Generate a new dedicated key
+## Rotate a recipient
 
-```sh
-mkdir -p "$HOME/.config/sops/age"
-chmod 700 "$HOME/.config/sops/age"
-age-keygen -o "$HOME/.config/sops/age/keys.txt"
-chmod 600 "$HOME/.config/sops/age/keys.txt"
-NEW_RECIPIENT="$(age-keygen -y "$HOME/.config/sops/age/keys.txt")"
-echo "$NEW_RECIPIENT"
-```
+1. Back up the old private key securely, then generate the replacement at the
+   key-file path used by the target machine. On Darwin that path is
+   `~/.config/sops/age/keys.txt`; on NixOS it is the same path under the user's
+   home directory.
 
-## 2) Backup the legacy key (encrypted with new recipient)
+   ```sh
+   install -d -m 700 "$HOME/.config/sops/age"
+   age-keygen -o "$HOME/.config/sops/age/keys.txt.new"
+   chmod 600 "$HOME/.config/sops/age/keys.txt.new"
+   NEW_RECIPIENT="$(age-keygen -y "$HOME/.config/sops/age/keys.txt.new")"
+   printf '%s\n' "$NEW_RECIPIENT"
+   ```
 
-```sh
-OLD_KEY_FILE="<legacy-key-file-path>"
-NEW_RECIPIENT="$(age-keygen -y "$HOME/.config/sops/age/keys.txt")"
-BACKUP_FILE="$HOME/.config/sops/age/legacy-keys-$(date +%Y%m%d).txt.age"
-age -r "$NEW_RECIPIENT" -o "$BACKUP_FILE" "$OLD_KEY_FILE"
-echo "$BACKUP_FILE"
-```
+2. In `.sops.yaml`, replace only the retiring recipient in the
+   `^secrets/shared\.yaml$` rule. Do not remove other active recipients.
 
-## 3) Replace recipient in SOPS policy
+3. Rewrap the shared blob while both old and new private keys are available.
+   `CURRENT_KEYS` must contain every key needed to decrypt the current blob.
 
-Update `.sops.yaml` to use `NEW_RECIPIENT` in `creation_rules`.
+   ```sh
+   CURRENT_KEYS="<path-to-current-decryption-keys>"
+   COMBINED_KEYS="$(mktemp)"
+   trap 'rm -f "$COMBINED_KEYS"' EXIT
+   chmod 600 "$COMBINED_KEYS"
+   cp "$CURRENT_KEYS" "$COMBINED_KEYS"
+   cat "$HOME/.config/sops/age/keys.txt.new" >> "$COMBINED_KEYS"
+   SOPS_AGE_KEY_FILE="$COMBINED_KEYS" sops updatekeys -y secrets/shared.yaml
+   ```
 
-## 4) Rewrap secrets to new key only
+4. Validate before replacing the active key:
 
-Because the current file is still encrypted to the old key, use a temporary combined key file once:
+   ```sh
+   SOPS_AGE_KEY_FILE="$HOME/.config/sops/age/keys.txt.new" \
+     sops decrypt secrets/shared.yaml >/dev/null
+   sops filestatus secrets/shared.yaml
+   nix flake check
+   ```
 
-```sh
-OLD_KEY_FILE="<legacy-key-file-path>"
-NEW_KEY_FILE="$HOME/.config/sops/age/keys.txt"
-COMBINED_KEY_FILE="/tmp/sops-age-keys-combined.txt"
+   Review the encrypted diff. Secret values must not appear in command output or
+   the diff, and the retired recipient must be absent from both `.sops.yaml` and
+   the SOPS metadata in `secrets/shared.yaml`.
 
-cat "$OLD_KEY_FILE" "$NEW_KEY_FILE" > "$COMBINED_KEY_FILE"
-chmod 600 "$COMBINED_KEY_FILE"
+5. Install the replacement key on the target machine and deploy:
 
-SOPS_AGE_KEY_FILE="$COMBINED_KEY_FILE" sops updatekeys -y hosts/kurogane/secrets.yaml
-SOPS_AGE_KEY_FILE="$COMBINED_KEY_FILE" sops rotate -i hosts/kurogane/secrets.yaml
-rm "$COMBINED_KEY_FILE"
-```
+   ```sh
+   mv "$HOME/.config/sops/age/keys.txt.new" \
+     "$HOME/.config/sops/age/keys.txt"
+   chmod 600 "$HOME/.config/sops/age/keys.txt"
+   ```
 
-## 5) Validate
-
-```sh
-SOPS_AGE_KEY_FILE="$HOME/.config/sops/age/keys.txt" \
-  sops decrypt --extract '["brave-api-key"]' hosts/kurogane/secrets.yaml
-
-OLD_RECIPIENT="<legacy-recipient>"
-rg -n "$OLD_RECIPIENT" .sops.yaml hosts/kurogane/secrets.yaml
-```
-
-Expected:
-
-- Decrypt succeeds with `~/.config/sops/age/keys.txt`.
-- Old recipient string does not appear in `.sops.yaml` or `hosts/kurogane/secrets.yaml`.
-
-## 6) Remove legacy key from active use
-
-```sh
-OLD_KEY_FILE="<legacy-key-file-path>"
-rm "$OLD_KEY_FILE"
-```
-
-## 7) Evaluate configuration
-
-```sh
-nh home switch --dry
-nix flake check
-```
+   Run the appropriate repository switch workflow, then verify a consumer can
+   read its declared `config.sops.secrets.<key>.path` without printing its
+   contents. Remove the old active key only after this succeeds.
 
 ## Rollback
 
-If immediate cutover fails before legacy key deletion:
+Before deleting the old key, restore the previous `.sops.yaml` recipient list
+and re-run `sops updatekeys -y secrets/shared.yaml` with keys capable of
+decrypting the current blob. Restore the old key file on the target machine and
+redeploy. If the old key has already been removed, recover it from the secure
+backup before rewrapping.
 
-- Revert `.sops.yaml` recipient to old key and rerun `sops updatekeys`.
+## Host-specific policy entries
 
-If legacy key was deleted:
-
-1. Decrypt the backup using the new key:
-
-```sh
-BACKUP_FILE="$HOME/.config/sops/age/legacy-keys-$(date +%Y%m%d).txt.age"
-age -d -i "$HOME/.config/sops/age/keys.txt" -o /tmp/legacy-keys.txt "$BACKUP_FILE"
-```
-
-2. Use `/tmp/legacy-keys.txt` as `SOPS_AGE_KEY_FILE` to recover/re-wrap as needed, then delete it:
-
-```sh
-rm /tmp/legacy-keys.txt
-```
+`.sops.yaml` also contains creation rules for `secrets/kurogane.yaml` and
+`secrets/seiran.yaml`, but those encrypted files do not currently exist and are
+not referenced by `modules/toplevel/secrets.nix`. Treat those entries as
+reserved policy, not active secret blobs. If host-specific secrets are added in
+the future, assign every intended recipient to the matching `.sops.yaml` rule
+before creating the encrypted file; the Seiran placeholder currently has no
+recipients and is not usable as-is. Give the encrypted file and declaration a
+clear owner, and update this runbook only when the active rotation model changes.

@@ -46,7 +46,6 @@ delib.module {
       age.keyFile = "/Users/${username}/.config/sops/age/keys.txt";
       secrets = lib.genAttrs sharedSecrets mkSharedSecret;
     };
-    # sops.defaultSopsFile = ./secrets.yaml;
   };
 
   nixos.always = {myconfig, ...}: let

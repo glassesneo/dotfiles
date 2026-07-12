@@ -1,22 +1,12 @@
 # modules/programs/mcp-servers/
 
-## MCP Architecture
+## Ownership
 
-Centralized MCP server definitions and runtime wiring live in a single Nix file:
-- @modules/programs/mcp-servers/default.nix (typed server catalog, target adapter metadata, validation assertions, and rendering)
+- This module owns the typed shared server catalog, target adapters, rendering, and consistency assertions.
+- Each supported client module owns its membership in `programs.mcp-servers-nix.targets.<target>` via `myconfig.ifEnabled`; do not centralize client policy here.
+- Keep per-client runtime state isolated when adapting a stateful server.
 
-### Ownership Model
+## Secret-Aware Wrappers
 
-- **Shared server catalog** (`programs.mcp-servers-nix.catalog`): centralized in this module. Add or modify server definitions here.
-- **Per-client membership** (`programs.mcp-servers-nix.targets.<target>`): owned by each client module via `myconfig.ifEnabled`. To change which servers a client uses, edit the client module:
-  - Claude Code: @modules/programs/claude-code/default.nix
-  - Claude Desktop: @modules/programs/claude-desktop.nix
-  - Codex: @modules/programs/codex/default.nix
-  - OpenCode: @modules/programs/opencode/default.nix
-
-Each AI tool uses a separate memory file under `$XDG_DATA_HOME` to prevent conflicts (e.g., `claudecode_memory.json`, `opencode_memory.json`, `crush_memory.json`).
-
-## Secrets
-
-- For env-var-only MCP servers, inject secrets through wrapper commands in @modules/programs/mcp-servers/default.nix.
-- Read secret values from `config.sops.secrets.<name>.path`; do not rely on global session exports.
+- Inject env-var-only server secrets through wrapper commands owned by this module.
+- Read secret values from `config.sops.secrets.<name>.path`; do not rely on global session exports or embed secret values in rendered configuration.

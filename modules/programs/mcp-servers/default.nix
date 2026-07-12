@@ -102,7 +102,6 @@ in
       # via myconfig.ifEnabled so each client owns its default membership.
       targets = {
         claude_code = listOfOption lib.types.str [];
-        claude_desktop = listOfOption lib.types.str [];
         codex = listOfOption lib.types.str [];
         opencode = listOfOption lib.types.str [];
       };
@@ -115,7 +114,7 @@ in
 
       # Target adapter metadata stays centralized — these define how each
       # client renders server entries and are not client-owned concerns.
-      claudeTargetMeta = {
+      claudeCodeTargetMeta = {
         env_syntax_mode = "dollar_braces";
         env_field_name = "env";
         static_env_field_name = "env";
@@ -125,8 +124,7 @@ in
       };
 
       targetAdapters = {
-        claude_code = claudeTargetMeta;
-        claude_desktop = claudeTargetMeta;
+        claude_code = claudeCodeTargetMeta;
         codex = {
           env_syntax_mode = "raw";
           env_field_name = "env_vars";
@@ -273,7 +271,7 @@ in
           secret = server.auth_secret;
           envVarName = lib.toUpper (builtins.replaceStrings ["-"] ["_"] secret);
           bearerValue =
-            if builtins.elem target ["claude_code" "claude_desktop"]
+            if target == "claude_code"
             then "Bearer \${${envVarName}}"
             else if target == "opencode"
             then "Bearer {file:${secretPath secret}}"
@@ -284,9 +282,9 @@ in
 
       mkRenderedServer = target: targetMeta: server: let
         effectiveServer = serverWithoutWrapperEnv server;
-        isClaudeTarget = builtins.elem target ["claude_code" "claude_desktop"];
+        isClaudeCodeTarget = target == "claude_code";
         effectiveUrlType =
-          if isClaudeTarget && effectiveServer.url_type != null
+          if isClaudeCodeTarget && effectiveServer.url_type != null
           then effectiveServer.url_type
           else targetMeta.url_type_policy;
         command = resolveServerCommand effectiveServer;
@@ -315,7 +313,7 @@ in
           lib.mapAttrs (_: server: mkRenderedServer target targetMeta server) serverCatalog
         );
 
-      context7Targets = ["claude_code" "claude_desktop" "codex"];
+      context7Targets = ["claude_code" "codex"];
 
       mkTargetModule = target:
         lib.optionalAttrs (builtins.elem target context7Targets) {
@@ -398,11 +396,6 @@ in
         (inputs.mcp-servers-nix.lib.evalModule pkgs renderedTargetModules.${target}).config.settings.servers;
     in {
       assertions = commandAssertions ++ serverValidationAssertions;
-
-      home.file = {
-        "Library/Application Support/Claude/claude_desktop_config.json".source =
-          inputs.mcp-servers-nix.lib.mkConfig pkgs renderedTargetModules.claude_desktop;
-      };
 
       programs.claude-code.mcpServers = evalTargetServers "claude_code";
       programs.codex.settings.mcp_servers = evalTargetServers "codex";
