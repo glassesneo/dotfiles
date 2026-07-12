@@ -12,11 +12,7 @@ delib.module {
 
   home.ifEnabled = let
     playwrightBrowsersPath = pkgs.playwright-driver.browsers;
-    chromiumBundleDir =
-      pkgs.lib.findFirst
-      (name: pkgs.lib.hasPrefix "chromium-" name)
-      (throw "programs.agent-browser: pkgs.playwright-driver.browsers does not contain a Chromium bundle")
-      (builtins.attrNames (builtins.readDir playwrightBrowsersPath));
+    chromiumBundleDir = "chromium-${pkgs.playwright-driver.browsersJSON.chromium.revision}";
     browserExecutable =
       if pkgs.stdenv.hostPlatform.isDarwin
       then let
