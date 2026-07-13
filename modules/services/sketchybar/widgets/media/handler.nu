@@ -1,24 +1,50 @@
 use ../../colors.nu
 
 const name = "@name@"
+const cache_path = "@cache-path@"
 const media_control = "@media-control@"
 
 def main () {
-  let payload = match $env.SENDER {
-    "media_stream_play" => ($env.PAYLOAD | from json),
-    "media_stream_pause" => {
-      hide_media
-      return
+  match $env.SENDER {
+    "mouse.entered" => {
+      refresh_artwork --show-popup
     },
-    "forced" => (^$media_control get | from json | select artist title album),
-    _ => {
+    "mouse.exited" | "mouse.exited.global" => {
+      close_artwork
+    },
+    "media_stream_play" => {
+      let payload = $env.PAYLOAD | from json
+      show_media ($payload | label_text)
+      refresh_artwork
+    },
+    "media_stream_pause" => {
+      disable_artwork
       hide_media
-      return
+    },
+    "forced" => {
+      handle_forced
+    },
+    _ => {
+      disable_artwork
+      hide_media
     },
   }
+}
 
-  let label = $payload | label_text
-  show_media $label
+def handle_forced [] {
+  let state = try {
+    ^$media_control get | from json
+  } catch {
+    null
+  }
+
+  if $state != null and ($state | get playing? | default false) {
+    show_media ($state | select artist title album | label_text)
+    refresh_artwork
+  } else {
+    disable_artwork
+    hide_media
+  }
 }
 
 def label_text (): record -> string {
@@ -36,6 +62,29 @@ def show_media (label: string) {
   ]
   sketchybar --set $name ...$options
   sketchybar --animate tanh 32 --set $name ...$animated_options
+}
+
+def close_artwork [] {
+  sketchybar --set $name popup.drawing=off
+}
+
+def disable_artwork [] {
+  sketchybar --set $name popup.drawing=off popup.background.image.drawing=off
+}
+
+def refresh_artwork [--show-popup] {
+  if ($cache_path | path exists) {
+    let options = [
+      $"popup.background.image=($cache_path)"
+      popup.background.image.drawing=on
+    ]
+    sketchybar --set $name ...$options
+    if $show_popup {
+      sketchybar --set $name popup.drawing=on
+    }
+  } else {
+    disable_artwork
+  }
 }
 
 def hide_media () {

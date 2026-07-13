@@ -5,6 +5,9 @@
   pkgs,
   ...
 }:
+let
+  artworkCachePath = "${homeConfig.xdg.cacheHome}/sketchybar/media/artwork.png";
+in
 delib.module {
   name = "services.sketchybar.widget-media";
 
@@ -20,6 +23,7 @@ delib.module {
         && lib.any (section: lib.any (entry: entry.widget == name) parent.layout.${section}) parent.sections;
       handler = pkgs.replaceVars ./handler.nu {
         inherit name;
+        cache-path = artworkCachePath;
         media-control = lib.getExe' myconfig.programs.media-control.package "media-control";
       };
     in {
@@ -35,8 +39,16 @@ delib.module {
     programs.media-control.enable = true;
   };
 
-  home.ifEnabled = {parent, ...}: let
-    service = ./service.nu;
+  home.ifEnabled = {
+    myconfig,
+    parent,
+    ...
+  }: let
+    service = pkgs.replaceVars ./service.nu {
+      cache-path = artworkCachePath;
+      media-control = lib.getExe' myconfig.programs.media-control.package "media-control";
+      sips = "/usr/bin/sips";
+    };
   in {
     launchd.agents.media-control = {
       enable = true;
