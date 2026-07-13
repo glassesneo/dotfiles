@@ -27,6 +27,23 @@ just switch
 New files used by the flake must be git-tracked before evaluation. Prefer the
 Nix-native workflows in this repository over ad hoc package state.
 
+** Deploying the =seiran-vm1= Tart VM
+
+On a Nix-equipped VM without =darwin-rebuild=, bootstrap it with one switch:
+
+#+begin_src sh
+sudo nix run nix-darwin/master#darwin-rebuild -- switch --flake .#seiran-vm1
+#+end_src
+
+Use the installed command for subsequent switches:
+
+#+begin_src sh
+sudo darwin-rebuild switch --flake .#seiran-vm1
+#+end_src
+
+Both commands activate the nix-darwin system and its integrated Home Manager
+configuration.
+
 * Repository Orientation
 
 - =hosts/= contains machine facts and host-only bindings.

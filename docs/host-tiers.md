@@ -16,6 +16,7 @@ An unset tier defaults to `standard`. Current declarations are:
 | --- | --- |
 | `seiran` | `full` |
 | `seiran-vm0` | `standard` |
+| `seiran-vm1` | `standard` |
 
 `modules/config/host-tier.nix` exports the shared `tiers` argument:
 

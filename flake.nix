@@ -86,9 +86,9 @@
         # VM validation lives in `checks.aarch64-linux.nixos-seiran-vm0` below.
         nixosConfigurations = {};
         homeConfigurations =
-          filterConfigurationsByHostNames ["seiran"] (mkConfigurations "home");
+          filterConfigurationsByHostNames ["seiran" "seiran-vm1"] (mkConfigurations "home");
         darwinConfigurations =
-          filterConfigurationsByHostNames ["seiran"] (mkConfigurations "darwin");
+          filterConfigurationsByHostNames ["seiran" "seiran-vm1"] (mkConfigurations "darwin");
       };
 
       # ----------------------------------------------------------------
