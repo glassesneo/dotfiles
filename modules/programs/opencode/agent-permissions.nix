@@ -32,6 +32,21 @@ delib.module {
       ])
       prefixes;
 
+    commandRulesFor = prefixes:
+      builtins.concatMap (prefix: [prefix "${prefix} *"]) prefixes;
+
+    askAmbiguousShellEffectsFor = prefixes:
+      ask (builtins.concatMap (prefix: [
+          "${prefix}?*$(*"
+          "${prefix}?*&&*"
+          "${prefix}?*<*"
+          "${prefix}?*>*"
+          "${prefix}?*`*"
+          "${prefix}?*|*"
+          "${prefix}?*;*"
+        ])
+        prefixes);
+
     addRulesToOps = ops: rules: perm:
       builtins.foldl' (
         acc: op:
@@ -148,6 +163,124 @@ delib.module {
 
         full = {
           bash = "allow";
+        };
+
+        # Trusted execution allows common local implementation commands while
+        # leaving unclassified executables approval-gated. Prefix-specific
+        # `?` rules sort after allowances and keep operators/external effects
+        # gated under OpenCode's last-match behavior.
+        trustedLocalImplementation = let
+          localCommands = [
+            "bun"
+            "cargo"
+            "chmod"
+            "cmake"
+            "cp"
+            "deno"
+            "git"
+            "go"
+            "just"
+            "make"
+            "mkdir"
+            "mv"
+            "ninja"
+            "nix"
+            "nix-build"
+            "nix-instantiate"
+            "node"
+            "npm"
+            "pnpm"
+            "python"
+            "python3"
+            "pytest"
+            "rm"
+            "ruff"
+            "touch"
+            "uv"
+            "yarn"
+            "zig"
+          ];
+        in {
+          bash =
+            askAll
+            // allow (commandRulesFor localCommands)
+            // ask [
+              "aws *"
+              "az *"
+              "bun publish*"
+              "cargo login*"
+              "cargo logout*"
+              "cargo owner*"
+              "cargo publish*"
+              "cargo yank*"
+              "curl *"
+              "docker push*"
+              "gcloud *"
+              "gh *"
+              "kubectl *"
+              "nix copy*"
+              "npm access*"
+              "npm adduser*"
+              "npm deprecate*"
+              "npm dist-tag*"
+              "npm hook*"
+              "npm login*"
+              "npm logout*"
+              "npm org*"
+              "npm owner*"
+              "npm profile*"
+              "npm publish*"
+              "npm star*"
+              "npm team*"
+              "npm token*"
+              "npm unpublish*"
+              "npm unstar*"
+              "pnpm login*"
+              "pnpm logout*"
+              "pnpm publish*"
+              "podman push*"
+              "rsync *"
+              "scp *"
+              "ssh *"
+              "terraform apply*"
+              "terraform destroy*"
+              "wget *"
+              "yarn npm login*"
+              "yarn npm logout*"
+              "yarn npm publish*"
+            ]
+            // allow [
+              "gh auth status*"
+              "gh issue view*"
+              "gh pr diff*"
+              "gh pr list*"
+              "gh pr view*"
+              "gh repo view*"
+              "gh api repos/*/issues/*"
+              "gh api repos/*/issues/*/comments*"
+              "gh api repos/*/pulls/*"
+              "gh api repos/*/pulls/*/comments*"
+              "gh api repos/*/pulls/*/reviews*"
+            ]
+            // ask [
+              "gh?*--field*"
+              "gh?*--input*"
+              "gh?*--method*"
+              "gh?*--raw-field*"
+              "gh?*-F*"
+              "gh?*-X*"
+              "gh?*-f*"
+              "gh?*$(*"
+              "gh?*&&*"
+              "gh?*<*"
+              "gh?*>*"
+              "gh?*`*"
+              "gh?*|*"
+              "gh?*;*"
+              "git?*push*"
+              "git?*send-pack*"
+            ]
+            // askAmbiguousShellEffectsFor (localCommands ++ ["gh"]);
         };
 
         # OpenCode evaluates granular permission rules with the last matching
@@ -396,6 +529,11 @@ delib.module {
         perm.context.full
         perm.safety.externalAll
       ];
+
+      implementationByPolicy = {
+        normal = implementation;
+        "trusted-vm" = merge implementation perm.execute.trustedLocalImplementation;
+      };
 
       unrestrictedCommandReadWrite = mergeMany [
         perm.read.workspace

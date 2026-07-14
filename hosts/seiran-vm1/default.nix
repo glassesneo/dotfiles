@@ -18,6 +18,7 @@ delib.host {
       spaces.enable = false;
     };
     programs = {
+      opencode.permissionPolicy = "trusted-vm";
       orbstack.enable = false;
       tart.enable = false;
     };

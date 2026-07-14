@@ -10,7 +10,7 @@ delib.module {
   options = with delib;
     moduleOptions {
       enable = boolOption host.devCoreFeatured;
-      implementationCommandExecution = enumOption ["ask" "allow"] "ask";
+      permissionPolicy = enumOption ["normal" "trusted-vm"] "normal";
     };
 
   myconfig.ifEnabled.programs.mcp-servers-nix.targets.opencode = [

@@ -18,9 +18,7 @@ delib.module {
       );
 
     implementationPermission =
-      if myconfig.programs.opencode.implementationCommandExecution == "allow"
-      then merge agentPerm.implementation perm.execute.full
-      else agentPerm.implementation;
+      agentPerm.implementationByPolicy.${myconfig.programs.opencode.permissionPolicy};
 
     specFilenamePolicy = readSharedPrompt "spec-filename-policy";
     planFilenamePolicy = readSharedPrompt "plan-filename-policy";
@@ -35,6 +33,26 @@ delib.module {
       {
         assertion = agentPerm.reviewOrchestrator.bash != "allow" && agentPerm.testRunner.bash != "allow";
         message = "OpenCode read-only reviewer/tester permissions must not serialize to unrestricted shell execution.";
+      }
+      {
+        assertion =
+          agentPerm.implementationByPolicy.normal.bash."*"
+          == "ask"
+          && agentPerm.implementationByPolicy."trusted-vm".bash."*" == "ask"
+          && agentPerm.implementationByPolicy."trusted-vm".bash."nix *" == "allow"
+          && agentPerm.implementationByPolicy."trusted-vm".bash."git?*push*" == "ask"
+          && agentPerm.implementationByPolicy."trusted-vm".bash."gh *" == "ask"
+          && agentPerm.implementationByPolicy."trusted-vm".bash."gh pr view*" == "allow"
+          && agentPerm.implementationByPolicy."trusted-vm".bash."gh?*-X*" == "ask"
+          && agentPerm.implementationByPolicy."trusted-vm".bash."nix?*;*" == "ask"
+          && agentPerm.implementationByPolicy."trusted-vm".bash."gh?*;*" == "ask"
+          && "*" < "nix *"
+          && "gh *" < "gh pr view*"
+          && "gh pr view*" < "gh?*-X*"
+          && "git push*" < "git?*push*"
+          && "nix *" < "nix?*;*"
+          && "gh pr view*" < "gh?*;*";
+        message = "OpenCode trusted policy ordering must allow local execution while keeping pushes, GitHub mutations, and ambiguous shell effects approval-gated.";
       }
       {
         assertion =
@@ -60,6 +78,7 @@ delib.module {
       };
 
       ultra-vibe-coding-xhigh-pro-max = {
+        disable = true;
         mode = "all";
         model = "openai/gpt-5.6-sol";
         reasoningEffort = "medium";
