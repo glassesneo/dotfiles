@@ -1,4 +1,8 @@
-{delib, ...}:
+{
+  delib,
+  lib,
+  ...
+}:
 delib.host {
   name = "seiran-vm1";
   type = "virtual";
@@ -7,7 +11,16 @@ delib.host {
 
   myconfig = {
     darwin.window-manager.enable = false;
-    programs.tart.enable = false;
+    nix-darwin.preferences = {
+      appearance.enable = false;
+      dock.enable = false;
+      input.enable = false;
+      spaces.enable = false;
+    };
+    programs = {
+      orbstack.enable = false;
+      tart.enable = false;
+    };
     services = {
       aerospace.enable = false;
       kanata = {
@@ -21,6 +34,27 @@ delib.host {
   };
 
   darwin = {
+    security.pam.services.sudo_local = {
+      reattach = lib.mkForce false;
+      touchIdAuth = lib.mkForce false;
+      watchIdAuth = lib.mkForce false;
+    };
+
+    # Keep the guest awake while it is used through SSH or by long-running agents.
+    system.activationScripts.postActivation.text = lib.mkAfter ''
+      /usr/bin/pmset -a sleep 0
+    '';
+
+    # The VM only receives credentials required by its enabled agent tooling:
+    # OpenCode/Codex use OpenRouter, and OpenCode's Brave MCP uses Brave Search.
+    sops.secrets = lib.mkForce (lib.genAttrs [
+        "brave-api-key"
+      ] (_: {
+        sopsFile = ../../secrets/shared.yaml;
+        owner = "neo";
+        mode = "0400";
+      }));
+
     services.openssh = {
       enable = true;
       extraConfig = ''
