@@ -83,7 +83,7 @@ delib.module {
 
       spec = {
         mode = "subagent";
-        model = "openai/gpt-5.6-terra";
+        model = "openai/gpt-5.6-luna-fast";
         reasoningEffort = "medium";
         description = "Produces decision-ready spec artifacts under .agents/specs.";
         prompt = renderAgentPrompt "spec" {
@@ -94,7 +94,7 @@ delib.module {
 
       planner = {
         mode = "subagent";
-        model = "openai/gpt-5.6-terra";
+        model = "openai/gpt-5.6-luna-fast";
         reasoningEffort = "medium";
         description = "Produces implementation plan artifacts under .agents/plans.";
         prompt = renderAgentPrompt "planner" {
@@ -115,7 +115,7 @@ delib.module {
 
       focused-reviewer = {
         mode = "subagent";
-        model = "openai/gpt-5.6-terra";
+        model = "openai/gpt-5.6-terra-fast";
         reasoningEffort = "medium";
         description = "Performs injected-perspective read-only code review with evidence-grounded findings.";
         prompt = readAgentPrompt "focused_reviewer";
@@ -128,7 +128,7 @@ delib.module {
 
       dissent-reviewer = {
         mode = "subagent";
-        model = "openai/gpt-5.6-terra";
+        model = "openai/gpt-5.6-terra-fast";
         reasoningEffort = "medium";
         description = "Validates review outputs for misses, overreach, severity, and alternate interpretations.";
         prompt = readAgentPrompt "dissent_reviewer";
@@ -140,7 +140,7 @@ delib.module {
       };
 
       explore = {
-        model = "openai/gpt-5.4-mini";
+        model = "openai/gpt-5.4-mini-fast";
         reasoningEffort = "medium";
         description = "Read-only exploration agent for delegated repository and filesystem context gathering.";
         prompt = readAgentPrompt "explore";
@@ -152,7 +152,7 @@ delib.module {
 
       challenger = {
         mode = "subagent";
-        model = "openai/gpt-5.6-terra";
+        model = "openai/gpt-5.6-terra-fast";
         description = "Challenges request/spec framing and assumptions with calibrated evidence checks.";
         reasoningEffort = "medium";
         prompt = readAgentPrompt "challenger";
@@ -161,7 +161,7 @@ delib.module {
 
       researcher = {
         mode = "subagent";
-        model = "openai/gpt-5.4-mini";
+        model = "openai/gpt-5.4-mini-fast";
         reasoningEffort = "high";
         description = "Performs targeted internet research when planning workflows have material knowledge uncertainty.";
         prompt = renderAgentPrompt "researcher" {
@@ -172,7 +172,7 @@ delib.module {
 
       tester = {
         mode = "subagent";
-        model = "openai/gpt-5.4-mini";
+        model = "openai/gpt-5.6-luna-fast";
         reasoningEffort = "medium";
         description = "Source-read-only validation runner that triages failures and writes failure-report files when suites fail.";
         prompt = readAgentPrompt "tester";
