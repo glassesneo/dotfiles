@@ -122,9 +122,15 @@
                     name == "neo@seiran" || name == "neo@seiran-catppuccin"
                 )
                 homeConfigs);
+
+            nvfChecks = {
+              nvf-neo_at_seiran =
+                homeConfigs."neo@seiran".config.programs.nvf.settings.vim.build.finalPackage;
+            };
           in
             hmChecks
-            // nixvimChecks)
+            // nixvimChecks
+            // nvfChecks)
           // lib.optionalAttrs (system == "aarch64-linux") (let
             nixosConfigs = filterConfigurationsByHostNames ["seiran-vm0"] (mkConfigurations "nixos");
           in {
