@@ -21,7 +21,7 @@ delib.module {
         {
           key = "q";
           mode = ["n"];
-          action = "<Nop";
+          action = "<Nop>";
           silent = true;
         }
         {
@@ -40,6 +40,30 @@ delib.module {
           key = "<Space>l";
           mode = ["n" "x" "o"];
           action = "$";
+          silent = true;
+        }
+        {
+          key = "M";
+          mode = ["n" "x" "o"];
+          action = "%";
+          silent = true;
+        }
+        {
+          key = ''a"'';
+          mode = ["x" "o"];
+          action = ''2i"'';
+          silent = true;
+        }
+        {
+          key = "a'";
+          mode = ["x" "o"];
+          action = "2i'";
+          silent = true;
+        }
+        {
+          key = "a`";
+          mode = ["x" "o"];
+          action = "2i`";
           silent = true;
         }
         {

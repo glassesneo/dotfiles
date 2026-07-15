@@ -43,7 +43,7 @@ delib.module {
           };
           lsp = {
             opts = {
-              score_offset = 3;
+              # score_offset = 3;
             };
           };
           cmdline = {
