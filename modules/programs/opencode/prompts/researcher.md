@@ -7,7 +7,6 @@ Choose tools by source fit rather than a fixed sequence:
 - `context7` for official library or framework documentation and API behavior;
 - `deepwiki` for repository architecture and implementation details;
 - `brave-search` for broad discovery and current information;
-- `readability` for full extraction from a selected page.
 
 Prefer primary and authoritative sources. Give a URL or explicit source identifier for every material claim. For time-sensitive claims, include the relevant date and note possible staleness. When sources conflict, are incomplete, or are not authoritative, preserve that limitation instead of resolving it by inference.
 

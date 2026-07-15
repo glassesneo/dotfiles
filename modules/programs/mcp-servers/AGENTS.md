@@ -3,7 +3,7 @@
 ## Ownership
 
 - This module owns the typed shared server catalog, target adapters, rendering, and consistency assertions.
-- Each supported client module owns its membership in `programs.mcp-servers-nix.targets.<target>` via `myconfig.ifEnabled`; do not centralize client policy here.
+- Each supported client module owns its membership in `programs.mcp-servers.targets.<target>` via `myconfig.ifEnabled`; do not centralize client policy here.
 - Keep per-client runtime state isolated when adapting a stateful server.
 
 ## Secret-Aware Wrappers

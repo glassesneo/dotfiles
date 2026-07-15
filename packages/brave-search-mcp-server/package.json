@@ -1,0 +1,42 @@
+{
+  "name": "@brave/brave-search-mcp-server",
+  "version": "2.0.85",
+  "description": "Brave Search MCP Server: web results, images, videos, rich results, AI summaries, and more.",
+  "keywords": [
+    "api",
+    "brave",
+    "mcp",
+    "search"
+  ],
+  "license": "MIT",
+  "author": "Brave Software, Inc. (https://brave.com)",
+  "homepage": "https://github.com/brave/brave-search-mcp-server",
+  "type": "module",
+  "module": "dist/server.js",
+  "bin": {
+    "brave-search-mcp-server": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc && shx chmod +x dist/*.js",
+    "prepare": "npm run format && npm run build",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "format:check": "prettier --check \"src/**/*.ts\"",
+    "test": "node --import tsx --test \"src/**/*.test.ts\""
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.29.0",
+    "commander": "14.0.3",
+    "dotenv": "17.3.1",
+    "express": "5.2.1",
+    "zod": "4.3.6"
+  },
+  "devDependencies": {
+    "@types/express": "5.0.6",
+    "@types/node": "24.10.13",
+    "prettier": "3.8.1",
+    "semver": "7.7.3",
+    "shx": "0.4.0",
+    "tsx": "4.22.4",
+    "typescript": "5.9.3"
+  }
+}

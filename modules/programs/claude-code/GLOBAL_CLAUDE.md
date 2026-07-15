@@ -15,8 +15,7 @@
 
 ### Web Operations
 - **MUST** use Brave Search MCP or Web Search Prime MCP for web searches (both have rate limits — alternate to avoid throttling)
-- **MUST** use Readability MCP or Web Reader MCP to fetch web page contents
-- **NEVER** use built-in web search and fetch tools
+- Use built-in `WebFetch` to fetch the contents of a known URL
 
 ## Proactive Delegation
 

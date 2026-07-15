@@ -10,4 +10,3 @@
 ## Local Decision Rules
 
 - Editor modules own their concrete keymaps. Add a shared keymap contract only when a genuine cross-editor abstraction is simpler than editor-local definitions.
-- MCP server npm packages are managed as one bun2nix unit in `node-packages/`; update its manifest, lockfile, and generated output together.

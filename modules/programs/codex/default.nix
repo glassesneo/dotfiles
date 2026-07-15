@@ -163,10 +163,9 @@ delib.module {
   };
 
   # Default MCP server membership for Codex.
-  myconfig.ifEnabled.programs.mcp-servers-nix.targets.codex = [
+  myconfig.ifEnabled.programs.mcp-servers.targets.codex = [
     "brave-search"
     "deepwiki"
-    "readability"
     "context7"
   ];
 }

@@ -4,8 +4,8 @@ This module keeps MCP server data and runtime wiring in a single Nix file.
 
 ## Ownership model
 
-- **Shared server catalog** — typed option `programs.mcp-servers-nix.catalog` in `modules/programs/mcp-servers/default.nix`. Each entry defines a server's command/URL, args, env, and behavior.
-- **Per-client membership** — typed list options `programs.mcp-servers-nix.targets.<target>` contributed by each client module via `myconfig.ifEnabled`:
+- **Shared server catalog** — typed option `programs.mcp-servers.catalog` in `modules/programs/mcp-servers/default.nix`. Each entry defines a server's command/URL, args, env, and behavior.
+- **Per-client membership** — typed list options `programs.mcp-servers.targets.<target>` contributed by each client module via `myconfig.ifEnabled`:
   - `modules/programs/claude-code/default.nix` → `targets.claude_code`
   - `modules/programs/codex/default.nix` → `targets.codex`
   - `modules/programs/opencode/default.nix` → `targets.opencode`
@@ -14,7 +14,7 @@ This module keeps MCP server data and runtime wiring in a single Nix file.
 ## Practical rules
 
 - To add or adjust a server definition: edit `catalog` defaults in `modules/programs/mcp-servers/default.nix`.
-- To change which servers a client uses: edit the `myconfig.ifEnabled.programs.mcp-servers-nix.targets.<target>` list in the client module.
+- To change which servers a client uses: edit the `myconfig.ifEnabled.programs.mcp-servers.targets.<target>` list in the client module.
 - Keep path resolution, wrappers, and per-host executable details in the MCP module file.
 
 ## Authenticated remote (hosted) MCP servers
@@ -38,4 +38,4 @@ Secrets must exist in `modules/toplevel/secrets.nix` and be bound in the host se
 
 ## Notes
 
-- Validation assertions (url xor command_id, required targets, enabled-server references, needs_node rules) are enforced as Nix assertions in the same file.
+- Validation assertions (url xor command_id and enabled-server references) are enforced as Nix assertions in the same file.

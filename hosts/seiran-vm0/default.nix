@@ -6,7 +6,7 @@ delib.host {
   tier = "standard";
   myconfig.programs.proton-pass-cli.enable = false;
   myconfig.programs.reload.enable = false;
-  myconfig.programs.mcp-servers-nix.enable = false;
+  myconfig.programs.mcp-servers.enable = false;
   myconfig.programs.codex.sandboxMode = "danger-full-access";
   myconfig.programs.zsh.zeno.enable = false;
 

@@ -10,7 +10,6 @@ Tool priority:
 1. Context7 for current official library or framework documentation and API/config references.
 2. DeepWiki for repository-level architecture or behavior questions about a specific library.
 3. Brave Search only when fresher or broader discovery is required; prioritize primary sources.
-4. Readability only to extract a selected noisy URL.
 
 Research workflow:
 1. Start from the delegated questions and known local evidence.

@@ -15,9 +15,6 @@ Coverage is incomplete. Missing results do not imply nonexistence.
 Use DeepWiki for complex situations involving a specific library, especially when dynamic interaction with Devin may surface useful hints or debugging direction.
 Treat it as guidance, not unquestionable truth.
 
-Use Readability to extract the body of a known URL into Markdown when the page is noisy or difficult to inspect directly.
-It is not a discovery tool.
-
 Use Brave Search only when built-in cached search is stale or when fresh results are required.
 Prefer official docs, changelogs, release notes, maintainers, and primary sources.
 
@@ -28,7 +25,6 @@ Default escalation path:
 2. Context7
 3. DeepWiki
 4. Brave Search
-5. Readability for selected URLs
 
 Use the shortest reliable path.
 Do not guess exact APIs, config keys, version-specific behavior, or recent changes.

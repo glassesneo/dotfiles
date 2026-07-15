@@ -12,8 +12,4 @@
     "--indent-width"
     "2"
   ];
-
-  settings.global.excludes = [
-    "node-packages/bun.nix"
-  ];
 }

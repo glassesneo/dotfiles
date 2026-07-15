@@ -48,7 +48,6 @@ delib.module {
             "mcp__context7__get-library-docs"
             "mcp__deepwiki__*"
             "mcp__brave-search__brave_web_search"
-            "mcp__readability__read_url_content_as_markdown"
           ];
         };
         sandbox = {
@@ -73,10 +72,9 @@ delib.module {
   };
 
   # Default MCP server membership for Claude Code.
-  myconfig.ifEnabled.programs.mcp-servers-nix.targets.claude_code = [
+  myconfig.ifEnabled.programs.mcp-servers.targets.claude_code = [
     "brave-search"
     "deepwiki"
-    "readability"
     "context7"
   ];
 }

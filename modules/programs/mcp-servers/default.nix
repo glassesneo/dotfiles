@@ -1,9 +1,7 @@
 {
   delib,
   host,
-  inputs,
   lib,
-  nodePackages,
   pkgs,
   sopsSecretPaths,
   ...
@@ -46,18 +44,13 @@
         default = {};
         description = "Static environment variable values.";
       };
-      needs_node = lib.mkOption {
-        type = lib.types.bool;
-        default = false;
-        description = "Whether the server script needs Node.js as its interpreter.";
-      };
     };
   };
 in
   delib.module {
-    name = "programs.mcp-servers-nix";
+    name = "programs.mcp-servers";
 
-    options.programs.mcp-servers-nix = with delib; {
+    options.programs.mcp-servers = with delib; {
       enable = boolOption host.devCoreFeatured;
 
       # Shared server catalog — centralized definitions consumed by all targets.
@@ -70,22 +63,6 @@ in
           };
           deepwiki = {
             url = "https://mcp.deepwiki.com/mcp";
-          };
-          readability = {
-            command_id = "readability-mcp";
-            needs_node = true;
-          };
-          tavily = {
-            command_id = "tavily-mcp";
-            env_keys = {TAVILY_API_KEY = "TAVILY_API_KEY";};
-          };
-          chrome-devtools = {
-            command_id = "chrome-devtools-mcp";
-          };
-          morph-fast-apply = {
-            command_id = "morph-fast-apply-mcp";
-            env_keys = {MORPH_API_KEY = "MORPH_API_KEY";};
-            env_static = {ALL_TOOLS = "false";};
           };
           codex = {
             command_id = "codex-mcp";
@@ -147,13 +124,13 @@ in
       serverNames = builtins.attrNames serverCatalog;
       commandBackedServers = lib.filterAttrs (_: server: server.command_id != null) serverCatalog;
 
-      nodejs = lib.getExe pkgs.nodejs;
       cat = lib.getExe' pkgs.coreutils "cat";
+      braveSearchMcpServer = pkgs.callPackage ../../../packages/brave-search-mcp-server {};
 
       secretPath = name: sopsSecretPaths.${name} or "/run/secrets/${name}";
 
       mkSecretWrapper = {
-        binaryName,
+        package,
         wrappedName,
         secretName,
         envVarName,
@@ -166,27 +143,15 @@ in
           fi
 
           export ${envVarName}="$(${cat} "$secret_file")"
-          exec "${nodePackages}/bin/${binaryName}" "$@"
+          exec "${lib.getExe package}" "$@"
         '';
 
       wrappers = {
         brave-search-mcp = mkSecretWrapper {
-          binaryName = "brave-search-mcp-server";
+          package = braveSearchMcpServer;
           wrappedName = "brave-search-mcp-server-wrapped";
           secretName = "brave-api-key";
           envVarName = "BRAVE_API_KEY";
-        };
-        tavily-mcp = mkSecretWrapper {
-          binaryName = "tavily-mcp";
-          wrappedName = "tavily-mcp-wrapped";
-          secretName = "tavily-api-key";
-          envVarName = "TAVILY_API_KEY";
-        };
-        morph-fast-apply-mcp = mkSecretWrapper {
-          binaryName = "mcp-server-filesystem";
-          wrappedName = "morph-fast-apply-mcp-wrapped";
-          secretName = "morph-fast-apply-api-key";
-          envVarName = "MORPH_API_KEY";
         };
       };
 
@@ -194,11 +159,7 @@ in
 
       resolvedCommands = {
         "brave-search-mcp" = lib.getExe wrappers."brave-search-mcp";
-        "readability-mcp" = "${nodePackages}/lib/node_modules/@mizchi/readability/dist/mcp.js";
-        "tavily-mcp" = lib.getExe wrappers."tavily-mcp";
-        "chrome-devtools-mcp" = "${nodePackages}/bin/chrome-devtools-mcp";
-        "morph-fast-apply-mcp" = lib.getExe wrappers."morph-fast-apply-mcp";
-        "context7-mcp" = lib.getExe inputs.mcp-servers-nix.packages.${host.homeManagerSystem}.context7-mcp;
+        "context7-mcp" = lib.getExe pkgs.context7-mcp;
       };
 
       serverWithoutWrapperEnv = server:
@@ -210,16 +171,6 @@ in
         if server.command_id == null
         then ""
         else resolvedCommands.${server.command_id} or server.command_id;
-
-      resolveServerCommand = server:
-        if server.needs_node
-        then nodejs
-        else resolveCommandToken server;
-
-      resolveServerArgs = server:
-        if server.needs_node
-        then [(resolveCommandToken server)] ++ server.args
-        else server.args;
 
       envFormatters = {
         dollar_env_colon = key: "\${env:" + key + "}";
@@ -287,8 +238,8 @@ in
           if isClaudeCodeTarget && effectiveServer.url_type != null
           then effectiveServer.url_type
           else targetMeta.url_type_policy;
-        command = resolveServerCommand effectiveServer;
-        args = resolveServerArgs effectiveServer;
+        command = resolveCommandToken effectiveServer;
+        args = effectiveServer.args;
       in
         if effectiveServer.url != null
         then
@@ -312,21 +263,6 @@ in
         lib.filterAttrs (name: _: builtins.elem name enabledServersByTarget.${target}) (
           lib.mapAttrs (_: server: mkRenderedServer target targetMeta server) serverCatalog
         );
-
-      context7Targets = ["claude_code" "codex"];
-
-      mkTargetModule = target:
-        lib.optionalAttrs (builtins.elem target context7Targets) {
-          programs.context7 = {
-            enable = true;
-            type = "stdio";
-          };
-        }
-        // {
-          settings.servers = mkServersForTarget target;
-        };
-
-      renderedTargetModules = lib.genAttrs requiredTargets mkTargetModule;
 
       # --- Assertions ---
 
@@ -356,49 +292,26 @@ in
         requiredTargets
       );
 
-      mkNeedsNodeAssertions = lib.flatten (
-        lib.mapAttrsToList (
-          name: server:
-            lib.optional server.needs_node {
-              assertion = server.command_id != null;
-              message = "MCP server `${name}` has needs_node = true but does not define `command_id`.";
-            }
-        )
-        serverCatalog
-      );
-
       serverValidationAssertions =
         mkServerShapeAssertions
-        ++ mkEnabledServerAssertions
-        ++ mkNeedsNodeAssertions;
+        ++ mkEnabledServerAssertions;
 
       commandAssertions = lib.flatten (
         lib.mapAttrsToList (
           name: server: let
             resolvedToken = resolveCommandToken server;
-            hasCommandMapping = builtins.hasAttr server.command_id resolvedCommands;
-          in
-            [
-              {
-                assertion = builtins.stringLength resolvedToken > 0;
-                message = "MCP server `${name}` command invariant failed: command_id `${server.command_id}` resolved to an empty command token.";
-              }
-            ]
-            ++ lib.optional server.needs_node {
-              assertion = hasCommandMapping;
-              message = "MCP server `${name}` needs_node invariant failed: command_id `${server.command_id}` is missing from config.programs.mcp-servers.commands.";
-            }
+          in {
+            assertion = builtins.stringLength resolvedToken > 0;
+            message = "MCP server `${name}` command invariant failed: command_id `${server.command_id}` resolved to an empty command token.";
+          }
         )
         commandBackedServers
       );
-
-      evalTargetServers = target:
-        (inputs.mcp-servers-nix.lib.evalModule pkgs renderedTargetModules.${target}).config.settings.servers;
     in {
       assertions = commandAssertions ++ serverValidationAssertions;
 
-      programs.claude-code.mcpServers = evalTargetServers "claude_code";
-      programs.codex.settings.mcp_servers = evalTargetServers "codex";
-      programs.opencode.settings.mcp = evalTargetServers "opencode";
+      programs.claude-code.mcpServers = mkServersForTarget "claude_code";
+      programs.codex.settings.mcp_servers = mkServersForTarget "codex";
+      programs.opencode.settings.mcp = mkServersForTarget "opencode";
     };
   }

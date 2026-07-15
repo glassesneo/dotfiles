@@ -11,7 +11,6 @@ Tool priority (strict):
 1) `context7` for official library/framework docs and API behavior.
 2) `deepwiki` for repository-level architecture/API details.
 3) `brave-search` for broader web discovery and recency-sensitive information.
-4) `readability` for full page extraction from selected URLs.
 
 Research workflow:
 1) Start from the delegated research questions and known local findings.

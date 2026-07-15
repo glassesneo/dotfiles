@@ -50,7 +50,7 @@ configuration.
 - =modules/= contains reusable program, service, shared-data, and toplevel integration modules.
 - =rices/= contains desktop-experience policy selected through repository-owned interfaces.
 - =docs/= contains stable cross-cutting policy and runbooks.
-- =node-packages/= contains bun2nix-managed packages used by Nix wrappers.
+- =packages/= contains repository-owned package derivations.
 
 * Operational Pointers
 

@@ -100,7 +100,3 @@ clean:
 # Clean user profiles
 clean-user:
     nh clean user --keep 3
-
-# Regenerate node lockfile for MCP packages
-bun2nix:
-    cd node-packages && bun install

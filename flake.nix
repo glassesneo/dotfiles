@@ -136,18 +136,14 @@
         devShells = lib.optionalAttrs (system == "aarch64-darwin") (let
           dotfiles = pkgs.mkShellNoCC {
             name = "dotfiles";
-            packages = with pkgs;
-              [
-                bun
-                deno
-                emmylua-ls
-                just
-                nickel
-                stylua
-              ]
-              ++ [
-                inputs.bun2nix.packages.aarch64-darwin.default
-              ];
+            packages = with pkgs; [
+              bun
+              deno
+              emmylua-ls
+              just
+              nickel
+              stylua
+            ];
           };
         in {
           inherit dotfiles;
@@ -193,10 +189,6 @@
     # url = "github:nix-community/neovim-nightly-overlay";
     # inputs.nixpkgs.follows = "nixpkgs";
     # };
-    mcp-servers-nix = {
-      url = "github:natsukium/mcp-servers-nix";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
     brew-nix = {
       url = "github:BatteredBunny/brew-nix";
       inputs.nix-darwin.follows = "nix-darwin";
@@ -252,10 +244,6 @@
     wallpapers = {
       url = "github:rose-pine/wallpapers";
       flake = false;
-    };
-    bun2nix = {
-      url = "github:nix-community/bun2nix";
-      inputs.nixpkgs.follows = "nixpkgs";
     };
     denops-plugins = {
       url = "github:glassesneo/denops-plugins.nix";

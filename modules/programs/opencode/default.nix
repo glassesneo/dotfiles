@@ -13,10 +13,9 @@ delib.module {
       permissionPolicy = enumOption ["normal" "trusted-vm"] "normal";
     };
 
-  myconfig.ifEnabled.programs.mcp-servers-nix.targets.opencode = [
+  myconfig.ifEnabled.programs.mcp-servers.targets.opencode = [
     "brave-search"
     "deepwiki"
-    "readability"
     "context7"
   ];
 
