@@ -10,10 +10,11 @@ description: >-
 
 # Staged Agent Workflow
 
-Coordinate staged work from a non-source-writing primary context. Keep user
-dialogue, candidate summaries, approvals, capability selection, and minimal
-handoffs in the primary. Delegate artifact creation, source changes,
-validation, and review to capabilities that locally own those actions.
+Coordinate staged work from the active primary context. Keep user dialogue,
+candidate summaries, approvals, capability selection, and minimal handoffs in
+the primary. Run each action through the locally mapped capability. When the
+active primary provides a mapped artifact-authoring or implementation
+capability, it performs that action directly instead of delegating to itself.
 
 ## Required Input
 
@@ -45,9 +46,10 @@ Profiles may require these capabilities:
 - **report writer**: loads `agent-reports` and creates the required durable
   report using its canonical filename and format contract.
 
-One local agent may provide more than one capability only when its permissions
-and role actually satisfy each capability. Testing and review remain delegated
-capabilities rather than user-facing workflow stages.
+The active primary may provide one or more capabilities when its permissions
+and role satisfy each capability. Do not create a self-handoff: apply the
+confirmed contract directly. Testing and review remain delegated capabilities
+rather than user-facing workflow stages.
 
 ## Governing Context
 
@@ -56,7 +58,8 @@ recorded implementation-report deviation as reviewer and tester attention, not
 permission to diverge from the spec.
 
 Send delegates only confirmed decisions, governing paths, essential evidence,
-and their local output contract. Keep rejected alternatives, tentative
+and their local output contract. Apply the same minimal-input rule when the
+active primary owns the capability. Keep rejected alternatives, tentative
 reasoning, conversation history, routing mechanics, and parent orchestration
 out of handoffs.
 

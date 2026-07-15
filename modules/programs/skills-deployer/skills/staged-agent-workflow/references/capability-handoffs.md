@@ -6,15 +6,17 @@ responsibility.
 ## Artifact authors
 
 Provide the confirmed contract, governing paths, requested coverage, and
-essential repository evidence. Let the specification author or planner apply
-its own artifact and filename contract.
+essential repository evidence. Let the mapped specification author or planner
+apply its own artifact and filename contract. When the active primary provides
+the capability, use that input directly and do not create a self-handoff.
 
 ## Source-changing implementer
 
 Provide implementation authorization, governing artifact paths, approved scope
 and deviations, validation expectations, report requirement, and any explicit
 stop conditions. The implementer owns source changes, not renewed workflow
-negotiation.
+negotiation. When the active primary is the implementer, proceed directly with
+that bounded context rather than delegating to itself.
 
 ## Validation runner
 

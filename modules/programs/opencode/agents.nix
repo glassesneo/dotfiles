@@ -10,12 +10,11 @@ delib.module {
     inherit (opencodeAgentPermissions) agentPerm merge mergeMany perm;
     readAgentPrompt = name: builtins.readFile (./prompts + "/${name}.md");
     readSharedPrompt = name: builtins.readFile (./prompts/shared + "/${name}.md");
-    renderAgentPrompt = name: replacements: let
+    renderText = text: replacements: let
       placeholders = builtins.attrNames replacements;
     in
-      builtins.replaceStrings placeholders (map (_placeholder: replacements.${_placeholder}) placeholders) (
-        readAgentPrompt name
-      );
+      builtins.replaceStrings placeholders (map (_placeholder: replacements.${_placeholder}) placeholders) text;
+    renderAgentPrompt = name: replacements: renderText (readAgentPrompt name) replacements;
 
     implementationPermission =
       agentPerm.implementationByPolicy.${myconfig.programs.opencode.permissionPolicy};
@@ -24,11 +23,38 @@ delib.module {
     planFilenamePolicy = readSharedPrompt "plan-filename-policy";
     dividableTaskStructure = readSharedPrompt "task-breakdown-structure";
     researchFilenamePolicy = readSharedPrompt "research-filename-policy";
+    specAuthoringContract = renderText (readSharedPrompt "spec-authoring-contract") {
+      "{{SPEC_FILENAME_POLICY}}" = specFilenamePolicy;
+    };
+    planAuthoringContract = renderText (readSharedPrompt "plan-authoring-contract") {
+      "{{DIVIDABLE_TASK_STRUCTURE}}" = dividableTaskStructure;
+      "{{PLAN_FILENAME_POLICY}}" = planFilenamePolicy;
+    };
   in {
     assertions = [
       {
         assertion = agentPerm.scoutFull.bash != "allow";
         message = "OpenCode workflow primary must not have unrestricted shell execution.";
+      }
+      {
+        assertion =
+          agentPerm.scoutFull."edit*"."*"
+          == "deny"
+          && agentPerm.scoutFull."edit*".".agents/specs/*.md" == "allow"
+          && agentPerm.scoutFull."edit*".".agents/plans/*.md" == "allow"
+          && agentPerm.scoutFull.bash."mkdir .agents/specs" == "allow"
+          && agentPerm.scoutFull.bash."mkdir .agents/plans" == "allow"
+          && !(agentPerm.scoutFull.bash ? "mkdir .agents/**");
+        message = "OpenCode scout must write only canonical specification and plan artifacts.";
+      }
+      {
+        assertion =
+          implementationPermission.task."*"
+          == "deny"
+          && (implementationPermission.task.explore or "deny") == "deny"
+          && implementationPermission.task.tester == "allow"
+          && implementationPermission.task."review-orchestrator" == "allow";
+        message = "OpenCode taskmaster must self-explore while retaining validation and review delegation.";
       }
       {
         assertion = agentPerm.reviewOrchestrator.bash != "allow" && agentPerm.testRunner.bash != "allow";
@@ -72,8 +98,10 @@ delib.module {
         mode = "all";
         model = "openai/gpt-5.6-sol";
         reasoningEffort = "medium";
-        description = "Source-changing implementation agent shaped by the received request or command contract.";
-        prompt = readAgentPrompt "taskmaster";
+        description = "Implementation agent that self-explores and owns approved /act plans.";
+        prompt = renderAgentPrompt "taskmaster" {
+          "{{PLAN_AUTHORING_CONTRACT}}" = planAuthoringContract;
+        };
         permission = implementationPermission;
       };
 
@@ -95,32 +123,12 @@ delib.module {
         mode = "all";
         model = "openai/gpt-5.6-sol";
         reasoningEffort = "high";
-        description = "Non-source-writing agent for planning, inspection, and report workflows.";
-        prompt = readAgentPrompt "scout";
+        description = "Non-source-writing workflow agent that authors approved specification and plan artifacts.";
+        prompt = renderAgentPrompt "scout" {
+          "{{SPEC_AUTHORING_CONTRACT}}" = specAuthoringContract;
+          "{{PLAN_AUTHORING_CONTRACT}}" = planAuthoringContract;
+        };
         permission = agentPerm.scoutFull;
-      };
-
-      spec = {
-        mode = "subagent";
-        model = "openai/gpt-5.6-luna-fast";
-        reasoningEffort = "medium";
-        description = "Produces decision-ready spec artifacts under .agents/specs.";
-        prompt = renderAgentPrompt "spec" {
-          "{{SPEC_FILENAME_POLICY}}" = specFilenamePolicy;
-        };
-        permission = agentPerm.specOnly;
-      };
-
-      planner = {
-        mode = "subagent";
-        model = "openai/gpt-5.6-luna-fast";
-        reasoningEffort = "medium";
-        description = "Produces implementation plan artifacts under .agents/plans.";
-        prompt = renderAgentPrompt "planner" {
-          "{{DIVIDABLE_TASK_STRUCTURE}}" = dividableTaskStructure;
-          "{{PLAN_FILENAME_POLICY}}" = planFilenamePolicy;
-        };
-        permission = agentPerm.plannerOnly;
       };
 
       review-orchestrator = {

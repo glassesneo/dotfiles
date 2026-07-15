@@ -148,6 +148,20 @@ delib.module {
             // deny (denyShellOperatorsFor ["mkdir"]);
         };
 
+        workflowArtifactDirectoryCreation = {
+          bash =
+            denyAll
+            // allow [
+              "mkdir .agents"
+              "mkdir .agents/plans"
+              "mkdir .agents/specs"
+              "mkdir -p .agents"
+              "mkdir -p .agents/plans"
+              "mkdir -p .agents/specs"
+            ]
+            // deny (denyShellOperatorsFor ["mkdir"]);
+        };
+
         agentsDateFetch = {
           bash =
             denyAll
@@ -494,17 +508,18 @@ delib.module {
     };
 
     agentPerm = rec {
-      pureRead = mergeMany [
+      readOnlyBase = mergeMany [
         perm.read.workspace
         perm.write.none
         perm.execute.none
-        perm.execute.agentsDirectoryCreation
         perm.execute.agentsDateFetch
         perm.delegate.none
         perm.interact.none
         perm.network.none
         perm.context.full
       ];
+
+      pureRead = merge readOnlyBase perm.execute.agentsDirectoryCreation;
 
       agentsOnly = perm.scope.agents ["read" "edit*"] pureRead;
 
@@ -523,7 +538,14 @@ delib.module {
         perm.read.workspace
         perm.write.full
         perm.execute.testExecutionAsk
-        perm.delegate.all
+        (perm.delegate.only [
+          "researcher"
+          "challenger"
+          "focused-reviewer"
+          "dissent-reviewer"
+          "review-orchestrator"
+          "tester"
+        ])
         perm.interact.all
         perm.network.full
         perm.context.full
@@ -556,7 +578,8 @@ delib.module {
       ];
 
       scoutFull = mergeMany [
-        pureRead
+        (perm.scope.plans ["edit*"] (perm.scope.specs ["edit*"] readOnlyBase))
+        perm.execute.workflowArtifactDirectoryCreation
         perm.execute.safeGitInspection
         perm.execute.safeValidation
         perm.execute.ghReviewInspection
@@ -564,8 +587,6 @@ delib.module {
         perm.context.full
         (perm.delegate.only [
           "explore"
-          "spec"
-          "planner"
           "researcher"
           "challenger"
           "focused-reviewer"
@@ -606,28 +627,6 @@ delib.module {
       ];
 
       researchOnly = perm.scope.research ["edit*"] pureRead;
-
-      specOnly = mergeMany [
-        (perm.scope.specs ["edit*"] pureRead)
-        safeEvidenceCollection
-        perm.interact.question
-        (perm.delegate.only [
-          "explore"
-          "researcher"
-          "challenger"
-        ])
-      ];
-
-      plannerOnly = mergeMany [
-        (perm.scope.plans ["edit*"] pureRead)
-        safeEvidenceCollection
-        perm.interact.question
-        (perm.delegate.only [
-          "explore"
-          "researcher"
-          "challenger"
-        ])
-      ];
 
       networkResearch = mergeMany [
         researchOnly

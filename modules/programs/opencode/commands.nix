@@ -22,19 +22,28 @@ delib.module {
       act = "Coordinate an approved lightweight plan and implementation.";
       impl = "Coordinate authorized implementation from governing context.";
     };
+    workflowAgents = {
+      spec = "scout";
+      plan = "scout";
+      strategy = "scout";
+      act = "taskmaster";
+      impl = "taskmaster";
+    };
     workflowCommands =
       lib.mapAttrs (name: profile: {
         template = readCommandPrompt name;
         description = workflowDescriptions.${name};
-        agent = "scout";
+        agent = workflowAgents.${name};
         subtask = false;
       })
       workflowProfiles;
   in {
     assertions =
       lib.mapAttrsToList (name: profile: {
-        assertion = lib.hasInfix "profile `${profile}`" workflowCommands.${name}.template;
-        message = "OpenCode command `${name}` must select staged workflow profile `${profile}`.";
+        assertion =
+          lib.hasInfix "profile `${profile}`" workflowCommands.${name}.template
+          && workflowCommands.${name}.agent == workflowAgents.${name};
+        message = "OpenCode command `${name}` must select profile `${profile}` and start on `${workflowAgents.${name}}`.";
       })
       workflowProfiles;
 
