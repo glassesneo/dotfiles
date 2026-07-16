@@ -143,8 +143,9 @@
           dotfiles = pkgs.mkShellNoCC {
             name = "dotfiles";
             packages = with pkgs; [
-              bun
               deno
+              nodejs
+              typescript-language-server
               emmylua-ls
               just
               nickel

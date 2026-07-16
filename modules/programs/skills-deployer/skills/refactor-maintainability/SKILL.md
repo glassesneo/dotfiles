@@ -1,6 +1,16 @@
 ---
 name: refactor-maintainability
-description: Use for behavior-preserving refactoring and maintainability work across specification planning, implementation planning, implementation, code review, and refactor tasks. Trigger on requests to find safe cleanup candidates, classify code smells, split a refactor plan, define behavior-preserving invariants, decide fix-now versus separate-change, or review maintainability/readability/design degradation. Do not use for feature changes, bug fixes that intentionally change behavior, rewrites, migrations, performance optimization, security-boundary changes, formatting-only disputes, or generated/vendor code cleanup unless the user explicitly scopes a behavior-preserving maintainability task.
+description: >-
+  Use for behavior-preserving refactoring and maintainability work across
+  specification planning, implementation planning, implementation, code review,
+  and refactor tasks. Trigger on requests to find safe cleanup candidates,
+  classify code smells, split a refactor plan, define behavior-preserving
+  invariants, decide fix-now versus separate-change, or review
+  maintainability/readability/design degradation. Do not use for feature
+  changes, bug fixes that intentionally change behavior, rewrites, migrations,
+  performance optimization, security-boundary changes, formatting-only
+  disputes, or generated/vendor code cleanup unless the user explicitly scopes
+  a behavior-preserving maintainability task.
 ---
 
 # Refactor Maintainability Skill
@@ -170,4 +180,3 @@ Do not block a review on a smell alone. Block only when the smell creates concre
 - `references/output-templates.md`: use when you need a Maintainability Scan,
   Refactor Plan, Implementation Guard, Review Finding, or Characterization Test
   Request template.
-

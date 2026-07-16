@@ -1,6 +1,7 @@
 ---
 name: prompt-interface-design
-description: Use when writing, revising, or reviewing prompts that will be consumed by another model, agent, subagent, reusable prompt template, or system that expands or passes prompts to a model. Trigger for model-facing command prompts, AGENTS.md files, agent instruction files, subagent handoffs, and reusable prompt templates. Use to define what the receiving model will actually see, place instructions in the correct layer, delegate existing skills, reduce prompt bloat, avoid unnecessary negative constraints, and specify clear output contracts. Out of scope: ordinary end-user answers, domain-specific coding guidance, general writing style advice, and security-specific prompt-injection analysis.
+description: >-
+  Use when writing, revising, or reviewing prompts that will be consumed by another model, agent, subagent, reusable prompt template, or system that expands or passes prompts to a model. Trigger for model-facing command prompts, AGENTS.md files, agent instruction files, subagent handoffs, and reusable prompt templates. Use to define what the receiving model will actually see, place instructions in the correct layer, delegate existing skills, reduce prompt bloat, avoid unnecessary negative constraints, and specify clear output contracts. Out of scope: ordinary end-user answers, domain-specific coding guidance, general writing style advice, and security-specific prompt-injection analysis.
 ---
 
 # Prompt Interface Design Skill

@@ -1,6 +1,14 @@
 ---
 name: accessibility-ux
-description: Use when UI accessibility or usability must shape specification planning, implementation planning, implementation, code/design review, or behavior-preserving refactoring. Trigger on work involving WCAG, semantic HTML, ARIA, keyboard operation, focus management, screen-reader support, forms, errors, contrast, reflow, status messages, or UX heuristics. Do not use for purely visual taste changes, legal compliance advice, framework-specific accessibility manuals, generic skill-authoring, or non-UI work unless accessibility/UX behavior is part of the task contract.
+description: >-
+  Use when UI accessibility or usability must shape specification planning,
+  implementation planning, implementation, code/design review, or
+  behavior-preserving refactoring. Trigger on work involving WCAG, semantic
+  HTML, ARIA, keyboard operation, focus management, screen-reader support,
+  forms, errors, contrast, reflow, status messages, or UX heuristics. Do not use
+  for purely visual taste changes, legal compliance advice, framework-specific
+  accessibility manuals, generic skill-authoring, or non-UI work unless
+  accessibility/UX behavior is part of the task contract.
 ---
 
 # Accessibility UX Skill

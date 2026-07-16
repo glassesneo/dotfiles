@@ -1,6 +1,15 @@
 ---
 name: liminal-lens
-description: Use when the user is exploring an unclear idea, shaping an underspecified requirement, naming a pattern, comparing vague options, designing a workflow, or turning an intuition into a reusable concept. Trigger when the user's input appears to be a compressed intermediate thought rather than a finalized instruction. Use to prevent premature closure by surfacing latent assumptions, unresolved tensions, alternative frames, and bounded decision points while preserving the normal task workflow. Do not use when the user has clearly decided, asks for direct execution, requests a final artifact, provides concrete implementation details, or signals convergence.
+description: >-
+  Use when the user is exploring an unclear idea, shaping an underspecified
+  requirement, naming a pattern, comparing vague options, designing a workflow,
+  or turning an intuition into a reusable concept. Trigger when the user's input
+  appears to be a compressed intermediate thought rather than a finalized
+  instruction. Use to prevent premature closure by surfacing latent assumptions,
+  unresolved tensions, alternative frames, and bounded decision points while
+  preserving the normal task workflow. Do not use when the user has clearly
+  decided, asks for direct execution, requests a final artifact, provides
+  concrete implementation details, or signals convergence.
 ---
 
 # Liminal Lens Skill

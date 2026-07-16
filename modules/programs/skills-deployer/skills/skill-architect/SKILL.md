@@ -1,6 +1,15 @@
 ---
 name: skill-architect
-description: Use when designing, reviewing, revising, splitting, merging, or packaging Agent Skill artifacts for coding agents. Trigger when the user asks to create a skill, improve a skill, define skill structure, write SKILL.md, design skill frontmatter, decide references/assets/scripts, audit overlap between skills, or turn domain guidance into a reusable skill. Do not use for ordinary end-user answers, one-off prompts that are not reusable skills, domain-specific implementation guidance unless it is being converted into a skill, or prompt-injection/security analysis except as it affects skill artifact boundaries.
+description: >-
+  Use when designing, reviewing, revising, splitting, merging, or packaging Agent
+  Skill artifacts for coding agents. Trigger when the user asks to create a
+  skill, improve a skill, define skill structure, write SKILL.md, design skill
+  frontmatter, decide references/assets/scripts, audit overlap between skills,
+  or turn domain guidance into a reusable skill. Do not use for ordinary
+  end-user answers, one-off prompts that are not reusable skills,
+  domain-specific implementation guidance unless it is being converted into a
+  skill, or prompt-injection/security analysis except as it affects skill
+  artifact boundaries.
 ---
 
 # Skill Architect
