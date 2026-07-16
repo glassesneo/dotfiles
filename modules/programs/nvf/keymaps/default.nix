@@ -31,6 +31,56 @@ delib.module {
           silent = true;
         }
         {
+          key = "<S-h>";
+          mode = ["n"];
+          action = "<Cmd>bprev<CR>";
+          silent = true;
+        }
+        {
+          key = "<S-l>";
+          mode = ["n"];
+          action = "<Cmd>bnext<CR>";
+          silent = true;
+        }
+        {
+          key = "<S-r>";
+          mode = ["n"];
+          action = "function() vim.lsp.buf.rename() end";
+          lua = true;
+          silent = true;
+        }
+        {
+          key = "<C-a>";
+          mode = ["i"];
+          action = "<C-o>^";
+          silent = true;
+        }
+        {
+          key = "<C-e>";
+          mode = ["i"];
+          action = ''            function()
+                        if vim.lsp.inline_completion.get() then
+                          return ""
+                        end
+                        return "<C-o>$"
+                      end'';
+          lua = true;
+          expr = true;
+          silent = true;
+        }
+        {
+          key = "<C-b>";
+          mode = ["i"];
+          action = "<Left>";
+          silent = true;
+        }
+        {
+          key = "<C-f>";
+          mode = ["i"];
+          action = "<Right>";
+          silent = true;
+        }
+        {
           key = "<Space>h";
           mode = ["n" "x" "o"];
           action = "^";
@@ -86,6 +136,12 @@ delib.module {
           key = "y";
           mode = ["x"];
           action = "mzy`z";
+          silent = true;
+        }
+        {
+          key = "gc";
+          mode = ["x"];
+          action = "mz:normal gcc<CR>`z";
           silent = true;
         }
       ]
