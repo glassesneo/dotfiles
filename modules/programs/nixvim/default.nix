@@ -40,6 +40,9 @@ delib.module {
   home.ifEnabled = {cfg, ...}: {
     programs.nixvim = {
       enable = true;
+      # Nixvim's current manpage builder requires Pandoc Lua support, which the
+      # followed Nixpkgs revision's minimal pandoc package does not provide.
+      enableMan = false;
       # package = inputs.neovim-nightly-overlay.packages.${pkgs.stdenv.hostPlatform.system}.default;
       inherit (cfg) defaultEditor;
       withNodeJs = false;

@@ -12,6 +12,7 @@
 
     nativeBuildInputs = with pkgs; [
       cmake
+      llvmPackages.lld
       perl
     ];
 
@@ -33,6 +34,9 @@
     cmakeFlags = [
       "-DCMAKE_INSTALL_PREFIX=${placeholder "out"}"
     ];
+
+    # Work around nixpkgs#536365 until the ld64 hardening fix reaches master.
+    env.NIX_CFLAGS_LINK = "-fuse-ld=lld";
 
     meta = with pkgs.lib; {
       description = "Control and observe media playback from the command line";

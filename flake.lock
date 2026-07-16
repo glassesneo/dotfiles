@@ -420,11 +420,11 @@
     "media-control": {
       "flake": false,
       "locked": {
-        "lastModified": 1757501287,
-        "narHash": "sha256-GvdgkW3Jux5oEqj+UfgUyk/Xj8fcAWo9ZmaNDIR6vzY=",
+        "lastModified": 1778511287,
+        "narHash": "sha256-JYcCUkWykyat+iM94y6QHd9ohaAnplEXvA7HlaTenrI=",
         "ref": "refs/heads/master",
-        "rev": "7f2b6107eab208ac6f7dd206232c7a8eb5c34aca",
-        "revCount": 47,
+        "rev": "815bcb5fb514da137e75ca5b866ffb2fb72f224e",
+        "revCount": 57,
         "submodules": true,
         "type": "git",
         "url": "https://github.com/ungive/media-control"
@@ -457,11 +457,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1781761792,
-        "narHash": "sha256-rCPytmKNjctLloB6UgK5CRrHSwV4b0ygxtJLPPp8R14=",
+        "lastModified": 1784123936,
+        "narHash": "sha256-IOWwQMJhUxcojm0MRvuKs1fKLH727u4+hHeEOPhdUyA=",
         "owner": "nix-darwin",
         "repo": "nix-darwin",
-        "rev": "a1fa429e945becaf60468600daf649be4ba0350c",
+        "rev": "a4cf1d10853b0d2be19b9eca35d749e201d70b55",
         "type": "github"
       },
       "original": {
@@ -550,11 +550,11 @@
     },
     "nixpkgs_3": {
       "locked": {
-        "lastModified": 1781607440,
-        "narHash": "sha256-rxO+uc/KFbSJp+pgyXRuAX6QlG9hJdnt0BXpEQRXY+U=",
+        "lastModified": 1784115452,
+        "narHash": "sha256-BoYPdqk6jlKXy+DyUzyGV/CtRGfAhk2MmIgBhsemTGI=",
         "owner": "nixos",
         "repo": "nixpkgs",
-        "rev": "3e41b24abd260e8f71dbe2f5737d24122f972158",
+        "rev": "35d3407a3816f3b341d8cf1d60abaf2b7b8166ac",
         "type": "github"
       },
       "original": {
