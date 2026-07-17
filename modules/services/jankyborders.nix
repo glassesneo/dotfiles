@@ -1,37 +1,21 @@
 {
   delib,
   host,
-  lib,
   tiers,
   ...
 }:
 delib.module {
   name = "services.jankyborders";
 
-  options.services.jankyborders = with delib; {
-    enable = boolOption host.guiShellFeatured;
-    style = lib.mkOption {
-      type = lib.types.enum ["round" "square"];
-      default = "round";
-      description = "JankyBorders window border style";
+  options = with delib;
+    moduleOptions {
+      enable = boolOption host.guiShellFeatured;
+      style = description (enumOption ["round" "square"] "round") "JankyBorders window border style";
+      active_color = description (strOption "0xffabb2bf") "JankyBorders active border color in ARGB hex (e.g. 0xffRRGGBB)";
+      inactive_color = description (strOption "0x00000000") "JankyBorders inactive border color in ARGB hex (e.g. 0xffRRGGBB)";
+      width = floatOption 5.0;
+      order = description (enumOption ["below" "above"] "below") "Whether JankyBorders should be rendered below or above window content";
     };
-    active_color = lib.mkOption {
-      type = lib.types.str;
-      default = "0xffabb2bf";
-      description = "JankyBorders active border color in ARGB hex (e.g. 0xffRRGGBB)";
-    };
-    inactive_color = lib.mkOption {
-      type = lib.types.str;
-      default = "0x00000000";
-      description = "JankyBorders inactive border color in ARGB hex (e.g. 0xffRRGGBB)";
-    };
-    width = floatOption 5.0;
-    order = lib.mkOption {
-      type = lib.types.enum ["below" "above"];
-      default = "below";
-      description = "Whether JankyBorders should be rendered below or above window content";
-    };
-  };
 
   darwin.ifEnabled = {cfg, ...}: {
     services.jankyborders = let

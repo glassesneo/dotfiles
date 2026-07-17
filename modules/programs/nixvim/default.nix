@@ -2,36 +2,27 @@
   delib,
   host,
   inputs,
-  lib,
   # pkgs,
   ...
 }:
 delib.module {
   name = "programs.nixvim";
 
-  options.programs.nixvim = with delib; {
-    enable = boolOption host.devCoreFeatured;
+  options = with delib;
+    moduleOptions {
+      enable = boolOption host.devCoreFeatured;
 
-    defaultEditor = boolOption true;
-    appearance = {
-      theme = lib.mkOption {
-        type = lib.types.enum ["catppuccin" "everforest" "base16"];
-        default = "base16";
+      defaultEditor = boolOption true;
+      appearance = {
+        theme = enumOption ["catppuccin" "everforest" "base16"] "base16";
+        catppuccin-flavor = enumOption ["latte" "frappe" "macchiato" "mocha"] "macchiato";
+        everforest-background = enumOption ["hard" "medium" "soft"] "medium";
+        transparent = boolOption false;
+        rounded-borders = boolOption false;
+        comment-color = strOption "";
+        transparent-floats = boolOption false;
       };
-      catppuccin-flavor = lib.mkOption {
-        type = lib.types.enum ["latte" "frappe" "macchiato" "mocha"];
-        default = "macchiato";
-      };
-      everforest-background = lib.mkOption {
-        type = lib.types.enum ["hard" "medium" "soft"];
-        default = "medium";
-      };
-      transparent = boolOption false;
-      rounded-borders = boolOption false;
-      comment-color = strOption "";
-      transparent-floats = boolOption false;
     };
-  };
 
   myconfig.always.args.shared.nixvimLib = inputs.nixvim.lib;
 

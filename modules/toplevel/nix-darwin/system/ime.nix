@@ -1,22 +1,22 @@
 {
   delib,
-  lib,
   pkgs,
   ...
 }:
 delib.module {
   name = "nix-darwin.system.ime";
 
-  options.nix-darwin.system.ime = with delib; {
-    enable = boolOption pkgs.stdenv.isDarwin;
+  options = with delib;
+    moduleOptions {
+      enable = boolOption pkgs.stdenv.isDarwin;
 
-    # Central aggregation interface for com.apple.HIToolbox input-source arrays.
-    # Feature modules (e.g. AquaSKK) contribute entries here; this module is the
-    # sole final writer so ordering and deduplication are controlled in one place.
-    extraEnabledInputSources = listOfOption lib.types.attrs [];
-    extraSelectedInputSources = listOfOption lib.types.attrs [];
-    extraInputSourceHistory = listOfOption lib.types.attrs [];
-  };
+      # Central aggregation interface for com.apple.HIToolbox input-source arrays.
+      # Feature modules (e.g. AquaSKK) contribute entries here; this module is the
+      # sole final writer so ordering and deduplication are controlled in one place.
+      extraEnabledInputSources = listOfOption attrsLegacy [];
+      extraSelectedInputSources = listOfOption attrsLegacy [];
+      extraInputSourceHistory = listOfOption attrsLegacy [];
+    };
 
   darwin.ifEnabled = {cfg, ...}: let
     # Shared system input sources — always present regardless of feature modules.

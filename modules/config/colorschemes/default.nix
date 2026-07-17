@@ -1,24 +1,16 @@
 {
   colorschemeLib,
   delib,
-  lib,
   ...
 }: let
   mkColorOption = name:
-    lib.mkOption {
-      type = lib.types.str;
-      apply = colorschemeLib.normalizeHex;
-      example = "#1a1a1a";
-      description = "Hex color value for ${name} in #RRGGBB format.";
-    };
+    with delib;
+      description (apply (noDefault (strOption null)) colorschemeLib.normalizeHex) "Hex color value for ${name} in #RRGGBB format."
+      // {example = "#1a1a1a";};
 
-  paletteType = lib.types.submodule ({config, ...}: {
+  paletteModule = {config, ...}: {
     options = {
-      polarity = lib.mkOption {
-        type = lib.types.enum ["dark" "light"];
-        default = "dark";
-        description = "Palette polarity for dark/light aware consumers.";
-      };
+      polarity = with delib; description (enumOption ["dark" "light"] "dark") "Palette polarity for dark/light aware consumers.";
 
       base00 = mkColorOption "base00";
       base01 = mkColorOption "base01";
@@ -37,23 +29,16 @@
       base0E = mkColorOption "base0E";
       base0F = mkColorOption "base0F";
     };
-  });
+  };
+  paletteType = delib.submodule paletteModule;
 in
   delib.module {
     name = "config.colorschemes";
 
-    options = {
-      colorschemes = lib.mkOption {
-        type = lib.types.attrsOf (lib.types.attrsOf paletteType);
-        default = {};
-        description = "Colorscheme registry keyed by scheme name and variant.";
-      };
+    options = with delib; {
+      colorschemes = description (attrsOfOption (attrsOf paletteType) {}) "Colorscheme registry keyed by scheme name and variant.";
 
-      colorscheme = lib.mkOption {
-        type = lib.types.nullOr paletteType;
-        default = null;
-        description = "Active colorscheme selected by the current rice.";
-      };
+      colorscheme = description (allowNull (submoduleOption paletteModule null)) "Active colorscheme selected by the current rice.";
     };
 
     myconfig.always = {myconfig, ...}: {

@@ -50,16 +50,10 @@
               virtual = ["devCore"];
             };
             hosts.extraSubmodules = [
-              ({lib, ...}: {
-                options.tier = lib.mkOption {
-                  type = lib.types.enum ["minimal" "basic" "standard" "full"];
-                  default = "standard";
-                  description = "Performance tier of this host. Ordered: minimal < basic < standard < full.";
-                };
-                options.hasNotch = lib.mkOption {
-                  type = lib.types.bool;
-                  default = false;
-                  description = "Whether this host has a display notch (e.g. MacBook Pro). Drives bar position and notch-aware layout defaults.";
+              ({...}: {
+                options = with denix.lib; {
+                  tier = description (enumOption ["minimal" "basic" "standard" "full"] "standard") "Performance tier of this host. Ordered: minimal < basic < standard < full.";
+                  hasNotch = description (boolOption false) "Whether this host has a display notch (e.g. MacBook Pro). Drives bar position and notch-aware layout defaults.";
                 };
               })
             ];

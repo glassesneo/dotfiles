@@ -21,10 +21,7 @@ in
           host.guiShellFeatured
           && myconfig.services.kanata.profile != null
         );
-        profile = lib.mkOption {
-          type = lib.types.nullOr (lib.types.enum (builtins.attrNames profiles));
-          default = null;
-        };
+        profile = allowNull (enumOption (builtins.attrNames profiles) null);
       });
 
     darwin.always = {

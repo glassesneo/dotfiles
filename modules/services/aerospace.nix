@@ -15,31 +15,20 @@ delib.module {
       # off Aerospace, change darwin.window-manager.backend, not this flag.
       enable = boolOption false;
       # Apps that should default to tiling layout (most apps float by default)
-      tilingApps = lib.mkOption {
-        type = lib.types.listOf lib.types.str;
-        default = [
-          "company.thebrowser.Browser" # Arc Browser
-          "com.mitchellh.ghostty" # Ghostty terminal
-        ];
-        description = "App bundle IDs that should use tiling layout by default";
-      };
+      tilingApps = description (listOfOption str [
+        "company.thebrowser.Browser" # Arc Browser
+        "com.mitchellh.ghostty" # Ghostty terminal
+      ]) "App bundle IDs that should use tiling layout by default";
       # Which screen edge gets the large bar reserve. Defaults follow host.hasNotch
       # so notched hosts reserve the top (where SketchyBar sits) and non-notched
       # hosts reserve the bottom. Rices can override via myconfig.services.aerospace.reservedEdge.
-      reservedEdge = lib.mkOption {
-        type = lib.types.enum ["top" "bottom"];
-        default =
-          if host.hasNotch
-          then "top"
-          else "bottom";
-        description = "Screen edge that receives the full bar reserve gap. Defaults to top for notched hosts, bottom otherwise. Should stay aligned with SketchyBar bar placement.";
-      };
+      reservedEdge = description (enumOption ["top" "bottom"] (
+        if host.hasNotch
+        then "top"
+        else "bottom"
+      )) "Screen edge that receives the full bar reserve gap. Defaults to top for notched hosts, bottom otherwise. Should stay aligned with SketchyBar bar placement.";
       # Size of the large reserved-edge gap, matching the SketchyBar bar height.
-      reservedSize = lib.mkOption {
-        type = lib.types.int;
-        default = 42;
-        description = "Size of the reserved-edge outer gap in pixels. Should match the SketchyBar bar height.";
-      };
+      reservedSize = description (intOption 42) "Size of the reserved-edge outer gap in pixels. Should match the SketchyBar bar height.";
     };
 
   darwin.ifEnabled = {cfg, ...}: {

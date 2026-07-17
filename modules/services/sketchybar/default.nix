@@ -8,11 +8,8 @@
 }: let
   colorType = lib.types.strMatching "0x[0-9a-fA-F]{8}";
   mkColorOption = name: default:
-    lib.mkOption {
-      type = colorType;
-      inherit default;
-      description = "SketchyBar semantic color ${name} in 0xAARRGGBB format.";
-    };
+    with delib;
+      description ((strOption default) // {type = colorType;}) "SketchyBar semantic color ${name} in 0xAARRGGBB format.";
   colorOptions = lib.mapAttrs mkColorOption {
     text_primary = "0xffabb2bf";
     text_muted = "0xff6c7891";
@@ -33,24 +30,22 @@
   };
   sectionOrder = ["a" "b" "c" "x" "y" "z"];
   leftSections = ["a" "b" "c"];
-  layoutEntryType = lib.types.coercedTo lib.types.str (widget: {inherit widget;}) (
-    lib.types.submodule {
-      options = {
-        widget = lib.mkOption {
-          type = lib.types.str;
+  layoutEntryType = with delib;
+    coercedTo str (widget: {inherit widget;}) (
+      submodule {
+        options = {
+          widget = noDefault (strOption null);
         };
-      };
-    }
-  );
-  layoutType = lib.types.submodule {
+      }
+    );
+  layoutModule = {
     options = lib.genAttrs sectionOrder (section:
-      lib.mkOption {
-        type = lib.types.listOf layoutEntryType;
-        default =
+      with delib;
+        listOfOption layoutEntryType (
           if section == "z"
           then [{widget = "datetime";}]
-          else [];
-      });
+          else []
+        ));
   };
 in
   delib.module {
@@ -60,28 +55,21 @@ in
       moduleOptions {
         enable = boolOption (pkgs.stdenv.isDarwin && host.guiShellFeatured);
         nushellPackage = packageOption pkgs.nushell;
-        colors = lib.mkOption {
-          type = lib.types.submodule {
-            options = colorOptions;
-          };
-          default = {};
-          description = "Semantic color palette for SketchyBar items and UI elements.";
-        };
+        colors = description (submoduleOption {
+          options = colorOptions;
+        } {}) "Semantic color palette for SketchyBar items and UI elements.";
         position = enumOption ["top" "bottom"] (
           if host.hasNotch
           then "top"
           else "bottom"
         );
-        layout = lib.mkOption {
-          type = layoutType;
-          default = {
-            a = ["aerospace_workspace"];
-            b = [];
-            c = [];
-            x = ["media"];
-            y = ["battery"];
-            z = ["datetime"];
-          };
+        layout = submoduleOption layoutModule {
+          a = ["aerospace_workspace"];
+          b = [];
+          c = [];
+          x = ["media"];
+          y = ["battery"];
+          z = ["datetime"];
         };
         sections = readOnly (listOfOption str sectionOrder);
       };

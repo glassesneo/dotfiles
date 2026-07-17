@@ -20,58 +20,35 @@
       "${./typing_sakura_petals.glsl}"
     ];
   };
+  paletteType =
+    lib.types.addCheck
+    (delib.listOf (lib.types.strMatching "^#[0-9a-fA-F]{6}$"))
+    (palette: palette == [] || builtins.length palette == 16);
 in
   delib.module {
     name = "programs.ghostty";
 
-    options.programs.ghostty = with delib; {
-      enable = boolOption host.guiShellFeatured;
-      appearance = {
-        font-family = strOption "";
-        font-size = lib.mkOption {
-          type = lib.types.nullOr lib.types.number;
-          default = null;
+    options = with delib;
+      moduleOptions {
+        enable = boolOption host.guiShellFeatured;
+        appearance = {
+          font-family = strOption "";
+          font-size = allowNull (numberOption null);
+          background-opacity = allowNull (numberOption null);
+          background-blur = allowNull (intOption null);
+          background = strOption "";
+          foreground = strOption "";
+          cursor = strOption "";
+          selection-background = strOption "";
+          selection-foreground = strOption "";
+          padding-x = allowNull (intOption null);
+          padding-y = allowNull (intOption null);
+          minimum-contrast = allowNull (numberOption null);
+          animate-shaders = boolOption false;
+          palette = description ((listOfOption str []) // {type = paletteType;}) "ANSI terminal palette colors in index order; empty uses Ghostty defaults.";
         };
-        background-opacity = lib.mkOption {
-          type = lib.types.nullOr lib.types.number;
-          default = null;
-        };
-        background-blur = lib.mkOption {
-          type = lib.types.nullOr lib.types.int;
-          default = null;
-        };
-        background = strOption "";
-        foreground = strOption "";
-        cursor = strOption "";
-        selection-background = strOption "";
-        selection-foreground = strOption "";
-        padding-x = lib.mkOption {
-          type = lib.types.nullOr lib.types.int;
-          default = null;
-        };
-        padding-y = lib.mkOption {
-          type = lib.types.nullOr lib.types.int;
-          default = null;
-        };
-        minimum-contrast = lib.mkOption {
-          type = lib.types.nullOr lib.types.number;
-          default = null;
-        };
-        animate-shaders = boolOption false;
-        palette = lib.mkOption {
-          type =
-            lib.types.addCheck
-            (lib.types.listOf (lib.types.strMatching "^#[0-9a-fA-F]{6}$"))
-            (palette: palette == [] || builtins.length palette == 16);
-          default = [];
-          description = "ANSI terminal palette colors in index order; empty uses Ghostty defaults.";
-        };
+        shader-profile = allowNull (enumOption (builtins.attrNames shaderProfiles) null);
       };
-      shader-profile = lib.mkOption {
-        type = lib.types.nullOr (lib.types.enum (builtins.attrNames shaderProfiles));
-        default = null;
-      };
-    };
 
     home.ifEnabled = {
       cfg,

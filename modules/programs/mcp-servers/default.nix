@@ -7,56 +7,27 @@
   ...
 }: let
   # Typed submodule for a single MCP server catalog entry.
-  serverType = lib.types.submodule {
+  serverType = delib.submodule {
     options = {
-      command_id = lib.mkOption {
-        type = lib.types.nullOr lib.types.str;
-        default = null;
-        description = "Nix package or command identifier for command-backed servers.";
-      };
-      url = lib.mkOption {
-        type = lib.types.nullOr lib.types.str;
-        default = null;
-        description = "URL for remote MCP servers.";
-      };
-      url_type = lib.mkOption {
-        type = lib.types.nullOr lib.types.str;
-        default = null;
-        description = "Per-server type override (e.g. \"http\" for streamable HTTP).";
-      };
-      auth_secret = lib.mkOption {
-        type = lib.types.nullOr lib.types.str;
-        default = null;
-        description = "SOPS secret name for bearer-token auth.";
-      };
-      args = lib.mkOption {
-        type = lib.types.listOf lib.types.str;
-        default = [];
-        description = "Arguments passed to the server command.";
-      };
-      env_keys = lib.mkOption {
-        type = lib.types.attrsOf lib.types.str;
-        default = {};
-        description = "Environment variable mappings (key = env var name in output, value = source key).";
-      };
-      env_static = lib.mkOption {
-        type = lib.types.attrsOf lib.types.str;
-        default = {};
-        description = "Static environment variable values.";
-      };
+      command_id = with delib; description (allowNull (strOption null)) "Nix package or command identifier for command-backed servers.";
+      url = with delib; description (allowNull (strOption null)) "URL for remote MCP servers.";
+      url_type = with delib; description (allowNull (strOption null)) "Per-server type override (e.g. \"http\" for streamable HTTP).";
+      auth_secret = with delib; description (allowNull (strOption null)) "SOPS secret name for bearer-token auth.";
+      args = with delib; description (listOfOption str []) "Arguments passed to the server command.";
+      env_keys = with delib; description (attrsOfOption str {}) "Environment variable mappings (key = env var name in output, value = source key).";
+      env_static = with delib; description (attrsOfOption str {}) "Static environment variable values.";
     };
   };
 in
   delib.module {
     name = "programs.mcp-servers";
 
-    options.programs.mcp-servers = with delib; {
-      enable = boolOption host.devCoreFeatured;
+    options = with delib;
+      moduleOptions {
+        enable = boolOption host.devCoreFeatured;
 
-      # Shared server catalog — centralized definitions consumed by all targets.
-      catalog = lib.mkOption {
-        type = lib.types.attrsOf serverType;
-        default = {
+        # Shared server catalog — centralized definitions consumed by all targets.
+        catalog = description (attrsOfOption serverType {
           brave-search = {
             command_id = "brave-search-mcp";
             env_keys = {BRAVE_API_KEY = "BRAVE_API_KEY";};
@@ -71,18 +42,16 @@ in
           context7 = {
             command_id = "context7-mcp";
           };
-        };
-        description = "Shared MCP server definitions. Each entry defines a server's command, URL, args, env, and behavior.";
-      };
+        }) "Shared MCP server definitions. Each entry defines a server's command, URL, args, env, and behavior.";
 
-      # Per-target server membership — client modules contribute their lists
-      # via myconfig.ifEnabled so each client owns its default membership.
-      targets = {
-        claude_code = listOfOption lib.types.str [];
-        codex = listOfOption lib.types.str [];
-        opencode = listOfOption lib.types.str [];
+        # Per-target server membership — client modules contribute their lists
+        # via myconfig.ifEnabled so each client owns its default membership.
+        targets = {
+          claude_code = listOfOption str [];
+          codex = listOfOption str [];
+          opencode = listOfOption str [];
+        };
       };
-    };
 
     home.ifEnabled = {cfg, ...}: let
       # Read typed config values.
