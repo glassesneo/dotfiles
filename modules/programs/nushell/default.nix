@@ -71,17 +71,4 @@ delib.module {
       };
     };
   };
-
-  darwin.ifEnabled = {myconfig, ...}: {
-    sops.secrets = {
-      iniad-id = {
-        owner = myconfig.constants.username;
-        mode = "0400";
-      };
-      iniad-password = {
-        owner = myconfig.constants.username;
-        mode = "0400";
-      };
-    };
-  };
 }

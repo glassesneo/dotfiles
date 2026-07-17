@@ -5,71 +5,76 @@
   lib,
   moduleSystem,
   ...
-}:
-delib.module {
-  name = "toplevel.secrets";
+}: let
+  sharedSecretNames = [
+    "gemini-api-key"
+    "ai-mop-api-key"
+    "brave-api-key"
+    "openrouter-api-key"
+    "cerebras-api-key"
+    "google-cloud-api-key"
+    "zai-api-key"
+    "iniad-id"
+    "iniad-password"
+  ];
+in
+  delib.module {
+    name = "toplevel.secrets";
 
-  myconfig.always.args.shared.sopsSecretPaths =
-    if builtins.elem moduleSystem ["darwin" "nixos"]
-    then lib.mapAttrs (_: secret: secret.path) config.sops.secrets
-    else {};
+    options = with delib;
+      moduleOptions {
+        enable = boolOption true;
+        names = listOfOption (lib.types.enum sharedSecretNames) sharedSecretNames;
+      };
 
-  darwin.always = {myconfig, ...}: let
-    username = myconfig.constants.username;
-    sharedSecrets = [
-      "gemini-api-key"
-      "ai-mop-api-key"
-      "brave-api-key"
-      "openrouter-api-key"
-      "cerebras-api-key"
-      "google-cloud-api-key"
-      "zai-api-key"
-      "iniad-id"
-      "iniad-password"
-    ];
-
-    # mkUserSecret = _: {
-    # owner = username;
-    # mode = "0400";
-    # };
-    mkSharedSecret = _: {
-      sopsFile = ../../secrets/shared.yaml;
-      owner = username;
-      mode = "0400";
+    myconfig.always = {cfg, ...}: {
+      args.shared.sopsSecretPaths =
+        if cfg.enable && builtins.elem moduleSystem ["darwin" "nixos"]
+        then lib.mapAttrs (_: secret: secret.path) config.sops.secrets
+        else {};
     };
-  in {
-    imports = [inputs.sops-nix.darwinModules.sops];
 
-    sops = {
-      age.keyFile = "/Users/${username}/.config/sops/age/keys.txt";
-      secrets = lib.genAttrs sharedSecrets mkSharedSecret;
-    };
-  };
+    # Nix module imports cannot depend on config. Keep the upstream module
+    # available and gate only secret provisioning through the typed interface.
+    darwin.always.imports = [inputs.sops-nix.darwinModules.sops];
 
-  nixos.always = {myconfig, ...}: let
-    username = myconfig.constants.username;
-    sharedSecrets = [
-      "gemini-api-key"
-      "ai-mop-api-key"
-      "brave-api-key"
-      "openrouter-api-key"
-      "cerebras-api-key"
-      "google-cloud-api-key"
-      "zai-api-key"
-      "iniad-id"
-      "iniad-password"
-    ];
-    mkSharedSecret = _: {
-      sopsFile = ../../secrets/shared.yaml;
-      owner = username;
-      mode = "0400";
-    };
-  in {
-    imports = [inputs.sops-nix.nixosModules.sops];
+    darwin.ifEnabled = {
+      cfg,
+      myconfig,
+      ...
+    }: let
+      username = myconfig.constants.username;
 
-    sops = {
-      age.keyFile = "/home/${username}/.config/sops/age/keys.txt";
-      secrets = lib.genAttrs sharedSecrets mkSharedSecret;
+      mkSharedSecret = _: {
+        sopsFile = ../../secrets/shared.yaml;
+        owner = username;
+        mode = "0400";
+      };
+    in {
+      sops = {
+        age.keyFile = "/Users/${username}/.config/sops/age/keys.txt";
+        secrets = lib.genAttrs cfg.names mkSharedSecret;
+      };
     };
-  };
-}
+
+    nixos.always.imports = [inputs.sops-nix.nixosModules.sops];
+
+    nixos.ifEnabled = {
+      cfg,
+      myconfig,
+      ...
+    }: let
+      username = myconfig.constants.username;
+
+      mkSharedSecret = _: {
+        sopsFile = ../../secrets/shared.yaml;
+        owner = username;
+        mode = "0400";
+      };
+    in {
+      sops = {
+        age.keyFile = "/home/${username}/.config/sops/age/keys.txt";
+        secrets = lib.genAttrs cfg.names mkSharedSecret;
+      };
+    };
+  }

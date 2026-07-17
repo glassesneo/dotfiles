@@ -8,6 +8,40 @@ file locations.
 Do not put plaintext credentials or private keys in the repository. Consumers
 must use `config.sops.secrets.<key>.path`, never a hardcoded decrypted path.
 
+## Bootstrap a host without an Age key
+
+The repository imports the sops-nix platform module unconditionally because
+Nix module imports cannot depend on host configuration. A host can still stop
+all repository-owned secret provisioning while it has no usable Age key:
+
+```nix
+myconfig.toplevel.secrets = {
+  enable = false;
+  names = ["brave-api-key"];
+};
+```
+
+Keep `names` limited to the credentials that the host should receive after
+bootstrap. With `enable = false`, the configuration emits no SOPS key-file
+setting, secret declarations, or shared secret paths. Programs that need those
+credentials remain installed but their secret-backed operations are unavailable
+until provisioning is restored.
+
+Build and activate the host with its normal repository workflow. For example,
+the initial `seiran-vm1` deployment can use:
+
+```sh
+sudo nix run nix-darwin/master#darwin-rebuild -- switch --flake .#seiran-vm1
+```
+
+Before restoring provisioning, install a usable private Age key outside the
+repository at `~/.config/sops/age/keys.txt`, set its mode to `0600`, and confirm
+its recipient is authorized for `secrets/shared.yaml`. Then set `enable = true`
+(or remove the false override), run the normal switch workflow again, and verify
+one declared secret path is readable without printing its contents. If
+activation fails, disable provisioning again and fix the key or recipient
+configuration before retrying.
+
 ## Prerequisites
 
 - `age`, `age-keygen`, and `sops` are installed.

@@ -11,6 +11,11 @@ delib.host {
 
   myconfig = {
     darwin.window-manager.enable = false;
+    # Bootstrap without an Age key. Install the key before re-enabling.
+    toplevel.secrets = {
+      enable = false;
+      names = ["brave-api-key"];
+    };
     nix-darwin.preferences = {
       appearance.enable = false;
       dock.enable = false;
@@ -88,16 +93,6 @@ delib.host {
     system.activationScripts.postActivation.text = lib.mkAfter ''
       /usr/bin/pmset -a sleep 0
     '';
-
-    # The VM only receives credentials required by its enabled agent tooling:
-    # OpenCode's Brave MCP uses Brave Search.
-    sops.secrets = lib.mkForce (lib.genAttrs [
-        "brave-api-key"
-      ] (_: {
-        sopsFile = ../../secrets/shared.yaml;
-        owner = "neo";
-        mode = "0400";
-      }));
 
     services.openssh = {
       enable = true;
