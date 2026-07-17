@@ -16,7 +16,7 @@ delib.module {
       # configDir = "${homeConfig.xdg.configHome}/.pi/agent";
       settings = {
         extensions = [
-          "${./extensions/agent_artifact.ts}"
+          "${./extensions}/agent_artifact.ts"
         ];
         prompts = [
           "${./prompts}"
