@@ -14,8 +14,11 @@ delib.host {
     nix-darwin.preferences = {
       appearance.enable = false;
       dock.enable = false;
+      feedback.enable = false;
       input.enable = false;
+      language.enable = false;
       spaces.enable = false;
+      accessibility.zoom.enable = false;
     };
     programs = {
       opencode.permissionPolicy = "trusted-vm";
@@ -31,10 +34,22 @@ delib.host {
       rift.enable = false;
       sketchybar.enable = false;
     };
-    user.uid = 501;
+    user.uid = 502;
   };
 
   darwin = {
+    system.defaults = {
+      CustomUserPreferences = {
+        NSGlobalDomain = {
+          AppleLanguages = [
+            "en-US"
+            "ja-JP"
+          ];
+
+          AppleLocale = "en_US";
+        };
+      };
+    };
     nix = {
       distributedBuilds = true;
 
@@ -87,7 +102,6 @@ delib.host {
     services.openssh = {
       enable = true;
       extraConfig = ''
-        AuthorizedKeysFile none
         PasswordAuthentication no
         KbdInteractiveAuthentication no
         PermitRootLogin no
