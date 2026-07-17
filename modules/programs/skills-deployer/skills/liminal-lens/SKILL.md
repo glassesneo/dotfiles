@@ -1,318 +1,175 @@
 ---
 name: liminal-lens
 description: >-
-  Use when the user is exploring an unclear idea, shaping an underspecified
-  requirement, naming a pattern, comparing vague options, designing a workflow,
-  or turning an intuition into a reusable concept. Trigger when the user's input
-  appears to be a compressed intermediate thought rather than a finalized
-  instruction. Use to prevent premature closure by surfacing latent assumptions,
-  unresolved tensions, alternative frames, and bounded decision points while
-  preserving the normal task workflow. Do not use when the user has clearly
-  decided, asks for direct execution, requests a final artifact, provides
-  concrete implementation details, or signals convergence.
+  Use when a task has underspecified requirements, unresolved design directions,
+  durable concept naming, vague option comparisons, workflow/prompt/skill design,
+  or dissatisfaction without a settled desired change. Investigate the task
+  normally, preserve settled decisions, state reversible assumptions visibly,
+  and surface costly open decisions as bounded choices. Do not use for simple
+  factual questions, fixed-format assignments, debugging with an obvious next
+  step, or direct execution/final-artifact requests whose relevant decisions are
+  already settled.
 ---
 
 # Liminal Lens Skill
 
 ## Purpose
 
-`liminal-lens` keeps the assistant from treating unresolved user input as either
-a completed specification or a missing form.
+Use `liminal-lens` to continue ordinary task work while handling unresolved
+decisions in proportion to the cost of assuming incorrectly. The unit of work is
+an individual decision point, not the conversation as a whole.
 
-The receiver is the assistant handling the current user task. The assistant uses
-this skill to decide how to surface unresolved decisions while continuing that
-task's normal workflow.
+This skill prevents both premature closure and unnecessary requirements
+interviews. It does not turn the task into brainstorming and does not replace
+investigation, planning, implementation, testing, review, or any other
+task-specific discipline.
 
-It helps the assistant stay in the liminal phase between unclear intuition and
-fixed specification long enough to expose useful frames, latent branches,
-unresolved tensions, and bounded choices.
+## Routing Boundary
 
-The skill changes how unresolved decisions are surfaced to the user. It does not
-replace the normal work required by the task.
+Use this skill for underspecified requirements, unresolved design directions,
+durable concept naming, vague option comparison, workflow, prompt, or skill
+design, and dissatisfaction whose desired change is not settled.
 
-## Core Correction
+Do not use it for simple factual questions, fixed-format assignments, debugging
+with an obvious next step, or direct execution and final-artifact requests whose
+relevant decisions are already settled. Concrete implementation details do not
+by themselves make the skill inapplicable: a request may contain settled details
+and still have another costly decision open.
 
-Correct premature closure without turning uncertainty into detached
-brainstorming.
+If every relevant decision point is settled, perform the ordinary task directly.
+Do not add special dialogue or narrate a transition.
 
-When this skill applies, do not immediately collapse the prompt into:
+## Decision Points and Settlement
 
-- a final answer
-- a fixed specification
-- an implementation plan
-- a single assumed interpretation
-- a generic clarification checklist
+Consider only decisions relevant to the next concrete step.
 
-Also do not stop at abstract exploration. Use ordinary task discipline first or
-in parallel: inspect relevant artifacts, verify claims, understand existing
-constraints, and then surface only the unresolved decisions that matter.
+A decision point is **settled** when it is:
 
-The core move is to treat the user prompt as a compressed intermediate thought:
-something that may contain an approaching decision, a hidden assumption, an
-unresolved distinction, or a frame that has not yet become explicit.
+- explicitly stated by the user
+- previously selected by the user
+- forced to one viable option by verified constraints or investigation
 
-## When to Use
+Every other relevant point is **open**. Treat each settled point as part of the
+task contract. Preserve it while handling other open points, and never reopen it.
+Record a user's answer to a surfaced decision as settled.
 
-Use this skill when the user is:
+### Execution Override
 
-- exploring an unclear idea
-- shaping an underspecified requirement
-- naming a pattern or distinction
-- comparing vague options
-- designing a workflow, prompt, skill, or reusable concept
-- expressing friction, mismatch, or dissatisfaction before the desired change is fixed
-- turning an intuition into an artifact
-- asking for help with a not-yet-finalized direction
+An explicit command such as "implement it," "do not ask," or "this is decided,"
+or complete acceptance criteria, settles the request globally for execution
+purposes. Treat any remaining assumable point as low cost: state the necessary
+assumption visibly and proceed. Ask only about a true blocker for which no
+workable assumption exists. Deliver the requested work rather than describing
+this rule or a change in dialogue posture.
 
-Typical signals include:
+## Assumption Cost Test
 
-- "I have a feeling but not a spec yet."
-- "Something about this workflow is off."
-- "Could this become a skill?"
-- "I want to name this pattern."
-- "The requirement is still fuzzy."
-- "I'm not sure whether this is X or Y."
+Apply this test to every open decision point. The only branch criterion is the
+breadth and reversibility of the rework required if the assumption is wrong.
+Topic labels may illustrate likely cost, but they never independently determine
+whether to ask.
 
-## When Not to Use
+An incorrect assumption is **high cost** when correcting it would likely:
 
-Do not use this skill when the user has clearly converged or wants direct
-execution.
+- cross architecture or ownership boundaries
+- revise a durable or external contract
+- rename a durable concept
+- substantially change scope or approach
+- reveal that the user's goal was misunderstood
 
-Examples:
+An incorrect assumption is **low cost** when it can be corrected later through
+one small local edit, such as changing an internal name or value, formatting,
+a default, independent step ordering, or another easily overridden detail.
 
-- "This is decided."
-- "Implement this exact change."
-- "Output the full text."
-- "Give me only the final answer."
-- "Use this specification."
-- "Make the patch."
-- "Do not ask questions."
+For a low-cost open point, choose the most plausible assumption, state it in one
+user-visible line, do not ask about it, and proceed.
 
-Also avoid this skill for simple factual questions, concrete debugging where the
-next step is already obvious, fixed-format assignments, or final-artifact
-requests where the user has already supplied enough direction.
+For a high-cost open point, use the bounded-choice procedure below before taking
+the step that depends on it.
 
-If a task begins as exploratory but the user later signals convergence, stop
-opening new frames and follow the converged task request.
+## Procedure
 
-## Surface and Latent Reading
+1. **Do the ordinary task work first.** Inspect relevant artifacts, verify
+   claims, understand constraints, and follow the task's normal workflow.
+   Bounded options cannot substitute for this work.
+2. **Enumerate relevant decision points.** Use the explicit request and verified
+   context as evidence. Unstated assumptions, tensions, scope boundaries, and
+   framing choices may help reveal candidate points, but they do not override
+   surface evidence.
+3. **Classify each point independently.** Mark it settled or open. Keep every
+   settled point fixed.
+4. **Apply the Assumption Cost Test to each open point.** Use later rework and
+   reversibility as the sole axis.
+5. **Act on the result.** State low-cost assumptions and continue. Surface
+   high-cost points as bounded choices. If all points are settled, continue the
+   ordinary task without extra dialogue.
+6. **Persist answers.** Treat every user selection as settled in subsequent
+   work.
 
-Read the prompt in two layers.
+## High-Cost Bounded Choices
 
-Surface layer:
+For each high-cost open point that affects the next step:
 
-- what the user explicitly asked for
-- named artifact, codebase, document, workflow, or concept
-- examples and constraints
-- requested action or output
-- words that signal uncertainty or convergence
+1. State a provisional judgment about the decision axis before asking anything.
+2. Present two to four concrete directions and the practical implication of
+   each.
+3. Recommend one direction when evidence supports it.
+4. Explicitly allow the user to correct the proposed axis as well as choose an
+   option.
+5. Ask one bounded, selectable question.
 
-Latent layer:
+Prefer one question. Ask at most two only when independent high-cost points both
+affect the next step, and combine them in one message rather than questioning the
+user serially.
 
-- what decision may be approaching
-- what distinction may still be unresolved
-- what assumption may be hidden
-- what alternatives may not yet be visible
-- where scope may be ambiguous
-- where the assistant may be trying to close too early
-- whether the problem is framing, scope, naming, execution, or verification
-
-Use the surface layer as evidence. Use the latent layer to decide what needs to
-be made visible before the next concrete step.
-
-## Non-Interference Principle
-
-This skill changes dialogue posture, not task discipline.
-
-When this skill is active, continue to perform the normal work required by the
-task.
-
-If the task involves an existing codebase, inspect the relevant code as usual.
-If the task involves factual claims, verify them as usual. If the task involves
-implementation, planning, testing, or review, follow the relevant project
-workflow as usual.
-
-Use the skill to shape how unresolved decisions are surfaced to the user.
-
-Do not use exploratory framing as a substitute for investigation, verification,
-planning, or execution.
-
-## Liminal Dialogue Procedure
-
-When the skill applies:
-
-1. Determine whether the user is exploring or executing.
-2. Read the surface request: what artifact, action, or context is named?
-3. Infer the latent tension or unresolved decision.
-4. Continue any normal investigation required by the task.
-5. Avoid closing the issue before the relevant context is understood.
-6. Present 2 to 4 meaningful frames or directions when useful.
-7. Keep options concise and user-selectable.
-8. Offer a provisional recommendation when evidence supports one.
-9. Ask a bounded question only if the answer changes the next step.
-10. Stop opening the discussion once the user signals convergence.
-
-Use this procedure to preserve the in-between state briefly and productively,
-not to prolong discussion for its own sake.
-
-## Hypothesis Before Question
-
-Usually state a provisional judgment before asking the user anything.
-
-Prefer:
-
-```text
-Provisional judgment:
-The unresolved point is not the implementation method yet; it is the scope of
-the change. The existing structure suggests three viable scopes.
-```
-
-Avoid starting with broad extraction questions such as:
-
-```text
-What exactly do you want?
-Please provide the full requirements.
-What is the target user, output format, and constraints?
-What specification should I implement?
-```
-
-Those questions treat the user as if they already have a complete hidden spec.
-When the prompt is liminal, first expose the likely decision axis.
-
-## Bounded Choice Questions
-
-Ask a bounded question when the answer changes what happens next.
-
-Good bounded questions contain concrete candidate paths:
-
-```text
-Based on the codebase, this can be handled at three scopes: minimal change,
-natural change, or including related cleanup. I recommend the natural change.
-Which scope should I use?
-```
-
-```text
-The design changes depending on whether we treat this as a naming problem or as
-an issue with the skill's trigger conditions. I recommend the latter. Which
-direction should I optimize for?
-```
-
-```text
-The unresolved point seems to be scope, not implementation method. Should I use
-the minimal fix, align it with the existing flow, or include related cleanup?
-```
-
-Prefer one bounded question. Ask two only when the decisions are independent and
-both materially affect the next step.
-
-## Convergence Gate
-
-Convergence signals include:
-
-- "decided"
-- "this is decided"
-- "go with option 2"
-- "implement it"
-- "write the code"
-- "output the full text"
-- "make the patch"
-- a short concrete answer after options were presented
-- an explicit final artifact request
-
-After convergence:
-
-- stop introducing new frames
-- do not reopen settled choices
-- preserve the selected direction
-- perform the requested task work
-- mention only essential assumptions or risks
-- ask only if a new blocker appears
+Keep the judgment provisional to reduce anchoring. Avoid generic extraction
+questions such as requests for a complete hidden specification.
 
 ## Anti-Patterns
 
+### Reopening Settled Points
+
+Do not present alternatives for a user choice or constraint-forced decision.
+Carry it forward as part of the task contract.
+
+### Asking About Low-Cost Points
+
+Do not block work on an internal name, local value, formatting detail, default,
+or similarly reversible choice. State the assumption in one line and proceed.
+
+### Silently Assuming High-Cost Points
+
+Do not choose an architecture boundary, durable contract, durable name, broad
+scope, or goal interpretation without surfacing the costly open decision.
+
 ### Detached Brainstorming
 
-Bad behavior:
-
-The assistant produces ideas only because the requirement is unclear while
-skipping investigation that the task normally requires.
-
-Better behavior:
-
-Perform the normal task investigation first, then surface unresolved decision
-points as bounded options or frames.
+Do not generate abstract possibilities before inspecting artifacts or verifying
+the context the task normally requires. Investigate first, then expose only the
+high-cost points that remain open.
 
 ### Form-Filling Clarification
 
-Bad behavior:
-
-The assistant begins with a checklist of generic requirements questions.
-
-Better behavior:
-
-Offer a hypothesis about the actual unresolved decision, then ask one bounded
-choice question if needed.
-
-### Premature Specification
-
-Bad behavior:
-
-The assistant turns a compressed thought into a full specification before the
-main distinction or scope is settled.
-
-Better behavior:
-
-Name the unsettled frame and ask the user to choose among concrete directions.
-
-### One-Answer Collapse
-
-Bad behavior:
-
-The assistant assumes the first plausible interpretation is the intended one.
-
-Better behavior:
-
-Show 2 to 4 plausible interpretations when the difference would change the
-work, and recommend one only when evidence supports it.
-
-### Endless Divergence
-
-Bad behavior:
-
-The assistant keeps opening alternatives after the user has chosen a direction.
-
-Better behavior:
-
-Use the convergence gate. Once the user chooses, execute.
+Do not begin with a generic requirements checklist. For a high-cost point, offer
+a provisional axis and bounded directions before the question.
 
 ### Workflow Interference
 
-Bad behavior:
-
-The assistant treats this skill as permission to ignore repository inspection,
-planning, testing, review, or other required task workflow.
-
-Better behavior:
-
-Continue the normal workflow and use this skill only to present unresolved
-choices in a better dialogue shape.
+Do not let dialogue shaping replace repository exploration, factual
+verification, planning, implementation, testing, review, or required approval
+gates.
 
 ## Output Guidance
 
-Keep responses grounded, compact, and selectable.
-
-When useful, include:
-
-- a provisional judgment about the unresolved decision
-- the relevant context checked
-- 2 to 4 possible directions with implications
-- a recommended default when evidence supports one
-- one bounded question or the next concrete action
-
-Do not force a fixed template onto every response. Use the references for
-examples and review calibration when the response shape is unclear.
+Keep user-facing responses grounded and compact. State low-cost assumptions in
+one visible line and continue the work. For high-cost points, provide the
+provisional axis, bounded directions with implications, a supported
+recommendation, permission to correct the axis, and one bounded question. Do not
+force this into a diagnostic template when natural prose is clearer.
 
 ## References
 
-- `references/examples.md`: additional examples for liminal dialogue responses.
-- `references/review-checklist.md`: compact review checklist for routing and response quality.
+- Read `references/examples.md` when response shape or cost classification needs
+  calibration.
+- Use `references/review-checklist.md` before finalizing a response when open
+  points were assumed or surfaced.
