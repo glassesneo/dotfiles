@@ -96,7 +96,7 @@ delib.module {
 
       taskmaster = {
         mode = "all";
-        model = "openai/gpt-5.6-sol";
+        model = "openai/gpt-5.6-sol-fast";
         reasoningEffort = "medium";
         description = "Implementation agent that self-explores and owns approved /act plans.";
         prompt = renderAgentPrompt "taskmaster" {
@@ -121,7 +121,7 @@ delib.module {
 
       scout = {
         mode = "all";
-        model = "openai/gpt-5.6-sol";
+        model = "openai/gpt-5.6-sol-fast";
         reasoningEffort = "high";
         description = "Non-source-writing workflow agent that authors approved specification and plan artifacts.";
         prompt = renderAgentPrompt "scout" {
@@ -133,7 +133,7 @@ delib.module {
 
       review-orchestrator = {
         mode = "all";
-        model = "openai/gpt-5.6-sol";
+        model = "openai/gpt-5.6-sol-fast";
         reasoningEffort = "medium";
         description = "Orchestrates scaled focused code-review perspectives and dissent validation.";
         prompt = readAgentPrompt "review_orchestrator";
