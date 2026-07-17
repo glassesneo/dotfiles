@@ -13,14 +13,8 @@ delib.module {
     mainIdentity = readOnly (strOption "~/.ssh/id_ed25519_personal");
   };
 
-  home.ifEnabled = {
-    cfg,
-    myconfig,
-    ...
-  }: {
-    programs.ssh = let
-      # otherHosts = lib.filter (h: h != host.name) (builtins.attrNames myconfig.hosts);
-    in {
+  home.ifEnabled = {cfg, ...}: {
+    programs.ssh = {
       enable = true;
       enableDefaultConfig = false;
 

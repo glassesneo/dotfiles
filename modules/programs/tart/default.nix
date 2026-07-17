@@ -8,9 +8,13 @@
 delib.module {
   name = "programs.tart";
 
-  options = delib.singleEnableOption (pkgs.stdenv.isDarwin && tiers.atLeast host.tier "standard");
+  options = with delib;
+    moduleOptions {
+      enable = boolOption (pkgs.stdenv.isDarwin && tiers.atLeast host.tier "standard");
+      package = packageOption pkgs.tart;
+    };
 
-  home.ifEnabled = {
-    home.packages = [pkgs.tart];
+  home.ifEnabled = {cfg, ...}: {
+    home.packages = [cfg.package];
   };
 }
