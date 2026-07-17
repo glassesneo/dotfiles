@@ -1,5 +1,6 @@
 ---
 name: agent-artifact
+disable-model-invocation: true
 description: >-
   Use when creating durable agent artifacts: specifications, implementation
   plans, research notes, implementation reports, review reports, bug reports,

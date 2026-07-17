@@ -1,5 +1,6 @@
 ---
 name: staged-agent-workflow
+disable-model-invocation: true
 description: >-
   Use when a primary agent must coordinate an approval-gated specification,
   planning, or implementation workflow through delegated capabilities. Trigger

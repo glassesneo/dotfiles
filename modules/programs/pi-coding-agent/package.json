@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "check": "tsc --noEmit"
+    "test": "node --test tests/*.test.ts",
+    "check": "tsc --noEmit && npm test"
   },
   "devDependencies": {
     "@earendil-works/pi-coding-agent": "0.80.7",
@@ -12,4 +13,3 @@
     "typescript": "^5.9.0"
   }
 }
-

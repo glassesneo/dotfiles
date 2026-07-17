@@ -15,6 +15,9 @@ delib.module {
   ];
 
   home.ifEnabled = let
+    piAuthoringTargets = [
+      ".agents/skills"
+    ];
     stagedWorkflowTargets = [
       ".agents/skills"
       # ".claude/skills"
@@ -53,6 +56,14 @@ delib.module {
       staged-agent-workflow = {
         source = ./skills/staged-agent-workflow;
         targetDirs = stagedWorkflowTargets;
+      };
+      specification-authoring = {
+        source = ./skills/specification-authoring;
+        targetDirs = piAuthoringTargets;
+      };
+      implementation-planning = {
+        source = ./skills/implementation-planning;
+        targetDirs = piAuthoringTargets;
       };
       accessibility-ux = {
         source = ./skills/accessibility-ux;
@@ -98,6 +109,14 @@ delib.module {
           builtins.pathExists ./skills/staged-agent-workflow/SKILL.md
           && skills.staged-agent-workflow.targetDirs == stagedWorkflowTargets;
         message = "staged-agent-workflow must be packaged and deployed to the agents and Cursor skill directories.";
+      }
+      {
+        assertion =
+          builtins.pathExists ./skills/specification-authoring/SKILL.md
+          && builtins.pathExists ./skills/implementation-planning/SKILL.md
+          && skills.specification-authoring.targetDirs == piAuthoringTargets
+          && skills.implementation-planning.targetDirs == piAuthoringTargets;
+        message = "Pi authoring skills must be packaged and deployed to the shared agents skill directory.";
       }
     ];
 
