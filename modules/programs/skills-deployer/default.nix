@@ -69,14 +69,6 @@ delib.module {
           ".claude/skills"
         ];
       };
-      parallax-reflection = {
-        source = ./skills/parallax-reflection;
-        targetDirs = [
-          ".agents/skills"
-          ".claude/skills"
-          ".cursor/skills"
-        ];
-      };
       skill-architect = {
         source = ./skills/skill-architect;
         targetDirs = [
