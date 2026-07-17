@@ -35,6 +35,34 @@ delib.host {
   };
 
   darwin = {
+    nix = {
+      distributedBuilds = true;
+
+      settings = {
+        builders-use-substitutes = true;
+      };
+
+      buildMachines = [
+        {
+          hostName = "172.16.244.135";
+          protocol = "ssh-ng";
+          sshUser = "neo";
+          sshKey = "/var/root/.ssh/nix-host-builder";
+
+          system = "aarch64-darwin";
+
+          maxJobs = 8;
+          speedFactor = 2;
+
+          supportedFeatures = [
+            "benchmark"
+            "big-parallel"
+          ];
+
+          mandatoryFeatures = [];
+        }
+      ];
+    };
     security.pam.services.sudo_local = {
       reattach = lib.mkForce false;
       touchIdAuth = lib.mkForce false;
