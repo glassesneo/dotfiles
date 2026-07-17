@@ -4,7 +4,7 @@
 
 - `prompts/commands/*.md` owns model-visible behavior for specific user entrypoints; command adapters for staged work stay thin and delegate reusable phase behavior to `staged-agent-workflow`.
 - Reusable agent prompts under `prompts/*.md` define capability posture, not command routing or duplicated workflows.
-- `prompts/shared/*.md` owns only OpenCode-local fragments without an external canonical owner. Durable report schemas and filename policy belong to `agent-reports`.
+- `prompts/shared/*.md` owns only OpenCode-local fragments without an external canonical owner. Durable artifact schemas and filename policy belong to `agent-artifact`.
 - `commands.nix` owns command registration and routing. `agents.nix` and `agent-permissions.nix` own capability bindings and enforced tool boundaries. `default.nix` owns the module interface and MCP membership.
 - `permissionPolicy = "normal"` is the safe host default. The `"trusted-vm"` policy may widen only taskmaster's local implementation execution; pushes, account mutations, and ambiguous shell effects remain approval-gated.
 

@@ -10,4 +10,4 @@ Project-local `.claude/agents/` definitions can override or shadow these global 
 
 ## Tester Artifacts
 
-The `tester` subagent writes non-trivial failure reports to `.agents/reports/` only when the current workspace is a git repo. Outside git repos, it returns structured failure content inline.
+The `tester` subagent writes non-trivial failure reports to `.agents/failure-reports/` only when the current workspace is a git repo. Outside git repos, it returns structured failure content inline.

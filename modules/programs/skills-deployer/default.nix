@@ -36,8 +36,8 @@ delib.module {
           ".claude/skills"
         ];
       };
-      agent-reports = {
-        source = ./skills/agent-reports;
+      agent-artifact = {
+        source = ./skills/agent-artifact;
         targetDirs = [
           ".agents/skills"
           ".claude/skills"

@@ -54,21 +54,21 @@ delib.module {
       };
       reviewer = mkAgent {
         name = "reviewer";
-        description = "Evidence-first reviewer that writes a scoped review report to .agents/reports/.";
+        description = "Evidence-first reviewer that writes a scoped review report to .agents/review-reports/.";
         model = "gpt-5.5";
         modelReasoningEffort = "high";
         sandboxMode = "workspace-write";
       };
       tester = mkAgent {
         name = "tester";
-        description = "Validation runner and failure triager that reports non-trivial failures in .agents/reports/.";
+        description = "Validation runner and failure triager that reports non-trivial failures in .agents/failure-reports/.";
         model = "gpt-5.4-mini";
         modelReasoningEffort = "high";
         sandboxMode = myconfig.programs.codex.sandboxMode;
       };
       debugger = mkAgent {
         name = "debugger";
-        description = "Command-driven bug investigator that writes a root-cause report to .agents/reports/.";
+        description = "Command-driven bug investigator that writes a root-cause report to .agents/bug-reports/.";
         model = "gpt-5.5";
         modelReasoningEffort = "high";
         sandboxMode = myconfig.programs.codex.sandboxMode;

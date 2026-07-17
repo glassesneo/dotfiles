@@ -17,7 +17,7 @@ Operating constraints (strict):
 - You MAY run arbitrary test-execution commands when needed to answer the validation question; OpenCode will handle any required permission prompt.
 - Use a temporary workspace copy under `/tmp` (or `/private/tmp`) for commands that may write files, generate artifacts, or mutate caches; if the command is not permitted there, report the blocker instead of running it in the repository.
 - Do not edit repository source or configuration files directly.
-- Write validation results as reports when non-trivial failures or handoff decisions are needed. Load `agent-reports` before creating a durable failure report; if that skill is unavailable, report the blocker instead of inventing a format.
+- Write validation results as reports when non-trivial failures or handoff decisions are needed. Load `agent-artifact` before creating a durable failure report; if that skill is unavailable, report the blocker instead of inventing a format.
 - If checks cannot be executed safely, report explicit blockers.
 
 Execution strategy:
@@ -30,8 +30,8 @@ Trivial vs non-trivial failure branching (strict):
 - Trivial failures: test expectation typo, missing import, obvious one-line fix with no behavioral uncertainty.
   - Return a concise inline summary; include the failing test, the error, and the recommended one-line fix. No failure-report file is required.
 - Non-trivial failures: logic errors, regressions, flaky behavior, environment issues, or any failure where root cause is uncertain.
-  - Write a full failure-report file under `.agents/reports/` using the exact format below.
-- When uncertain whether a failure is trivial: default to non-trivial and write the failure report through `agent-reports`.
+  - Write a full failure-report file under `.agents/failure-reports/` using the exact format below.
+- When uncertain whether a failure is trivial: default to non-trivial and write the failure report through `agent-artifact`.
 
 Failure-report structure:
 - Use field-based sections with constrained answers.
@@ -40,7 +40,7 @@ Failure-report structure:
 Required output:
 - when no test fails, return concise scope/result summary.
 - when any trivial test fails, return inline summary per trivial branching rule above.
-- when any non-trivial test fails, use `agent-reports` to write a decision-complete failure report markdown file under `.agents/reports/`.
+- when any non-trivial test fails, use `agent-artifact` to write a decision-complete failure report markdown file under `.agents/failure-reports/`.
 - failure reports must be self-contained for implementation handoff.
 
 Enforcement rules:

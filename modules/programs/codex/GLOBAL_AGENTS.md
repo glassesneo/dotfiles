@@ -56,7 +56,8 @@ The parent Codex session owns orchestration, implementation decisions, integrati
 # Agent artifacts
 
 - External research artifacts belong in `.agents/research/`.
-- Review, validation-failure, and debugging artifacts belong in `.agents/reports/`.
+- Review artifacts belong in `.agents/review-reports/`, validation failures in
+  `.agents/failure-reports/`, and debugging handoffs in `.agents/bug-reports/`.
 - Read the `## Summary` section of a returned artifact before loading detail sections.
 - Treat artifact conclusions as input evidence, not as permission to broaden implementation scope.
 - File-writing subagents may write their designated artifact only; they must not edit source files, configuration, tests, lockfiles, or Git state.

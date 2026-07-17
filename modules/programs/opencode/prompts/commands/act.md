@@ -5,6 +5,6 @@ Local capability mapping:
 - source-changing implementer: `taskmaster` (active agent)
 - validation runner: `tester`
 - read-only reviewer: `review-orchestrator`
-- report writer: the responsible capability using `agent-reports`
+- report writer: the responsible capability using `agent-artifact`
 
 Target/context: $ARGUMENTS

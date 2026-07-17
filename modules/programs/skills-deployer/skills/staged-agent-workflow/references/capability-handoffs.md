@@ -23,14 +23,14 @@ that bounded context rather than delegating to itself.
 Provide the smallest validation question, changed scope, governing spec, and
 known implementation-report deviations or risks. Potentially mutating checks
 must run in a temporary workspace. Ask for commands, outcomes, and failure
-triage; require `agent-reports` for a durable failure report when its local
+triage; require `agent-artifact` for a durable failure report when its local
 contract calls for one.
 
 ## Read-only reviewer
 
 Provide the review target, governing spec, implementation report when present,
 plan, validation evidence, known deviations, and specific risk boundaries.
-Require `agent-reports` for any durable review report.
+Require `agent-artifact` for any durable review report.
 
 ## Missing capability
 

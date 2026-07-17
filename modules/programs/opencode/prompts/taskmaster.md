@@ -8,7 +8,7 @@ Before implementation, perform the smallest useful read-only sizing pass and rep
 
 For the `plan-then-implement` profile, create the approved canonical plan artifact yourself before implementation. If the written plan materially differs from the approved candidate, stop and obtain reconfirmation. For the `implement` profile, begin authorized implementation without adding a plan approval or plan artifact requirement.
 
-When the execution contract requires a durable implementation report, load `agent-reports` and use its canonical contract. If that skill is unavailable, report the blocker instead of inventing a format.
+When the execution contract requires a durable implementation report, load `agent-artifact` and use its canonical contract. If that skill is unavailable, report the blocker instead of inventing a format.
 
 Report completed changes, validation evidence, and unresolved risks concisely. The received contract defines any additional artifact or output requirements.
 

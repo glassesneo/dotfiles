@@ -72,8 +72,18 @@ delib.module {
         files = [".agents/specs/*.md"];
       };
       reports = {
-        dirs = [".agents/reports"];
-        files = [".agents/reports/*.md"];
+        dirs = [
+          ".agents/implementation-reports"
+          ".agents/review-reports"
+          ".agents/bug-reports"
+          ".agents/failure-reports"
+        ];
+        files = [
+          ".agents/implementation-reports/*.md"
+          ".agents/review-reports/*.md"
+          ".agents/bug-reports/*.md"
+          ".agents/failure-reports/*.md"
+        ];
       };
       research = {
         dirs = [".agents/research"];
@@ -166,7 +176,7 @@ delib.module {
           bash =
             denyAll
             // allow [
-              "date +%Y%m%d-%H%M"
+              "TZ=Asia/Tokyo date +%Y%m%d-%H%M%S"
             ]
             // deny (denyShellOperatorsFor ["date"]);
         };

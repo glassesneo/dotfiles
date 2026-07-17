@@ -43,7 +43,7 @@ Profiles may require these capabilities:
 - **validation runner**: runs focused checks and triages failures without
   editing repository source;
 - **read-only reviewer**: inspects completed work without changing it;
-- **report writer**: loads `agent-reports` and creates the required durable
+- **report writer**: loads `agent-artifact` and creates the required durable
   report using its canonical filename and format contract.
 
 The active primary may provide one or more capabilities when its permissions

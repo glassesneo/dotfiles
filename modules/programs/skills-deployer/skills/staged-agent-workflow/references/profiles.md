@@ -47,7 +47,7 @@
 5. After changes, delegate focused validation when feasible and read-only
    review for non-trivial work.
 6. If source or configuration changed, create exactly one implementation report
-   through the `agent-reports` skill. For a read-only or no-op result, skip the
+   through the `agent-artifact` skill. For a read-only or no-op result, skip the
    report and state why.
 
 ## `implement`
@@ -59,4 +59,4 @@ ambiguous.
 
 After changes, delegate focused validation when feasible and read-only review
 for non-trivial work. If source or configuration changed, create exactly one
-implementation report through `agent-reports`; otherwise skip it and state why.
+implementation report through `agent-artifact`; otherwise skip it and state why.
