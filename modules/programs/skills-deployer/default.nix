@@ -44,6 +44,12 @@ delib.module {
           ".cursor/skills"
         ];
       };
+      coherent-growth = {
+        source = ./skills/coherent-growth;
+        targetDirs = [
+          ".agents/skills"
+        ];
+      };
       staged-agent-workflow = {
         source = ./skills/staged-agent-workflow;
         targetDirs = stagedWorkflowTargets;
