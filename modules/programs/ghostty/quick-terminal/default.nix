@@ -1,7 +1,6 @@
 {
   delib,
   lib,
-  pkgs,
   ...
 }:
 delib.module {
@@ -24,9 +23,7 @@ delib.module {
       };
     };
     programs.zsh.initContent = lib.mkOrder 1200 (
-      builtins.readFile (
-        pkgs.replaceVars ./quick-terminal-check.sh {color = cfg.background;}
-      )
+      lib.replaceStrings ["@color@"] [cfg.background] (lib.readFile ./quick-terminal-check.sh)
     );
   };
 }
