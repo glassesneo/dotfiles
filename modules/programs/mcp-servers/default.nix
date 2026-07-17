@@ -11,7 +11,6 @@
     options = {
       command_id = with delib; description (allowNull (strOption null)) "Nix package or command identifier for command-backed servers.";
       url = with delib; description (allowNull (strOption null)) "URL for remote MCP servers.";
-      url_type = with delib; description (allowNull (strOption null)) "Per-server type override (e.g. \"http\" for streamable HTTP).";
       auth_secret = with delib; description (allowNull (strOption null)) "SOPS secret name for bearer-token auth.";
       args = with delib; description (listOfOption str []) "Arguments passed to the server command.";
       env_keys = with delib; description (attrsOfOption str {}) "Environment variable mappings (key = env var name in output, value = source key).";
@@ -35,10 +34,6 @@ in
           deepwiki = {
             url = "https://mcp.deepwiki.com/mcp";
           };
-          codex = {
-            command_id = "codex-mcp";
-            args = ["mcp-server"];
-          };
           context7 = {
             command_id = "context7-mcp";
           };
@@ -47,8 +42,6 @@ in
         # Per-target server membership — client modules contribute their lists
         # via myconfig.ifEnabled so each client owns its default membership.
         targets = {
-          claude_code = listOfOption str [];
-          codex = listOfOption str [];
           opencode = listOfOption str [];
         };
       };
@@ -60,25 +53,7 @@ in
 
       # Target adapter metadata stays centralized — these define how each
       # client renders server entries and are not client-owned concerns.
-      claudeCodeTargetMeta = {
-        env_syntax_mode = "dollar_braces";
-        env_field_name = "env";
-        static_env_field_name = "env";
-        url_type_policy = "sse";
-        local_type_policy = null;
-        command_list_behavior = false;
-      };
-
       targetAdapters = {
-        claude_code = claudeCodeTargetMeta;
-        codex = {
-          env_syntax_mode = "raw";
-          env_field_name = "env_vars";
-          static_env_field_name = "env";
-          url_type_policy = null;
-          local_type_policy = null;
-          command_list_behavior = false;
-        };
         opencode = {
           env_syntax_mode = "braces_env_colon";
           env_field_name = "environment";
@@ -142,11 +117,7 @@ in
         else resolvedCommands.${server.command_id} or server.command_id;
 
       envFormatters = {
-        dollar_env_colon = key: "\${env:" + key + "}";
-        dollar_braces = key: "\${" + key + "}";
-        dollar_bare = key: "$" + key;
         braces_env_colon = key: "{env:" + key + "}";
-        raw = key: key;
       };
 
       formatEnvValue = mode: key: let
@@ -163,8 +134,6 @@ in
         dynamicFields =
           if server.env_keys == {}
           then {}
-          else if dynamicFieldName == "env_vars"
-          then {${dynamicFieldName} = lib.attrValues server.env_keys;}
           else {
             ${dynamicFieldName} = lib.mapAttrs (_: key: formatEnvValue targetMeta.env_syntax_mode key) server.env_keys;
           };
@@ -184,37 +153,25 @@ in
         }
         else dynamicFields // staticFields;
 
-      mkAuthHeaders = target: server:
+      mkAuthHeaders = server:
         if server.auth_secret == null
         then {}
         else let
           secret = server.auth_secret;
-          envVarName = lib.toUpper (builtins.replaceStrings ["-"] ["_"] secret);
-          bearerValue =
-            if target == "claude_code"
-            then "Bearer \${${envVarName}}"
-            else if target == "opencode"
-            then "Bearer {file:${secretPath secret}}"
-            else "Bearer {env:${envVarName}}";
         in {
-          headers.Authorization = bearerValue;
+          headers.Authorization = "Bearer {file:${secretPath secret}}";
         };
 
-      mkRenderedServer = target: targetMeta: server: let
+      mkRenderedServer = targetMeta: server: let
         effectiveServer = serverWithoutWrapperEnv server;
-        isClaudeCodeTarget = target == "claude_code";
-        effectiveUrlType =
-          if isClaudeCodeTarget && effectiveServer.url_type != null
-          then effectiveServer.url_type
-          else targetMeta.url_type_policy;
         command = resolveCommandToken effectiveServer;
         args = effectiveServer.args;
       in
         if effectiveServer.url != null
         then
           {url = effectiveServer.url;}
-          // lib.optionalAttrs (effectiveUrlType != null) {type = effectiveUrlType;}
-          // mkAuthHeaders target effectiveServer
+          // lib.optionalAttrs (targetMeta.url_type_policy != null) {type = targetMeta.url_type_policy;}
+          // mkAuthHeaders effectiveServer
         else
           (
             if targetMeta.command_list_behavior
@@ -230,7 +187,7 @@ in
         targetMeta = targetAdapters.${target};
       in
         lib.filterAttrs (name: _: builtins.elem name enabledServersByTarget.${target}) (
-          lib.mapAttrs (_: server: mkRenderedServer target targetMeta server) serverCatalog
+          lib.mapAttrs (_: server: mkRenderedServer targetMeta server) serverCatalog
         );
 
       # --- Assertions ---
@@ -279,8 +236,6 @@ in
     in {
       assertions = commandAssertions ++ serverValidationAssertions;
 
-      programs.claude-code.mcpServers = mkServersForTarget "claude_code";
-      programs.codex.settings.mcp_servers = mkServersForTarget "codex";
       programs.opencode.settings.mcp = mkServersForTarget "opencode";
     };
   }

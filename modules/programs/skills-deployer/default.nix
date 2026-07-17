@@ -17,7 +17,7 @@ delib.module {
   home.ifEnabled = let
     stagedWorkflowTargets = [
       ".agents/skills"
-      ".claude/skills"
+      # ".claude/skills"
       ".cursor/skills"
     ];
     skills = {
@@ -25,7 +25,7 @@ delib.module {
         source = "${inputs.japanese-tech-writing-skill}";
         targetDirs = [
           ".agents/skills"
-          ".claude/skills"
+          # ".claude/skills"
         ];
       };
       agent-browser = {
@@ -33,14 +33,14 @@ delib.module {
         subdir = "share/agent-browser/skills/agent-browser";
         targetDirs = [
           ".agents/skills"
-          ".claude/skills"
+          # ".claude/skills"
         ];
       };
       agent-artifact = {
         source = ./skills/agent-artifact;
         targetDirs = [
           ".agents/skills"
-          ".claude/skills"
+          # ".claude/skills"
           ".cursor/skills"
         ];
       };
@@ -52,7 +52,7 @@ delib.module {
         source = ./skills/accessibility-ux;
         targetDirs = [
           ".agents/skills"
-          ".claude/skills"
+          # ".claude/skills"
           ".cursor/skills"
         ];
       };
@@ -66,21 +66,21 @@ delib.module {
         source = ./skills/prompt-interface-design;
         targetDirs = [
           ".agents/skills"
-          ".claude/skills"
+          # ".claude/skills"
         ];
       };
       skill-architect = {
         source = ./skills/skill-architect;
         targetDirs = [
           ".agents/skills"
-          ".claude/skills"
+          # ".claude/skills"
         ];
       };
       refactor-maintainability = {
         source = ./skills/refactor-maintainability;
         targetDirs = [
           ".agents/skills"
-          ".claude/skills"
+          # ".claude/skills"
           ".cursor/skills"
         ];
       };
@@ -91,7 +91,7 @@ delib.module {
         assertion =
           builtins.pathExists ./skills/staged-agent-workflow/SKILL.md
           && skills.staged-agent-workflow.targetDirs == stagedWorkflowTargets;
-        message = "staged-agent-workflow must be packaged and deployed to the agents, Claude, and Cursor skill directories.";
+        message = "staged-agent-workflow must be packaged and deployed to the agents and Cursor skill directories.";
       }
     ];
 

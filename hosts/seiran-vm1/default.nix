@@ -90,7 +90,7 @@ delib.host {
     '';
 
     # The VM only receives credentials required by its enabled agent tooling:
-    # OpenCode/Codex use OpenRouter, and OpenCode's Brave MCP uses Brave Search.
+    # OpenCode's Brave MCP uses Brave Search.
     sops.secrets = lib.mkForce (lib.genAttrs [
         "brave-api-key"
       ] (_: {

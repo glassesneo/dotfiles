@@ -13,16 +13,6 @@ export default defineConfig(() => ({
       snippet: "nvim",
     },
     {
-      name: "claude-code",
-      keyword: "cc",
-      snippet: "claude",
-    },
-    {
-      name: "codex",
-      keyword: "cx",
-      snippet: "codex",
-    },
-    {
       name: "opencode",
       keyword: "oc",
       snippet: "opencode",

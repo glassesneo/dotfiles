@@ -1,41 +1,11 @@
 {
   delib,
-  homeConfig,
   host,
   inputs,
-  lib,
-  llm-agents,
   pkgs,
   ...
-}: let
-  codexEnabled = homeConfig.programs.codex.enable;
-  claudeCodeEnabled = homeConfig.programs.claude-code.enable;
-
-  zedAgentPackages =
-    (lib.optional codexEnabled homeConfig.programs.codex.package)
-    ++ (lib.optional claudeCodeEnabled homeConfig.programs.claude-code.package);
-
-  zedAgentServers =
-    (lib.optionalAttrs codexEnabled {
-      "Codex" = {
-        type = "custom";
-        command = lib.getExe llm-agents.codex-acp;
-        args = [];
-        env = {};
-      };
-    })
-    // (lib.optionalAttrs claudeCodeEnabled {
-      "Claude-Code" = {
-        type = "custom";
-        command = lib.getExe llm-agents.claude-agent-acp;
-        args = [];
-        env = {
-          CLAUDE_CODE_EXECUTABLE = lib.getExe' homeConfig.programs.claude-code.package "claude";
-        };
-      };
-    });
-in
-  delib.module {
+}:
+delib.module {
     name = "programs.zed-editor";
 
     options = delib.singleEnableOption host.guiShellFeatured;
@@ -47,11 +17,9 @@ in
     home.ifEnabled = {
       programs.zed-editor = {
         enable = true;
-        extraPackages =
-          (with pkgs; [
-            nixd
-          ])
-          ++ zedAgentPackages;
+        extraPackages = with pkgs; [
+          nixd
+        ];
         mutableUserSettings = false;
         userSettings =
           {
@@ -76,9 +44,6 @@ in
               "status_bar.background" = "#00000090";
               "title_bar.background" = "#00000070";
             };
-          }
-          // lib.optionalAttrs (zedAgentServers != {}) {
-            agent_servers = zedAgentServers;
           };
         userKeymaps = [
           # Concrete Neovim-like bindings owned by Zed.
@@ -209,4 +174,4 @@ in
         ];
       };
     };
-  }
+}

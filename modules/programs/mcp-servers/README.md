@@ -6,8 +6,6 @@ This module keeps MCP server data and runtime wiring in a single Nix file.
 
 - **Shared server catalog** — typed option `programs.mcp-servers.catalog` in `modules/programs/mcp-servers/default.nix`. Each entry defines a server's command/URL, args, env, and behavior.
 - **Per-client membership** — typed list options `programs.mcp-servers.targets.<target>` contributed by each client module via `myconfig.ifEnabled`:
-  - `modules/programs/claude-code/default.nix` → `targets.claude_code`
-  - `modules/programs/codex/default.nix` → `targets.codex`
   - `modules/programs/opencode/default.nix` → `targets.opencode`
 - **Target adapter metadata** — centralized in `modules/programs/mcp-servers/default.nix` (env format, type policies, command behavior per target).
 
@@ -19,19 +17,17 @@ This module keeps MCP server data and runtime wiring in a single Nix file.
 
 ## Authenticated remote (hosted) MCP servers
 
-Remote MCP servers that require bearer-token auth use the `auth_secret` and `url_type` fields:
+Remote MCP servers that require bearer-token auth use the `auth_secret` field:
 
 ```nix
 my-remote-server = {
   url = "https://api.example.com/mcp";
-  url_type = "http";       # Per-server type override (Claude needs "http" for streamable HTTP)
   auth_secret = "my-key";  # SOPS secret name from config.sops.secrets
 };
 ```
 
 Auth headers are rendered per target using runtime substitution — no plaintext secrets in generated config:
 
-- **Claude Code**: `"Bearer ${MY_KEY}"` — env-var interpolation; the wrapper exports the secret at launch.
 - **OpenCode**: `"Bearer {file:/path/to/secret}"` — file-content substitution via `config.sops.secrets.<key>.path`.
 
 Secrets must exist in `modules/toplevel/secrets.nix` and be bound in the host secrets file.

@@ -17,7 +17,6 @@ delib.module {
   darwin.always = {myconfig, ...}: let
     username = myconfig.constants.username;
     sharedSecrets = [
-      "claude-code-oauth-token"
       "gemini-api-key"
       "ai-mop-api-key"
       "brave-api-key"
@@ -50,7 +49,6 @@ delib.module {
   nixos.always = {myconfig, ...}: let
     username = myconfig.constants.username;
     sharedSecrets = [
-      "claude-code-oauth-token"
       "gemini-api-key"
       "ai-mop-api-key"
       "brave-api-key"
