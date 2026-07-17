@@ -64,7 +64,7 @@ delib.host {
 
       buildMachines = [
         {
-          hostName = "172.16.244.135";
+          hostName = "192.168.64.1";
           protocol = "ssh-ng";
           sshUser = "neo";
           sshKey = "/var/root/.ssh/nix-host-builder";
