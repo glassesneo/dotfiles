@@ -168,15 +168,22 @@ replacement APIs.
 ## `save_agent_artifact` tool
 
 `save_agent_artifact` owns the approval lifecycle for repository-local spec and
-plan artifacts. The model should pass the completed Markdown body to the tool
-once, rather than printing the full artifact in the chat and regenerating it for
-saving.
+plan artifacts. The specification and planning Skills pass a completed Markdown
+body directly to the tool, rather than printing the full candidate in chat and
+asking for a separate body-approval question. The pending artifact review is the
+single candidate-approval and final-promotion gate; specification and plan
+artifacts still require independent approvals.
 
 The tool first writes content under `.agents/pending-artifacts/` with a JSON
-metadata sidecar containing kind, slug, title, state, pending path, planned final
-path, timestamps, line count, and file size. In TUI and RPC modes it then shows a
-review screen with approve, request revision, reject, and full-text view actions.
-Full-text view reads the saved pending file.
+metadata sidecar containing kind, slug, title, summary, state, pending path,
+planned final path, timestamps, line count, and file size. Summary extraction
+prefers the first non-empty paragraph in `## Summary`, joins its wrapped lines,
+and truncates it to 180 characters. If that section is absent or empty, the tool
+uses the first useful body paragraph while excluding headings, fences,
+horizontal rules, and metadata such as `Status:`. In TUI and RPC modes it then
+shows kind, title, summary, paths, line count, and file size in a review screen
+with approve, request revision, reject, and full-text view actions. Full-text
+view reads the saved pending file.
 
 Approval promotes the pending Markdown file into `.agents/specs/` or
 `.agents/plans/` and reports `finalPath`. Revision requests keep the same
@@ -185,7 +192,10 @@ pending artifact, mark it `revision_requested`, and return `pendingId`,
 action should read/edit that same pending file and call the tool again with the
 same `pendingId`. Rejection does not create a final artifact. Print/JSON modes
 fail closed for approval-required artifacts: a pending file may be left for
-manual recovery, but no final spec or plan is saved.
+manual recovery, but no final spec or plan is saved. After approval, the thin
+`/spec` and `/plan` prompts report their approved artifact path; `/strategy`
+reports both paths when planning completes and only the specification path when
+it stops before planning.
 
 ## Development
 

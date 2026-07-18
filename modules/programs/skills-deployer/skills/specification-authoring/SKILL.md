@@ -28,19 +28,25 @@ that the specification is not decision-ready.
 1. Establish the problem, user goal, governing evidence, and material decision
    boundaries.
 2. Resolve discoverable facts and surface costly unresolved choices as bounded
-   questions.
-3. Present a concise candidate specification, including material defaults and
-   deferrals.
-4. Obtain explicit user approval of the candidate before persistence. Do not
-   create or revise an artifact before that approval.
-5. After approval, persist exactly one specification unless the approved
-   request explicitly revises an existing one. Use an available runtime
-   artifact writer with logical kind `spec`.
-6. If no runtime artifact writer contract is available, stop and report the
-   blocker instead of inventing storage behavior.
+   questions. The `question` tool may be used for these blocking decisions.
+3. Complete a decision-ready candidate specification, including material
+   defaults and deferrals.
+4. When the runtime artifact writer provides pending review and approval,
+   submit the completed Markdown body directly to it with logical kind `spec`.
+   Do not print the full candidate in normal assistant text first or ask a
+   separate `question` solely to approve its body. The writer's pending review
+   is the single candidate-approval and final-promotion gate.
+5. If the writer returns a revision request, revise the same pending artifact
+   and resubmit the complete body with the same pending identifier. Do not
+   repeat the revised body in normal assistant text.
+6. Report a final artifact path only after the writer reports approval. If no
+   writer exists, or its contract cannot obtain approval before final
+   persistence, stop and report the blocker instead of inventing storage
+   behavior.
 
-If approved content must materially change before persistence, present the
-revised candidate and obtain approval again.
+Do not create a final specification before approval. A workflow question after
+approval (for example, whether to continue to planning) is separate from
+artifact body approval and may still use `question`.
 
 ## Decision-Ready Content
 
@@ -73,4 +79,5 @@ Return:
 - `Non-blocking questions/defaults/deferrals: <none | concise list>`
 
 Use `Spec file: none` when no artifact was persisted because approval,
-readiness, or the writer contract is missing. Never fabricate an artifact path.
+readiness, or the writer contract is missing. Never fabricate an artifact path
+or repeat the full artifact body in this completion output.

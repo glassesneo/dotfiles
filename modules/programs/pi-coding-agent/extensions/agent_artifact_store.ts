@@ -116,13 +116,67 @@ function firstMarkdownHeading(content: string): string | undefined {
     return undefined;
 }
 
-function firstParagraph(content: string): string | undefined {
-    for (const raw of content.split(/\r?\n/)) {
+function normalizeParagraph(lines: string[]): string | undefined {
+    const paragraph = lines.map(line => line.trim()).filter(line => line !== "").join(" ");
+    if (paragraph === "") return undefined;
+    return paragraph.length > 180 ? `${paragraph.slice(0, 177)}...` : paragraph;
+}
+
+function atxHeadingLevel(line: string): number | undefined {
+    const match = /^(#{1,6})\s+.+?\s*#*\s*$/.exec(line.trim());
+    return match?.[1].length;
+}
+
+function isMetadataLine(line: string): boolean {
+    return /^[A-Za-z][A-Za-z0-9_-]*:\s*.+$/.test(line.trim());
+}
+
+function isSkippableParagraphLine(line: string): boolean {
+    const trimmed = line.trim();
+    return trimmed === ""
+        || trimmed.startsWith("#")
+        || trimmed.startsWith("```")
+        || /^-{3,}\s*$/.test(trimmed)
+        || isMetadataLine(trimmed);
+}
+
+function firstParagraphFromLines(lines: string[], options: { skipMetadata: boolean }): string | undefined {
+    let paragraph: string[] = [];
+    for (const raw of lines) {
         const line = raw.trim();
-        if (line === "" || line.startsWith("#") || line.startsWith("```") || line.startsWith("---")) continue;
-        return line.length > 180 ? `${line.slice(0, 177)}...` : line;
+        const skippable = options.skipMetadata ? isSkippableParagraphLine(line) : line === "" || line.startsWith("#") || line.startsWith("```") || /^-{3,}\s*$/.test(line);
+        if (skippable) {
+            const normalized = normalizeParagraph(paragraph);
+            if (normalized !== undefined) return normalized;
+            paragraph = [];
+            continue;
+        }
+        paragraph.push(line);
     }
-    return undefined;
+    return normalizeParagraph(paragraph);
+}
+
+function summarySectionLines(content: string): string[] | undefined {
+    const lines = content.split(/\r?\n/);
+    const start = lines.findIndex(line => /^##\s+Summary\s*#*\s*$/i.test(line.trim()));
+    if (start === -1) return undefined;
+
+    const section: string[] = [];
+    for (const line of lines.slice(start + 1)) {
+        const level = atxHeadingLevel(line);
+        if (level !== undefined && level <= 2) break;
+        section.push(line);
+    }
+    return section;
+}
+
+function firstParagraph(content: string): string | undefined {
+    const explicitSummary = summarySectionLines(content);
+    if (explicitSummary !== undefined) {
+        const paragraph = firstParagraphFromLines(explicitSummary, { skipMetadata: false });
+        if (paragraph !== undefined) return paragraph;
+    }
+    return firstParagraphFromLines(content.split(/\r?\n/), { skipMetadata: true });
 }
 
 function summarizeContent(content: string, slug: string): Pick<ArtifactSummary, "title" | "summary" | "lineCount" | "fileSize"> {

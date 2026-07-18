@@ -31,22 +31,32 @@ left for later plans.
 
 Resolve discoverable facts before asking the user. Do not invent scope,
 architecture, interfaces, acceptance criteria, or verification. If the basis is
-insufficient, produce a blocked candidate with the missing decisions.
+insufficient, report `Status: blocked` with the missing decisions in the
+completion output. Do not submit a plan artifact until those decisions are
+resolved and the plan is implementation-ready.
 
 ## Planning Workflow
 
 1. Establish the governing basis, coverage, constraints, and repository facts.
-2. Present a concise candidate plan with scope, paths, ordered work,
-   verification, risks, defaults, and deferrals.
-3. Obtain explicit user approval of the candidate before persistence. Do not
-   create or revise a plan artifact before that approval.
-4. After approval, persist exactly one plan using an available runtime artifact
-   writer with logical kind `plan`.
-5. If no runtime artifact writer contract is available, stop and report the
-   blocker instead of inventing storage behavior.
+   Resolve material blocking decisions first; the `question` tool may be used
+   for those decisions.
+2. Complete an implementation-ready candidate plan with scope, paths, ordered
+   work, verification, risks, defaults, and deferrals.
+3. When the runtime artifact writer provides pending review and approval,
+   submit the completed Markdown body directly to it with logical kind `plan`.
+   Do not print the full candidate in normal assistant text first or ask a
+   separate `question` solely to approve its body. The writer's pending review
+   is the single candidate-approval and final-promotion gate.
+4. If the writer returns a revision request, revise the same pending artifact
+   and resubmit the complete body with the same pending identifier. Do not
+   repeat the revised body in normal assistant text.
+5. Report a final artifact path only after the writer reports approval. If no
+   writer exists, or its contract cannot obtain approval before final
+   persistence, stop and report the blocker instead of inventing storage
+   behavior.
 
-If the plan must materially change before persistence, present the revised
-candidate and obtain approval again.
+Do not create a final plan before approval. Plan approval is independent of any
+approval previously given to its governing specification.
 
 ## Implementation-Ready Content
 
@@ -89,4 +99,5 @@ Return:
 - `Risks/defaults/deferrals: <none | concise list>`
 
 Use `Plan file: none` when no artifact was persisted because approval,
-readiness, or the writer contract is missing. Never fabricate an artifact path.
+readiness, or the writer contract is missing. Never fabricate an artifact path
+or repeat the full artifact body in this completion output.

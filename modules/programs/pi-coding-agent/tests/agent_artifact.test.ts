@@ -109,6 +109,66 @@ test("pending creation writes content and metadata outside final directories", a
     await assert.rejects(readdir(join(root, ".agents", "specs")));
 });
 
+test("summary extraction prefers the Summary section over status metadata", async t => {
+    const root = await makeTemporaryRoot(t);
+    const pending = await createOrUpdatePendingArtifact({
+        cwd: root,
+        kind: "spec",
+        slug: "summary-contract",
+        content: [
+            "# Specification: Summary Contract",
+            "",
+            "Status: decision-ready",
+            "",
+            "## Summary",
+            "Use the real summary",
+            "even when it spans lines.",
+            "",
+            "## Problem",
+            "Later content.",
+        ].join("\n"),
+        now: fixedDate,
+    });
+
+    assert.equal(pending.title, "Specification: Summary Contract");
+    assert.equal(pending.summary, "Use the real summary even when it spans lines.");
+});
+
+test("summary extraction falls back to non-metadata body paragraphs", async t => {
+    const root = await makeTemporaryRoot(t);
+    const pending = await createOrUpdatePendingArtifact({
+        cwd: root,
+        kind: "plan",
+        slug: "fallback-summary",
+        content: [
+            "# Implementation Plan",
+            "",
+            "Status: implementation-ready",
+            "Owner: pi-coding-agent",
+            "---",
+            "",
+            "First useful fallback paragraph",
+            "continues here.",
+        ].join("\n"),
+        now: fixedDate,
+    });
+
+    assert.equal(pending.summary, "First useful fallback paragraph continues here.");
+});
+
+test("summary extraction reports no summary when no body paragraph exists", async t => {
+    const root = await makeTemporaryRoot(t);
+    const pending = await createOrUpdatePendingArtifact({
+        cwd: root,
+        kind: "plan",
+        slug: "empty-summary",
+        content: "# Implementation Plan\n\nStatus: blocked\n\n## Summary\n\n## Tasks\n",
+        now: fixedDate,
+    });
+
+    assert.equal(pending.summary, "No summary available.");
+});
+
 test("approve promotes pending content to final and keeps metadata", async t => {
     const root = await makeTemporaryRoot(t);
     const pending = await createOrUpdatePendingArtifact({ cwd: root, kind: "spec", slug: "pi-workflow", content: "# Spec\n", now: fixedDate });
@@ -166,15 +226,29 @@ test("tool approve/revision/reject UI statuses are deterministic", async t => {
     const root = await makeTemporaryRoot(t);
     const tool = createAgentArtifactToolDefinition();
 
+    const approvedContent = "# Plan\n\nStatus: implementation-ready\n\n## Summary\n\nUseful approval summary.\n";
+    let approvalReviewText = "";
     const approved = await tool.execute(
         "call",
-        toolParams("plan", "approve-me", "# Plan\n"),
+        toolParams("plan", "approve-me", approvedContent),
         undefined,
         undefined,
-        context({ cwd: root, mode: "rpc", hasUI: true, ui: { async select() { return "Approve"; } } }),
+        context({ cwd: root, mode: "rpc", hasUI: true, ui: { async select(title) { approvalReviewText = title; return "Approve"; } } }),
     );
     assert.equal(approved.details.status, "approved");
-    assert.equal(await readFile(approved.details.finalPath!, "utf8"), "# Plan\n");
+    assert.equal(approved.details.title, "Plan");
+    assert.equal(approved.details.summary, "Useful approval summary.");
+    assert.equal(await readFile(approved.details.finalPath!, "utf8"), approvedContent);
+    assert.match(approvalReviewText, /Kind: plan/);
+    assert.match(approvalReviewText, /Summary: Useful approval summary\./);
+    assert.match(approvalReviewText, /Line count: 8/);
+    assert.match(resultText(approved.content[0]), /summary: Useful approval summary\./);
+    assert.match(resultText(approved.content[0]), new RegExp(`finalPath: ${approved.details.finalPath}`));
+    const rendered = tool.renderResult?.(approved, { expanded: false } as never, { fg: (_color: string, text: string) => text } as never, {} as never);
+    const renderedText = rendered?.render(160).join("\n") ?? "";
+    assert.match(renderedText, /plan Plan/);
+    assert.match(renderedText, /Useful approval summary\./);
+    assert.match(renderedText, new RegExp(approved.details.finalPath!));
 
     const reviseScript = ["Request revision", "tighten scope"];
     const revision = await tool.execute(
