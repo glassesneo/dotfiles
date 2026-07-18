@@ -1,6 +1,7 @@
 {
   delib,
   lib,
+  pkgs,
   ...
 }:
 delib.host {
@@ -41,6 +42,8 @@ delib.host {
   };
 
   darwin = {
+    environment.systemPackages = [pkgs.kitty.terminfo];
+
     system.defaults = {
       CustomUserPreferences = {
         NSGlobalDomain = {
