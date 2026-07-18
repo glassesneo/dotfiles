@@ -1,5 +1,6 @@
 import type { ExtensionUIContext } from "@earendil-works/pi-coding-agent";
 import {
+    noteMode,
     optionDisplayText,
     QuestionProgress,
     unavailableResult,
@@ -14,6 +15,9 @@ export interface StandardQuestionContext {
     hasUI: boolean;
     ui: Pick<ExtensionUIContext, "select" | "input" | "editor" | "notify">;
 }
+
+const REVIEW_NOW = Symbol("review-now");
+type QuestionStepResult = PendingQuestionAnswer | typeof REVIEW_NOW | undefined;
 
 function isCancelled(signal: AbortSignal | undefined): boolean {
     return signal?.aborted === true;
@@ -35,7 +39,8 @@ function uniqueLabel(base: string, displays: ReadonlySet<string>): string {
 
 function noteFrom(answer: QuestionAnswer | undefined, value?: string): string | undefined {
     if (answer?.kind === "single" || answer?.kind === "confirm") return answer.note;
-    if (answer?.kind === "multi" && value !== undefined) {
+    if (answer?.kind === "multi") {
+        if (value === undefined) return answer.note;
         return answer.values.find(selected => selected.value === value)?.note;
     }
     return undefined;
@@ -49,8 +54,10 @@ async function askNote(
     signal: AbortSignal | undefined,
 ): Promise<string | undefined | null> {
     if (isCancelled(signal)) return null;
+    const title = question.note?.prompt ?? `Optional note for ${label}`;
+    const placeholder = question.note?.placeholder;
     const note = await ui.editor(
-        `Optional note for ${label}${question.notePlaceholder === undefined ? "" : ` — ${question.notePlaceholder}`}`,
+        placeholder === undefined ? title : `${title} — ${placeholder}`,
         existing ?? "",
     );
     if (note === undefined || isCancelled(signal)) return null;
@@ -72,12 +79,14 @@ async function askSingle(
     title: string,
     existing: QuestionAnswer | undefined,
     signal: AbortSignal | undefined,
-): Promise<PendingQuestionAnswer | undefined> {
+): Promise<QuestionStepResult> {
     const options = question.options ?? [];
     const current = existing?.kind === "single" ? existing.value : undefined;
     const displays = markedOptions(options, current);
-    const selected = await context.ui.select(title, displays, { signal });
+    const reviewLabel = uniqueLabel("Review answers now", new Set(displays));
+    const selected = await context.ui.select(title, [...displays, reviewLabel], { signal });
     if (selected === undefined || isCancelled(signal)) return undefined;
+    if (selected === reviewLabel) return REVIEW_NOW;
     const option = options[displays.indexOf(selected)];
     if (option === undefined) throw new Error(`Standard UI returned an unknown option: ${selected}`);
     const note = await askNote(context.ui, question, option.label, noteFrom(existing), signal);
@@ -91,13 +100,15 @@ async function askMulti(
     title: string,
     existing: QuestionAnswer | undefined,
     signal: AbortSignal | undefined,
-): Promise<PendingQuestionAnswer | undefined> {
+): Promise<QuestionStepResult> {
     const options = question.options ?? [];
     const selectedValues = new Set(
         existing?.kind === "multi" ? existing.values.map(selected => selected.value) : [],
     );
     const rawDisplays = new Set(options.map(optionDisplayText));
     const doneLabel = uniqueLabel("Done — confirm selections", rawDisplays);
+    rawDisplays.add(doneLabel);
+    const reviewLabel = uniqueLabel("Review answers now", rawDisplays);
 
     while (true) {
         if (isCancelled(signal)) return undefined;
@@ -106,10 +117,11 @@ async function askMulti(
         );
         const selected = await context.ui.select(
             `${title} (toggle items, then choose Done)`,
-            [...displays, doneLabel],
+            [...displays, doneLabel, reviewLabel],
             { signal },
         );
         if (selected === undefined || isCancelled(signal)) return undefined;
+        if (selected === reviewLabel) return REVIEW_NOW;
         if (selected === doneLabel) {
             if (selectedValues.size > 0) break;
             context.ui.notify("Select at least one option before choosing Done.", "warning");
@@ -124,19 +136,19 @@ async function askMulti(
     }
 
     const values: Array<{ value: string; note?: string }> = [];
-    for (const option of options) {
-        if (!selectedValues.has(option.value)) continue;
-        const note = await askNote(
-            context.ui,
-            question,
-            option.label,
-            noteFrom(existing, option.value),
-            signal,
-        );
-        if (note === null) return undefined;
-        values.push({ value: option.value, note });
+    if (noteMode(question) === "per-option") {
+        for (const option of options) {
+            if (!selectedValues.has(option.value)) continue;
+            const note = await askNote(context.ui, question, option.label, noteFrom(existing, option.value), signal);
+            if (note === null) return undefined;
+            values.push({ value: option.value, note });
+        }
+        return { kind: "multi", values };
     }
-    return { kind: "multi", values };
+    for (const option of options) if (selectedValues.has(option.value)) values.push({ value: option.value });
+    const note = await askNote(context.ui, question, "answer", noteFrom(existing), signal);
+    if (note === null) return undefined;
+    return { kind: "multi", values, note };
 }
 
 async function askConfirm(
@@ -145,14 +157,16 @@ async function askConfirm(
     title: string,
     existing: QuestionAnswer | undefined,
     signal: AbortSignal | undefined,
-): Promise<PendingQuestionAnswer | undefined> {
+): Promise<QuestionStepResult> {
     const current = existing?.kind === "confirm" ? String(existing.value) : undefined;
     const displays = [
         `${current === "true" ? "[current]" : "[ ]"} Yes`,
         `${current === "false" ? "[current]" : "[ ]"} No`,
     ];
-    const selected = await context.ui.select(title, displays, { signal });
+    const reviewLabel = uniqueLabel("Review answers now", new Set(displays));
+    const selected = await context.ui.select(title, [...displays, reviewLabel], { signal });
     if (selected === undefined || isCancelled(signal)) return undefined;
+    if (selected === reviewLabel) return REVIEW_NOW;
     const index = displays.indexOf(selected);
     if (index < 0) throw new Error(`Standard UI returned an unknown confirmation: ${selected}`);
     const note = await askNote(
@@ -172,7 +186,10 @@ async function askText(
     title: string,
     existing: QuestionAnswer | undefined,
     signal: AbortSignal | undefined,
-): Promise<PendingQuestionAnswer | undefined> {
+): Promise<QuestionStepResult> {
+    const action = await context.ui.select(title, ["Answer this question", "Review answers now"], { signal });
+    if (action === undefined || isCancelled(signal)) return undefined;
+    if (action === "Review answers now") return REVIEW_NOW;
     let prefill = existing?.kind === "text" ? existing.value : question.initialValue;
     while (true) {
         if (isCancelled(signal)) return undefined;
@@ -191,7 +208,7 @@ async function askQuestion(
     total: number,
     existing: QuestionAnswer | undefined,
     signal: AbortSignal | undefined,
-): Promise<PendingQuestionAnswer | undefined> {
+): Promise<QuestionStepResult> {
     const title = progressTitle(question, index, total);
     switch (question.kind) {
         case "single":
@@ -212,12 +229,13 @@ function summarizeAnswer(question: QuestionItem, answer: QuestionAnswer): string
         const label = question.options?.find(option => option.value === answer.value)?.label ?? answer.value;
         return `${label}${answer.note === undefined ? "" : ` — note: ${answer.note}`}`;
     }
-    return answer.values
+    const values = answer.values
         .map(selected => {
             const label = question.options?.find(option => option.value === selected.value)?.label ?? selected.value;
             return `${label}${selected.note === undefined ? "" : ` (note: ${selected.note})`}`;
         })
         .join(", ");
+    return `${values}${answer.note === undefined ? "" : ` — note: ${answer.note}`}`;
 }
 
 export async function runStandardQuestionFlow(
@@ -239,14 +257,16 @@ export async function runStandardQuestionFlow(
             signal,
         );
         if (pending === undefined) return progress.cancelled();
+        if (pending === REVIEW_NOW) break;
         progress.submit(pending);
     }
 
     while (true) {
         if (isCancelled(signal)) return progress.cancelled(false);
-        const questionLabels = questions.map((question, index) =>
-            `Q${index + 1}: ${question.prompt} — ${summarizeAnswer(question, progress.answerFor(question)!)}`,
-        );
+        const questionLabels = questions.map((question, index) => {
+            const answer = progress.answerFor(question);
+            return `Q${index + 1}: ${question.prompt} — ${answer === undefined ? "Unanswered" : summarizeAnswer(question, answer)}`;
+        });
         const used = new Set(questionLabels);
         const submitLabel = uniqueLabel("Submit answers", used);
         used.add(submitLabel);
@@ -259,7 +279,7 @@ export async function runStandardQuestionFlow(
         if (selected === undefined || selected === cancelLabel || isCancelled(signal)) {
             return progress.cancelled(false);
         }
-        if (selected === submitLabel) return progress.answered();
+        if (selected === submitLabel) return progress.submitted();
 
         const index = questionLabels.indexOf(selected);
         if (index < 0) throw new Error(`Standard UI returned an unknown review item: ${selected}`);
@@ -273,6 +293,6 @@ export async function runStandardQuestionFlow(
             signal,
         );
         if (pending === undefined) return progress.cancelled(false);
-        progress.submit(pending);
+        if (pending !== REVIEW_NOW) progress.submit(pending);
     }
 }

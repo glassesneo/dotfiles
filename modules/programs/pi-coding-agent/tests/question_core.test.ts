@@ -21,7 +21,7 @@ const questions: QuestionItem[] = [
             { value: "safe", label: "Safe", description: "Small change" },
             { value: "fast", label: "Fast", description: "Broad change" },
         ],
-        notePlaceholder: "Optional condition",
+        note: { mode: "answer", placeholder: "Optional condition" },
     },
     {
         id: "details",
@@ -52,6 +52,9 @@ test("schema accepts all four kinds and multiple questions", () => {
         true,
     );
     assert.equal(Value.Check(questionParameters, { questions: [] }), false);
+    assert.equal(Value.Check(questionParameters, {
+        questions: [{ id: "legacy", prompt: "Legacy", kind: "confirm", notePlaceholder: "old" }],
+    }), false);
     assert.equal(
         Value.Check(questionParameters, {
             questions: [{ id: "x", prompt: "x", kind: "unknown" }],
@@ -97,7 +100,7 @@ test("runtime validation rejects duplicate and kind-specific violations", () => 
         ],
         [/does not accept options/, [{ ...questions[1], options: questions[0].options }]],
         [/initialValue is only valid/, [{ ...questions[0], initialValue: "x" }]],
-        [/notePlaceholder is only valid/, [{ ...questions[1], notePlaceholder: "x" }]],
+        [/note is not valid/, [{ ...questions[1], note: { mode: "answer" } }]],
     ];
 
     for (const [pattern, items] of invalidCases) {
@@ -123,6 +126,7 @@ test("answers normalize notes and multi values in option definition order", () =
             { value: "b", label: "B" },
             { value: "c", label: "C" },
         ],
+        note: { mode: "per-option" },
     };
 
     assert.deepEqual(
@@ -137,6 +141,13 @@ test("answers normalize notes and multi values in option definition order", () =
             kind: "multi",
             values: [{ value: "a" }, { value: "c", note: "line 1\nline 2" }],
         },
+    );
+    assert.deepEqual(
+        normalizeQuestionAnswer({
+            id: "default-note", prompt: "Targets", kind: "multi",
+            options: [{ value: "a", label: "A" }, { value: "b", label: "B" }],
+        }, { kind: "multi", values: [{ value: "a", note: "ignored" }], note: "answer note" }),
+        { kind: "multi", values: [{ value: "a" }], note: "answer note" },
     );
     assert.deepEqual(
         normalizeQuestionAnswer(questions[0], {
@@ -184,9 +195,14 @@ test("normalization rejects empty or inconsistent pending answers", () => {
 test("progress supports movement, overwrite, cancellation contexts, and explicit submission", () => {
     const progress = new QuestionProgress(questions);
     assert.equal(progress.index, 0);
+    assert.equal(progress.answeredCount, 0);
+    assert.equal(progress.unansweredCount, 2);
     assert.throws(() => progress.answered(), /before all questions complete/);
+    assert.deepEqual(progress.submitted(), { status: "answered", answers: {} });
 
     progress.submit({ kind: "single", value: "safe" });
+    assert.equal(progress.answeredCount, 1);
+    assert.equal(progress.unansweredCount, 1);
     assert.equal(progress.index, 0);
     progress.move(1);
     assert.equal(progress.index, 1);

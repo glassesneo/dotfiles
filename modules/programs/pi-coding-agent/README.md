@@ -2,53 +2,75 @@
 
 This module registers project-owned extensions and prompts with Pi through Home
 Manager. Deterministic extension behavior lives in `extensions/`; resource
-registration lives in `default.nix`.
+registration and Pi's standard keybindings live in `default.nix`.
+
+## Input and application keys
+
+Normal input uses `Enter` to submit and `Shift-Enter` or `Ctrl-J` for a newline.
+`Ctrl-C` aborts active agent or bash work; while idle it clears non-empty input
+and does nothing when input is empty. It never exits Pi. Use `Ctrl-D` to exit
+when the editor is empty. Terminal, tmux, or macOS bindings own copying selected
+terminal text.
+
+| Action | Key |
+|---|---|
+| External editor | `Alt-E` |
+| Copy last assistant message | `Alt-C` |
+| Select model | `Alt-M` |
+| Previous / next model | `Alt-[` / `Alt-]` |
+| Cycle thinking level | `Alt-T` |
+| Expand thinking / tool output | `Ctrl-T` / `Ctrl-O` |
+| Follow up / dequeue | `Alt-Enter` / `Alt-Up` |
+
+The old `Ctrl-G`, `Ctrl-X`, `Ctrl-L`, `Ctrl-P`, `Ctrl-Shift-P`, `Shift-Tab`, and
+`Ctrl-C` aliases for these actions are intentionally absent.
+
+Until Pi exposes the postponed searchable-list redesign, list-only actions use
+these temporary keys:
+
+- Session path, sort, named filter, rename, delete: `Alt-P`, `Alt-S`, `Alt-N`,
+  `Alt-R`, `Alt-D`.
+- Scoped-model clear and provider toggle: `Alt-X`, `Alt-P`.
+- Tree filter next and previous: `Alt-F`, `Alt-Shift-F`.
+
+The scoped-model save (`Ctrl-S`) and select-all (`Ctrl-A`) keys remain unchanged.
+Session deletion retains Pi's `Enter` confirmation and `Esc` cancellation.
 
 ## `question` tool
 
-The `question` tool lets the model request decisions or missing information
-needed to continue the current task. A call contains one or more questions. The
-TUI keeps the whole call in one tabbed screen; RPC asks sequentially and then
-opens a review loop. Both return only after explicit submission, cancellation,
-or an unavailable-UI result.
+A call owns one draft state across all questions. Confirmed answers and
+unconfirmed drafts survive forward and backward navigation. `Tab` on the last
+question opens Review even when questions remain unanswered. Review shows a
+Submit row followed by every answered or unanswered question. Selecting a
+question reopens it; confirming that revision returns to Review. Partial
+submission is allowed, and the result contains only confirmed answers.
 
-Question kinds:
+Question kinds are `single`, `multi`, `text`, and `confirm`. Text answers must
+contain a non-whitespace character. Selection questions always support notes;
+omitting `note` selects answer-level note mode.
 
-- `single`: choose one of at least two options.
-- `multi`: choose one or more of at least two options.
-- `text`: enter non-blank multiline text.
-- `confirm`: choose Yes or No without conflating No with cancellation.
-
-Every `single`, `multi`, and `confirm` selection supports an optional note.
-Blank notes are omitted. A `multi` result is normalized to option definition
-order, regardless of the order in which options were selected.
-
-### Input example
+### Schema
 
 ```json
 {
   "questions": [
     {
       "id": "scope",
-      "prompt": "Which implementation scope should be used?",
-      "kind": "single",
+      "prompt": "Which scope should be used?",
+      "kind": "multi",
       "options": [
-        {
-          "value": "minimal",
-          "label": "Minimal",
-          "description": "Change only the current module"
-        },
-        {
-          "value": "broad",
-          "label": "Broad",
-          "description": "Update related modules too"
-        }
+        { "value": "minimal", "label": "Minimal" },
+        { "value": "broad", "label": "Broad" }
       ],
-      "notePlaceholder": "Optional constraints"
+      "note": {
+        "mode": "answer",
+        "prompt": "Optional constraints",
+        "placeholder": "Conditions that apply to the whole answer"
+      }
     },
     {
       "id": "details",
-      "prompt": "Describe any additional requirements.",
+      "prompt": "Describe additional requirements.",
       "kind": "text",
       "initialValue": ""
     }
@@ -56,110 +78,108 @@ order, regardless of the order in which options were selected.
 }
 ```
 
-Question IDs must be non-blank and unique within the call. Option values and
-rendered option text must be unique within each question. `text` and `confirm`
-do not accept `options`; `initialValue` is text-only, and `notePlaceholder` is
-selection-only. Contract violations are tool errors rather than cancellations.
+`note.mode` is `answer` or `per-option`. `answer` stores one note on the answer;
+`per-option` stores notes on selected option entries. `confirm` supports only
+answer mode, and `text` does not accept `note`. Blank notes are omitted.
+`notePlaceholder` is removed and is a validation error; there is no legacy
+schema or answer conversion.
 
-### Result format
-
-`details` and the JSON text in `content` represent the same payload:
-
-```json
-{
-  "status": "answered",
-  "answers": {
-    "scope": {
-      "kind": "single",
-      "value": "minimal",
-      "note": "Keep public behavior unchanged"
-    },
-    "details": {
-      "kind": "text",
-      "value": "Preserve existing tests.\nAdd adapter coverage."
-    }
-  }
-}
-```
-
-The status is `answered`, `cancelled`, or `unavailable`. Cancellation from a
-question tab preserves confirmed answers and includes that tab's
-`currentQuestionId`. Cancellation from final review preserves all confirmed
-answers and omits `currentQuestionId`. Non-interactive modes return:
+A multi answer in default answer mode is:
 
 ```json
 {
-  "status": "unavailable",
-  "answers": {}
+  "kind": "multi",
+  "values": [{ "value": "minimal" }],
+  "note": "Keep the public interface stable"
 }
 ```
+
+In per-option mode it is:
+
+```json
+{
+  "kind": "multi",
+  "values": [
+    { "value": "minimal", "note": "Apply first" },
+    { "value": "broad" }
+  ]
+}
+```
+
+The result status is `answered`, `cancelled`, or `unavailable`. `content` and
+`details` contain the same structured payload. An `answered` result may contain
+fewer answers than the input contains; absent IDs are unanswered. Cancellation
+preserves only confirmed answers and identifies the current question when
+cancellation occurs from a question screen.
+
+Pi's tool call display lists each question prompt. Its result display lists each
+prompt with the selected label, text, Yes/No value, notes, or `Unanswered`, so
+the useful content remains visible after the custom question screen closes.
 
 ### TUI controls
 
-| State | Keys | Action |
-|---|---|---|
-| Any state | `Ctrl-C` | Cancel the whole tool call |
-| Question or review | `Esc` | Cancel the whole tool call |
-| Choice or text tab-navigation | `←` / `→` | Move between question tabs, wrapping at each end |
-| Choices | `↑` / `↓`, `Ctrl-P` / `Ctrl-N` | Move focus |
-| `single` | `Enter` | Confirm the focused option and advance |
-| `multi` | `Space` | Toggle the focused option |
-| `multi` | `Enter` | Confirm one or more selected options and advance |
-| `confirm` | `Y` / `N` | Focus Yes or No |
-| `confirm` | `Enter` | Confirm Yes or No and advance |
-| Any choice | `Tab` | Select it and open its optional note |
-| Note editor | `Enter` | Insert a newline |
-| Note editor | `Tab` | Save the note and return to choices |
-| Note editor | `Esc` | Discard the current edit and return |
-| Text editor | `Enter` | Insert a newline |
-| Text editor | `Tab` | Keep the draft and enter tab-navigation mode |
-| Text tab-navigation | `Tab` | Return to the text editor |
-| Text question | `Ctrl-D` | Confirm a non-blank answer and advance |
-| Final review | `←` | Return to the last question |
-| Final review | `Enter` | Submit all answers |
+| Context | Keys |
+|---|---|
+| All question screens | `Tab` next (Review after the last), `Shift-Tab` previous, `Esc` back, `Ctrl-C` cancel all |
+| `single` | `Up`/`k` and `Down`/`j` move, `Enter` confirm, `e` edit note |
+| `multi` | `Up`/`k` and `Down`/`j` move, `Space` toggle, `Enter` confirm set, `e` edit note |
+| `confirm` | `Up`/`k` and `Down`/`j` move, `Enter` confirm, `y`/`n` directly confirm, `e` edit note |
+| `text` | `Enter` confirm, `Shift-Enter`/`Ctrl-J` newline |
+| Note editor | `Enter` save, `Shift-Enter`/`Ctrl-J` newline, `Esc` discard |
+| Review | `Up`/`k` and `Down`/`j` rows, `Tab`/`Shift-Tab` question rows, `Enter` activate, `Esc` reopen last question |
 
-The top row shows every `Qn` tab, answered/unanswered state, current position,
-and whether `Confirm` is locked or ready. Confirmed answers and unconfirmed
-drafts survive navigation; confirming a revised answer overwrites its prior
-value. Focus, selection, saved-note, validation, and submission states are shown
-in text, not only with color. The component wraps or truncates every line to the
-available terminal width.
+`e` never changes the current selection. After saving, the first non-empty note
+line is shown beside its answer or option without reopening the editor. `Esc`
+from an initial question does not cancel the call and displays the `Ctrl-C`
+instruction. Text and note editor focus is propagated for IME cursor
+positioning. Status, selection, errors, notes, answered/unanswered counts, and
+Submit availability are shown in text as well as color.
 
-### RPC fallback and mode differences
+When an unanswered question is completed from Review, focus moves to the next
+unanswered question; completing the final unanswered question moves focus to
+Submit. Revising an already answered question, or discarding an edit with
+`Esc`, keeps focus on that question row.
 
-RPC uses Pi's standard extension dialogs instead of the TUI custom component:
+RPC uses Pi's standard selectors and editors. `Review answers now` skips the
+remaining questions; text questions first offer an answer-or-review selector.
+Answer mode opens one note editor per answer; per-option mode opens one for each
+selected option. Review can submit partial answers or reopen answered and
+unanswered questions. Revision, explicit submission, and cancellation use the
+same schema as the TUI.
 
-- `single` and `confirm` use a selector followed by a multiline optional-note
-  editor.
-- `multi` repeatedly toggles items in a selector, uses a dedicated Done item,
-  then opens a multiline note editor for each selected item.
-- `text` uses the standard multiline editor.
-- After the initial sequence, a review selector lists every current answer plus
-  `Submit answers` and `Cancel`. Choosing a question reopens it with its current
-  selection, text, and notes; the replacement answer returns to review.
+### Question keymap configuration
 
-RPC reproduces the TUI review, revision, and explicit-submission semantics, not
-its exact keys or tab layout. Standard dialogs that support `AbortSignal`
-receive it directly. The standard editor has no signal option in Pi 0.80.7, so
-interruption is checked before and after it; returning the cancelled result can
-wait for the RPC client to close that editor.
+Home Manager installs `~/.pi/agent/question-keybindings.json`. The file has the
+seven contexts `question.single`, `question.multi`, `question.confirm`,
+`question.text`, `question.note`, `question.review`, and `question.common`.
+An action supplied in a context replaces its complete default key array;
+omitted actions inherit defaults, including Pi's injected submit, newline, and
+selection bindings.
 
-Print and JSON modes do not open dialogs and return `unavailable`.
+The extension rejects unknown contexts/actions, invalid keys, empty required
+actions, and same-context collisions. Help is generated from the resolved map.
+Run `/reload` after editing either keybinding file.
+
+Modal list search, printable list commands, filter menus, and the `Alt-S`
+session menu remain postponed because Pi 0.80.7 does not expose the required
+replacement APIs.
 
 ## Development
 
-Run checks from this directory through the repository's Nix development shell:
-
 ```sh
-nix develop --command npm ci
-nix develop --command npm run check
+cd modules/programs/pi-coding-agent
+nix develop ../../.. --command npm run check
 ```
 
-To load the extension directly for a TUI smoke test:
+For a TUI smoke test:
 
 ```sh
-nix develop --command npx pi --extension ./extensions/question.ts
+nix develop ../../.. --command npx pi \
+  --extension ./extensions/interaction_policy.ts \
+  --extension ./extensions/question.ts
 ```
 
-New extension files must be git-tracked before flake evaluation because flakes
-cannot read untracked files.
+New files must be git-tracked before flake evaluation because flakes cannot read
+untracked files. Manually verify Ghostty and tmux `Alt-[`/`Alt-]`, normal-input
+`Ctrl-C`, Japanese IME cursor placement, multiline editing, reverse navigation,
+review revision, and `/reload` help updates.

@@ -66,7 +66,7 @@ test("extension registers sequential question metadata and model guidance", () =
 
     assert.equal(registered?.name, "question");
     assert.equal(registered?.executionMode, "sequential");
-    assert.match(registered?.description ?? "", /optional note/);
+    assert.match(registered?.description ?? "", /notes/);
     assert.ok(questionPromptGuidelines.some(line => /repository/.test(line)));
     assert.ok(questionPromptGuidelines.some(line => /generic 'Other'/.test(line)));
     assert.ok(questionPromptGuidelines.some(line => /Treat each note/.test(line)));
@@ -138,7 +138,15 @@ test("TUI dispatch uses one custom UI through confirmation", async () => {
                             requestRender() {},
                         } as TUI,
                         { fg: (_color: string, text: string) => text } as never,
-                        {} as never,
+                        { getKeys(action: string) {
+                            return ({
+                                "tui.select.confirm": ["enter"],
+                                "tui.select.up": ["up"],
+                                "tui.select.down": ["down"],
+                                "tui.input.submit": ["enter"],
+                                "tui.input.newLine": ["shift+enter", "ctrl+j"],
+                            } as Record<string, string[]>)[action] ?? [];
+                        } } as never,
                         value => { resolved = value as QuestionResultDetails; },
                     );
                     component.handleInput?.("\r");
@@ -154,6 +162,33 @@ test("TUI dispatch uses one custom UI through confirmation", async () => {
         status: "answered",
         answers: { choice: { kind: "single", value: "a" } },
     });
+});
+
+test("tool renderers show question prompts, answers, notes, and unanswered state", () => {
+    const tool = createQuestionToolDefinition();
+    const renderTheme = { fg: (_color: string, text: string) => text } as never;
+    const args = {
+        questions: [
+            params.questions[0],
+            { id: "details", prompt: "Explain", kind: "text" as const },
+        ],
+    };
+    const call = tool.renderCall?.(args, renderTheme, {} as never);
+    assert.match(call?.render(120).join("\n") ?? "", /Q1: Choose/);
+    assert.match(call?.render(120).join("\n") ?? "", /Q2: Explain/);
+
+    const result = {
+        content: [{ type: "text", text: "" }],
+        details: {
+            status: "answered",
+            answers: { choice: { kind: "single", value: "b", note: "because" } },
+        },
+    } as never;
+    const collapsed = tool.renderResult?.(result, { expanded: false } as never, renderTheme, { args } as never);
+    const collapsedText = collapsed?.render(160).join("\n") ?? "";
+    assert.match(collapsedText, /1 answered, 1 unanswered/);
+    assert.match(collapsedText, /Choose — B — note: because/);
+    assert.match(collapsedText, /Explain — Unanswered/);
 });
 
 test("runtime contract violations throw tool errors before UI", async () => {
@@ -172,5 +207,15 @@ test("runtime contract violations throw tool errors before UI", async () => {
             context({ mode: "rpc", hasUI: true }),
         ),
         /id must be unique/,
+    );
+    await assert.rejects(
+        tool.execute(
+            "call",
+            { questions: [{ ...params.questions[0], notePlaceholder: "legacy" }] } as never,
+            undefined,
+            undefined,
+            context({ mode: "rpc", hasUI: true }),
+        ),
+        /notePlaceholder is not supported/,
     );
 });
