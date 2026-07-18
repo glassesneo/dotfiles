@@ -4,6 +4,7 @@ import {
     QuestionProgress,
     unavailableResult,
     type PendingQuestionAnswer,
+    type QuestionAnswer,
     type QuestionItem,
     type QuestionOption,
     type QuestionResultDetails,
@@ -18,20 +19,11 @@ function isCancelled(signal: AbortSignal | undefined): boolean {
     return signal?.aborted === true;
 }
 
-function displayMap(options: readonly QuestionOption[]): Map<string, string> {
-    return new Map(options.map(option => [optionDisplayText(option), option.value]));
-}
-
-function progressTitle(
-    question: QuestionItem,
-    index: number,
-    total: number,
-): string {
+function progressTitle(question: QuestionItem, index: number, total: number): string {
     return `Question ${index + 1}/${total}: ${question.prompt}`;
 }
 
-function uniqueDoneLabel(displays: ReadonlySet<string>): string {
-    const base = "Done — confirm selections";
+function uniqueLabel(base: string, displays: ReadonlySet<string>): string {
     let label = base;
     let suffix = 2;
     while (displays.has(label)) {
@@ -41,63 +33,77 @@ function uniqueDoneLabel(displays: ReadonlySet<string>): string {
     return label;
 }
 
+function noteFrom(answer: QuestionAnswer | undefined, value?: string): string | undefined {
+    if (answer?.kind === "single" || answer?.kind === "confirm") return answer.note;
+    if (answer?.kind === "multi" && value !== undefined) {
+        return answer.values.find(selected => selected.value === value)?.note;
+    }
+    return undefined;
+}
+
 async function askNote(
     ui: StandardQuestionContext["ui"],
     question: QuestionItem,
     label: string,
+    existing: string | undefined,
     signal: AbortSignal | undefined,
 ): Promise<string | undefined | null> {
     if (isCancelled(signal)) return null;
-    const note = await ui.input(
-        `Optional note for ${label}`,
-        question.notePlaceholder ?? "Leave blank for no note",
-        { signal },
+    const note = await ui.editor(
+        `Optional note for ${label}${question.notePlaceholder === undefined ? "" : ` — ${question.notePlaceholder}`}`,
+        existing ?? "",
     );
     if (note === undefined || isCancelled(signal)) return null;
     return note;
+}
+
+function markedOptions(
+    options: readonly QuestionOption[],
+    currentValue: string | undefined,
+): string[] {
+    return options.map(option =>
+        `${option.value === currentValue ? "[current]" : "[ ]"} ${optionDisplayText(option)}`,
+    );
 }
 
 async function askSingle(
     context: StandardQuestionContext,
     question: QuestionItem,
     title: string,
+    existing: QuestionAnswer | undefined,
     signal: AbortSignal | undefined,
 ): Promise<PendingQuestionAnswer | undefined> {
     const options = question.options ?? [];
-    const byDisplay = displayMap(options);
-    const selected = await context.ui.select(title, [...byDisplay.keys()], { signal });
+    const current = existing?.kind === "single" ? existing.value : undefined;
+    const displays = markedOptions(options, current);
+    const selected = await context.ui.select(title, displays, { signal });
     if (selected === undefined || isCancelled(signal)) return undefined;
-
-    const value = byDisplay.get(selected);
-    if (value === undefined) {
-        throw new Error(`Standard UI returned an unknown option: ${selected}`);
-    }
-    const option = options.find(candidate => candidate.value === value);
-    if (option === undefined) {
-        throw new Error(`Missing option for value: ${value}`);
-    }
-    const note = await askNote(context.ui, question, option.label, signal);
+    const option = options[displays.indexOf(selected)];
+    if (option === undefined) throw new Error(`Standard UI returned an unknown option: ${selected}`);
+    const note = await askNote(context.ui, question, option.label, noteFrom(existing), signal);
     if (note === null) return undefined;
-    return { kind: "single", value, note };
+    return { kind: "single", value: option.value, note };
 }
 
 async function askMulti(
     context: StandardQuestionContext,
     question: QuestionItem,
     title: string,
+    existing: QuestionAnswer | undefined,
     signal: AbortSignal | undefined,
 ): Promise<PendingQuestionAnswer | undefined> {
     const options = question.options ?? [];
-    const selectedValues = new Set<string>();
+    const selectedValues = new Set(
+        existing?.kind === "multi" ? existing.values.map(selected => selected.value) : [],
+    );
     const rawDisplays = new Set(options.map(optionDisplayText));
-    const doneLabel = uniqueDoneLabel(rawDisplays);
+    const doneLabel = uniqueLabel("Done — confirm selections", rawDisplays);
 
     while (true) {
         if (isCancelled(signal)) return undefined;
-        const displays = options.map(option => {
-            const marker = selectedValues.has(option.value) ? "[x]" : "[ ]";
-            return `${marker} ${optionDisplayText(option)}`;
-        });
+        const displays = options.map(option =>
+            `${selectedValues.has(option.value) ? "[x]" : "[ ]"} ${optionDisplayText(option)}`,
+        );
         const selected = await context.ui.select(
             `${title} (toggle items, then choose Done)`,
             [...displays, doneLabel],
@@ -109,23 +115,24 @@ async function askMulti(
             context.ui.notify("Select at least one option before choosing Done.", "warning");
             continue;
         }
-
-        const index = displays.indexOf(selected);
-        const option = options[index];
+        const option = options[displays.indexOf(selected)];
         if (option === undefined) {
             throw new Error(`Standard UI returned an unknown multi option: ${selected}`);
         }
-        if (selectedValues.has(option.value)) {
-            selectedValues.delete(option.value);
-        } else {
-            selectedValues.add(option.value);
-        }
+        if (selectedValues.has(option.value)) selectedValues.delete(option.value);
+        else selectedValues.add(option.value);
     }
 
     const values: Array<{ value: string; note?: string }> = [];
     for (const option of options) {
         if (!selectedValues.has(option.value)) continue;
-        const note = await askNote(context.ui, question, option.label, signal);
+        const note = await askNote(
+            context.ui,
+            question,
+            option.label,
+            noteFrom(existing, option.value),
+            signal,
+        );
         if (note === null) return undefined;
         values.push({ value: option.value, note });
     }
@@ -136,26 +143,37 @@ async function askConfirm(
     context: StandardQuestionContext,
     question: QuestionItem,
     title: string,
+    existing: QuestionAnswer | undefined,
     signal: AbortSignal | undefined,
 ): Promise<PendingQuestionAnswer | undefined> {
-    const selected = await context.ui.select(title, ["Yes", "No"], { signal });
+    const current = existing?.kind === "confirm" ? String(existing.value) : undefined;
+    const displays = [
+        `${current === "true" ? "[current]" : "[ ]"} Yes`,
+        `${current === "false" ? "[current]" : "[ ]"} No`,
+    ];
+    const selected = await context.ui.select(title, displays, { signal });
     if (selected === undefined || isCancelled(signal)) return undefined;
-    if (selected !== "Yes" && selected !== "No") {
-        throw new Error(`Standard UI returned an unknown confirmation: ${selected}`);
-    }
-
-    const note = await askNote(context.ui, question, selected, signal);
+    const index = displays.indexOf(selected);
+    if (index < 0) throw new Error(`Standard UI returned an unknown confirmation: ${selected}`);
+    const note = await askNote(
+        context.ui,
+        question,
+        index === 0 ? "Yes" : "No",
+        noteFrom(existing),
+        signal,
+    );
     if (note === null) return undefined;
-    return { kind: "confirm", value: selected === "Yes", note };
+    return { kind: "confirm", value: index === 0, note };
 }
 
 async function askText(
     context: StandardQuestionContext,
     question: QuestionItem,
     title: string,
+    existing: QuestionAnswer | undefined,
     signal: AbortSignal | undefined,
 ): Promise<PendingQuestionAnswer | undefined> {
-    let prefill = question.initialValue;
+    let prefill = existing?.kind === "text" ? existing.value : question.initialValue;
     while (true) {
         if (isCancelled(signal)) return undefined;
         const value = await context.ui.editor(title, prefill);
@@ -171,19 +189,35 @@ async function askQuestion(
     question: QuestionItem,
     index: number,
     total: number,
+    existing: QuestionAnswer | undefined,
     signal: AbortSignal | undefined,
 ): Promise<PendingQuestionAnswer | undefined> {
     const title = progressTitle(question, index, total);
     switch (question.kind) {
         case "single":
-            return askSingle(context, question, title, signal);
+            return askSingle(context, question, title, existing, signal);
         case "multi":
-            return askMulti(context, question, title, signal);
+            return askMulti(context, question, title, existing, signal);
         case "confirm":
-            return askConfirm(context, question, title, signal);
+            return askConfirm(context, question, title, existing, signal);
         case "text":
-            return askText(context, question, title, signal);
+            return askText(context, question, title, existing, signal);
     }
+}
+
+function summarizeAnswer(question: QuestionItem, answer: QuestionAnswer): string {
+    if (answer.kind === "text") return answer.value;
+    if (answer.kind === "confirm") return `${answer.value ? "Yes" : "No"}${answer.note === undefined ? "" : ` — note: ${answer.note}`}`;
+    if (answer.kind === "single") {
+        const label = question.options?.find(option => option.value === answer.value)?.label ?? answer.value;
+        return `${label}${answer.note === undefined ? "" : ` — note: ${answer.note}`}`;
+    }
+    return answer.values
+        .map(selected => {
+            const label = question.options?.find(option => option.value === selected.value)?.label ?? selected.value;
+            return `${label}${selected.note === undefined ? "" : ` (note: ${selected.note})`}`;
+        })
+        .join(", ");
 }
 
 export async function runStandardQuestionFlow(
@@ -194,18 +228,51 @@ export async function runStandardQuestionFlow(
     if (!context.hasUI) return unavailableResult();
 
     const progress = new QuestionProgress(questions);
-    while (progress.current !== undefined) {
+    for (let index = 0; index < questions.length; index += 1) {
+        progress.moveTo(index);
         const pending = await askQuestion(
             context,
             progress.current,
-            progress.index,
+            index,
             progress.total,
+            undefined,
             signal,
         );
         if (pending === undefined) return progress.cancelled();
-        const completed = progress.submit(pending);
-        if (completed !== undefined) return completed;
+        progress.submit(pending);
     }
 
-    throw new Error("Question flow ended without a result");
+    while (true) {
+        if (isCancelled(signal)) return progress.cancelled(false);
+        const questionLabels = questions.map((question, index) =>
+            `Q${index + 1}: ${question.prompt} — ${summarizeAnswer(question, progress.answerFor(question)!)}`,
+        );
+        const used = new Set(questionLabels);
+        const submitLabel = uniqueLabel("Submit answers", used);
+        used.add(submitLabel);
+        const cancelLabel = uniqueLabel("Cancel", used);
+        const selected = await context.ui.select(
+            "Review answers (choose a question to revise)",
+            [...questionLabels, submitLabel, cancelLabel],
+            { signal },
+        );
+        if (selected === undefined || selected === cancelLabel || isCancelled(signal)) {
+            return progress.cancelled(false);
+        }
+        if (selected === submitLabel) return progress.answered();
+
+        const index = questionLabels.indexOf(selected);
+        if (index < 0) throw new Error(`Standard UI returned an unknown review item: ${selected}`);
+        progress.moveTo(index);
+        const pending = await askQuestion(
+            context,
+            progress.current,
+            index,
+            progress.total,
+            progress.answerFor(progress.current),
+            signal,
+        );
+        if (pending === undefined) return progress.cancelled(false);
+        progress.submit(pending);
+    }
 }

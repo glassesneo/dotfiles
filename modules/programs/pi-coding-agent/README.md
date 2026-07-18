@@ -7,8 +7,9 @@ registration lives in `default.nix`.
 ## `question` tool
 
 The `question` tool lets the model request decisions or missing information
-needed to continue the current task. A call contains one or more questions. Pi
-presents them sequentially and returns only after the last answer, cancellation,
+needed to continue the current task. A call contains one or more questions. The
+TUI keeps the whole call in one tabbed screen; RPC asks sequentially and then
+opens a review loop. Both return only after explicit submission, cancellation,
 or an unavailable-UI result.
 
 Question kinds:
@@ -81,9 +82,10 @@ selection-only. Contract violations are tool errors rather than cancellations.
 }
 ```
 
-The status is `answered`, `cancelled`, or `unavailable`. Cancellation preserves
-only previously confirmed answers and includes the unconfirmed
-`currentQuestionId`. Non-interactive modes return:
+The status is `answered`, `cancelled`, or `unavailable`. Cancellation from a
+question tab preserves confirmed answers and includes that tab's
+`currentQuestionId`. Cancellation from final review preserves all confirmed
+answers and omits `currentQuestionId`. Non-interactive modes return:
 
 ```json
 {
@@ -96,38 +98,51 @@ only previously confirmed answers and includes the unconfirmed
 
 | State | Keys | Action |
 |---|---|---|
-| Any question | `Ctrl-C` | Cancel the whole tool call |
-| Question screen | `Esc` | Cancel the whole tool call |
+| Any state | `Ctrl-C` | Cancel the whole tool call |
+| Question or review | `Esc` | Cancel the whole tool call |
+| Choice or text tab-navigation | `←` / `→` | Move between question tabs, wrapping at each end |
 | Choices | `↑` / `↓`, `Ctrl-P` / `Ctrl-N` | Move focus |
-| `single` | `Enter` | Confirm the focused option |
+| `single` | `Enter` | Confirm the focused option and advance |
 | `multi` | `Space` | Toggle the focused option |
-| `multi` | `Enter` | Confirm one or more selected options |
+| `multi` | `Enter` | Confirm one or more selected options and advance |
 | `confirm` | `Y` / `N` | Focus Yes or No |
-| `confirm` | `Enter` | Confirm Yes or No |
+| `confirm` | `Enter` | Confirm Yes or No and advance |
 | Any choice | `Tab` | Select it and open its optional note |
-| Note editor | `Enter` | Save the note and return to choices |
+| Note editor | `Enter` | Insert a newline |
+| Note editor | `Tab` | Save the note and return to choices |
 | Note editor | `Esc` | Discard the current edit and return |
-| `text` | `Enter` | Insert a newline |
-| `text` | `Ctrl-D` | Confirm a non-blank answer |
+| Text editor | `Enter` | Insert a newline |
+| Text editor | `Tab` | Keep the draft and enter tab-navigation mode |
+| Text tab-navigation | `Tab` | Return to the text editor |
+| Text question | `Ctrl-D` | Confirm a non-blank answer and advance |
+| Final review | `←` | Return to the last question |
+| Final review | `Enter` | Submit all answers |
 
-Focus, selection, saved-note, validation, and progress states are shown in text,
-not only with color. The component wraps or truncates output to the available
-terminal width.
+The top row shows every `Qn` tab, answered/unanswered state, current position,
+and whether `Confirm` is locked or ready. Confirmed answers and unconfirmed
+drafts survive navigation; confirming a revised answer overwrites its prior
+value. Focus, selection, saved-note, validation, and submission states are shown
+in text, not only with color. The component wraps or truncates every line to the
+available terminal width.
 
 ### RPC fallback and mode differences
 
 RPC uses Pi's standard extension dialogs instead of the TUI custom component:
 
-- `single` and `confirm` use a selector followed by an optional note input.
+- `single` and `confirm` use a selector followed by a multiline optional-note
+  editor.
 - `multi` repeatedly toggles items in a selector, uses a dedicated Done item,
-  then asks for an optional note for each selected item.
+  then opens a multiline note editor for each selected item.
 - `text` uses the standard multiline editor.
+- After the initial sequence, a review selector lists every current answer plus
+  `Submit answers` and `Cancel`. Choosing a question reopens it with its current
+  selection, text, and notes; the replacement answer returns to review.
 
-RPC reproduces the TUI answer structure, not its exact keys or screen layout.
-Standard dialogs that support `AbortSignal` receive it directly. The standard
-editor has no signal option in Pi 0.80.7, so interruption is checked before and
-after it; returning the cancelled result can wait for the RPC client to close
-that editor.
+RPC reproduces the TUI review, revision, and explicit-submission semantics, not
+its exact keys or tab layout. Standard dialogs that support `AbortSignal`
+receive it directly. The standard editor has no signal option in Pi 0.80.7, so
+interruption is checked before and after it; returning the cancelled result can
+wait for the RPC client to close that editor.
 
 Print and JSON modes do not open dialogs and return `unavailable`.
 

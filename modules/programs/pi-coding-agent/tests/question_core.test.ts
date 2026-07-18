@@ -181,10 +181,14 @@ test("normalization rejects empty or inconsistent pending answers", () => {
     );
 });
 
-test("progress commits only completed questions and answers only at the end", () => {
+test("progress supports movement, overwrite, cancellation contexts, and explicit submission", () => {
     const progress = new QuestionProgress(questions);
     assert.equal(progress.index, 0);
-    assert.equal(progress.submit({ kind: "single", value: "safe" }), undefined);
+    assert.throws(() => progress.answered(), /before all questions complete/);
+
+    progress.submit({ kind: "single", value: "safe" });
+    assert.equal(progress.index, 0);
+    progress.move(1);
     assert.equal(progress.index, 1);
     assert.deepEqual(progress.cancelled(), {
         status: "cancelled",
@@ -192,16 +196,26 @@ test("progress commits only completed questions and answers only at the end", ()
         currentQuestionId: "details",
     });
 
-    assert.deepEqual(
-        progress.submit({ kind: "text", value: "line one\nline two" }),
-        {
-            status: "answered",
-            answers: {
-                approach: { kind: "single", value: "safe" },
-                details: { kind: "text", value: "line one\nline two" },
-            },
+    progress.submit({ kind: "text", value: "line one\nline two" });
+    assert.equal(progress.allAnswered, true);
+    progress.move(1);
+    assert.equal(progress.index, 0);
+    progress.submit({ kind: "single", value: "fast", note: "revised" });
+    assert.deepEqual(progress.cancelled(false), {
+        status: "cancelled",
+        answers: {
+            approach: { kind: "single", value: "fast", note: "revised" },
+            details: { kind: "text", value: "line one\nline two" },
         },
-    );
+    });
+    assert.deepEqual(progress.answered(), {
+        status: "answered",
+        answers: {
+            approach: { kind: "single", value: "fast", note: "revised" },
+            details: { kind: "text", value: "line one\nline two" },
+        },
+    });
+    assert.throws(() => progress.moveTo(2), /out of range/);
 });
 
 test("result content and details carry the same recoverable JSON", () => {
@@ -214,7 +228,8 @@ test("progress safely preserves question IDs that are object prototype names", (
     const progress = new QuestionProgress([
         { id: "__proto__", prompt: "Details", kind: "text" },
     ]);
-    const details = progress.submit({ kind: "text", value: "answer" });
+    progress.submit({ kind: "text", value: "answer" });
+    const details = progress.answered();
     assert.deepEqual(details, {
         status: "answered",
         answers: Object.fromEntries([
@@ -222,7 +237,7 @@ test("progress safely preserves question IDs that are object prototype names", (
         ]),
     });
     assert.equal(
-        Object.prototype.hasOwnProperty.call(details?.answers, "__proto__"),
+        Object.prototype.hasOwnProperty.call(details.answers, "__proto__"),
         true,
     );
     assert.deepEqual(JSON.parse(JSON.stringify(details)), details);

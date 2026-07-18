@@ -65,11 +65,7 @@ export const questionParameters = Type.Object(
 
 export type InferredQuestionParameters = Static<typeof questionParameters>;
 
-export type PendingQuestionAnswer =
-    | { kind: "single"; value: string; note?: string }
-    | { kind: "multi"; values: Array<{ value: string; note?: string }> }
-    | { kind: "text"; value: string }
-    | { kind: "confirm"; value: boolean; note?: string };
+export type PendingQuestionAnswer = QuestionAnswer;
 
 export interface QuestionToolResult {
     content: Array<{ type: "text"; text: string }>;
@@ -83,9 +79,7 @@ export function optionDisplayText(option: QuestionOption): string {
 }
 
 function requireNonBlank(value: string, message: string): void {
-    if (value.trim().length === 0) {
-        throw new Error(message);
-    }
+    if (value.trim().length === 0) throw new Error(message);
 }
 
 function requireUnique(
@@ -94,16 +88,12 @@ function requireUnique(
 ): void {
     const seen = new Set<string>();
     for (const value of values) {
-        if (seen.has(value)) {
-            throw new Error(message(value));
-        }
+        if (seen.has(value)) throw new Error(message(value));
         seen.add(value);
     }
 }
 
-export function validateQuestionParameters(
-    params: QuestionParameters,
-): void {
+export function validateQuestionParameters(params: QuestionParameters): void {
     if (params.questions.length === 0) {
         throw new Error("questions must contain at least one question");
     }
@@ -130,7 +120,6 @@ export function validateQuestionParameters(
                     `${question.kind} question ${question.id} requires at least two options`,
                 );
             }
-
             for (const option of question.options) {
                 requireNonBlank(
                     option.value,
@@ -141,7 +130,6 @@ export function validateQuestionParameters(
                     `Option label must not be blank in question ${question.id}`,
                 );
             }
-
             requireUnique(
                 question.options.map(option => option.value),
                 value =>
@@ -222,16 +210,17 @@ export function normalizeQuestionAnswer(
                 }
                 byValue.set(selected.value, normalizeNote(selected.note));
             }
-
-            const values = (question.options ?? [])
-                .filter(option => byValue.has(option.value))
-                .map(option => {
-                    const note = byValue.get(option.value);
-                    return note === undefined
-                        ? { value: option.value }
-                        : { value: option.value, note };
-                });
-            return { kind: "multi", values };
+            return {
+                kind: "multi",
+                values: (question.options ?? [])
+                    .filter(option => byValue.has(option.value))
+                    .map(option => {
+                        const note = byValue.get(option.value);
+                        return note === undefined
+                            ? { value: option.value }
+                            : { value: option.value, note };
+                    }),
+            };
         }
         case "text":
             requireNonBlank(
@@ -268,43 +257,56 @@ export class QuestionProgress {
         return this.#questions.length;
     }
 
-    get current(): QuestionItem | undefined {
-        return this.#questions[this.#index];
+    get current(): QuestionItem {
+        return this.#questions[this.#index]!;
     }
 
-    submit(pending: PendingQuestionAnswer): QuestionResultDetails | undefined {
-        const question = this.current;
-        if (question === undefined) {
-            throw new Error("All questions have already been answered");
-        }
+    questionAt(index: number): QuestionItem {
+        const question = this.#questions[index];
+        if (question === undefined) throw new Error(`Question index out of range: ${index}`);
+        return question;
+    }
 
-        const answer = normalizeQuestionAnswer(question, pending);
-        this.#answers.set(question.id, answer);
-        this.#index += 1;
+    moveTo(index: number): void {
+        this.questionAt(index);
+        this.#index = index;
+    }
 
-        return this.current === undefined ? this.answered() : undefined;
+    move(delta: number): void {
+        this.#index = (this.#index + delta % this.total + this.total) % this.total;
+    }
+
+    answerFor(questionOrId: QuestionItem | string): QuestionAnswer | undefined {
+        const id = typeof questionOrId === "string" ? questionOrId : questionOrId.id;
+        return this.#answers.get(id);
+    }
+
+    isAnswered(questionOrId: QuestionItem | string): boolean {
+        return this.answerFor(questionOrId) !== undefined;
+    }
+
+    get allAnswered(): boolean {
+        return this.#questions.every(question => this.#answers.has(question.id));
+    }
+
+    submit(pending: PendingQuestionAnswer): QuestionAnswer {
+        const answer = normalizeQuestionAnswer(this.current, pending);
+        this.#answers.set(this.current.id, answer);
+        return answer;
     }
 
     answered(): QuestionResultDetails {
-        if (this.current !== undefined) {
+        if (!this.allAnswered) {
             throw new Error("Cannot build an answered result before all questions complete");
         }
-        return {
-            status: "answered",
-            answers: Object.fromEntries(this.#answers),
-        };
+        return { status: "answered", answers: Object.fromEntries(this.#answers) };
     }
 
-    cancelled(): QuestionResultDetails {
-        const currentQuestionId = this.current?.id;
+    cancelled(includeCurrentQuestion = true): QuestionResultDetails {
         const answers = Object.fromEntries(this.#answers);
-        return currentQuestionId === undefined
-            ? { status: "cancelled", answers }
-            : {
-                  status: "cancelled",
-                  answers,
-                  currentQuestionId,
-              };
+        return includeCurrentQuestion
+            ? { status: "cancelled", answers, currentQuestionId: this.current.id }
+            : { status: "cancelled", answers };
     }
 }
 

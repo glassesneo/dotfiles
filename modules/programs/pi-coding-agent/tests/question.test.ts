@@ -10,7 +10,7 @@ import registerQuestion, {
     createQuestionToolDefinition,
     questionPromptGuidelines,
 } from "../extensions/question.ts";
-import type { PendingQuestionAnswer } from "../extensions/question_core.ts";
+import type { QuestionResultDetails } from "../extensions/question_core.ts";
 
 function resultText(content: { type: string; text?: string }): string {
     assert.equal(content.type, "text");
@@ -89,7 +89,7 @@ test("non-interactive and print modes return unavailable without UI", async () =
 
 test("RPC dispatch uses standard dialogs and preserves content/details", async () => {
     const tool = createQuestionToolDefinition();
-    const script = ["B", "because"];
+    const script = ["[ ] B", "because", "Submit answers"];
     const result = await tool.execute(
         "call",
         params,
@@ -102,7 +102,7 @@ test("RPC dispatch uses standard dialogs and preserves content/details", async (
                 async select() {
                     return script.shift();
                 },
-                async input() {
+                async editor() {
                     return script.shift();
                 },
             },
@@ -117,10 +117,9 @@ test("RPC dispatch uses standard dialogs and preserves content/details", async (
     assert.deepEqual(JSON.parse(resultText(result.content[0])), result.details);
 });
 
-test("TUI dispatch uses custom UI", async () => {
+test("TUI dispatch uses one custom UI through confirmation", async () => {
     const tool = createQuestionToolDefinition();
     let customCalls = 0;
-    const answer: PendingQuestionAnswer = { kind: "single", value: "a" };
     const result = await tool.execute(
         "call",
         params,
@@ -132,6 +131,7 @@ test("TUI dispatch uses custom UI", async () => {
             ui: {
                 async custom(factory) {
                     customCalls += 1;
+                    let resolved: QuestionResultDetails | undefined;
                     const component = await factory(
                         {
                             terminal: { rows: 24, columns: 80 },
@@ -139,10 +139,12 @@ test("TUI dispatch uses custom UI", async () => {
                         } as TUI,
                         { fg: (_color: string, text: string) => text } as never,
                         {} as never,
-                        () => {},
+                        value => { resolved = value as QuestionResultDetails; },
                     );
+                    component.handleInput?.("\r");
+                    component.handleInput?.("\r");
                     component.dispose?.();
-                    return answer as never;
+                    return resolved as never;
                 },
             },
         }),

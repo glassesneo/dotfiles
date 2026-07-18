@@ -50,18 +50,13 @@ const allKinds: QuestionItem[] = [
             { value: "c", label: "C" },
         ],
     },
-    {
-        id: "text",
-        prompt: "Details?",
-        kind: "text",
-        initialValue: "initial",
-    },
+    { id: "text", prompt: "Details?", kind: "text", initialValue: "initial" },
     { id: "ok", prompt: "Proceed?", kind: "confirm" },
 ];
 
-test("standard UI produces shared structured answers for all kinds", async () => {
+test("standard UI answers all kinds, reviews, and explicitly submits", async () => {
     const mock = scriptedUI([
-        "A — First",
+        "[ ] A — First",
         "single note",
         "[ ] C",
         "[ ] A",
@@ -69,32 +64,105 @@ test("standard UI produces shared structured answers for all kinds", async () =>
         "note A",
         "note C",
         "line 1\nline 2",
-        "No",
+        "[ ] No",
         "not now",
+        "Submit answers",
+    ]);
+
+    assert.deepEqual(await runStandardQuestionFlow({ hasUI: true, ui: mock.ui }, allKinds), {
+        status: "answered",
+        answers: {
+            one: { kind: "single", value: "a", note: "single note" },
+            many: {
+                kind: "multi",
+                values: [
+                    { value: "a", note: "note A" },
+                    { value: "c", note: "note C" },
+                ],
+            },
+            text: { kind: "text", value: "line 1\nline 2" },
+            ok: { kind: "confirm", value: false, note: "not now" },
+        },
+    });
+    assert.equal(mock.remaining.length, 0);
+    const textEditor = mock.calls.find(call => call.method === "editor" && call.args[0] === "Question 3/4: Details?");
+    assert.deepEqual(textEditor?.args, ["Question 3/4: Details?", "initial"]);
+    assert.ok(mock.calls.some(call => call.method === "select" && call.args[0] === "Review answers (choose a question to revise)"));
+});
+
+test("review can reopen an answer with current values and overwrite it", async () => {
+    const mock = scriptedUI([
+        "[ ] A — First",
+        "old note",
+        "Q1: One? — A — note: old note",
+        "[ ] B",
+        "new\nnote",
+        "Submit answers",
+    ]);
+    assert.deepEqual(
+        await runStandardQuestionFlow({ hasUI: true, ui: mock.ui }, [allKinds[0]]),
+        {
+            status: "answered",
+            answers: { one: { kind: "single", value: "b", note: "new\nnote" } },
+        },
+    );
+    const revision = mock.calls.find(call =>
+        call.method === "select" && String(call.args[0]).startsWith("Question") &&
+        Array.isArray(call.args[1]) && (call.args[1] as string[]).includes("[current] A — First"),
+    );
+    assert.ok(revision);
+    const revisedNote = mock.calls.filter(call => call.method === "editor").at(-1);
+    assert.equal(revisedNote?.args[1], "old note");
+});
+
+test("review rehydrates and revises multi, text, and confirm answers", async () => {
+    const questions = allKinds.slice(1);
+    const mock = scriptedUI([
+        "[ ] A",
+        "Done — confirm selections",
+        "old A",
+        "old text",
+        "[ ] Yes",
+        "old yes",
+        "Q1: Many? — A (note: old A)",
+        "[ ] B",
+        "Done — confirm selections",
+        "new A",
+        "new B",
+        "Q2: Details? — old text",
+        "new text",
+        "Q3: Proceed? — Yes — note: old yes",
+        "[ ] No",
+        "new no",
+        "Submit answers",
     ]);
 
     assert.deepEqual(
-        await runStandardQuestionFlow({ hasUI: true, ui: mock.ui }, allKinds),
+        await runStandardQuestionFlow({ hasUI: true, ui: mock.ui }, questions),
         {
             status: "answered",
             answers: {
-                one: { kind: "single", value: "a", note: "single note" },
                 many: {
                     kind: "multi",
                     values: [
-                        { value: "a", note: "note A" },
-                        { value: "c", note: "note C" },
+                        { value: "a", note: "new A" },
+                        { value: "b", note: "new B" },
                     ],
                 },
-                text: { kind: "text", value: "line 1\nline 2" },
-                ok: { kind: "confirm", value: false, note: "not now" },
+                text: { kind: "text", value: "new text" },
+                ok: { kind: "confirm", value: false, note: "new no" },
             },
         },
     );
-    assert.equal(mock.remaining.length, 0);
-    assert.equal(mock.calls.some(call => call.method === "confirm"), false);
-    const editorCall = mock.calls.find(call => call.method === "editor");
-    assert.deepEqual(editorCall?.args, ["Question 3/4: Details?", "initial"]);
+    assert.ok(mock.calls.some(call =>
+        call.method === "select" && Array.isArray(call.args[1]) &&
+        (call.args[1] as string[]).includes("[x] A"),
+    ));
+    assert.ok(mock.calls.some(call => call.method === "editor" && call.args[1] === "old text"));
+    assert.ok(mock.calls.some(call =>
+        call.method === "select" && Array.isArray(call.args[1]) &&
+        (call.args[1] as string[]).includes("[current] Yes"),
+    ));
 });
 
 test("multi requires one selection before Done", async () => {
@@ -103,11 +171,9 @@ test("multi requires one selection before Done", async () => {
         "[ ] B",
         "Done — confirm selections",
         "",
+        "Submit answers",
     ]);
-    const result = await runStandardQuestionFlow(
-        { hasUI: true, ui: mock.ui },
-        [allKinds[1]],
-    );
+    const result = await runStandardQuestionFlow({ hasUI: true, ui: mock.ui }, [allKinds[1]]);
     assert.deepEqual(result, {
         status: "answered",
         answers: { many: { kind: "multi", values: [{ value: "b" }] } },
@@ -115,17 +181,25 @@ test("multi requires one selection before Done", async () => {
     assert.equal(mock.calls.filter(call => call.method === "notify").length, 1);
 });
 
-test("cancellation retains only completed preceding answers", async () => {
-    const mock = scriptedUI(["B", "", undefined]);
-    const result = await runStandardQuestionFlow(
-        { hasUI: true, ui: mock.ui },
-        allKinds.slice(0, 2),
+test("initial and review cancellation retain the correct context", async () => {
+    const initial = scriptedUI(["[ ] B", "", undefined]);
+    assert.deepEqual(
+        await runStandardQuestionFlow({ hasUI: true, ui: initial.ui }, allKinds.slice(0, 2)),
+        {
+            status: "cancelled",
+            answers: { one: { kind: "single", value: "b" } },
+            currentQuestionId: "many",
+        },
     );
-    assert.deepEqual(result, {
-        status: "cancelled",
-        answers: { one: { kind: "single", value: "b" } },
-        currentQuestionId: "many",
-    });
+
+    const review = scriptedUI(["[ ] B", "", "Cancel"]);
+    assert.deepEqual(
+        await runStandardQuestionFlow({ hasUI: true, ui: review.ui }, [allKinds[0]]),
+        {
+            status: "cancelled",
+            answers: { one: { kind: "single", value: "b" } },
+        },
+    );
 });
 
 test("non-interactive mode never invokes UI", async () => {
@@ -138,42 +212,25 @@ test("non-interactive mode never invokes UI", async () => {
 });
 
 test("text retries blanks and abort after editor discards its value", async () => {
-    const blank = scriptedUI(["  ", "answer"]);
+    const blank = scriptedUI(["  ", "answer", "Submit answers"]);
     assert.deepEqual(
-        await runStandardQuestionFlow(
-            { hasUI: true, ui: blank.ui },
-            [allKinds[2]],
-        ),
-        {
-            status: "answered",
-            answers: { text: { kind: "text", value: "answer" } },
-        },
+        await runStandardQuestionFlow({ hasUI: true, ui: blank.ui }, [allKinds[2]]),
+        { status: "answered", answers: { text: { kind: "text", value: "answer" } } },
     );
     assert.equal(blank.calls.filter(call => call.method === "notify").length, 1);
 
     const controller = new AbortController();
-    const calls: string[] = [];
     const ui: UI = {
-        async select() {
-            throw new Error("unused");
-        },
-        async input() {
-            throw new Error("unused");
-        },
+        async select() { throw new Error("unused"); },
+        async input() { throw new Error("unused"); },
         async editor() {
-            calls.push("editor");
             controller.abort();
             return "must be discarded";
         },
         notify() {},
     };
     assert.deepEqual(
-        await runStandardQuestionFlow(
-            { hasUI: true, ui },
-            [allKinds[2]],
-            controller.signal,
-        ),
+        await runStandardQuestionFlow({ hasUI: true, ui }, [allKinds[2]], controller.signal),
         { status: "cancelled", answers: {}, currentQuestionId: "text" },
     );
-    assert.deepEqual(calls, ["editor"]);
 });
