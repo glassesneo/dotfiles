@@ -1,0 +1,174 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import type {
+    ExtensionAPI,
+    ExtensionContext,
+    ExtensionUIContext,
+} from "@earendil-works/pi-coding-agent";
+import type { TUI } from "@earendil-works/pi-tui";
+import registerQuestion, {
+    createQuestionToolDefinition,
+    questionPromptGuidelines,
+} from "../extensions/question.ts";
+import type { PendingQuestionAnswer } from "../extensions/question_core.ts";
+
+function resultText(content: { type: string; text?: string }): string {
+    assert.equal(content.type, "text");
+    assert.equal(typeof content.text, "string");
+    return content.text as string;
+}
+
+function context(options: {
+    mode: ExtensionContext["mode"];
+    hasUI: boolean;
+    ui?: Partial<ExtensionUIContext>;
+}): ExtensionContext {
+    const unexpected = () => {
+        throw new Error("Unexpected UI call");
+    };
+    return {
+        mode: options.mode,
+        hasUI: options.hasUI,
+        ui: {
+            select: unexpected,
+            input: unexpected,
+            editor: unexpected,
+            notify: unexpected,
+            custom: unexpected,
+            ...options.ui,
+        } as ExtensionUIContext,
+    } as ExtensionContext;
+}
+
+const params = {
+    questions: [
+        {
+            id: "choice",
+            prompt: "Choose",
+            kind: "single" as const,
+            options: [
+                { value: "a", label: "A" },
+                { value: "b", label: "B" },
+            ],
+        },
+    ],
+};
+
+test("extension registers sequential question metadata and model guidance", () => {
+    let registered: ReturnType<typeof createQuestionToolDefinition> | undefined;
+    registerQuestion({
+        registerTool(tool) {
+            registered = tool as unknown as ReturnType<
+                typeof createQuestionToolDefinition
+            >;
+        },
+    } as ExtensionAPI);
+
+    assert.equal(registered?.name, "question");
+    assert.equal(registered?.executionMode, "sequential");
+    assert.match(registered?.description ?? "", /optional note/);
+    assert.ok(questionPromptGuidelines.some(line => /repository/.test(line)));
+    assert.ok(questionPromptGuidelines.some(line => /generic 'Other'/.test(line)));
+    assert.ok(questionPromptGuidelines.some(line => /Treat each note/.test(line)));
+});
+
+test("non-interactive and print modes return unavailable without UI", async () => {
+    const tool = createQuestionToolDefinition();
+    for (const mode of ["print", "json"] as const) {
+        const result = await tool.execute(
+            "call",
+            params,
+            undefined,
+            undefined,
+            context({ mode, hasUI: true }),
+        );
+        assert.deepEqual(result.details, { status: "unavailable", answers: {} });
+        assert.deepEqual(JSON.parse(resultText(result.content[0])), result.details);
+    }
+});
+
+test("RPC dispatch uses standard dialogs and preserves content/details", async () => {
+    const tool = createQuestionToolDefinition();
+    const script = ["B", "because"];
+    const result = await tool.execute(
+        "call",
+        params,
+        undefined,
+        undefined,
+        context({
+            mode: "rpc",
+            hasUI: true,
+            ui: {
+                async select() {
+                    return script.shift();
+                },
+                async input() {
+                    return script.shift();
+                },
+            },
+        }),
+    );
+    assert.deepEqual(result.details, {
+        status: "answered",
+        answers: {
+            choice: { kind: "single", value: "b", note: "because" },
+        },
+    });
+    assert.deepEqual(JSON.parse(resultText(result.content[0])), result.details);
+});
+
+test("TUI dispatch uses custom UI", async () => {
+    const tool = createQuestionToolDefinition();
+    let customCalls = 0;
+    const answer: PendingQuestionAnswer = { kind: "single", value: "a" };
+    const result = await tool.execute(
+        "call",
+        params,
+        undefined,
+        undefined,
+        context({
+            mode: "tui",
+            hasUI: true,
+            ui: {
+                async custom(factory) {
+                    customCalls += 1;
+                    const component = await factory(
+                        {
+                            terminal: { rows: 24, columns: 80 },
+                            requestRender() {},
+                        } as TUI,
+                        { fg: (_color: string, text: string) => text } as never,
+                        {} as never,
+                        () => {},
+                    );
+                    component.dispose?.();
+                    return answer as never;
+                },
+            },
+        }),
+    );
+    assert.equal(customCalls, 1);
+    assert.deepEqual(result.details, {
+        status: "answered",
+        answers: { choice: { kind: "single", value: "a" } },
+    });
+});
+
+test("runtime contract violations throw tool errors before UI", async () => {
+    const tool = createQuestionToolDefinition();
+    await assert.rejects(
+        tool.execute(
+            "call",
+            {
+                questions: [
+                    params.questions[0],
+                    { ...params.questions[0], prompt: "Duplicate" },
+                ],
+            },
+            undefined,
+            undefined,
+            context({ mode: "rpc", hasUI: true }),
+        ),
+        /id must be unique/,
+    );
+});

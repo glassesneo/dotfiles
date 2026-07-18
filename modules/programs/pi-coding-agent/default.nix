@@ -17,6 +17,7 @@ delib.module {
       settings = {
         extensions = [
           "${./extensions}/agent_artifact.ts"
+          "${./extensions}/question.ts"
         ];
         prompts = [
           "${./prompts}"

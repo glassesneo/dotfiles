@@ -7,7 +7,9 @@
     "check": "tsc --noEmit && npm test"
   },
   "devDependencies": {
+    "@earendil-works/pi-ai": "0.80.7",
     "@earendil-works/pi-coding-agent": "0.80.7",
+    "@earendil-works/pi-tui": "0.80.7",
     "@types/node": "^24.0.0",
     "typebox": "^1.0.0",
     "typescript": "^5.9.0"
