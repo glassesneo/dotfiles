@@ -15,7 +15,14 @@ import {
     requestPendingArtifactRevision,
     type ArtifactKind,
     type ArtifactSummary,
-} from "./agent_artifact_store.ts";
+} from "./utilities/agent_artifact_store.ts";
+import {
+    type DecisionFlowPolicy,
+    type DecisionItem,
+    type DecisionResultDetails,
+} from "./utilities/decision_core.ts";
+import { runStandardDecisionFlow } from "./utilities/decision_standard_ui.ts";
+import { runTuiDecisionFlow } from "./utilities/decision_tui.ts";
 
 export type AgentArtifactStatus = "approved" | "revision_requested" | "rejected" | "unavailable" | "error";
 
@@ -32,6 +39,7 @@ export interface AgentArtifactResultDetails {
     lineCount: number;
     fileSize: number;
     revisionInstructions?: string;
+    actionNote?: string;
     message: string;
 }
 
@@ -47,7 +55,12 @@ export const agentArtifactPromptGuidelines = [
     "After save_agent_artifact returns approved, mention the finalPath if useful but do not repeat the artifact body.",
 ];
 
-function detailsFrom(summary: ArtifactSummary, status: AgentArtifactStatus, message: string, revisionInstructions?: string): AgentArtifactResultDetails {
+function detailsFrom(
+    summary: ArtifactSummary,
+    status: AgentArtifactStatus,
+    message: string,
+    options: { revisionInstructions?: string; actionNote?: string } = {},
+): AgentArtifactResultDetails {
     return {
         status,
         kind: summary.kind,
@@ -60,7 +73,8 @@ function detailsFrom(summary: ArtifactSummary, status: AgentArtifactStatus, mess
         summary: summary.summary,
         lineCount: summary.lineCount,
         fileSize: summary.fileSize,
-        revisionInstructions,
+        revisionInstructions: options.revisionInstructions,
+        actionNote: options.actionNote,
         message,
     };
 }
@@ -78,6 +92,7 @@ function resultText(details: AgentArtifactResultDetails): string {
         `lineCount: ${details.lineCount}`,
         `fileSize: ${details.fileSize}`,
         details.revisionInstructions === undefined ? undefined : `revisionInstructions: ${details.revisionInstructions}`,
+        details.actionNote === undefined ? undefined : `actionNote: ${details.actionNote}`,
         details.message,
     ].filter((row): row is string => row !== undefined);
     return rows.join("\n");
@@ -96,19 +111,68 @@ function reviewText(summary: ArtifactSummary): string {
     ].join("\n");
 }
 
-async function selectApprovalAction(ctx: ExtensionContext, summary: ArtifactSummary, signal?: AbortSignal): Promise<"approve" | "revise" | "reject" | undefined> {
-    const choices = ["Approve", "Request revision", "Reject", "View full text"];
-    while (true) {
-        const selected = await ctx.ui.select(reviewText(summary), choices, { signal });
-        if (selected === undefined || signal?.aborted) return undefined;
-        if (selected === "Approve") return "approve";
-        if (selected === "Request revision") return "revise";
-        if (selected === "Reject") return "reject";
-        if (selected === "View full text") {
+type ApprovalAction = "approve" | "revise" | "reject" | "view";
+
+const approvalDecisionPolicy: DecisionFlowPolicy = {
+    autoSubmitSingle: true,
+    noteRequirement(_item, option) {
+        if (option?.value === "view") return "none";
+        if (option?.value === "revise") return "required";
+        return "optional";
+    },
+};
+
+function approvalQuestion(summary: ArtifactSummary): DecisionItem {
+    return {
+        id: "artifact-action",
+        prompt: reviewText(summary),
+        kind: "single",
+        options: [
+            { value: "approve", label: "Approve" },
+            { value: "revise", label: "Request revision" },
+            { value: "reject", label: "Reject" },
+            { value: "view", label: "View full text" },
+        ],
+        note: {
+            mode: "answer",
+            placeholder: "Add conditions, reasons, or revision instructions",
+        },
+    };
+}
+
+async function askApprovalDecision(
+    ctx: ExtensionContext,
+    summary: ArtifactSummary,
+    signal?: AbortSignal,
+): Promise<DecisionResultDetails> {
+    const questions = [approvalQuestion(summary)];
+    return ctx.mode === "tui"
+        ? runTuiDecisionFlow(ctx, questions, signal, approvalDecisionPolicy)
+        : runStandardDecisionFlow({ hasUI: ctx.hasUI, ui: ctx.ui }, questions, signal, approvalDecisionPolicy);
+}
+
+async function selectApprovalAction(
+    ctx: ExtensionContext,
+    summary: ArtifactSummary,
+    signal?: AbortSignal,
+): Promise<{ action: Exclude<ApprovalAction, "view">; note?: string } | undefined> {
+    while (!signal?.aborted) {
+        const decision = await askApprovalDecision(ctx, summary, signal);
+        const answer = decision.answers["artifact-action"];
+        if (decision.status !== "answered" || answer?.kind !== "single") return undefined;
+        const action = answer.value as ApprovalAction;
+        if (action === "view") {
             const content = await readPendingArtifactContent(ctx.cwd, summary.id);
             await ctx.ui.editor(`Full text: ${summary.pendingPath}`, content);
+            continue;
         }
+        if (action === "revise" && answer.note === undefined) {
+            ctx.ui.notify("Request revision requires non-blank revision instructions in the action note.", "warning");
+            continue;
+        }
+        return { action, note: answer.note };
     }
+    return undefined;
 }
 
 async function runApprovalFlow(ctx: ExtensionContext, summary: ArtifactSummary, signal?: AbortSignal): Promise<AgentArtifactResultDetails> {
@@ -116,23 +180,27 @@ async function runApprovalFlow(ctx: ExtensionContext, summary: ArtifactSummary, 
         return detailsFrom(summary, "unavailable", "Approval UI is unavailable; pending artifact was not promoted.");
     }
 
-    const action = await selectApprovalAction(ctx, summary, signal);
-    if (action === "approve") {
+    const decision = await selectApprovalAction(ctx, summary, signal);
+    if (decision?.action === "approve") {
         const approved = artifactSummary(await approvePendingArtifact(ctx.cwd, summary.id));
-        return detailsFrom(approved, "approved", `Approved and saved to ${approved.finalPath}`);
+        return detailsFrom(approved, "approved", `Approved and saved to ${approved.finalPath}`, { actionNote: decision.note });
     }
-    if (action === "revise") {
-        const instructions = await ctx.ui.editor("Revision instructions", "");
-        if (instructions === undefined || instructions.trim() === "") {
-            const rejected = artifactSummary(await rejectPendingArtifact(ctx.cwd, summary.id));
-            return detailsFrom(rejected, "rejected", "Artifact approval was cancelled before revision instructions were supplied.");
-        }
+    if (decision?.action === "revise") {
+        const instructions = decision.note!;
         const revised = artifactSummary(await requestPendingArtifactRevision(ctx.cwd, summary.id, instructions));
-        return detailsFrom(revised, "revision_requested", "Revision requested; edit the same pending artifact and call save_agent_artifact with pendingId.", instructions);
+        return detailsFrom(revised, "revision_requested", "Revision requested; edit the same pending artifact and call save_agent_artifact with pendingId.", {
+            revisionInstructions: instructions,
+            actionNote: instructions,
+        });
     }
 
     const rejected = artifactSummary(await rejectPendingArtifact(ctx.cwd, summary.id));
-    return detailsFrom(rejected, "rejected", "Artifact was rejected and was not saved as a final artifact.");
+    return detailsFrom(
+        rejected,
+        "rejected",
+        decision === undefined ? "Artifact approval was cancelled; the artifact was not saved as a final artifact." : "Artifact was rejected and was not saved as a final artifact.",
+        { actionNote: decision?.note },
+    );
 }
 
 export function createAgentArtifactToolDefinition(): ToolDefinition<typeof artifactParameters, AgentArtifactResultDetails> {

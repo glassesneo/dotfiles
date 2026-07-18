@@ -133,3 +133,10 @@ export function detailedQuestionHelp(context: QuestionContext, keymap: ResolvedQ
 export function questionHelp(context: QuestionContext, keymap: ResolvedQuestionKeymap): string {
     return detailedQuestionHelp(context, keymap).map(item => `${item.keys[0]} ${item.label}`).join(" • ");
 }
+
+// Generic names for shared decision consumers; question-prefixed names remain
+// compatibility aliases for the deployed keybinding contexts and JSON format.
+export const resolveDecisionKeymap = resolveQuestionKeymap;
+export const decisionHelp = questionHelp;
+export type DecisionContext = QuestionContext;
+export type ResolvedDecisionKeymap = ResolvedQuestionKeymap;

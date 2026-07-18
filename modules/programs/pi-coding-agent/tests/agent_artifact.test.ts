@@ -14,7 +14,7 @@ import {
     readPendingArtifact,
     requestPendingArtifactRevision,
     saveAgentArtifact,
-} from "../extensions/agent_artifact_store.ts";
+} from "../extensions/utilities/agent_artifact_store.ts";
 
 const fixedDate = new Date("2026-07-17T15:31:45Z");
 
@@ -222,27 +222,37 @@ test("tool fails closed without UI after creating only a pending artifact", asyn
     await assert.rejects(readdir(join(root, ".agents", "specs")));
 });
 
-test("tool approve/revision/reject UI statuses are deterministic", async t => {
+test("tool approve/revision/reject UI statuses and action notes are deterministic", async t => {
     const root = await makeTemporaryRoot(t);
     const tool = createAgentArtifactToolDefinition();
 
     const approvedContent = "# Plan\n\nStatus: implementation-ready\n\n## Summary\n\nUseful approval summary.\n";
     let approvalReviewText = "";
+    const approveSelects = ["[ ] Approve", "Submit answers"];
     const approved = await tool.execute(
         "call",
         toolParams("plan", "approve-me", approvedContent),
         undefined,
         undefined,
-        context({ cwd: root, mode: "rpc", hasUI: true, ui: { async select(title) { approvalReviewText = title; return "Approve"; } } }),
+        context({
+            cwd: root,
+            mode: "rpc",
+            hasUI: true,
+            ui: {
+                async select(title) { approvalReviewText ||= title; return approveSelects.shift(); },
+                async editor() { return "looks good"; },
+            },
+        }),
     );
     assert.equal(approved.details.status, "approved");
+    assert.equal(approved.details.actionNote, "looks good");
     assert.equal(approved.details.title, "Plan");
     assert.equal(approved.details.summary, "Useful approval summary.");
     assert.equal(await readFile(approved.details.finalPath!, "utf8"), approvedContent);
     assert.match(approvalReviewText, /Kind: plan/);
     assert.match(approvalReviewText, /Summary: Useful approval summary\./);
     assert.match(approvalReviewText, /Line count: 8/);
-    assert.match(resultText(approved.content[0]), /summary: Useful approval summary\./);
+    assert.match(resultText(approved.content[0]), /actionNote: looks good/);
     assert.match(resultText(approved.content[0]), new RegExp(`finalPath: ${approved.details.finalPath}`));
     const rendered = tool.renderResult?.(approved, { expanded: false } as never, { fg: (_color: string, text: string) => text } as never, {} as never);
     const renderedText = rendered?.render(160).join("\n") ?? "";
@@ -250,7 +260,7 @@ test("tool approve/revision/reject UI statuses are deterministic", async t => {
     assert.match(renderedText, /Useful approval summary\./);
     assert.match(renderedText, new RegExp(approved.details.finalPath!));
 
-    const reviseScript = ["Request revision", "tighten scope"];
+    const reviseSelects = ["[ ] Request revision", "Submit answers"];
     const revision = await tool.execute(
         "call",
         toolParams("spec", "revise-me", "# Spec\n"),
@@ -260,20 +270,91 @@ test("tool approve/revision/reject UI statuses are deterministic", async t => {
             cwd: root,
             mode: "rpc",
             hasUI: true,
-            ui: { async select() { return reviseScript.shift(); }, async editor() { return reviseScript.shift(); } },
+            ui: { async select() { return reviseSelects.shift(); }, async editor() { return "tighten scope"; } },
         }),
     );
     assert.equal(revision.details.status, "revision_requested");
     assert.equal(revision.details.revisionInstructions, "tighten scope");
+    assert.equal(revision.details.actionNote, "tighten scope");
+    assert.equal((await readPendingArtifact(root, revision.details.pendingId)).revisionInstructions, "tighten scope");
 
+    const rejectSelects = ["[ ] Reject", "Submit answers"];
     const rejected = await tool.execute(
         "call",
         toolParams("spec", "reject-me", "# Spec\n"),
         undefined,
         undefined,
-        context({ cwd: root, mode: "rpc", hasUI: true, ui: { async select() { return "Reject"; } } }),
+        context({
+            cwd: root,
+            mode: "rpc",
+            hasUI: true,
+            ui: { async select() { return rejectSelects.shift(); }, async editor() { return "not needed"; } },
+        }),
     );
     assert.equal(rejected.details.status, "rejected");
+    assert.equal(rejected.details.actionNote, "not needed");
+});
+
+test("blank revision notes re-prompt without recording an instructionless revision", async t => {
+    const root = await makeTemporaryRoot(t);
+    const tool = createAgentArtifactToolDefinition();
+    const selects = [
+        "[ ] Request revision", "Submit answers",
+        "[ ] Request revision", "Submit answers",
+    ];
+    const notes = ["   ", "add acceptance criteria"];
+    const notifications: string[] = [];
+    const result = await tool.execute(
+        "call",
+        toolParams("spec", "blank-revision", "# Spec\n"),
+        undefined,
+        undefined,
+        context({
+            cwd: root,
+            mode: "rpc",
+            hasUI: true,
+            ui: {
+                async select() { return selects.shift(); },
+                async editor() { return notes.shift(); },
+                notify(message) { notifications.push(message); },
+            },
+        }),
+    );
+
+    assert.equal(result.details.status, "revision_requested");
+    assert.equal(result.details.revisionInstructions, "add acceptance criteria");
+    assert.deepEqual(notifications, ["Enter a non-blank note to continue."]);
+});
+
+test("View full text displays pending content and loops back to approval", async t => {
+    const root = await makeTemporaryRoot(t);
+    const tool = createAgentArtifactToolDefinition();
+    const content = "# Spec\n\nFull body.\n";
+    const selects = ["[ ] View full text", "[ ] Approve"];
+    const editorCalls: Array<{ title: string; initial?: string }> = [];
+    const result = await tool.execute(
+        "call",
+        toolParams("spec", "view-then-approve", content),
+        undefined,
+        undefined,
+        context({
+            cwd: root,
+            mode: "rpc",
+            hasUI: true,
+            ui: {
+                async select() { return selects.shift(); },
+                async editor(title, initial) {
+                    editorCalls.push({ title, initial });
+                    return title.startsWith("Full text:") ? initial : "";
+                },
+            },
+        }),
+    );
+
+    assert.equal(result.details.status, "approved");
+    const fullText = editorCalls.find(call => call.title.startsWith("Full text:"));
+    assert.equal(fullText?.initial, content);
+    assert.equal(editorCalls.filter(call => call.title.startsWith("Full text:")).length, 1);
 });
 
 test("saveAgentArtifact rejects an invalid slug before writing", async t => {

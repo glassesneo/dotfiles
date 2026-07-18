@@ -10,7 +10,7 @@ import {
     unavailableResult,
     validateQuestionParameters,
     type QuestionItem,
-} from "../extensions/question_core.ts";
+} from "../extensions/utilities/decision_core.ts";
 
 const questions: QuestionItem[] = [
     {

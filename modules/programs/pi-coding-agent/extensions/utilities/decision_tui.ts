@@ -1,7 +1,7 @@
 import type { ExtensionUIContext, KeybindingsManager, Theme } from "@earendil-works/pi-coding-agent";
 import { Editor, truncateToWidth, visibleWidth, wrapTextWithAnsi, type Component, type EditorTheme, type Focusable, type TUI } from "@earendil-works/pi-tui";
-import { noteMode, QuestionProgress, type PendingQuestionAnswer, type QuestionAnswer, type QuestionItem, type QuestionOption, type QuestionResultDetails } from "./question_core.ts";
-import { loadQuestionKeymapConfig, questionHelp, resolveQuestionKeymap, resolveUiAction, type QuestionContext, type ResolvedQuestionKeymap, type UiAction } from "./question_keymap.ts";
+import { decisionNoteRequirement, noteMode, QuestionProgress, shouldAutoSubmitSingle, type DecisionFlowPolicy, type DecisionNoteRequirement, type PendingQuestionAnswer, type QuestionAnswer, type QuestionItem, type QuestionOption, type QuestionResultDetails } from "./decision_core.ts";
+import { loadQuestionKeymapConfig, questionHelp, resolveQuestionKeymap, resolveUiAction, type QuestionContext, type ResolvedQuestionKeymap, type UiAction } from "./decision_keymap.ts";
 
 interface DisplayChoice { value: string; label: string; description?: string; }
 interface ChoiceDraft { focusIndex: number; selected: Set<string>; answerNote?: string; optionNotes: Map<string, string>; }
@@ -48,7 +48,7 @@ function answerSummary(question: QuestionItem, answer: QuestionAnswer): string {
     return `${values}${answer.note ? ` — note: ${answer.note}` : ""}`;
 }
 
-export class QuestionComponent implements Component, Focusable {
+export class DecisionComponent implements Component, Focusable {
     readonly #tui: Pick<TUI, "requestRender">;
     readonly #theme: Theme;
     readonly #questions: readonly QuestionItem[];
@@ -57,6 +57,7 @@ export class QuestionComponent implements Component, Focusable {
     readonly #drafts = new Map<string, QuestionDraft>();
     readonly #editor: Editor;
     readonly #keymap: ResolvedQuestionKeymap;
+    readonly #policy?: DecisionFlowPolicy;
     readonly #signal?: AbortSignal;
     readonly #abortHandler: () => void;
     #mode: Mode = "question";
@@ -67,15 +68,17 @@ export class QuestionComponent implements Component, Focusable {
     #questionSnapshot?: QuestionDraft;
     #noteSnapshot?: string;
     #noteTarget?: string;
+    #submitAfterNote = false;
     #validation?: string;
     #cachedLines?: string[];
     #cachedWidth?: number;
     #finished = false;
     #focused = false;
 
-    constructor(options: { tui: TUI; theme: Theme; keybindings: Pick<KeybindingsManager, "getKeys">; keymapConfig?: Parameters<typeof resolveQuestionKeymap>[1]; keymapPath?: string; questions: readonly QuestionItem[]; progress?: QuestionProgress; signal?: AbortSignal; done: (result: QuestionResultDetails) => void; }) {
+    constructor(options: { tui: TUI; theme: Theme; keybindings: Pick<KeybindingsManager, "getKeys">; keymapConfig?: Parameters<typeof resolveQuestionKeymap>[1]; keymapPath?: string; questions: readonly QuestionItem[]; progress?: QuestionProgress; policy?: DecisionFlowPolicy; signal?: AbortSignal; done: (result: QuestionResultDetails) => void; }) {
         this.#tui = options.tui; this.#theme = options.theme; this.#questions = options.questions;
         this.#progress = options.progress ?? new QuestionProgress(options.questions); this.#done = options.done;
+        this.#policy = options.policy;
         this.#keymap = resolveQuestionKeymap(options.keybindings, options.keymapConfig, options.keymapPath);
         this.#editor = new Editor(options.tui, editorTheme(options.theme)); this.#editor.disableSubmit = true;
         for (const question of options.questions) this.#drafts.set(question.id, draftFrom(question));
@@ -93,6 +96,7 @@ export class QuestionComponent implements Component, Focusable {
     #finish(result: QuestionResultDetails): void { if (this.#finished) return; this.#finished = true; this.#cleanup(); this.#done(result); }
     #cancel(): void { this.#finish(this.#progress.cancelled(this.#mode !== "review")); }
     #question(): QuestionItem { return this.#progress.current; }
+    #autoSubmitSingle(): boolean { return this.#progress.total === 1 && shouldAutoSubmitSingle(this.#policy); }
     #draft(): QuestionDraft { return this.#drafts.get(this.#question().id)!; }
     #choiceDraft(): ChoiceDraft { const draft = this.#draft(); if (!("selected" in draft)) throw new Error("Not a choice question"); return draft; }
     #textDraft(): TextDraft { const draft = this.#draft(); if (!("value" in draft)) throw new Error("Not a text question"); return draft; }
@@ -110,6 +114,7 @@ export class QuestionComponent implements Component, Focusable {
         this.#saveEditorDraft();
         const next = this.#progress.index + delta;
         if (delta > 0 && next >= this.#progress.total) {
+            if (this.#autoSubmitSingle()) { this.#finish(this.#progress.submitted()); return; }
             this.#mode = "review"; this.#reviewIndex = 0; this.#syncEditorFocus(); this.#validation = undefined; this.#refresh(); return;
         }
         if (next < 0 || next >= this.#progress.total) return;
@@ -117,10 +122,25 @@ export class QuestionComponent implements Component, Focusable {
     }
     #moveChoice(delta: number): void { const choices = this.#choices(); const draft = this.#choiceDraft(); draft.focusIndex = (draft.focusIndex + delta + choices.length) % choices.length; this.#validation = undefined; this.#refresh(); }
     #noteKey(): string { return noteMode(this.#question()) === "answer" ? "__answer__" : this.#choices()[this.#choiceDraft().focusIndex]!.value; }
+    #noteRequirement(): DecisionNoteRequirement {
+        const question = this.#question();
+        const option = question.kind === "multi" && noteMode(question) === "answer"
+            ? undefined
+            : this.#choices()[this.#choiceDraft().focusIndex]!;
+        return decisionNoteRequirement(this.#policy, question, option);
+    }
     #getNote(key: string): string | undefined { return key === "__answer__" ? this.#choiceDraft().answerNote : this.#choiceDraft().optionNotes.get(key); }
     #setNote(key: string, value: string | undefined): void { const normalized = value === undefined || value.trim() === "" ? undefined : value; if (key === "__answer__") this.#choiceDraft().answerNote = normalized; else if (normalized === undefined) this.#choiceDraft().optionNotes.delete(key); else this.#choiceDraft().optionNotes.set(key, normalized); }
-    #openNote(): void { this.#noteTarget = this.#noteKey(); this.#noteSnapshot = this.#getNote(this.#noteTarget); this.#editor.setText(this.#noteSnapshot ?? ""); this.#mode = "note"; this.#validation = undefined; this.#syncEditorFocus(); this.#refresh(); }
-    #closeNote(save: boolean): void { if (this.#noteTarget !== undefined) this.#setNote(this.#noteTarget, save ? this.#editor.getExpandedText() : this.#noteSnapshot); this.#noteTarget = undefined; this.#noteSnapshot = undefined; this.#mode = "question"; this.#syncEditorFocus(); this.#refresh(); }
+    #openNote(submitAfterSave = false): void { this.#noteTarget = this.#noteKey(); this.#noteSnapshot = this.#getNote(this.#noteTarget); this.#submitAfterNote = submitAfterSave; this.#editor.setText(this.#noteSnapshot ?? ""); this.#mode = "note"; this.#validation = undefined; this.#syncEditorFocus(); this.#refresh(); }
+    #closeNote(save: boolean): void {
+        if (save && this.#noteRequirement() === "required" && this.#editor.getExpandedText().trim() === "") {
+            this.#validation = "Note must contain non-whitespace text."; this.#refresh(); return;
+        }
+        if (this.#noteTarget !== undefined) this.#setNote(this.#noteTarget, save ? this.#editor.getExpandedText() : this.#noteSnapshot);
+        const submit = save && this.#submitAfterNote;
+        this.#noteTarget = undefined; this.#noteSnapshot = undefined; this.#submitAfterNote = false; this.#mode = "question"; this.#validation = undefined; this.#syncEditorFocus();
+        if (submit) this.#commit(); else this.#refresh();
+    }
     #pending(): PendingQuestionAnswer | undefined {
         const question = this.#question();
         if (question.kind === "text") { const value = this.#editor.getExpandedText(); this.#textDraft().value = value; if (value.trim() === "") { this.#validation = "Answer must contain non-whitespace text."; this.#refresh(); return undefined; } return { kind: "text", value }; }
@@ -131,10 +151,16 @@ export class QuestionComponent implements Component, Focusable {
         return { kind: "confirm", value: choice.value === "true", note: draft.answerNote };
     }
     #commit(): void {
+        if ((this.#question().kind === "single" || this.#question().kind === "confirm") && this.#noteRequirement() === "required" && this.#getNote(this.#noteKey()) === undefined) {
+            this.#openNote(true); return;
+        }
         const pending = this.#pending(); if (pending === undefined) return;
         const editedIndex = this.#progress.index;
         const wasAnswered = this.#reviewEntryWasAnswered;
         this.#progress.submit(pending);
+        if (!this.#fromReview && this.#autoSubmitSingle()) {
+            this.#finish(this.#progress.submitted()); return;
+        }
         if (this.#fromReview) {
             this.#mode = "review";
             if (this.#progress.allAnswered) this.#reviewIndex = 0;
@@ -156,7 +182,7 @@ export class QuestionComponent implements Component, Focusable {
     #handleQuestion(action: UiAction | undefined, data: string): void {
         if (action === "next-question") return this.#moveQuestion(1); if (action === "previous-question") return this.#moveQuestion(-1);
         if (action === "back") return this.#back(); if (action === "move-up") return this.#moveChoice(-1); if (action === "move-down") return this.#moveChoice(1);
-        if (action === "edit-note" && this.#question().kind !== "text") return this.#openNote();
+        if (action === "edit-note" && this.#question().kind !== "text" && this.#noteRequirement() !== "none") return this.#openNote();
         if (action === "toggle" && this.#question().kind === "multi") { const draft = this.#choiceDraft(); const value = this.#choices()[draft.focusIndex]!.value; draft.selected.has(value) ? draft.selected.delete(value) : draft.selected.add(value); this.#validation = undefined; return this.#refresh(); }
         if (action === "confirm-yes" && this.#question().kind === "confirm") { this.#choiceDraft().focusIndex = 0; return this.#commit(); }
         if (action === "confirm-no" && this.#question().kind === "confirm") { this.#choiceDraft().focusIndex = 1; return this.#commit(); }
@@ -191,7 +217,7 @@ export class QuestionComponent implements Component, Focusable {
         if (this.#mode === "note") { if (action === "back") this.#closeNote(false); else if (action === "accept") this.#closeNote(true); else if (action === "newline") { this.#editor.insertTextAtCursor("\n"); this.#refresh(); } else { this.#editor.handleInput(data); this.#refresh(); } }
         else if (this.#mode === "review") this.#handleReview(action); else this.#handleQuestion(action, data);
     }
-    #renderHeader(lines: string[], width: number): void { const tabs = this.#questions.map((question, index) => `[${index + 1} ${this.#mode !== "review" && index === this.#progress.index ? "●" : this.#progress.isAnswered(question) ? "✓" : "○"}]`); tabs.push(`[Review${this.#mode === "review" ? " ●" : ""}]`); appendWrapped(lines, width, this.#theme.fg("accent", tabs.join(" "))); }
+    #renderHeader(lines: string[], width: number): void { const tabs = this.#questions.map((question, index) => `[${index + 1} ${this.#mode !== "review" && index === this.#progress.index ? "●" : this.#progress.isAnswered(question) ? "✓" : "○"}]`); if (!this.#autoSubmitSingle()) tabs.push(`[Review${this.#mode === "review" ? " ●" : ""}]`); appendWrapped(lines, width, this.#theme.fg("accent", tabs.join(" "))); }
     #renderChoices(lines: string[], width: number): void {
         const draft = this.#choiceDraft();
         for (let index = 0; index < this.#choices().length; index += 1) {
@@ -211,15 +237,18 @@ export class QuestionComponent implements Component, Focusable {
     render(width: number): string[] {
         const w = Math.max(1, width); if (this.#cachedLines && this.#cachedWidth === w) return this.#cachedLines;
         const lines = [this.#theme.fg("accent", "─".repeat(w))]; this.#renderHeader(lines, w); lines.push("");
-        if (this.#mode === "review") this.#renderReview(lines, w); else { appendWrapped(lines, w, this.#theme.fg("text", this.#question().prompt), " "); lines.push(""); if (this.#mode === "note") { const config = this.#question().note; const target = this.#noteTarget === "__answer__" ? "answer" : this.#choices().find(choice => choice.value === this.#noteTarget)?.label ?? "option"; this.#renderEditor(lines, w, config?.prompt ?? `Optional note for ${target}`); if (config?.placeholder) appendWrapped(lines, w, this.#theme.fg("dim", config.placeholder), " "); } else if (this.#question().kind === "text") this.#renderEditor(lines, w, "Answer"); else this.#renderChoices(lines, w); }
+        if (this.#mode === "review") this.#renderReview(lines, w); else { appendWrapped(lines, w, this.#theme.fg("text", this.#question().prompt), " "); lines.push(""); if (this.#mode === "note") { const config = this.#question().note; const target = this.#noteTarget === "__answer__" ? "answer" : this.#choices().find(choice => choice.value === this.#noteTarget)?.label ?? "option"; const fallback = this.#noteRequirement() === "required" ? `Required note for ${target}` : `Optional note for ${target}`; this.#renderEditor(lines, w, config?.prompt ?? fallback); if (config?.placeholder) appendWrapped(lines, w, this.#theme.fg("dim", config.placeholder), " "); } else if (this.#question().kind === "text") this.#renderEditor(lines, w, "Answer"); else this.#renderChoices(lines, w); }
         if (this.#validation) { lines.push(""); appendWrapped(lines, w, this.#theme.fg("warning", `Error: ${this.#validation}`), " "); }
         lines.push(""); appendWrapped(lines, w, this.#theme.fg("dim", questionHelp(this.#context(), this.#keymap)), " "); lines.push(this.#theme.fg("accent", "─".repeat(w)));
         this.#cachedLines = lines.map(line => truncateToWidth(line, w, "")); this.#cachedWidth = w; return this.#cachedLines;
     }
 }
 
-export async function runTuiQuestionFlow(context: TuiQuestionContext, questions: readonly QuestionItem[], signal?: AbortSignal): Promise<QuestionResultDetails> {
+export async function runTuiDecisionFlow(context: TuiQuestionContext, questions: readonly QuestionItem[], signal?: AbortSignal, policy?: DecisionFlowPolicy): Promise<QuestionResultDetails> {
     const progress = new QuestionProgress(questions); if (signal?.aborted) return progress.cancelled();
     const loaded = loadQuestionKeymapConfig();
-    return context.ui.custom<QuestionResultDetails>((tui, theme, keybindings, done) => new QuestionComponent({ tui, theme, keybindings, keymapConfig: loaded.config, keymapPath: loaded.path, questions, progress, signal, done }));
+    return context.ui.custom<QuestionResultDetails>((tui, theme, keybindings, done) => new DecisionComponent({ tui, theme, keybindings, keymapConfig: loaded.config, keymapPath: loaded.path, questions, progress, policy, signal, done }));
 }
+
+export { DecisionComponent as QuestionComponent };
+export const runTuiQuestionFlow = runTuiDecisionFlow;

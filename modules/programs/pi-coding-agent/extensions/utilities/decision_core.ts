@@ -72,6 +72,39 @@ export interface QuestionToolResult {
     details: QuestionResultDetails;
 }
 
+// Generic aliases keep the shared flow free to serve tools other than `question`
+// while preserving the question tool's existing public TypeScript API.
+export type DecisionKind = QuestionKind;
+export type DecisionOption = QuestionOption;
+export type DecisionNoteConfig = QuestionNoteConfig;
+export type DecisionItem = QuestionItem;
+export type DecisionAnswer = QuestionAnswer;
+export type DecisionResultDetails = QuestionResultDetails;
+export type PendingDecisionAnswer = PendingQuestionAnswer;
+
+export type DecisionNoteRequirement = "none" | "optional" | "required";
+export interface DecisionFlowPolicy {
+    autoSubmitSingle?: boolean;
+    noteRequirement?: (
+        item: DecisionItem,
+        option?: DecisionOption,
+    ) => DecisionNoteRequirement;
+}
+
+export function decisionNoteRequirement(
+    policy: DecisionFlowPolicy | undefined,
+    item: DecisionItem,
+    option?: DecisionOption,
+): DecisionNoteRequirement {
+    return policy?.noteRequirement?.(item, option) ?? "optional";
+}
+
+export function shouldAutoSubmitSingle(
+    policy: DecisionFlowPolicy | undefined,
+): boolean {
+    return policy?.autoSubmitSingle ?? true;
+}
+
 export function optionDisplayText(option: QuestionOption): string {
     return option.description === undefined ? option.label : `${option.label} — ${option.description}`;
 }
@@ -223,6 +256,11 @@ export class QuestionProgress {
         return includeCurrentQuestion ? { ...base, currentQuestionId: this.current.id } : base;
     }
 }
+
+export const DecisionProgress = QuestionProgress;
+export type DecisionProgress = QuestionProgress;
+export const normalizeDecisionAnswer = normalizeQuestionAnswer;
+export const validateDecisionParameters = validateQuestionParameters;
 
 export function unavailableResult(): QuestionResultDetails { return { status: "unavailable", answers: {} }; }
 export function buildQuestionToolResult(details: QuestionResultDetails): QuestionToolResult {

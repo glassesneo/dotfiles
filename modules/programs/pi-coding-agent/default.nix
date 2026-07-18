@@ -25,6 +25,11 @@ in
           prompts = [
             "${./prompts}"
           ];
+          defaultModel = "gpt-5.6-sol";
+          defaultProvider = "openai";
+          defaultThinkingLevel = "medium";
+
+          theme = "dark";
         };
         keybindings = {
           "tui.editor.cursorLeft" = [
@@ -101,6 +106,6 @@ in
       };
 
       home.file."${configDir}/question-keybindings.json".source =
-        ./extensions/question-keybindings.json;
+        ./extensions/utilities/question-keybindings.json;
     };
   }

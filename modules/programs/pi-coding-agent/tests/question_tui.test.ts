@@ -3,8 +3,8 @@ import { getEventListeners } from "node:events";
 import test from "node:test";
 import type { Theme } from "@earendil-works/pi-coding-agent";
 import { visibleWidth, type TUI } from "@earendil-works/pi-tui";
-import { QuestionComponent, runTuiQuestionFlow } from "../extensions/question_tui.ts";
-import type { QuestionItem, QuestionResultDetails } from "../extensions/question_core.ts";
+import { QuestionComponent, runTuiQuestionFlow } from "../extensions/utilities/decision_tui.ts";
+import type { DecisionFlowPolicy, QuestionItem, QuestionResultDetails } from "../extensions/utilities/decision_core.ts";
 
 const theme = { fg(_color: string, text: string) { return text; } } as Theme;
 const manager = { getKeys(action: string) { return ({
@@ -14,10 +14,10 @@ const manager = { getKeys(action: string) { return ({
 const keys = { down: "\u001b[B", up: "\u001b[A", tab: "\t", shiftTab: "\u001b[Z", enter: "\r", escape: "\u001b", space: " ", ctrlJ: "\n", ctrlC: "\u0003" };
 const single: QuestionItem = { id: "single", prompt: "Choose one", kind: "single", options: [{ value: "a", label: "Alpha", description: "First option" }, { value: "b", label: "Beta" }] };
 
-function harness(questions: readonly QuestionItem[], signal?: AbortSignal) {
+function harness(questions: readonly QuestionItem[], signal?: AbortSignal, policy?: DecisionFlowPolicy) {
     const results: QuestionResultDetails[] = []; let renders = 0;
     const tui = { terminal: { rows: 24, columns: 80 }, requestRender() { renders += 1; } } as TUI;
-    const component = new QuestionComponent({ tui, theme, keybindings: manager, questions, signal, done: result => { results.push(result); } });
+    const component = new QuestionComponent({ tui, theme, keybindings: manager, questions, policy, signal, done: result => { results.push(result); } });
     component.focused = true;
     return { component, results, get renders() { return renders; } };
 }
@@ -87,14 +87,39 @@ test("last-question Tab opens review and submits unanswered questions", () => {
     assert.deepEqual(h.results, [{ status: "answered", answers: {} }]);
 });
 
-test("review reopens an answer and returns to review after confirmation", () => {
-    const h = harness([single]);
-    h.component.handleInput(keys.enter); // answer Alpha
-    h.component.handleInput(keys.down); // question row
-    h.component.handleInput(keys.enter); // edit
-    h.component.handleInput(keys.down); h.component.handleInput(keys.enter); // answer Beta, return to Submit because all are answered
-    h.component.handleInput(keys.enter); // Submit
-    assert.deepEqual(h.results[0]?.answers.single, { kind: "single", value: "b" });
+test("a single question omits review and submits directly", () => {
+    const answered = harness([single]);
+    assert.doesNotMatch(answered.component.render(80).join("\n"), /\[Review/);
+    answered.component.handleInput(keys.down);
+    answered.component.handleInput(keys.enter);
+    assert.deepEqual(answered.results, [{
+        status: "answered",
+        answers: { single: { kind: "single", value: "b" } },
+    }]);
+
+    const unanswered = harness([single]);
+    unanswered.component.handleInput(keys.tab);
+    assert.deepEqual(unanswered.results, [{ status: "answered", answers: {} }]);
+});
+
+test("required and disabled option notes follow decision policy", () => {
+    const required = harness([single], undefined, {
+        noteRequirement: (_item, option) => option?.value === "b" ? "required" : "none",
+    });
+    required.component.handleInput(keys.down);
+    required.component.handleInput(keys.enter);
+    assert.match(required.component.render(80).join("\n"), /Required note/);
+    required.component.handleInput("why");
+    required.component.handleInput(keys.enter);
+    assert.deepEqual(required.results[0]?.answers.single, { kind: "single", value: "b", note: "why" });
+
+    const disabled = harness([single], undefined, {
+        noteRequirement: () => "none",
+    });
+    disabled.component.handleInput("e");
+    assert.doesNotMatch(disabled.component.render(80).join("\n"), /Optional note for/);
+    disabled.component.handleInput(keys.enter);
+    assert.deepEqual(disabled.results[0]?.answers.single, { kind: "single", value: "a" });
 });
 
 test("review j/k navigation and hybrid return focus follow answer state", () => {

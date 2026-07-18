@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { ExtensionUIContext } from "@earendil-works/pi-coding-agent";
-import { runStandardQuestionFlow } from "../extensions/question_standard_ui.ts";
-import type { QuestionItem } from "../extensions/question_core.ts";
+import { runStandardQuestionFlow } from "../extensions/utilities/decision_standard_ui.ts";
+import type { QuestionItem } from "../extensions/utilities/decision_core.ts";
 
 type UI = Pick<ExtensionUIContext, "select" | "input" | "editor" | "notify">;
 
@@ -92,29 +92,55 @@ test("standard UI answers all kinds, reviews, and explicitly submits", async () 
     assert.ok(mock.calls.some(call => call.method === "select" && call.args[0] === "Review answers (choose a question to revise)"));
 });
 
-test("review can reopen an answer with current values and overwrite it", async () => {
-    const mock = scriptedUI([
-        "[ ] A — First",
-        "old note",
-        "Q1: One? — A — note: old note",
-        "[ ] B",
-        "new\nnote",
-        "Submit answers",
-    ]);
+test("a single answered question submits without opening review", async () => {
+    const mock = scriptedUI(["[ ] A — First", "single note"]);
     assert.deepEqual(
         await runStandardQuestionFlow({ hasUI: true, ui: mock.ui }, [allKinds[0]]),
         {
             status: "answered",
-            answers: { one: { kind: "single", value: "b", note: "new\nnote" } },
+            answers: { one: { kind: "single", value: "a", note: "single note" } },
         },
     );
-    const revision = mock.calls.find(call =>
-        call.method === "select" && String(call.args[0]).startsWith("Question") &&
-        Array.isArray(call.args[1]) && (call.args[1] as string[]).includes("[current] A — First"),
+    assert.equal(mock.remaining.length, 0);
+    const choices = mock.calls.find(call => call.method === "select")?.args[1] as string[];
+    assert.ok(choices.includes("Submit without answering"));
+    assert.ok(!choices.includes("Review answers now"));
+    assert.ok(!mock.calls.some(call => call.args[0] === "Review answers (choose a question to revise)"));
+});
+
+test("a single unanswered question submits without opening review", async () => {
+    const mock = scriptedUI(["Submit without answering"]);
+    assert.deepEqual(
+        await runStandardQuestionFlow({ hasUI: true, ui: mock.ui }, [allKinds[0]]),
+        { status: "answered", answers: {} },
     );
-    assert.ok(revision);
-    const revisedNote = mock.calls.filter(call => call.method === "editor").at(-1);
-    assert.equal(revisedNote?.args[1], "old note");
+    assert.ok(!mock.calls.some(call => call.args[0] === "Review answers (choose a question to revise)"));
+});
+
+test("single-choice note policy supports required and disabled notes", async () => {
+    const required = scriptedUI(["[ ] B", " ", "required note"]);
+    assert.deepEqual(
+        await runStandardQuestionFlow(
+            { hasUI: true, ui: required.ui },
+            [allKinds[0]!],
+            undefined,
+            { noteRequirement: (_item, option) => option?.value === "b" ? "required" : "none" },
+        ),
+        { status: "answered", answers: { one: { kind: "single", value: "b", note: "required note" } } },
+    );
+    assert.equal(required.calls.filter(call => call.method === "notify").length, 1);
+
+    const disabled = scriptedUI(["[ ] A — First"]);
+    assert.deepEqual(
+        await runStandardQuestionFlow(
+            { hasUI: true, ui: disabled.ui },
+            [allKinds[0]!],
+            undefined,
+            { noteRequirement: () => "none" },
+        ),
+        { status: "answered", answers: { one: { kind: "single", value: "a" } } },
+    );
+    assert.equal(disabled.calls.filter(call => call.method === "editor").length, 0);
 });
 
 test("review rehydrates and revises multi, text, and confirm answers", async () => {
@@ -220,9 +246,9 @@ test("initial and review cancellation retain the correct context", async () => {
         },
     );
 
-    const review = scriptedUI(["[ ] B", "", "Cancel"]);
+    const review = scriptedUI(["[ ] B", "", "Review answers now", "Cancel"]);
     assert.deepEqual(
-        await runStandardQuestionFlow({ hasUI: true, ui: review.ui }, [allKinds[0]]),
+        await runStandardQuestionFlow({ hasUI: true, ui: review.ui }, allKinds.slice(0, 2)),
         {
             status: "cancelled",
             answers: { one: { kind: "single", value: "b" } },

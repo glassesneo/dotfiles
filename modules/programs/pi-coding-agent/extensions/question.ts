@@ -12,10 +12,10 @@ import {
     type QuestionAnswer,
     type QuestionItem,
     type QuestionResultDetails,
-} from "./question_core.ts";
-import { runStandardQuestionFlow } from "./question_standard_ui.ts";
-import { runTuiQuestionFlow } from "./question_tui.ts";
-import { loadQuestionKeymapConfig } from "./question_keymap.ts";
+} from "./utilities/decision_core.ts";
+import { runStandardQuestionFlow } from "./utilities/decision_standard_ui.ts";
+import { runTuiQuestionFlow } from "./utilities/decision_tui.ts";
+import { loadQuestionKeymapConfig } from "./utilities/decision_keymap.ts";
 
 export const questionDescription =
     "Ask the user for decisions or missing information required to continue the current task. Supports single-choice, multiple-choice, multiline text, and confirmation questions. Selection questions support answer-level notes by default or per-option notes when note.mode is per-option. Users may submit with questions unanswered; absent answer IDs are unanswered.";

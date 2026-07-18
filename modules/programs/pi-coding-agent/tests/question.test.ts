@@ -10,7 +10,7 @@ import registerQuestion, {
     createQuestionToolDefinition,
     questionPromptGuidelines,
 } from "../extensions/question.ts";
-import type { QuestionResultDetails } from "../extensions/question_core.ts";
+import type { QuestionResultDetails } from "../extensions/utilities/decision_core.ts";
 
 function resultText(content: { type: string; text?: string }): string {
     assert.equal(content.type, "text");

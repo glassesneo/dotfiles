@@ -1,15 +1,19 @@
 import type { ExtensionUIContext } from "@earendil-works/pi-coding-agent";
 import {
+    decisionNoteRequirement,
     noteMode,
     optionDisplayText,
     QuestionProgress,
+    shouldAutoSubmitSingle,
     unavailableResult,
+    type DecisionFlowPolicy,
+    type DecisionNoteRequirement,
     type PendingQuestionAnswer,
     type QuestionAnswer,
     type QuestionItem,
     type QuestionOption,
     type QuestionResultDetails,
-} from "./question_core.ts";
+} from "./decision_core.ts";
 
 export interface StandardQuestionContext {
     hasUI: boolean;
@@ -51,17 +55,25 @@ async function askNote(
     question: QuestionItem,
     label: string,
     existing: string | undefined,
+    requirement: DecisionNoteRequirement,
     signal: AbortSignal | undefined,
 ): Promise<string | undefined | null> {
-    if (isCancelled(signal)) return null;
-    const title = question.note?.prompt ?? `Optional note for ${label}`;
-    const placeholder = question.note?.placeholder;
-    const note = await ui.editor(
-        placeholder === undefined ? title : `${title} — ${placeholder}`,
-        existing ?? "",
-    );
-    if (note === undefined || isCancelled(signal)) return null;
-    return note;
+    if (requirement === "none") return undefined;
+    let prefill = existing ?? "";
+    while (true) {
+        if (isCancelled(signal)) return null;
+        const fallback = requirement === "required" ? `Required note for ${label}` : `Optional note for ${label}`;
+        const title = question.note?.prompt ?? fallback;
+        const placeholder = question.note?.placeholder;
+        const note = await ui.editor(
+            placeholder === undefined ? title : `${title} — ${placeholder}`,
+            prefill,
+        );
+        if (note === undefined || isCancelled(signal)) return null;
+        if (requirement !== "required" || note.trim().length > 0) return note;
+        ui.notify("Enter a non-blank note to continue.", "warning");
+        prefill = note;
+    }
 }
 
 function markedOptions(
@@ -79,17 +91,20 @@ async function askSingle(
     title: string,
     existing: QuestionAnswer | undefined,
     signal: AbortSignal | undefined,
+    policy: DecisionFlowPolicy | undefined,
+    reviewActionLabel: string,
 ): Promise<QuestionStepResult> {
     const options = question.options ?? [];
     const current = existing?.kind === "single" ? existing.value : undefined;
     const displays = markedOptions(options, current);
-    const reviewLabel = uniqueLabel("Review answers now", new Set(displays));
+    const reviewLabel = uniqueLabel(reviewActionLabel, new Set(displays));
     const selected = await context.ui.select(title, [...displays, reviewLabel], { signal });
     if (selected === undefined || isCancelled(signal)) return undefined;
     if (selected === reviewLabel) return REVIEW_NOW;
     const option = options[displays.indexOf(selected)];
     if (option === undefined) throw new Error(`Standard UI returned an unknown option: ${selected}`);
-    const note = await askNote(context.ui, question, option.label, noteFrom(existing), signal);
+    const requirement = decisionNoteRequirement(policy, question, option);
+    const note = await askNote(context.ui, question, option.label, noteFrom(existing), requirement, signal);
     if (note === null) return undefined;
     return { kind: "single", value: option.value, note };
 }
@@ -100,6 +115,8 @@ async function askMulti(
     title: string,
     existing: QuestionAnswer | undefined,
     signal: AbortSignal | undefined,
+    policy: DecisionFlowPolicy | undefined,
+    reviewActionLabel: string,
 ): Promise<QuestionStepResult> {
     const options = question.options ?? [];
     const selectedValues = new Set(
@@ -108,7 +125,7 @@ async function askMulti(
     const rawDisplays = new Set(options.map(optionDisplayText));
     const doneLabel = uniqueLabel("Done — confirm selections", rawDisplays);
     rawDisplays.add(doneLabel);
-    const reviewLabel = uniqueLabel("Review answers now", rawDisplays);
+    const reviewLabel = uniqueLabel(reviewActionLabel, rawDisplays);
 
     while (true) {
         if (isCancelled(signal)) return undefined;
@@ -139,14 +156,16 @@ async function askMulti(
     if (noteMode(question) === "per-option") {
         for (const option of options) {
             if (!selectedValues.has(option.value)) continue;
-            const note = await askNote(context.ui, question, option.label, noteFrom(existing, option.value), signal);
+            const requirement = decisionNoteRequirement(policy, question, option);
+            const note = await askNote(context.ui, question, option.label, noteFrom(existing, option.value), requirement, signal);
             if (note === null) return undefined;
             values.push({ value: option.value, note });
         }
         return { kind: "multi", values };
     }
     for (const option of options) if (selectedValues.has(option.value)) values.push({ value: option.value });
-    const note = await askNote(context.ui, question, "answer", noteFrom(existing), signal);
+    const requirement = decisionNoteRequirement(policy, question);
+    const note = await askNote(context.ui, question, "answer", noteFrom(existing), requirement, signal);
     if (note === null) return undefined;
     return { kind: "multi", values, note };
 }
@@ -157,13 +176,15 @@ async function askConfirm(
     title: string,
     existing: QuestionAnswer | undefined,
     signal: AbortSignal | undefined,
+    policy: DecisionFlowPolicy | undefined,
+    reviewActionLabel: string,
 ): Promise<QuestionStepResult> {
     const current = existing?.kind === "confirm" ? String(existing.value) : undefined;
     const displays = [
         `${current === "true" ? "[current]" : "[ ]"} Yes`,
         `${current === "false" ? "[current]" : "[ ]"} No`,
     ];
-    const reviewLabel = uniqueLabel("Review answers now", new Set(displays));
+    const reviewLabel = uniqueLabel(reviewActionLabel, new Set(displays));
     const selected = await context.ui.select(title, [...displays, reviewLabel], { signal });
     if (selected === undefined || isCancelled(signal)) return undefined;
     if (selected === reviewLabel) return REVIEW_NOW;
@@ -174,6 +195,10 @@ async function askConfirm(
         question,
         index === 0 ? "Yes" : "No",
         noteFrom(existing),
+        decisionNoteRequirement(policy, question, {
+            value: String(index === 0),
+            label: index === 0 ? "Yes" : "No",
+        }),
         signal,
     );
     if (note === null) return undefined;
@@ -186,10 +211,12 @@ async function askText(
     title: string,
     existing: QuestionAnswer | undefined,
     signal: AbortSignal | undefined,
+    _policy: DecisionFlowPolicy | undefined,
+    reviewActionLabel: string,
 ): Promise<QuestionStepResult> {
-    const action = await context.ui.select(title, ["Answer this question", "Review answers now"], { signal });
+    const action = await context.ui.select(title, ["Answer this question", reviewActionLabel], { signal });
     if (action === undefined || isCancelled(signal)) return undefined;
-    if (action === "Review answers now") return REVIEW_NOW;
+    if (action === reviewActionLabel) return REVIEW_NOW;
     let prefill = existing?.kind === "text" ? existing.value : question.initialValue;
     while (true) {
         if (isCancelled(signal)) return undefined;
@@ -208,17 +235,21 @@ async function askQuestion(
     total: number,
     existing: QuestionAnswer | undefined,
     signal: AbortSignal | undefined,
+    policy: DecisionFlowPolicy | undefined,
 ): Promise<QuestionStepResult> {
     const title = progressTitle(question, index, total);
+    const reviewActionLabel = total === 1 && shouldAutoSubmitSingle(policy)
+        ? "Submit without answering"
+        : "Review answers now";
     switch (question.kind) {
         case "single":
-            return askSingle(context, question, title, existing, signal);
+            return askSingle(context, question, title, existing, signal, policy, reviewActionLabel);
         case "multi":
-            return askMulti(context, question, title, existing, signal);
+            return askMulti(context, question, title, existing, signal, policy, reviewActionLabel);
         case "confirm":
-            return askConfirm(context, question, title, existing, signal);
+            return askConfirm(context, question, title, existing, signal, policy, reviewActionLabel);
         case "text":
-            return askText(context, question, title, existing, signal);
+            return askText(context, question, title, existing, signal, policy, reviewActionLabel);
     }
 }
 
@@ -238,10 +269,11 @@ function summarizeAnswer(question: QuestionItem, answer: QuestionAnswer): string
     return `${values}${answer.note === undefined ? "" : ` — note: ${answer.note}`}`;
 }
 
-export async function runStandardQuestionFlow(
+export async function runStandardDecisionFlow(
     context: StandardQuestionContext,
     questions: readonly QuestionItem[],
     signal?: AbortSignal,
+    policy?: DecisionFlowPolicy,
 ): Promise<QuestionResultDetails> {
     if (!context.hasUI) return unavailableResult();
 
@@ -255,10 +287,15 @@ export async function runStandardQuestionFlow(
             progress.total,
             undefined,
             signal,
+            policy,
         );
         if (pending === undefined) return progress.cancelled();
-        if (pending === REVIEW_NOW) break;
+        if (pending === REVIEW_NOW) {
+            if (questions.length === 1 && shouldAutoSubmitSingle(policy)) return progress.submitted();
+            break;
+        }
         progress.submit(pending);
+        if (questions.length === 1 && shouldAutoSubmitSingle(policy)) return progress.submitted();
     }
 
     while (true) {
@@ -291,8 +328,11 @@ export async function runStandardQuestionFlow(
             progress.total,
             progress.answerFor(progress.current),
             signal,
+            policy,
         );
         if (pending === undefined) return progress.cancelled(false);
         if (pending !== REVIEW_NOW) progress.submit(pending);
     }
 }
+
+export const runStandardQuestionFlow = runStandardDecisionFlow;

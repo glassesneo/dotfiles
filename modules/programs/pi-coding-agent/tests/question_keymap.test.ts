@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { detailedQuestionHelp, resolveQuestionKeymap, resolveUiAction, validateQuestionKeymapConfig } from "../extensions/question_keymap.ts";
+import { detailedQuestionHelp, resolveQuestionKeymap, resolveUiAction, validateQuestionKeymapConfig } from "../extensions/utilities/decision_keymap.ts";
 
 const manager = { getKeys(action: string) { return ({
     "tui.select.confirm": ["enter"], "tui.select.up": ["up"], "tui.select.down": ["down"],
