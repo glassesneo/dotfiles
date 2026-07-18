@@ -6,35 +6,36 @@ registration and Pi's standard keybindings live in `default.nix`.
 
 ## Input and application keys
 
-Normal input uses `Enter` to submit and `Shift-Enter` or `Ctrl-J` for a newline.
-`Ctrl-C` aborts active agent or bash work; while idle it clears non-empty input
-and does nothing when input is empty. It never exits Pi. Use `Ctrl-D` to exit
-when the editor is empty. Terminal, tmux, or macOS bindings own copying selected
-terminal text.
+Pi's standard keymap contains no Option/Alt bindings. Normal input uses `Enter`
+to submit and `Shift-Enter` for a newline. `Ctrl-C` aborts active agent or bash
+work; while idle it clears non-empty input and does nothing when input is empty.
+It never exits Pi. Use `Ctrl-D` to exit when the editor is empty. Terminal, tmux,
+or macOS bindings own copying selected terminal text.
 
 | Action | Key |
 |---|---|
-| External editor | `Alt-E` |
-| Copy last assistant message | `Alt-C` |
-| Select model | `Alt-M` |
-| Previous / next model | `Alt-[` / `Alt-]` |
-| Cycle thinking level | `Alt-T` |
-| Expand thinking / tool output | `Ctrl-T` / `Ctrl-O` |
-| Follow up / dequeue | `Alt-Enter` / `Alt-Up` |
+| Line start / end | `Ctrl-A` / `Ctrl-E` |
+| Character left / right | `Ctrl-B` / `Ctrl-F` |
+| External editor | `Ctrl-G` |
+| Cycle thinking level | `Ctrl-T` |
+| Paste image | `Ctrl-V` |
+| Follow up / dequeue | `Ctrl-Enter` / `Ctrl-Up` |
+| Fold / unfold tree branch | `Ctrl-Left` / `Ctrl-Right` |
+| Session path / sort / named-only filter | `Ctrl-P` / `Ctrl-S` / `Ctrl-N` |
+| Rename / delete session | `Ctrl-R` / `Ctrl-D` |
 
-The old `Ctrl-G`, `Ctrl-X`, `Ctrl-L`, `Ctrl-P`, `Ctrl-Shift-P`, `Shift-Tab`, and
-`Ctrl-C` aliases for these actions are intentionally absent.
+Arrow keys, `Home`, `End`, `Delete`, and other retained unmodified keys continue
+to use Pi's defaults. `Ctrl-Enter` and `Ctrl-Up` require Ghostty's extended key
+reporting; tmux must also use `extended-keys` with the `csi-u` format. Session
+deletion retains Pi's `Enter` confirmation and `Esc` cancellation.
 
-Until Pi exposes the postponed searchable-list redesign, list-only actions use
-these temporary keys:
-
-- Session path, sort, named filter, rename, delete: `Alt-P`, `Alt-S`, `Alt-N`,
-  `Alt-R`, `Alt-D`.
-- Scoped-model clear and provider toggle: `Alt-X`, `Alt-P`.
-- Tree filter next and previous: `Alt-F`, `Alt-Shift-F`.
-
-The scoped-model save (`Ctrl-S`) and select-all (`Ctrl-A`) keys remain unchanged.
-Session deletion retains Pi's `Enter` confirmation and `Esc` cancellation.
+The following Pi actions are deliberately unbound: word movement and deletion,
+character jumps, deletion to line start or end, `Ctrl-J` newline, yank,
+yank-pop, undo, suspend, copying the last assistant message, model selection and
+cycling, thinking-block and tool-output expansion, every scoped-model command,
+and tree-filter cycling. The individual tree-filter shortcuts are also unbound.
+`Ctrl-H`, `Ctrl-J`, `Ctrl-K`, and `Ctrl-L` are reserved for tmux and have no new
+Pi assignments.
 
 ## `question` tool
 
@@ -202,6 +203,6 @@ nix develop ../../.. --command npx pi \
 ```
 
 New files must be git-tracked before flake evaluation because flakes cannot read
-untracked files. Manually verify Ghostty and tmux `Alt-[`/`Alt-]`, normal-input
-`Ctrl-C`, Japanese IME cursor placement, multiline editing, reverse navigation,
-review revision, and `/reload` help updates.
+untracked files. Manually verify normal-input `Ctrl-C`, Japanese IME cursor
+placement, multiline editing, reverse navigation, review revision, and `/reload`
+help updates.

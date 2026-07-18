@@ -3,59 +3,104 @@
   homeConfig,
   llm-agents,
   ...
-}:
-let
+}: let
   configDir = "${homeConfig.home.homeDirectory}/.pi/agent";
 in
-delib.module {
-  name = "programs.pi-coding-agent";
+  delib.module {
+    name = "programs.pi-coding-agent";
 
-  options = delib.singleEnableOption true;
+    options = delib.singleEnableOption true;
 
-  home.ifEnabled = {
-    programs.pi-coding-agent = {
-      enable = true;
-      package = llm-agents.pi;
-      inherit configDir;
-      settings = {
-        extensions = [
-          "${./extensions}/agent_artifact.ts"
-          "${./extensions}/interaction_policy.ts"
-          "${./extensions}/question.ts"
-        ];
-        prompts = [
-          "${./prompts}"
-        ];
+    home.ifEnabled = {
+      programs.pi-coding-agent = {
+        enable = true;
+        package = llm-agents.pi;
+        inherit configDir;
+        settings = {
+          extensions = [
+            "${./extensions}/agent_artifact.ts"
+            "${./extensions}/interaction_policy.ts"
+            "${./extensions}/question.ts"
+          ];
+          prompts = [
+            "${./prompts}"
+          ];
+        };
+        keybindings = {
+          "tui.editor.cursorLeft" = [
+            "left"
+            "ctrl+b"
+          ];
+          "tui.editor.cursorRight" = [
+            "right"
+            "ctrl+f"
+          ];
+          "tui.editor.cursorWordLeft" = [];
+          "tui.editor.cursorWordRight" = [];
+          "tui.editor.cursorLineStart" = [
+            "home"
+            "ctrl+a"
+          ];
+          "tui.editor.cursorLineEnd" = [
+            "end"
+            "ctrl+e"
+          ];
+          "tui.editor.jumpForward" = [];
+          "tui.editor.jumpBackward" = [];
+          "tui.editor.deleteCharForward" = ["delete"];
+          "tui.editor.deleteWordBackward" = [];
+          "tui.editor.deleteWordForward" = [];
+          "tui.editor.deleteToLineStart" = [];
+          "tui.editor.deleteToLineEnd" = [];
+          "tui.input.newLine" = ["shift+enter"];
+          "tui.editor.yank" = [];
+          "tui.editor.yankPop" = [];
+          "tui.editor.undo" = [];
+          "tui.input.copy" = [];
+
+          "app.clear" = ["ctrl+c"];
+          "app.exit" = ["ctrl+d"];
+          "app.suspend" = [];
+          "app.editor.external" = ["ctrl+g"];
+          "app.clipboard.pasteImage" = ["ctrl+v"];
+
+          "app.session.togglePath" = ["ctrl+p"];
+          "app.session.toggleSort" = ["ctrl+s"];
+          "app.session.toggleNamedFilter" = ["ctrl+n"];
+          "app.session.rename" = ["ctrl+r"];
+          "app.session.delete" = ["ctrl+d"];
+          "app.session.deleteNoninvasive" = [];
+
+          "app.model.select" = [];
+          "app.model.cycleBackward" = [];
+          "app.model.cycleForward" = [];
+          "app.thinking.cycle" = ["ctrl+t"];
+          "app.thinking.toggle" = [];
+          "app.tools.expand" = [];
+          "app.message.copy" = [];
+          "app.message.followUp" = ["ctrl+enter"];
+          "app.message.dequeue" = ["ctrl+up"];
+
+          "app.tree.foldOrUp" = ["ctrl+left"];
+          "app.tree.unfoldOrDown" = ["ctrl+right"];
+          "app.tree.filter.default" = [];
+          "app.tree.filter.noTools" = [];
+          "app.tree.filter.userOnly" = [];
+          "app.tree.filter.labeledOnly" = [];
+          "app.tree.filter.all" = [];
+          "app.tree.filter.cycleForward" = [];
+          "app.tree.filter.cycleBackward" = [];
+
+          "app.models.save" = [];
+          "app.models.enableAll" = [];
+          "app.models.clearAll" = [];
+          "app.models.toggleProvider" = [];
+          "app.models.reorderUp" = [];
+          "app.models.reorderDown" = [];
+        };
       };
-      keybindings = {
-        "app.editor.external" = [ "alt+e" ];
-        "app.message.copy" = [ "alt+c" ];
-        "app.model.select" = [ "alt+m" ];
-        "app.model.cycleBackward" = [ "alt+[" ];
-        "app.model.cycleForward" = [ "alt+]" ];
-        "app.thinking.cycle" = [ "alt+t" ];
-        "tui.input.copy" = [ ];
-        "app.clear" = [ ];
 
-        "app.session.togglePath" = [ "alt+p" ];
-        "app.session.toggleSort" = [ "alt+s" ];
-        "app.session.toggleNamedFilter" = [ "alt+n" ];
-        "app.session.rename" = [ "alt+r" ];
-        "app.session.delete" = [ "alt+d" ];
-        "app.session.deleteNoninvasive" = [ ];
-        "app.models.clearAll" = [ "alt+x" ];
-        "app.models.toggleProvider" = [ "alt+p" ];
-        "app.tree.filter.default" = [ ];
-        "app.tree.filter.noTools" = [ ];
-        "app.tree.filter.userOnly" = [ ];
-        "app.tree.filter.labeledOnly" = [ ];
-        "app.tree.filter.all" = [ ];
-        "app.tree.filter.cycleForward" = [ "alt+f" ];
-        "app.tree.filter.cycleBackward" = [ "alt+shift+f" ];
-      };
+      home.file."${configDir}/question-keybindings.json".source =
+        ./extensions/question-keybindings.json;
     };
-
-    home.file."${configDir}/question-keybindings.json".source =
-      ./extensions/question-keybindings.json;
-  };
-}
+  }
