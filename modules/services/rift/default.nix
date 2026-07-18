@@ -4,6 +4,7 @@
   inputs,
   lib,
   pkgs,
+  windowManager,
   ...
 }: let
   serviceLabel = "git.acsandmann.rift";
@@ -42,9 +43,8 @@ in
 
     options = with delib;
       moduleOptions {
-        # Rift activation is derived from the host-selected window-manager
-        # backend so exactly one WM provider is active per host.
-        enable = boolOption false;
+        # Activation is derived from the shared Window Manager selector.
+        enable = readOnly (boolOption windowManager.isRift);
         package = readOnly (packageOption rift);
       };
 

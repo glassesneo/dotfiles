@@ -1,0 +1,4 @@
+[
+  {"uuid":"display-1","screen_id":111,"space":10,"active_space_ids":[10]},
+  {"uuid":"display-2","screen_id":222,"space":20,"active_space_ids":[20]}
+]

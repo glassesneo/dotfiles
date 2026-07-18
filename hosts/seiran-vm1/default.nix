@@ -31,12 +31,10 @@ delib.host {
       tart.enable = false;
     };
     services = {
-      aerospace.enable = false;
       kanata = {
         enable = false;
         profile = null;
       };
-      rift.enable = false;
       sketchybar.enable = false;
     };
     user.uid = 502;

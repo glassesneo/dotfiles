@@ -3,6 +3,7 @@
   host,
   lib,
   pkgs,
+  windowManager,
   ...
 }:
 delib.module {
@@ -10,10 +11,8 @@ delib.module {
 
   options = with delib;
     moduleOptions {
-      # Aerospace activation is derived from the host-selected window-manager
-      # backend so exactly one WM provider is active per host. To switch a host
-      # off Aerospace, change darwin.window-manager.backend, not this flag.
-      enable = boolOption false;
+      # Activation is derived from the shared Window Manager selector.
+      enable = readOnly (boolOption windowManager.isAerospace);
       # Apps that should default to tiling layout (most apps float by default)
       tilingApps = description (listOfOption str [
         "company.thebrowser.Browser" # Arc Browser

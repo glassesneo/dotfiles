@@ -121,10 +121,23 @@
               nvf-neo_at_seiran =
                 homeConfigs."neo@seiran".config.programs.nvf.settings.vim.build.finalPackage;
             };
+
+            sketchybarWorkspaceAdapterTests = {
+              sketchybar-workspace-adapter-tests =
+                pkgs.runCommand "sketchybar-workspace-adapter-tests" {
+                  nativeBuildInputs = [pkgs.nushell];
+                } ''
+                  cp -r ${./modules/services/sketchybar/widgets/workspace} workspace
+                  cd workspace/tests
+                  nu default.nu
+                  touch $out
+                '';
+            };
           in
             hmChecks
             // nixvimChecks
-            // nvfChecks)
+            // nvfChecks
+            // sketchybarWorkspaceAdapterTests)
           // lib.optionalAttrs (system == "aarch64-linux") (let
             nixosConfigs = filterConfigurationsByHostNames ["seiran-vm0"] (mkConfigurations "nixos");
           in {

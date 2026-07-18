@@ -4,6 +4,7 @@
   inputs,
   lib,
   pkgs,
+  windowManager,
   ...
 }: let
   profiles = {
@@ -45,10 +46,10 @@ in
       injections = [
         {
           name = "rift";
-          enabled = myconfig.services.rift.enable;
+          enabled = windowManager.isRift;
           startupBaseLayer = "rift-base";
           rootFragment = pkgs.replaceVars ./injections/rift.kbd {
-            riftCli = "${myconfig.services.rift.package}/bin/rift-cli";
+            riftCli = windowManager.rift.cli;
           };
         }
       ];

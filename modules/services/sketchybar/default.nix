@@ -64,7 +64,7 @@ in
           else "bottom"
         );
         layout = submoduleOption layoutModule {
-          a = ["aerospace_workspace"];
+          a = ["workspace"];
           b = [];
           c = [];
           x = ["media"];
@@ -112,9 +112,6 @@ in
         (lib.filter (name: lib.hasPrefix "widget-" name) (builtins.attrNames myconfig.services.sketchybar));
       unknownWidgets = lib.filter (widget: !(builtins.elem widget availableWidgets)) enabledWidgets;
       widgetOf = key: myconfig.services.sketchybar."widget-${key}";
-      # Silently drop widgets that are defined but disabled (for example, the
-      # Aerospace-only workspace widget on a Rift-backed host) so SketchyBar
-      # stays functional regardless of which WM provider is active.
       disabledWidgets = lib.filter (widget: builtins.elem widget availableWidgets && !((widgetOf widget).enable)) enabledWidgets;
       renderableLayout =
         lib.filter
@@ -130,16 +127,25 @@ in
       copyWidget = entry: let
         widget = widgetOf entry.widget;
         widgetDir = "widgets/${entry.widget}";
+        copyRuntimeFile = target: source: ''
+          mkdir -p "$out/${widgetDir}/${builtins.dirOf target}"
+          cp ${lib.escapeShellArg source} "$out/${widgetDir}/${target}"
+        '';
       in ''
         mkdir -p "$out/${widgetDir}"
         cp ${lib.escapeShellArg widget.render} "$out/${widgetDir}/widget.nu"
         cp ${lib.escapeShellArg widget.handler} "$out/${widgetDir}/handler.nu"
+        ${lib.concatStringsSep "\n" (lib.mapAttrsToList copyRuntimeFile (widget.runtimeFiles or {}))}
         chmod +w "$out/${widgetDir}/widget.nu"
         substituteInPlace "$out/${widgetDir}/widget.nu" \
           --replace-fail '@script-path@' "$out/${widgetDir}/script"
+        if grep -q '__script_path__' "$out/${widgetDir}/handler.nu"; then
+          substituteInPlace "$out/${widgetDir}/handler.nu" \
+            --replace-fail '__script_path__' "$out/${widgetDir}/script"
+        fi
         printf '%s\n' \
           '#!${pkgs.runtimeShell}' \
-          "exec ${nushellBin} \"$out/${widgetDir}/handler.nu\"" \
+          "exec ${nushellBin} \"$out/${widgetDir}/handler.nu\" \"\$@\"" \
           > "$out/${widgetDir}/script"
         chmod +x "$out/${widgetDir}/script"
       '';
@@ -178,6 +184,10 @@ in
         {
           assertion = unknownWidgets == [];
           message = "services.sketchybar.layout: unknown widgets: ${lib.concatStringsSep ", " unknownWidgets}";
+        }
+        {
+          assertion = disabledWidgets == [];
+          message = "services.sketchybar.layout: disabled widgets are referenced: ${lib.concatStringsSep ", " disabledWidgets}";
         }
       ];
 
