@@ -49,6 +49,10 @@ A decision point is **settled** when it is:
 - previously selected by the user
 - forced to one viable option by verified constraints or investigation
 
+A governing phase contract may override this default by reclassifying inputs
+for that phase. When no such contract exists, use the default classification
+above.
+
 Every other relevant point is **open**. Treat each settled point as part of the
 task contract. Preserve it while handling other open points, and never reopen it.
 Record a user's answer to a surfaced decision as settled.
