@@ -68,6 +68,7 @@ delib.module {
       # Terminal apps where AquaSKK uses direct (passthrough) mode
       direct_clients = [
         "com.mitchellh.ghostty"
+        "net.kovidgoyal.kitty"
       ];
     };
 

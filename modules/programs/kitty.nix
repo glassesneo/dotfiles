@@ -1,8 +1,6 @@
 {
   delib,
   host,
-  homeConfig,
-  lib,
   ...
 }:
 delib.module {
@@ -12,6 +10,9 @@ delib.module {
 
   home.ifEnabled.programs.kitty = {
     enable = true;
+    keybindings = {
+      "shift+enter" = "send_text normal,application \\e[13;2u";
+    };
     quickAccessTerminalConfig = {
       hide_on_focus_loss = true;
       enable_audio_bell = false;
@@ -19,7 +20,7 @@ delib.module {
       bold_font = "auto";
       italic_font = "auto";
       bold_italic_font = "auto";
-      font_size = 12;
+      font_size = 13;
       edge = "center-sized";
     };
   };
