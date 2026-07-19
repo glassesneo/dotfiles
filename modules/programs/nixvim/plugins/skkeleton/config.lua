@@ -3,7 +3,7 @@ local skkeleton_group = vim.api.nvim_create_augroup("dotfiles-skkeleton", { clea
 vim.api.nvim_create_autocmd("User", {
   group = skkeleton_group,
   pattern = "skkeleton-initialize-pre",
-  callback = function()
+  callback = function ()
     vim.fn["skkeleton#config"]({
       globalDictionaries = { "@skk-dict-path@" },
       eggLikeNewline = true,
@@ -30,9 +30,11 @@ vim.api.nvim_create_autocmd("User", {
   end,
 })
 
-vim.cmd([[
+vim.cmd(
+  [[
   imap <C-j> <Plug>(skkeleton-enable)
   cmap <C-j> <Plug>(skkeleton-enable)
   imap <C-l> <Plug>(skkeleton-disable)
   cmap <C-l> <Plug>(skkeleton-disable)
-]])
+]]
+)

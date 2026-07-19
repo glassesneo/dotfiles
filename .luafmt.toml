@@ -1,0 +1,10 @@
+[syntax]
+level = "LuaJIT"
+
+[indent]
+kind = "Space"
+width = 2
+
+[output]
+trailing_comma = "Never"
+trailing_table_separator = "Multiline"

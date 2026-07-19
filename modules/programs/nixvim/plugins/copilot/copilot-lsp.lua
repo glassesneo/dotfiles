@@ -34,7 +34,7 @@ local function should_skip_path(buf_path)
   end
 
   local disable_patterns = { "env", "conf", "local", "private" }
-  return vim.iter(disable_patterns):any(function(pattern)
+  return vim.iter(disable_patterns):any(function (pattern)
     return string.match(fname, pattern) ~= nil
   end)
 end
@@ -54,10 +54,10 @@ return {
     type = "binary",
     custom_server_filepath = "copilot-language-server",
   },
-  root_dir = function()
+  root_dir = function ()
     return git_root_for_bufnr(0) or vim.fn.getcwd()
   end,
-  should_attach = function(bufnr, buf_path)
+  should_attach = function (bufnr, buf_path)
     if not vim.bo[bufnr].buflisted or vim.bo[bufnr].buftype ~= "" then
       return false
     end
@@ -69,7 +69,7 @@ return {
     return git_root_for_bufnr(bufnr) ~= nil
   end,
   server_opts_overrides = {
-    on_attach = function(client, bufnr)
+    on_attach = function (client, bufnr)
       if client:supports_method(vim.lsp.protocol.Methods.textDocument_inlineCompletion, bufnr) then
         vim.lsp.inline_completion.enable(true, { bufnr = bufnr })
       end

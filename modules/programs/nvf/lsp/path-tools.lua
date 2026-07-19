@@ -10,16 +10,15 @@ local function buffer_path(bufnr)
   return vim.fs.normalize(path)
 end
 
-local function file_exists(path)
-  local stat = uv.fs_stat(path)
-  return stat ~= nil and stat.type == "file"
+local function path_exists(path)
+  return uv.fs_stat(path) ~= nil
 end
 
 local function nearest_marker(path, markers)
   local dir = vim.fs.dirname(path)
   while dir and dir ~= "" do
     for _, marker in ipairs(markers) do
-      if file_exists(dir .. "/" .. marker) then
+      if path_exists(dir .. "/" .. marker) then
         return dir
       end
     end
@@ -33,13 +32,17 @@ local function nearest_marker(path, markers)
 end
 
 local function project_root(markers)
-  return function(path)
+  return function (path)
     return nearest_marker(path, markers)
   end
 end
 
 local function file_root(path)
   return vim.fs.dirname(path)
+end
+
+local function lua_root(path)
+  return nearest_marker(path, { ".emmyrc.json", ".emmyrc.lua", ".luarc.json", ".git" }) or file_root(path)
 end
 
 -- Deno has priority over Biome at every ancestor. Ordinary TypeScript is the
@@ -70,7 +73,7 @@ function _G.nvf_web_formatters(bufnr)
 end
 
 local function gated_root(command, resolve)
-  return function(bufnr, on_dir)
+  return function (bufnr, on_dir)
     if vim.fn.executable(command) ~= 1 then
       return
     end
@@ -86,7 +89,7 @@ local function gated_root(command, resolve)
 end
 
 local function web_root(command, route)
-  return gated_root(command, function(path)
+  return gated_root(command, function (path)
     local selected, root = _G.nvf_web_route(path)
     if selected == route then
       return root
@@ -98,6 +101,19 @@ local capabilities = vim.lsp.protocol.make_client_capabilities()
 local blink_ok, blink = pcall(require, "blink.cmp")
 if blink_ok then
   capabilities = blink.get_lsp_capabilities(capabilities)
+end
+
+local lua_library_paths = {
+  vim.env.VIMRUNTIME .. "/lua", vim.env.VIMRUNTIME .. "/lua/vim/_meta", vim.fn.stdpath("config") .. "/lua",
+}
+
+local unique_lua_library_paths = {}
+local seen_lua_library_paths = {}
+for _, path in ipairs(lua_library_paths) do
+  if path and not seen_lua_library_paths[path] then
+    table.insert(unique_lua_library_paths, path)
+    seen_lua_library_paths[path] = true
+  end
 end
 
 local servers = {
@@ -154,11 +170,24 @@ local servers = {
     root_dir = gated_root("zls", file_root),
     settings = { zls = { enable_inlay_hints = true, warn_style = true } },
   },
-  lua_ls = {
-    cmd = { "lua-language-server" },
+  emmylua_ls = {
+    cmd = { "emmylua_ls", "--editor", "neovim" },
     filetypes = { "lua" },
-    root_dir = gated_root("lua-language-server", file_root),
-    settings = { Lua = { telemetry = { enable = false }, hint = { enable = true } } },
+    root_dir = gated_root("emmylua_ls", lua_root),
+    settings = {
+      emmylua = {
+        diagnostic = {
+          enable = true,
+        },
+        runtime = { version = "LuaJIT" },
+        workspace = {
+          library = unique_lua_library_paths,
+          ignoreDir = { ".direnv", ".git" },
+        },
+        hint = { enable = true },
+        strict = { requirePath = true },
+      },
+    },
   },
   sourcekit = {
     cmd = { "sourcekit-lsp" },
@@ -168,7 +197,7 @@ local servers = {
   moonbit = {
     cmd = { "moonbit-lsp" },
     filetypes = { "moonbit" },
-    root_dir = gated_root("moonbit-lsp", function(path)
+    root_dir = gated_root("moonbit-lsp", function (path)
       return nearest_marker(path, { "moon.mod.json" }) or file_root(path)
     end),
   },

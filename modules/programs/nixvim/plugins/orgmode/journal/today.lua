@@ -1,9 +1,9 @@
 -- :Today command — create/open today's single-file journal
 
 --- Find the range of the first heading matching the given title.
---- @param content string[]
---- @param title string
---- @return integer|nil, integer|nil
+---@param content string[]
+---@param title   string
+---@return integer|nil, integer|nil
 local function find_heading_range(content, title)
   local start_line = nil
   local level = nil
@@ -34,8 +34,8 @@ local function find_heading_range(content, title)
 end
 
 --- Extract up to 3 unfinished checkbox items from the `Plan` section.
---- @param content string[]
---- @return string[]
+---@param content string[]
+---@return string[]
 local function extract_top3_from_plan(content)
   local plan_start, plan_end = find_heading_range(content, "Plan")
   if not plan_start or not plan_end then
@@ -58,8 +58,8 @@ local function extract_top3_from_plan(content)
 end
 
 --- Extract up to 3 unfinished checkbox items from `明日のTop3` in the `Diary` section.
---- @param content string[]
---- @return string[]
+---@param content string[]
+---@return string[]
 local function extract_top3_from_diary(content)
   local diary_start, diary_end = find_heading_range(content, "Diary")
   if not diary_start or not diary_end then
@@ -100,21 +100,13 @@ local function extract_top3_from_diary(content)
 end
 
 --- Build the daily journal scaffold.
---- @param checkin_time string
---- @param top3 string[]
---- @return string[]
+---@param checkin_time string
+---@param top3         string[]
+---@return string[]
 local function build_daily_template(checkin_time, top3)
   local lines = {
-    "* Journal",
-    "** Checkin",
-    ":PROPERTIES:",
-    ":FEELING:",
-    ":MOOD:",
-    ":ENERGY:",
-    ":END:",
-    "  [" .. checkin_time .. "]",
-    "",
-    "** Plan",
+    "* Journal", "** Checkin", ":PROPERTIES:", ":FEELING:", ":MOOD:", ":ENERGY:", ":END:", "  [" .. checkin_time .. "]",
+    "", "** Plan",
   }
 
   if #top3 > 0 then
@@ -192,9 +184,13 @@ local function today_command()
   end
 end
 
-vim.api.nvim_create_user_command("Today", function()
-  today_command()
-end, {
-  nargs = 0,
-  desc = "Open today's journal and create it with checkin scaffold if missing",
-})
+vim.api.nvim_create_user_command(
+  "Today",
+  function ()
+    today_command()
+  end,
+  {
+    nargs = 0,
+    desc = "Open today's journal and create it with checkin scaffold if missing",
+  }
+)

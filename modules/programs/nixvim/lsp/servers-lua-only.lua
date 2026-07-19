@@ -16,8 +16,7 @@ local arduino_project_cache = {}
 local arduino_startup_state = {}
 local arduino_client_roots = {}
 local arduino_data_dir_candidates = {
-  vim.fs.normalize(vim.fn.expand("~/Library/Arduino15")),
-  vim.fs.normalize(vim.fn.expand("~/.arduino15")),
+  vim.fs.normalize(vim.fn.expand("~/Library/Arduino15")), vim.fs.normalize(vim.fn.expand("~/.arduino15")),
 }
 local arduino_cli_config_candidates = {
   vim.fs.normalize(vim.fn.expand("~/Library/Arduino15/arduino-cli.yaml")),
@@ -55,9 +54,7 @@ end
 
 local function notify_arduino(message, level, opts)
   opts = opts or {}
-  local notify_opts = {
-    title = "Arduino LSP",
-  }
+  local notify_opts = { title = "Arduino LSP" }
   if opts.id then
     notify_opts.replace = opts.id
   end
@@ -139,8 +136,7 @@ local function begin_arduino_startup(project)
   state.started_at = uv.hrtime()
   state.notify_id = notify_arduino(
     ("Preparing compile database for %s (%s)..."):format(vim.fs.basename(project.root_dir), project.default_fqbn),
-    vim.log.levels.INFO,
-    { id = state.notify_id, timeout = false }
+    vim.log.levels.INFO, { id = state.notify_id, timeout = false }
   )
   arduino_startup_state[project.root_dir] = state
   return state
@@ -169,11 +165,8 @@ local function note_arduino_startup_attached(root_dir)
 
   state.notify_id = notify_arduino(
     ("Connected for %s in %s. Waiting for clangd..."):format(
-      vim.fs.basename(root_dir),
-      format_elapsed(state.started_at)
-    ),
-    vim.log.levels.INFO,
-    { id = state.notify_id, timeout = false }
+      vim.fs.basename(root_dir), format_elapsed(state.started_at)
+    ), vim.log.levels.INFO, { id = state.notify_id, timeout = false }
   )
 end
 
@@ -198,13 +191,8 @@ local function fail_arduino_startup(root_dir, code, signal)
 
   state.notify_id = notify_arduino(
     ("Startup failed for %s after %s (exit %d, signal %d). See :LspLog."):format(
-      vim.fs.basename(root_dir),
-      format_elapsed(state.started_at),
-      code,
-      signal
-    ),
-    vim.log.levels.WARN,
-    { id = state.notify_id, timeout = 5000 }
+      vim.fs.basename(root_dir), format_elapsed(state.started_at), code, signal
+    ), vim.log.levels.WARN, { id = state.notify_id, timeout = 5000 }
   )
 end
 
@@ -262,11 +250,7 @@ local function parse_fqbn(default_fqbn)
   if not vendor or not architecture or not board then
     return nil
   end
-  return {
-    vendor = vendor,
-    architecture = architecture,
-    board = board,
-  }
+  return { vendor = vendor, architecture = architecture, board = board }
 end
 
 local function has_installed_core(cli_config, default_fqbn)
@@ -307,11 +291,7 @@ local function has_installed_core(cli_config, default_fqbn)
 end
 
 local function arduino_preflight_error(key, message, level)
-  return {
-    key = key,
-    message = message,
-    level = level or vim.log.levels.WARN,
-  }
+  return { key = key, message = message, level = level or vim.log.levels.WARN }
 end
 
 local function resolve_arduino_cli_config(default_fqbn)
@@ -373,8 +353,7 @@ local function resolve_arduino_project(start_path)
     return nil,
       arduino_preflight_error(
         ("missing-sketch:%s"):format(start_path),
-        "Arduino LSP: no ancestor sketch.yaml found before the project boundary.",
-        vim.log.levels.INFO
+        "Arduino LSP: no ancestor sketch.yaml found before the project boundary.", vim.log.levels.INFO
       )
   end
 
@@ -395,9 +374,7 @@ local function resolve_arduino_project(start_path)
       arduino_preflight_error(
         ("missing-primary-sketch:%s"):format(sketch_root),
         ("Arduino LSP: %s must contain %s.ino or %s.pde to compile a sketch-local database."):format(
-          sketch_root,
-          sketch_name,
-          sketch_name
+          sketch_root, sketch_name, sketch_name
         )
       )
   end
@@ -408,8 +385,7 @@ local function resolve_arduino_project(start_path)
       arduino_preflight_error(
         "missing-cli-config",
         ("Arduino LSP: missing Arduino CLI config. Create %s or %s before starting the server."):format(
-          arduino_cli_config_candidates[1],
-          arduino_cli_config_candidates[2]
+          arduino_cli_config_candidates[1], arduino_cli_config_candidates[2]
         )
       )
   end
@@ -445,9 +421,7 @@ local function resolve_arduino_project(start_path)
       arduino_preflight_error(
         ("missing-core:%s"):format(default_fqbn),
         ("Arduino LSP: missing installed core for %s under %s. Run `arduino-cli core install %s` before starting the server."):format(
-          default_fqbn,
-          read_arduino_cli_data_dir(arduino_cli_config),
-          core_hint
+          default_fqbn, read_arduino_cli_data_dir(arduino_cli_config), core_hint
         )
       )
   end
@@ -483,8 +457,7 @@ local function resolve_arduino_project_for_buffer(bufnr)
   if not buf_path then
     notify_arduino_once(
       ("arduino:missing-buffer:%s"):format(bufnr),
-      "Arduino LSP: save the sketch to disk before starting the language server.",
-      vim.log.levels.INFO
+      "Arduino LSP: save the sketch to disk before starting the language server.", vim.log.levels.INFO
     )
     return nil
   end
@@ -498,9 +471,7 @@ local function resolve_arduino_project_for_buffer(bufnr)
 end
 
 local library_paths = {
-  vim.env.VIMRUNTIME .. "/lua",
-  vim.env.VIMRUNTIME .. "/lua/vim/_meta",
-  vim.fn.stdpath("config") .. "/lua",
+  vim.env.VIMRUNTIME .. "/lua", vim.env.VIMRUNTIME .. "/lua/vim/_meta", vim.fn.stdpath("config") .. "/lua",
 }
 
 local unique_library_paths = {}
@@ -537,9 +508,7 @@ vim.lsp.config.emmylua_ls = {
   workspace_required = false,
 }
 
-vim.lsp.config.sourcekit = {
-  single_file_support = true,
-}
+vim.lsp.config.sourcekit = { single_file_support = true }
 
 vim.lsp.config.denols = {
   single_file_support = true,
@@ -587,13 +556,13 @@ vim.lsp.config.denols = {
 
 vim.lsp.config.arduino_language_server = {
   filetypes = { "arduino" },
-  root_dir = function(bufnr, on_dir)
+  root_dir = function (bufnr, on_dir)
     local project = resolve_arduino_project_for_buffer(bufnr)
     if project then
       on_dir(project.root_dir)
     end
   end,
-  cmd = function(dispatchers, config)
+  cmd = function (dispatchers, config)
     local project = arduino_project_cache[config.root_dir]
     if not project then
       local resolved_project, err = resolve_arduino_project(config.root_dir)
@@ -610,18 +579,18 @@ vim.lsp.config.arduino_language_server = {
       detached = config.detached,
     })
   end,
-  on_attach = function(client, _bufnr)
+  on_attach = function (client, _bufnr)
     if client.root_dir then
       arduino_client_roots[client.id] = client.root_dir
       note_arduino_startup_attached(client.root_dir)
     end
   end,
-  on_init = function(client, _init_result)
+  on_init = function (client, _init_result)
     if client.root_dir then
       arduino_client_roots[client.id] = client.root_dir
     end
   end,
-  on_exit = function(code, signal, client_id)
+  on_exit = function (code, signal, client_id)
     local root_dir = arduino_client_roots[client_id]
     arduino_client_roots[client_id] = nil
     if root_dir then
@@ -634,7 +603,7 @@ local arduino_progress_group = vim.api.nvim_create_augroup("arduino_lsp_progress
 
 vim.api.nvim_create_autocmd("LspProgress", {
   group = arduino_progress_group,
-  callback = function(args)
+  callback = function (args)
     local data = args.data
     if not data or not data.client_id then
       return

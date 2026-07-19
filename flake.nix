@@ -167,9 +167,10 @@
               nodejs
               typescript-language-server
               emmylua-ls
+              emmylua-check
+              emmylua-formatter
               just
               nickel
-              stylua
             ];
           };
         in {

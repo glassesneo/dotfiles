@@ -1,7 +1,5 @@
 -- Runtime-only exceptions: `efm` formatting config.
-local exception_executables = {
-  ["efm"] = "efm-langserver",
-}
+local exception_executables = { ["efm"] = "efm-langserver" }
 
 vim.lsp.config.efm = {
   init_options = {

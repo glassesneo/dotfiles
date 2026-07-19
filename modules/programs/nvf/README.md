@@ -22,7 +22,7 @@ inactive without preventing the editor from starting.
 | Go | `gopls` | `goimports` (then `gofmt`) |
 | Nushell | `nu` | none |
 | Zig | `zls` | Zig LSP |
-| Lua | `lua-language-server` | `stylua` |
+| Lua | `emmylua_ls` | EmmyLua LSP |
 | Swift | `sourcekit-lsp` | `swift-format` |
 | MoonBit | `moonbit-lsp` | MoonBit LSP when supported |
 

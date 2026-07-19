@@ -1,4 +1,4 @@
-return function(bufnr)
+return function (bufnr)
   if not vim.g.formatsave or vim.b[bufnr].disableFormatSave then
     return
   end
@@ -11,7 +11,8 @@ return function(bufnr)
   end
 
   local ft = vim.bo[bufnr].filetype
-  local lsp_only = { zig = true, moonbit = true }
+  ---@type table<string, true | nil>
+  local lsp_only = { lua = true, zig = true, moonbit = true }
   if ft == "javascript" or ft == "javascriptreact" or ft == "typescript" or ft == "typescriptreact" then
     local route = web_route()
     if route == "biome" then
@@ -26,7 +27,7 @@ return function(bufnr)
   if lsp_only[ft] then
     local clients = vim.lsp.get_clients({ bufnr = bufnr, method = "textDocument/formatting" })
     if clients[1] then
-      return { lsp_format = "fallback", timeout_ms = 500 }
+      return { lsp_format = "prefer", timeout_ms = 500 }
     end
     return
   end
