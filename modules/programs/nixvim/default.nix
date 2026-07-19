@@ -31,6 +31,11 @@ delib.module {
   home.ifEnabled = {cfg, ...}: {
     programs.nixvim = {
       enable = true;
+      # Keep nixvim on the repository's nixpkgs intentionally and make that
+      # choice explicit so nixvim does not warn about a default changed by
+      # flake input following.
+      nixpkgs.source = inputs.nixpkgs;
+
       # Nixvim's current manpage builder requires Pandoc Lua support, which the
       # followed Nixpkgs revision's minimal pandoc package does not provide.
       enableMan = false;

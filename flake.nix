@@ -193,7 +193,6 @@
     };
     nixvim = {
       url = "github:nix-community/nixvim/main";
-      inputs.nixpkgs.follows = "nixpkgs";
     };
     nvf = {
       url = "github:notashelf/nvf";
