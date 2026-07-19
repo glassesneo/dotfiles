@@ -3,8 +3,8 @@ import { getEventListeners } from "node:events";
 import test from "node:test";
 import type { Theme } from "@earendil-works/pi-coding-agent";
 import { visibleWidth, type TUI } from "@earendil-works/pi-tui";
-import { QuestionComponent, runTuiQuestionFlow } from "../extensions/utilities/decision_tui.ts";
-import type { DecisionFlowPolicy, QuestionItem, QuestionResultDetails } from "../extensions/utilities/decision_core.ts";
+import { QuestionComponent, runTuiQuestionFlow } from "../extensions_src/utilities/decision_tui.ts";
+import type { DecisionFlowPolicy, QuestionItem, QuestionResultDetails } from "../extensions_src/utilities/decision_core.ts";
 
 const theme = {
     fg(_color: string, text: string) { return text; },

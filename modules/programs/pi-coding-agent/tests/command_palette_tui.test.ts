@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { Theme } from "@earendil-works/pi-coding-agent";
 import { visibleWidth, type TUI } from "@earendil-works/pi-tui";
-import { resolvePaletteKeymap } from "../extensions/utilities/command_palette_keymap.ts";
-import { paletteTargetRows, PaletteListComponent, runPaletteList } from "../extensions/utilities/command_palette_tui.ts";
+import { resolvePaletteKeymap } from "../extensions_src/utilities/command_palette_keymap.ts";
+import { paletteTargetRows, PaletteListComponent, runPaletteList } from "../extensions_src/utilities/command_palette_tui.ts";
 
 const theme = { fg(_color: string, text: string) { return text; }, bg(_color: string, text: string) { return text; }, bold(text: string) { return text; } } as Theme;
 const keys = { up: "\u0010", down: "\u000e", enter: "\r", escape: "\u001b", ctrlC: "\u0003" };

@@ -11,7 +11,7 @@ import {
     unavailableResult,
     validateQuestionParameters,
     type QuestionItem,
-} from "../extensions/utilities/decision_core.ts";
+} from "../extensions_src/utilities/decision_core.ts";
 
 const questions: QuestionItem[] = [
     {

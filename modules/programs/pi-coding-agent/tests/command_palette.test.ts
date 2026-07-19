@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import commandPalette, { buildCommandPaletteActions } from "../extensions/command_palette.ts";
-import { commandPaletteActionIds } from "../extensions/utilities/command_palette_core.ts";
+import commandPalette, { buildCommandPaletteActions } from "../extensions_src/command_palette.ts";
+import { commandPaletteActionIds } from "../extensions_src/utilities/command_palette_core.ts";
 
 test("registry contains only the seven explicit draft-orthogonal adapters", () => {
     const pi = { getActiveTools: () => ["read"], getThinkingLevel: () => "medium" } as never;
@@ -66,6 +66,6 @@ test("a running palette suppresses duplicate opens and can reopen after closing"
 });
 
 test("palette source does not expose editor, prompt, message-send, abort, or idle-wait dependencies", async () => {
-    const source = await import("node:fs/promises").then(fs => fs.readFile(new URL("../extensions/command_palette.ts", import.meta.url), "utf8"));
+    const source = await import("node:fs/promises").then(fs => fs.readFile(new URL("../extensions_src/command_palette.ts", import.meta.url), "utf8"));
     for (const forbidden of ["getEditorText(", "setEditorText(", "pasteToEditor(", "sendUserMessage(", "sendMessage(", "getCommands(", "abort(", "waitForIdle("]) assert.doesNotMatch(source, new RegExp(forbidden.replace(/[()]/g, "\\$&")));
 });

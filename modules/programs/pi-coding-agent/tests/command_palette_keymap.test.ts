@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { paletteHelp, paletteKeyAction, resolvePaletteKeymap, validatePaletteKeymapConfig } from "../extensions/utilities/command_palette_keymap.ts";
+import { paletteHelp, paletteKeyAction, resolvePaletteKeymap, validatePaletteKeymapConfig } from "../extensions_src/utilities/command_palette_keymap.ts";
 
 test("palette defaults use local Ctrl-P and Ctrl-N navigation", () => {
     const map = resolvePaletteKeymap();

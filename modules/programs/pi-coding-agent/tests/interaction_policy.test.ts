@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { applyCtrlCPolicy } from "../extensions/interaction_policy.ts";
+import { applyCtrlCPolicy } from "../extensions_src/interaction_policy.ts";
 
 function scenario(idle: boolean, initial: string) {
     let text = initial; let aborts = 0; let clears = 0;

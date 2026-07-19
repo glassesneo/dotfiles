@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { ExtensionUIContext } from "@earendil-works/pi-coding-agent";
-import { runStandardQuestionFlow } from "../extensions/utilities/decision_standard_ui.ts";
-import type { QuestionItem } from "../extensions/utilities/decision_core.ts";
+import { runStandardQuestionFlow } from "../extensions_src/utilities/decision_standard_ui.ts";
+import type { QuestionItem } from "../extensions_src/utilities/decision_core.ts";
 
 type UI = Pick<ExtensionUIContext, "select" | "editor" | "notify">;
 

@@ -17,12 +17,6 @@ in
         package = llm-agents.pi;
         inherit configDir;
         settings = {
-          extensions = [
-            "${./extensions}/agent_artifact.ts"
-            "${./extensions}/command_palette.ts"
-            "${./extensions}/interaction_policy.ts"
-            "${./extensions}/question.ts"
-          ];
           prompts = [
             "${./prompts}"
           ];
@@ -105,10 +99,5 @@ in
           "app.models.reorderDown" = [];
         };
       };
-
-      home.file."${configDir}/command-palette-keybindings.json".source =
-        ./extensions/utilities/command-palette-keybindings.json;
-      home.file."${configDir}/question-keybindings.json".source =
-        ./extensions/utilities/question-keybindings.json;
     };
   }

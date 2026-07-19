@@ -5,7 +5,7 @@ import { join } from "node:path";
 import test from "node:test";
 import type { ExtensionContext, ExtensionUIContext } from "@earendil-works/pi-coding-agent";
 import Value from "typebox/value";
-import { createAgentArtifactToolDefinition } from "../extensions/agent_artifact.ts";
+import { createAgentArtifactToolDefinition } from "../extensions_src/agent_artifact.ts";
 import {
     approvePendingArtifact,
     artifactParameters,
@@ -14,7 +14,7 @@ import {
     readPendingArtifact,
     requestPendingArtifactRevision,
     saveAgentArtifact,
-} from "../extensions/utilities/agent_artifact_store.ts";
+} from "../extensions_src/utilities/agent_artifact_store.ts";
 
 const fixedDate = new Date("2026-07-17T15:31:45Z");
 

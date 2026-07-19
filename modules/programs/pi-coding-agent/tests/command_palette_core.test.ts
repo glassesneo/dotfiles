@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { extractLastAssistantText, filterPaletteItems, formatContextUsage, summarizeSession } from "../extensions/utilities/command_palette_core.ts";
+import { extractLastAssistantText, filterPaletteItems, formatContextUsage, summarizeSession } from "../extensions_src/utilities/command_palette_core.ts";
 
 test("palette filtering searches labels, descriptions, keywords, and state", () => {
     const items = [{ value: "model", label: "Select model", description: "Choose provider", keywords: ["llm"], state: "Current: x" }, { value: "theme", label: "Theme" }];

@@ -9,8 +9,8 @@ import type { TUI } from "@earendil-works/pi-tui";
 import registerQuestion, {
     createQuestionToolDefinition,
     questionPromptGuidelines,
-} from "../extensions/question.ts";
-import type { QuestionResultDetails } from "../extensions/utilities/decision_core.ts";
+} from "../extensions_src/question.ts";
+import type { QuestionResultDetails } from "../extensions_src/utilities/decision_core.ts";
 
 function resultText(content: { type: string; text?: string }): string {
     assert.equal(content.type, "text");
