@@ -7,7 +7,7 @@
 delib.host {
   name = "seiran-vm1";
   type = "virtual";
-  rice = "monochrome";
+  rice = "catppuccin";
   tier = "standard";
 
   myconfig = {
