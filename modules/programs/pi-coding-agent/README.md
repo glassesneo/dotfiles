@@ -44,7 +44,8 @@ Pi assignments.
 prompt draft. Pi's extension shortcut API owns the opening key; Kitty and tmux
 must pass modified keys through without rewriting or consuming them. The palette
 never reads, edits, submits, or sends editor text. It is available in TUI mode
-while the agent is idle and provides exactly these actions:
+both while the agent is idle and while it is running, and provides exactly these
+actions:
 
 - `/model` select the authenticated model
 - `/thinking` select reasoning effort supported by the current model
@@ -53,6 +54,10 @@ while the agent is idle and provides exactly these actions:
 - `/session` show read-only session information
 - `/copy` copy the latest assistant text on the active branch
 - `/theme` select the live theme
+
+Display actions take effect immediately. Model, reasoning-effort, and active-tool
+changes update the session immediately and apply to the next model request; they
+do not alter or abort a provider request or tool call already in progress.
 
 Every palette-owned list uses `Ctrl-P` to move up, `Ctrl-N` to move down,
 `Enter` to select, and `Esc` or `Ctrl-C` to cancel. Selection, current and active

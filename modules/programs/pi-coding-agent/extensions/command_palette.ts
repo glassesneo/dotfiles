@@ -101,7 +101,6 @@ export default function commandPalette(pi: ExtensionAPI): void {
     const openPalette = async (ctx: ExtensionContext): Promise<void> => {
         if (opening) return;
         if (ctx.mode !== "tui") { ctx.ui.notify("Command Palette requires TUI mode", "warning"); return; }
-        if (!ctx.isIdle()) { ctx.ui.notify("Command Palette is unavailable while the agent is running", "warning"); return; }
         opening = true;
         try {
             const actions = buildCommandPaletteActions(pi, ctx);
