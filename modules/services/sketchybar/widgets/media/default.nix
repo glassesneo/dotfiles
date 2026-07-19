@@ -6,6 +6,7 @@
   ...
 }: let
   artworkCachePath = "${homeConfig.xdg.cacheHome}/sketchybar/media/artwork.png";
+  hoverTokenPath = "${homeConfig.xdg.stateHome}/sketchybar/media/hover-token";
 in
   delib.module {
     name = "services.sketchybar.widget-media";
@@ -23,6 +24,7 @@ in
         handler = pkgs.replaceVars ./handler.nu {
           inherit name;
           cache-path = artworkCachePath;
+          hover-token-path = hoverTokenPath;
           media-control = lib.getExe' myconfig.programs.media-control.package "media-control";
         };
       in {

@@ -2,14 +2,16 @@ use ../../colors.nu
 
 const name = "@name@"
 const cache_path = "@cache-path@"
+const hover_token_path = "@hover-token-path@"
 const media_control = "@media-control@"
 
 def main () {
   match $env.SENDER {
     "mouse.entered" => {
-      refresh_artwork --show-popup
+      show_artwork_after_hover_delay
     },
-    "mouse.exited" | "mouse.exited.global" => {
+    "mouse.exited" | "mouse.exited.global" | "display_change" => {
+      cancel_pending_hover
       close_artwork
     },
     "media_stream_play" => {
@@ -18,6 +20,7 @@ def main () {
       refresh_artwork
     },
     "media_stream_pause" => {
+      cancel_pending_hover
       disable_artwork
       hide_media
     },
@@ -25,6 +28,7 @@ def main () {
       handle_forced
     },
     _ => {
+      cancel_pending_hover
       disable_artwork
       hide_media
     },
@@ -42,9 +46,42 @@ def handle_forced [] {
     show_media ($state | select artist title album | label_text)
     refresh_artwork
   } else {
+    cancel_pending_hover
     disable_artwork
     hide_media
   }
+}
+
+def show_artwork_after_hover_delay [] {
+  let token = random uuid
+  let pending_token_path = $"($hover_token_path).($token)"
+  let token_stored = try {
+    mkdir ($hover_token_path | path dirname)
+    $token | save --force $pending_token_path
+    mv --force $pending_token_path $hover_token_path
+    true
+  } catch {
+    try { rm --force $pending_token_path }
+    false
+  }
+
+  if not $token_stored {
+    return
+  }
+
+  sleep 500ms
+  let current_token = try {
+    open --raw $hover_token_path | str trim
+  } catch {
+    null
+  }
+  if $current_token == $token {
+    refresh_artwork --show-popup
+  }
+}
+
+def cancel_pending_hover [] {
+  try { rm --force $hover_token_path }
 }
 
 def label_text (): record -> string {

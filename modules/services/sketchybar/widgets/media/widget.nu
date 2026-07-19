@@ -54,5 +54,5 @@ def main [direction: string] {
   sketchybar --set $name ...$widget_options
   sketchybar --add item $artwork_anchor $"popup.($name)"
   sketchybar --set $artwork_anchor ...$anchor_options
-  sketchybar --subscribe $name media_stream_play media_stream_pause mouse.entered mouse.exited mouse.exited.global
+  sketchybar --subscribe $name media_stream_play media_stream_pause display_change mouse.entered mouse.exited mouse.exited.global
 }

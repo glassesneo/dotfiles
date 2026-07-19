@@ -133,11 +133,24 @@
                   touch $out
                 '';
             };
+
+            sketchybarMediaHoverTests = {
+              sketchybar-media-hover-tests =
+                pkgs.runCommand "sketchybar-media-hover-tests" {
+                  nativeBuildInputs = [pkgs.nushell];
+                } ''
+                  cp -r ${./modules/services/sketchybar} sketchybar
+                  cd sketchybar/widgets/media/tests
+                  bash default.sh
+                  touch $out
+                '';
+            };
           in
             hmChecks
             // nixvimChecks
             // nvfChecks
-            // sketchybarWorkspaceAdapterTests)
+            // sketchybarWorkspaceAdapterTests
+            // sketchybarMediaHoverTests)
           // lib.optionalAttrs (system == "aarch64-linux") (let
             nixosConfigs = filterConfigurationsByHostNames ["seiran-vm0"] (mkConfigurations "nixos");
           in {
