@@ -1,4 +1,8 @@
-{delib, ...}:
+{
+  delib,
+  host,
+  ...
+}:
 delib.module {
   name = "programs.nvf.languages.nix";
 
@@ -31,11 +35,11 @@ delib.module {
 
           options = {
             nix-darwin = {
-              expr = "(builtins.getFlake (builtins.toString ./.)).darwinConfigurations.<hostname>.options";
+              expr = "(builtins.getFlake (builtins.toString ./.)).darwinConfigurations.${host.name}.options";
             };
 
             home-manager = {
-              expr = "(builtins.getFlake (builtins.toString ./.)).homeConfigurations.\"<name>\".options";
+              expr = "(builtins.getFlake (builtins.toString ./.)).homeConfigurations.${host.name}.options";
             };
           };
         };
