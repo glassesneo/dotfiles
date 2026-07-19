@@ -48,6 +48,12 @@ in
         transparent = true;
         rounded-borders = true;
       };
+      programs.nvf.theme = {
+        enable = true;
+        name = "catppuccin";
+        style = "mocha";
+        transparent = true;
+      };
 
       services = {
         jankyborders = {
