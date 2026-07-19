@@ -12,6 +12,7 @@ inactive without preventing the editor from starting.
 | Shell | `bash-language-server` | `shfmt` |
 | Markdown | `marksman` | none |
 | Typst | `tinymist` | `typstyle` |
+| Python | `ty`, `ruff server` | Ruff LSP (`ruff format` fallback) |
 | Deno | `deno` | Deno LSP |
 | Biome web project | `biome` | `biome` |
 | Other TypeScript/JavaScript | `typescript-language-server` | TypeScript LSP |

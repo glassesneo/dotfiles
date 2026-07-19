@@ -39,6 +39,12 @@ local function lua_root(path)
   return nearest_marker(path, { ".emmyrc.json", ".emmyrc.lua", ".luarc.json", ".git" }) or file_root(path)
 end
 
+local function python_root(path)
+  return nearest_marker(path, {
+    "ty.toml", "pyproject.toml", "ruff.toml", ".ruff.toml", "setup.py", "setup.cfg", "requirements.txt", ".git",
+  }) or file_root(path)
+end
+
 -- Deno has priority over Biome at every ancestor. Ordinary TypeScript is the
 -- fallback only when neither marker exists, so primary web clients never
 -- overlap. The formatter module consumes the same routing function.
@@ -126,6 +132,17 @@ local servers = {
     filetypes = { "typst" },
     root_dir = gated_root("tinymist", file_root),
     settings = { formatterMode = "typstyle" },
+  },
+  ty = {
+    cmd = { "ty", "server" },
+    filetypes = { "python" },
+    root_dir = gated_root("ty", python_root),
+  },
+  ruff = {
+    cmd = { "ruff", "server" },
+    filetypes = { "python" },
+    root_dir = gated_root("ruff", python_root),
+    init_options = { settings = { lint = { enable = false } } },
   },
   nushell = {
     cmd = { "nu", "--no-config-file", "--lsp" },

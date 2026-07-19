@@ -11,6 +11,19 @@ return function (bufnr)
   end
 
   local ft = vim.bo[bufnr].filetype
+  if ft == "python" then
+    local clients = vim.lsp.get_clients({ bufnr = bufnr, name = "ruff", method = "textDocument/formatting" })
+    if clients[1] then
+      return {
+        lsp_format = "prefer",
+        timeout_ms = 500,
+        filter = function(client)
+          return client.name == "ruff"
+        end,
+      }
+    end
+  end
+
   ---@type table<string, true | nil>
   local lsp_only = { lua = true, zig = true, moonbit = true }
   if ft == "javascript" or ft == "javascriptreact" or ft == "typescript" or ft == "typescriptreact" then

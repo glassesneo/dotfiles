@@ -18,11 +18,13 @@ delib.module {
         # command a no-op rather than a failed editor session.
         formatters = {
           biome.command = "biome";
+          ruff_format.command = "ruff";
         };
         formatters_by_ft = {
           sh = ["shfmt"];
           bash = ["shfmt"];
           typst = ["typstyle"];
+          python = ["ruff_format"];
           javascript = lib.generators.mkLuaInline "function(bufnr) return _G.nvf_web_formatters(bufnr) end";
           javascriptreact = lib.generators.mkLuaInline "function(bufnr) return _G.nvf_web_formatters(bufnr) end";
           typescript = lib.generators.mkLuaInline "function(bufnr) return _G.nvf_web_formatters(bufnr) end";
