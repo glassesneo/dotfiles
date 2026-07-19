@@ -1,20 +1,21 @@
 #+TITLE: Neo's Nix Dotfiles
 #+AUTHOR: Neo Kitani
 
-* Overview
+* About This Repository
 
-This repository is a declarative workstation configuration built with
-[[https://github.com/yunfachi/denix][Denix]], [[https://github.com/nix-darwin/nix-darwin][nix-darwin]], and
-[[https://github.com/nix-community/home-manager][Home Manager]]. It composes host definitions, reusable features, and selectable
-desktop themes (rices) into system and user configurations.
+These are my personal dotfiles for the machines and environments I use.
+I manage them declaratively with [[https://github.com/yunfachi/denix][Denix]], [[https://github.com/nix-darwin/nix-darwin][nix-darwin]], and [[https://github.com/nix-community/home-manager][Home Manager]].
 
-Denix discovers =.nix= files under =hosts/=, =modules/=, and =rices/=. The
-canonical ownership rules and change checklist are in
-=docs/denix-architecture.md=.
+The repository is intentionally tailored to my hosts, accounts, preferred tools, and desktop setup.
+It is not a general-purpose Nix configuration, framework, or starter template, and I do not try to preserve compatibility for other users.
+The source may still be useful as a reference or a starting point for a fork.
 
-* Getting Started
+Denix discovers =.nix= files under =hosts/=, =modules/=, and =rices/=.
+The repository's ownership rules and change checklist are in =docs/denix-architecture.md=.
 
-Enter the development shell, then use =just= to list the maintained workflows:
+* Daily Use
+
+From the repository root, I enter the development shell and use =just= for the maintained workflows:
 
 #+begin_src sh
 nix develop
@@ -24,8 +25,8 @@ just home
 just switch
 #+end_src
 
-New files used by the flake must be git-tracked before evaluation. Prefer the
-Nix-native workflows in this repository over ad hoc package state.
+New files used by the flake must be git-tracked before evaluation.
+I use the Nix-native workflows in this repository instead of maintaining ad hoc package state.
 
 ** Deploying the =seiran-vm1= Tart VM
 
@@ -41,10 +42,9 @@ Use the installed command for subsequent switches:
 sudo darwin-rebuild switch --flake .#seiran-vm1
 #+end_src
 
-Both commands activate the nix-darwin system and its integrated Home Manager
-configuration.
+Both commands activate the nix-darwin system and its integrated Home Manager configuration.
 
-* Repository Orientation
+* Repository Layout
 
 - =hosts/= contains machine facts and host-only bindings.
 - =modules/= contains reusable program, service, shared-data, and toplevel integration modules.
@@ -52,7 +52,7 @@ configuration.
 - =docs/= contains stable cross-cutting policy and runbooks.
 - =packages/= contains repository-owned package derivations.
 
-* Operational Pointers
+* Notes and Runbooks
 
 - Architecture and ownership: =docs/denix-architecture.md=
 - Documentation policy: =docs/documentation-policy.md=
@@ -61,9 +61,8 @@ configuration.
 - AquaSKK setup and recovery: =modules/programs/aquaskk/README.md=
 - Coding-agent entry guidance: =AGENTS.md=
 
-Secrets are declared by =modules/toplevel/secrets.nix= and consumed through
-=config.sops.secrets.<key>.path=. Never place plaintext credentials in the
-repository.
+Secrets are declared by =modules/toplevel/secrets.nix= and consumed through =config.sops.secrets.<key>.path=.
+Plaintext credentials do not belong in the repository.
 
 * License
 
