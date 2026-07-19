@@ -34,7 +34,9 @@ in
     in {
       imports = [inputs.catppuccin.homeModules.catppuccin];
       catppuccin = {
-        inherit (myconfig.theme.catppuccin) enable flavor;
+        enable = true;
+        autoEnable = myconfig.theme.catppuccin.enable;
+        inherit (myconfig.theme.catppuccin) flavor;
         nvim.enable = false;
         tmux.enable = false;
         firefox.enable = false;
