@@ -19,7 +19,7 @@ in
 
         notes.orgmode = {
           enable = true;
-          treesitter.enable = true;
+          treesitter.enable = false;
           setupOpts = {
             org_agenda_files = [
               inbox_file

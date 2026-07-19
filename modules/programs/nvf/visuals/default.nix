@@ -36,6 +36,7 @@ delib.module {
             options = {
               mode = "cursor";
               count_only = false;
+              wrap = false;
             };
           };
         };
