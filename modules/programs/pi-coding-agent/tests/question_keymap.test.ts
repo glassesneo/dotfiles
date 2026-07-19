@@ -13,6 +13,7 @@ test("all contexts resolve expected defaults without retired question keys", () 
     assert.equal(resolveUiAction("\n", "question.text", map), "newline");
     assert.equal(resolveUiAction("\u001b[Z", "question.single", map), "previous-question");
     assert.equal(resolveUiAction("k", "question.single", map), "move-up");
+    assert.equal(resolveUiAction(" ", "question.single", map), "toggle");
     assert.equal(resolveUiAction("j", "question.multi", map), "move-down");
     assert.equal(resolveUiAction("k", "question.review", map), "move-up");
     assert.equal(resolveUiAction("j", "question.review", map), "move-down");

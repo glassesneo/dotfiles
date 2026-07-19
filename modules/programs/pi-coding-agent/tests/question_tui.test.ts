@@ -6,7 +6,11 @@ import { visibleWidth, type TUI } from "@earendil-works/pi-tui";
 import { QuestionComponent, runTuiQuestionFlow } from "../extensions/utilities/decision_tui.ts";
 import type { DecisionFlowPolicy, QuestionItem, QuestionResultDetails } from "../extensions/utilities/decision_core.ts";
 
-const theme = { fg(_color: string, text: string) { return text; } } as Theme;
+const theme = {
+    fg(_color: string, text: string) { return text; },
+    bg(_color: string, text: string) { return text; },
+    bold(text: string) { return text; },
+} as Theme;
 const manager = { getKeys(action: string) { return ({
     "tui.select.confirm": ["enter"], "tui.select.up": ["up"], "tui.select.down": ["down"],
     "tui.input.submit": ["enter"], "tui.input.newLine": ["shift+enter", "ctrl+j"],
@@ -14,10 +18,10 @@ const manager = { getKeys(action: string) { return ({
 const keys = { down: "\u001b[B", up: "\u001b[A", tab: "\t", shiftTab: "\u001b[Z", enter: "\r", escape: "\u001b", space: " ", ctrlJ: "\n", ctrlC: "\u0003" };
 const single: QuestionItem = { id: "single", prompt: "Choose one", kind: "single", options: [{ value: "a", label: "Alpha", description: "First option" }, { value: "b", label: "Beta" }] };
 
-function harness(questions: readonly QuestionItem[], signal?: AbortSignal, policy?: DecisionFlowPolicy) {
+function harness(questions: readonly QuestionItem[], signal?: AbortSignal, policy?: DecisionFlowPolicy, renderedTheme: Theme = theme) {
     const results: QuestionResultDetails[] = []; let renders = 0;
     const tui = { terminal: { rows: 24, columns: 80 }, requestRender() { renders += 1; } } as TUI;
-    const component = new QuestionComponent({ tui, theme, keybindings: manager, questions, policy, signal, done: result => { results.push(result); } });
+    const component = new QuestionComponent({ tui, theme: renderedTheme, keybindings: manager, questions, policy, signal, done: result => { results.push(result); } });
     component.focused = true;
     return { component, results, get renders() { return renders; } };
 }
@@ -45,9 +49,72 @@ test("e edits an answer note without changing the focused answer", () => {
     assert.deepEqual(h.results[0]?.answers.single, { kind: "single", value: "b", note: "why" });
 });
 
+test("single uses radio markers and Space selects a draft without confirming", () => {
+    const h = harness([single]);
+    assert.match(h.component.render(80).join("\n"), /> \( \) Alpha/);
+    h.component.handleInput(keys.space);
+    assert.equal(h.results.length, 0);
+    assert.match(h.component.render(80).join("\n"), /> \(●\) Alpha/);
+    h.component.handleInput(keys.down); h.component.handleInput(keys.space);
+    const selected = h.component.render(80).join("\n");
+    assert.match(selected, /  \( \) Alpha/);
+    assert.match(selected, /> \(●\) Beta/);
+    h.component.handleInput(keys.enter);
+    assert.deepEqual(h.results[0]?.answers.single, { kind: "single", value: "b" });
+});
+
+test("single Space draft survives navigation but remains unanswered", () => {
+    const h = harness([single, { ...single, id: "other", prompt: "Other" }]);
+    h.component.handleInput(keys.space); h.component.handleInput(keys.tab); h.component.handleInput(keys.shiftTab);
+    assert.match(h.component.render(80).join("\n"), /> \(●\) Alpha/);
+    h.component.handleInput(keys.tab); h.component.handleInput(keys.tab);
+    assert.match(h.component.render(80).join("\n"), /0 answered, 2 unanswered/);
+});
+
+test("saving per-option notes selects their single or multi target without confirming", () => {
+    const singleNote: QuestionItem = { ...single, note: { mode: "per-option" } };
+    const one = harness([singleNote]);
+    one.component.handleInput(keys.down); one.component.handleInput("e"); one.component.handleInput("why B"); one.component.handleInput(keys.enter);
+    assert.equal(one.results.length, 0);
+    assert.match(one.component.render(80).join("\n"), /> \(●\) Beta — Note: why B/);
+    one.component.handleInput(keys.enter);
+    assert.deepEqual(one.results[0]?.answers.single, { kind: "single", value: "b", note: "why B" });
+
+    const review = harness([singleNote, { ...single, id: "other", prompt: "Other" }]);
+    review.component.handleInput(keys.down); review.component.handleInput("e"); review.component.handleInput("review note"); review.component.handleInput(keys.enter); review.component.handleInput(keys.enter);
+    review.component.handleInput(keys.tab); review.component.handleInput(keys.down); review.component.handleInput(keys.enter);
+    assert.match(review.component.render(80).join("\n"), /> \(●\) Beta — Note: review note/);
+
+    const multi: QuestionItem = { id: "multi", prompt: "Many", kind: "multi", options: [{ value: "a", label: "A" }, { value: "b", label: "B" }], note: { mode: "per-option" } };
+    const many = harness([multi]);
+    many.component.handleInput("e"); many.component.handleInput("note A"); many.component.handleInput(keys.enter);
+    assert.equal(many.results.length, 0);
+    assert.match(many.component.render(80).join("\n"), /> \[x\] A — Note: note A/);
+});
+
+test("discarded and blank per-option notes do not select a new target", () => {
+    const question: QuestionItem = { ...single, note: { mode: "per-option" } };
+    const discarded = harness([question]);
+    discarded.component.handleInput("e"); discarded.component.handleInput("discard"); discarded.component.handleInput(keys.escape);
+    assert.match(discarded.component.render(80).join("\n"), /> \( \) Alpha/);
+    assert.doesNotMatch(discarded.component.render(80).join("\n"), /discard/);
+
+    const blank = harness([question]);
+    blank.component.handleInput("e"); blank.component.handleInput("   "); blank.component.handleInput(keys.enter);
+    assert.match(blank.component.render(80).join("\n"), /> \( \) Alpha/);
+
+    const required = harness([question], undefined, { noteRequirement: () => "required" });
+    required.component.handleInput("e"); required.component.handleInput("   "); required.component.handleInput(keys.enter);
+    assert.match(required.component.render(80).join("\n"), /Error: Note must contain non-whitespace text/);
+    assert.doesNotMatch(required.component.render(80).join("\n"), /\(●\)/);
+});
+
 test("Esc discards the current note edit and confirm y/n commit immediately", () => {
     const confirm: QuestionItem = { id: "ok", prompt: "Proceed?", kind: "confirm" };
     const h = harness([confirm]);
+    const initial = h.component.render(80).join("\n");
+    assert.match(initial, /> \( \) Yes/);
+    assert.match(initial, /  \( \) No/);
     h.component.handleInput("e"); h.component.handleInput("discard me"); h.component.handleInput(keys.escape);
     h.component.handleInput("n"); h.component.handleInput(keys.enter);
     assert.deepEqual(h.results[0]?.answers.ok, { kind: "confirm", value: false });
@@ -153,6 +220,38 @@ test("Esc backs out without cancelling; Ctrl-C cancels the entire call", () => {
     h.component.handleInput(keys.escape); assert.equal(h.results.length, 0); assert.match(h.component.render(80).join("\n"), /Ctrl-C/);
     h.component.handleInput(keys.ctrlC);
     assert.deepEqual(h.results, [{ status: "cancelled", answers: {}, currentQuestionId: "single" }]);
+});
+
+test("render applies semantic theme roles and refreshes themed output after invalidation", () => {
+    const calls = { fg: new Set<string>(), bg: new Set<string>(), bold: 0 };
+    let version = 31;
+    const recordingTheme = {
+        fg(color: string, text: string) { calls.fg.add(color); return `\u001b[${version}m${text}\u001b[39m`; },
+        bg(color: string, text: string) { calls.bg.add(color); return `\u001b[4${version === 31 ? 1 : 4}m${text}\u001b[49m`; },
+        bold(text: string) { calls.bold += 1; return `\u001b[1m${text}\u001b[22m`; },
+    } as Theme;
+    const h = harness([single, { ...single, id: "other", prompt: "Other" }], undefined, undefined, recordingTheme);
+    h.component.handleInput(keys.space);
+    h.component.render(80);
+    h.component.handleInput(keys.tab); h.component.handleInput(keys.tab);
+    h.component.render(80);
+    h.component.handleInput(keys.down); h.component.handleInput(keys.enter); h.component.handleInput(keys.enter);
+    const before = h.component.render(80).join("\n");
+    version = 34;
+    assert.equal(h.component.render(80).join("\n"), before);
+    h.component.invalidate();
+    const after = h.component.render(80).join("\n");
+    assert.notEqual(before, after);
+    assert.ok(["accent", "text", "muted", "dim", "success", "warning", "border"].every(token => calls.fg.has(token)));
+    assert.ok(calls.bg.has("selectedBg"));
+    assert.ok(calls.bold > 0);
+
+    const editor = harness([{ id: "text", prompt: "Details", kind: "text" }], undefined, undefined, recordingTheme);
+    editor.component.render(80);
+    editor.component.handleInput(keys.enter);
+    editor.component.render(80);
+    assert.ok(calls.fg.has("borderAccent"));
+    assert.ok(calls.fg.has("error"));
 });
 
 test("render output never exceeds narrow widths", () => {

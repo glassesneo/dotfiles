@@ -22,7 +22,7 @@ const DEFAULT_OVERRIDES: QuestionKeymapConfig = {
         "next-question": ["tab"], "previous-question": ["shift+tab"],
         back: ["escape"], cancel: ["ctrl+c"],
     },
-    "question.single": { "move-up": ["up", "k"], "move-down": ["down", "j"], "edit-note": ["e"] },
+    "question.single": { "move-up": ["up", "k"], "move-down": ["down", "j"], toggle: ["space"], "edit-note": ["e"] },
     "question.multi": { "move-up": ["up", "k"], "move-down": ["down", "j"], toggle: ["space"], "edit-note": ["e"] },
     "question.confirm": { "move-up": ["up", "k"], "move-down": ["down", "j"], "edit-note": ["e"], "confirm-yes": ["y"], "confirm-no": ["n"] },
     "question.review": { "move-up": ["up", "k"], "move-down": ["down", "j"] },

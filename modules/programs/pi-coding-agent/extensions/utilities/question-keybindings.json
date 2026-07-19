@@ -8,6 +8,7 @@
   "question.single": {
     "move-up": ["up", "k"],
     "move-down": ["down", "j"],
+    "toggle": ["space"],
     "edit-note": ["e"]
   },
   "question.multi": {

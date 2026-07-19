@@ -11,7 +11,7 @@ type Mode = "question" | "note" | "review";
 interface TuiQuestionContext { ui: Pick<ExtensionUIContext, "custom">; }
 
 function editorTheme(theme: Theme): EditorTheme {
-    return { borderColor: text => theme.fg("accent", text), selectList: {
+    return { borderColor: text => theme.fg("borderAccent", text), selectList: {
         selectedPrefix: text => theme.fg("accent", text), selectedText: text => theme.fg("accent", text),
         description: text => theme.fg("muted", text), scrollInfo: text => theme.fg("dim", text), noMatch: text => theme.fg("warning", text),
     } };
@@ -20,11 +20,12 @@ function choicesFor(question: QuestionItem): DisplayChoice[] {
     if (question.kind === "confirm") return [{ value: "true", label: "Yes" }, { value: "false", label: "No" }];
     return (question.options ?? []).map((option: QuestionOption) => ({ ...option }));
 }
-function appendWrapped(lines: string[], width: number, text: string, prefix = ""): void {
+function appendWrapped(lines: string[], width: number, text: string, prefix = "", decorate?: (line: string) => string): void {
+    const append = (line: string): void => { lines.push(decorate?.(line) ?? line); };
     const prefixWidth = visibleWidth(prefix);
-    if (prefixWidth >= width) { lines.push(...wrapTextWithAnsi(`${prefix}${text}`, width)); return; }
+    if (prefixWidth >= width) { wrapTextWithAnsi(`${prefix}${text}`, width).forEach(append); return; }
     const wrapped = wrapTextWithAnsi(text, width - prefixWidth);
-    wrapped.forEach((line, index) => lines.push(`${index === 0 ? prefix : " ".repeat(prefixWidth)}${line}`));
+    wrapped.forEach((line, index) => append(`${index === 0 ? prefix : " ".repeat(prefixWidth)}${line}`));
 }
 function cloneDraft(draft: QuestionDraft): QuestionDraft {
     return "value" in draft ? { value: draft.value } : { focusIndex: draft.focusIndex, selected: new Set(draft.selected), answerNote: draft.answerNote, optionNotes: new Map(draft.optionNotes) };
@@ -32,7 +33,12 @@ function cloneDraft(draft: QuestionDraft): QuestionDraft {
 function draftFrom(question: QuestionItem, answer?: QuestionAnswer): QuestionDraft {
     if (question.kind === "text") return { value: answer?.kind === "text" ? answer.value : question.initialValue ?? "" };
     const draft: ChoiceDraft = { focusIndex: 0, selected: new Set(), optionNotes: new Map() };
-    if (answer?.kind === "single") { draft.selected.add(answer.value); draft.focusIndex = Math.max(0, (question.options ?? []).findIndex(option => option.value === answer.value)); draft.answerNote = answer.note; }
+    if (answer?.kind === "single") {
+        draft.selected.add(answer.value);
+        draft.focusIndex = Math.max(0, (question.options ?? []).findIndex(option => option.value === answer.value));
+        if (answer.note !== undefined && noteMode(question) === "per-option") draft.optionNotes.set(answer.value, answer.note);
+        else draft.answerNote = answer.note;
+    }
     else if (answer?.kind === "confirm") { const value = String(answer.value); draft.selected.add(value); draft.focusIndex = answer.value ? 0 : 1; draft.answerNote = answer.note; }
     else if (answer?.kind === "multi") { for (const item of answer.values) { draft.selected.add(item.value); if (item.note !== undefined) draft.optionNotes.set(item.value, item.note); } draft.answerNote = answer.note; }
     return draft;
@@ -133,10 +139,17 @@ export class DecisionComponent implements Component, Focusable {
     #setNote(key: string, value: string | undefined): void { const normalized = value === undefined || value.trim() === "" ? undefined : value; if (key === "__answer__") this.#choiceDraft().answerNote = normalized; else if (normalized === undefined) this.#choiceDraft().optionNotes.delete(key); else this.#choiceDraft().optionNotes.set(key, normalized); }
     #openNote(submitAfterSave = false): void { this.#noteTarget = this.#noteKey(); this.#noteSnapshot = this.#getNote(this.#noteTarget); this.#submitAfterNote = submitAfterSave; this.#editor.setText(this.#noteSnapshot ?? ""); this.#mode = "note"; this.#validation = undefined; this.#syncEditorFocus(); this.#refresh(); }
     #closeNote(save: boolean): void {
-        if (save && this.#noteRequirement() === "required" && this.#editor.getExpandedText().trim() === "") {
+        const editedNote = this.#editor.getExpandedText();
+        if (save && this.#noteRequirement() === "required" && editedNote.trim() === "") {
             this.#validation = "Note must contain non-whitespace text."; this.#refresh(); return;
         }
-        if (this.#noteTarget !== undefined) this.#setNote(this.#noteTarget, save ? this.#editor.getExpandedText() : this.#noteSnapshot);
+        const target = this.#noteTarget;
+        if (target !== undefined) this.#setNote(target, save ? editedNote : this.#noteSnapshot);
+        if (save && target !== undefined && target !== "__answer__" && editedNote.trim() !== "") {
+            const draft = this.#choiceDraft();
+            if (this.#question().kind === "single") draft.selected.clear();
+            draft.selected.add(target);
+        }
         const submit = save && this.#submitAfterNote;
         this.#noteTarget = undefined; this.#noteSnapshot = undefined; this.#submitAfterNote = false; this.#mode = "question"; this.#validation = undefined; this.#syncEditorFocus();
         if (submit) this.#commit(); else this.#refresh();
@@ -147,7 +160,10 @@ export class DecisionComponent implements Component, Focusable {
         const draft = this.#choiceDraft();
         if (question.kind === "multi") { if (draft.selected.size === 0) { this.#validation = "Select at least one option."; this.#refresh(); return undefined; } return { kind: "multi", values: (question.options ?? []).filter(option => draft.selected.has(option.value)).map(option => ({ value: option.value, note: draft.optionNotes.get(option.value) })), note: draft.answerNote }; }
         const choice = this.#choices()[draft.focusIndex]!; draft.selected.clear(); draft.selected.add(choice.value);
-        if (question.kind === "single") return { kind: "single", value: choice.value, note: draft.answerNote };
+        if (question.kind === "single") {
+            const note = noteMode(question) === "per-option" ? draft.optionNotes.get(choice.value) : draft.answerNote;
+            return { kind: "single", value: choice.value, note };
+        }
         return { kind: "confirm", value: choice.value === "true", note: draft.answerNote };
     }
     #commit(): void {
@@ -183,7 +199,12 @@ export class DecisionComponent implements Component, Focusable {
         if (action === "next-question") return this.#moveQuestion(1); if (action === "previous-question") return this.#moveQuestion(-1);
         if (action === "back") return this.#back(); if (action === "move-up") return this.#moveChoice(-1); if (action === "move-down") return this.#moveChoice(1);
         if (action === "edit-note" && this.#question().kind !== "text" && this.#noteRequirement() !== "none") return this.#openNote();
-        if (action === "toggle" && this.#question().kind === "multi") { const draft = this.#choiceDraft(); const value = this.#choices()[draft.focusIndex]!.value; draft.selected.has(value) ? draft.selected.delete(value) : draft.selected.add(value); this.#validation = undefined; return this.#refresh(); }
+        if (action === "toggle" && (this.#question().kind === "single" || this.#question().kind === "multi")) {
+            const draft = this.#choiceDraft(); const value = this.#choices()[draft.focusIndex]!.value;
+            if (this.#question().kind === "single") { draft.selected.clear(); draft.selected.add(value); }
+            else draft.selected.has(value) ? draft.selected.delete(value) : draft.selected.add(value);
+            this.#validation = undefined; return this.#refresh();
+        }
         if (action === "confirm-yes" && this.#question().kind === "confirm") { this.#choiceDraft().focusIndex = 0; return this.#commit(); }
         if (action === "confirm-no" && this.#question().kind === "confirm") { this.#choiceDraft().focusIndex = 1; return this.#commit(); }
         if (action === "accept") return this.#commit();
@@ -217,29 +238,53 @@ export class DecisionComponent implements Component, Focusable {
         if (this.#mode === "note") { if (action === "back") this.#closeNote(false); else if (action === "accept") this.#closeNote(true); else if (action === "newline") { this.#editor.insertTextAtCursor("\n"); this.#refresh(); } else { this.#editor.handleInput(data); this.#refresh(); } }
         else if (this.#mode === "review") this.#handleReview(action); else this.#handleQuestion(action, data);
     }
-    #renderHeader(lines: string[], width: number): void { const tabs = this.#questions.map((question, index) => `[${index + 1} ${this.#mode !== "review" && index === this.#progress.index ? "●" : this.#progress.isAnswered(question) ? "✓" : "○"}]`); if (!this.#autoSubmitSingle()) tabs.push(`[Review${this.#mode === "review" ? " ●" : ""}]`); appendWrapped(lines, width, this.#theme.fg("accent", tabs.join(" "))); }
+    #renderHeader(lines: string[], width: number): void {
+        const tabs = this.#questions.map((question, index) => {
+            const active = this.#mode !== "review" && index === this.#progress.index;
+            const answered = this.#progress.isAnswered(question);
+            const text = `[${index + 1} ${active ? "●" : answered ? "✓" : "○"}]`;
+            if (active) return this.#theme.fg("accent", this.#theme.bold(text));
+            return this.#theme.fg(answered ? "success" : "dim", text);
+        });
+        if (!this.#autoSubmitSingle()) {
+            const text = `[Review${this.#mode === "review" ? " ●" : ""}]`;
+            tabs.push(this.#mode === "review" ? this.#theme.fg("accent", this.#theme.bold(text)) : this.#theme.fg("dim", text));
+        }
+        appendWrapped(lines, width, tabs.join(" "));
+    }
     #renderChoices(lines: string[], width: number): void {
-        const draft = this.#choiceDraft();
+        const question = this.#question(); const draft = this.#choiceDraft();
         for (let index = 0; index < this.#choices().length; index += 1) {
             const choice = this.#choices()[index]!; const focused = index === draft.focusIndex; const selected = draft.selected.has(choice.value);
             const preview = notePreview(draft.optionNotes.get(choice.value));
-            appendWrapped(lines, width, this.#theme.fg(focused ? "accent" : "text", `[${selected ? "x" : " "}] ${choice.label}${preview ? ` — Note: ${preview}` : ""}`), focused ? "> " : "  ");
+            const control = question.kind === "multi" ? `[${selected ? "x" : " "}]` : `(${selected ? "●" : " "})`;
+            const text = `${control} ${choice.label}${preview ? ` — Note: ${preview}` : ""}`;
+            const styled = this.#theme.fg(focused ? "accent" : selected ? "success" : "text", focused || selected ? this.#theme.bold(text) : text);
+            appendWrapped(lines, width, styled, focused ? "> " : "  ", focused ? line => this.#theme.bg("selectedBg", line) : undefined);
             if (choice.description) appendWrapped(lines, width, this.#theme.fg("muted", choice.description), "    ");
         }
         const answerNote = notePreview(draft.answerNote);
         if (answerNote) appendWrapped(lines, width, this.#theme.fg("muted", `Note: ${answerNote}`), "  ");
     }
-    #renderEditor(lines: string[], width: number, label: string): void { appendWrapped(lines, width, this.#theme.fg("muted", label), " "); for (const line of this.#editor.render(Math.max(1, width - 1))) lines.push(width > 1 ? ` ${line}` : line); }
+    #renderEditor(lines: string[], width: number, label: string): void { appendWrapped(lines, width, this.#theme.fg("accent", this.#theme.bold(label)), " "); for (const line of this.#editor.render(Math.max(1, width - 1))) lines.push(width > 1 ? ` ${line}` : line); }
     #renderReview(lines: string[], width: number): void {
-        appendWrapped(lines, width, this.#theme.fg("accent", `${this.#reviewIndex === 0 ? ">" : " "} Submit answers — ready (${this.#progress.answeredCount} answered, ${this.#progress.unansweredCount} unanswered)`));
-        this.#questions.forEach((question, index) => { const answer = this.#progress.answerFor(question); appendWrapped(lines, width, `${this.#reviewIndex === index + 1 ? ">" : " "} Q${index + 1} ${answer ? "✓ Answered" : "○ Unanswered"}: ${question.prompt}`); if (answer) appendWrapped(lines, width, this.#theme.fg("muted", answerSummary(question, answer)), "    "); });
+        const submitText = `Submit answers — ready (${this.#progress.answeredCount} answered, ${this.#progress.unansweredCount} unanswered)`;
+        const submitFocused = this.#reviewIndex === 0;
+        appendWrapped(lines, width, this.#theme.fg(submitFocused ? "accent" : "success", this.#theme.bold(submitText)), submitFocused ? "> " : "  ", submitFocused ? line => this.#theme.bg("selectedBg", line) : undefined);
+        this.#questions.forEach((question, index) => {
+            const answer = this.#progress.answerFor(question); const focused = this.#reviewIndex === index + 1;
+            const text = `Q${index + 1} ${answer ? "✓ Answered" : "○ Unanswered"}: ${question.prompt}`;
+            const styled = this.#theme.fg(focused ? "accent" : answer ? "success" : "warning", focused ? this.#theme.bold(text) : text);
+            appendWrapped(lines, width, styled, focused ? "> " : "  ", focused ? line => this.#theme.bg("selectedBg", line) : undefined);
+            if (answer) appendWrapped(lines, width, this.#theme.fg("muted", answerSummary(question, answer)), "    ");
+        });
     }
     render(width: number): string[] {
         const w = Math.max(1, width); if (this.#cachedLines && this.#cachedWidth === w) return this.#cachedLines;
-        const lines = [this.#theme.fg("accent", "─".repeat(w))]; this.#renderHeader(lines, w); lines.push("");
-        if (this.#mode === "review") this.#renderReview(lines, w); else { appendWrapped(lines, w, this.#theme.fg("text", this.#question().prompt), " "); lines.push(""); if (this.#mode === "note") { const config = this.#question().note; const target = this.#noteTarget === "__answer__" ? "answer" : this.#choices().find(choice => choice.value === this.#noteTarget)?.label ?? "option"; const fallback = this.#noteRequirement() === "required" ? `Required note for ${target}` : `Optional note for ${target}`; this.#renderEditor(lines, w, config?.prompt ?? fallback); if (config?.placeholder) appendWrapped(lines, w, this.#theme.fg("dim", config.placeholder), " "); } else if (this.#question().kind === "text") this.#renderEditor(lines, w, "Answer"); else this.#renderChoices(lines, w); }
-        if (this.#validation) { lines.push(""); appendWrapped(lines, w, this.#theme.fg("warning", `Error: ${this.#validation}`), " "); }
-        lines.push(""); appendWrapped(lines, w, this.#theme.fg("dim", questionHelp(this.#context(), this.#keymap)), " "); lines.push(this.#theme.fg("accent", "─".repeat(w)));
+        const lines = [this.#theme.fg("border", "─".repeat(w))]; this.#renderHeader(lines, w); lines.push("");
+        if (this.#mode === "review") this.#renderReview(lines, w); else { appendWrapped(lines, w, this.#theme.fg("accent", this.#theme.bold(this.#question().prompt)), " "); lines.push(""); if (this.#mode === "note") { const config = this.#question().note; const target = this.#noteTarget === "__answer__" ? "answer" : this.#choices().find(choice => choice.value === this.#noteTarget)?.label ?? "option"; const fallback = this.#noteRequirement() === "required" ? `Required note for ${target}` : `Optional note for ${target}`; this.#renderEditor(lines, w, config?.prompt ?? fallback); if (config?.placeholder) appendWrapped(lines, w, this.#theme.fg("dim", config.placeholder), " "); } else if (this.#question().kind === "text") this.#renderEditor(lines, w, "Answer"); else this.#renderChoices(lines, w); }
+        if (this.#validation) { lines.push(""); appendWrapped(lines, w, this.#theme.fg("error", this.#theme.bold(`Error: ${this.#validation}`)), " "); }
+        lines.push(""); appendWrapped(lines, w, this.#theme.fg("dim", questionHelp(this.#context(), this.#keymap)), " "); lines.push(this.#theme.fg("border", "─".repeat(w)));
         this.#cachedLines = lines.map(line => truncateToWidth(line, w, "")); this.#cachedWidth = w; return this.#cachedLines;
     }
 }

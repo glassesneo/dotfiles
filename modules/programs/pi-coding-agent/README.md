@@ -122,19 +122,22 @@ the useful content remains visible after the custom question screen closes.
 | Context | Keys |
 |---|---|
 | All question screens | `Tab` next (Review after the last), `Shift-Tab` previous, `Esc` back, `Ctrl-C` cancel all |
-| `single` | `Up`/`k` and `Down`/`j` move, `Enter` confirm, `e` edit note |
+| `single` | `Up`/`k` and `Down`/`j` move, `Space` select without confirming, `Enter` confirm, `e` edit note |
 | `multi` | `Up`/`k` and `Down`/`j` move, `Space` toggle, `Enter` confirm set, `e` edit note |
 | `confirm` | `Up`/`k` and `Down`/`j` move, `Enter` confirm, `y`/`n` directly confirm, `e` edit note |
 | `text` | `Enter` confirm, `Shift-Enter`/`Ctrl-J` newline |
 | Note editor | `Enter` save, `Shift-Enter`/`Ctrl-J` newline, `Esc` discard |
 | Review | `Up`/`k` and `Down`/`j` rows, `Tab`/`Shift-Tab` question rows, `Enter` activate, `Esc` reopen last question |
 
-`e` never changes the current selection. After saving, the first non-empty note
-line is shown beside its answer or option without reopening the editor. `Esc`
-from an initial question does not cancel the call and displays the `Ctrl-C`
-instruction. Text and note editor focus is propagated for IME cursor
-positioning. Status, selection, errors, notes, answered/unanswered counts, and
-Submit availability are shown in text as well as color.
+`e` only opens the note editor. Saving a non-empty per-option note selects its
+target as a draft without confirming the question; answer-level notes do not
+change selection. After saving, the first non-empty note line is shown beside
+its answer or option without reopening the editor. `Esc` from an initial
+question does not cancel the call and displays the `Ctrl-C` instruction. Text
+and note editor focus is propagated for IME cursor positioning. Status,
+selection, errors, notes, answered/unanswered counts, and Submit availability
+are shown in text as well as color. Single and confirm choices use radio-button
+markers; multi choices use checkbox markers.
 
 When an unanswered question is completed from Review, focus moves to the next
 unanswered question; completing the final unanswered question moves focus to
