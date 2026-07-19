@@ -34,21 +34,12 @@ delib.module {
           {
             AddKeysToAgent = "yes";
             IdentitiesOnly = "yes";
-            # SetEnv = "TERM=xterm-256color";
           }
           (lib.mkIf pkgs.stdenv.hostPlatform.isDarwin {
             UseKeychain = "yes";
           })
         ];
       };
-
-      # matchBlocks = lib.mkMerge [
-      # (lib.genAttrs otherHosts (host: {
-      # HostName = "${host}.local";
-      # User = myconfig.constants.Username;
-      # IdentityFile = cfg.mainIdentity;
-      # }))
-      # ];
     };
   };
 }

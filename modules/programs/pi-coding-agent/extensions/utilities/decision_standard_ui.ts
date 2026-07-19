@@ -1,6 +1,7 @@
 import type { ExtensionUIContext } from "@earendil-works/pi-coding-agent";
 import {
     decisionNoteRequirement,
+    formatQuestionAnswer,
     noteMode,
     optionDisplayText,
     QuestionProgress,
@@ -17,7 +18,7 @@ import {
 
 export interface StandardQuestionContext {
     hasUI: boolean;
-    ui: Pick<ExtensionUIContext, "select" | "input" | "editor" | "notify">;
+    ui: Pick<ExtensionUIContext, "select" | "editor" | "notify">;
 }
 
 const REVIEW_NOW = Symbol("review-now");
@@ -253,22 +254,6 @@ async function askQuestion(
     }
 }
 
-function summarizeAnswer(question: QuestionItem, answer: QuestionAnswer): string {
-    if (answer.kind === "text") return answer.value;
-    if (answer.kind === "confirm") return `${answer.value ? "Yes" : "No"}${answer.note === undefined ? "" : ` — note: ${answer.note}`}`;
-    if (answer.kind === "single") {
-        const label = question.options?.find(option => option.value === answer.value)?.label ?? answer.value;
-        return `${label}${answer.note === undefined ? "" : ` — note: ${answer.note}`}`;
-    }
-    const values = answer.values
-        .map(selected => {
-            const label = question.options?.find(option => option.value === selected.value)?.label ?? selected.value;
-            return `${label}${selected.note === undefined ? "" : ` (note: ${selected.note})`}`;
-        })
-        .join(", ");
-    return `${values}${answer.note === undefined ? "" : ` — note: ${answer.note}`}`;
-}
-
 export async function runStandardDecisionFlow(
     context: StandardQuestionContext,
     questions: readonly QuestionItem[],
@@ -302,7 +287,9 @@ export async function runStandardDecisionFlow(
         if (isCancelled(signal)) return progress.cancelled(false);
         const questionLabels = questions.map((question, index) => {
             const answer = progress.answerFor(question);
-            return `Q${index + 1}: ${question.prompt} — ${answer === undefined ? "Unanswered" : summarizeAnswer(question, answer)}`;
+            return `Q${index + 1}: ${question.prompt} — ${answer === undefined ? "Unanswered" : formatQuestionAnswer(question, answer, {
+                formatOptionNote: note => ` (note: ${note})`,
+            })}`;
         });
         const used = new Set(questionLabels);
         const submitLabel = uniqueLabel("Submit answers", used);

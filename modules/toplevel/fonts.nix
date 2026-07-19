@@ -13,7 +13,6 @@ delib.module {
     fonts.fontconfig.enable = true;
 
     home.packages = with pkgs; [
-      # noto-fonts
       udev-gothic-nf
 
       # japanese
@@ -22,10 +21,6 @@ delib.module {
 
       # nerd fonts
       hackgen-nf-font
-
-      # icons
-      # font-awesome
-      # material-design-icons
     ];
   };
 }

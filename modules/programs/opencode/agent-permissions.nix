@@ -47,6 +47,32 @@ delib.module {
         ])
         prefixes);
 
+    ghInspectionCommands = [
+      "gh auth status*"
+      "gh issue view*"
+      "gh pr diff*"
+      "gh pr list*"
+      "gh pr view*"
+      "gh repo view*"
+      "gh api repos/*/issues/*"
+      "gh api repos/*/issues/*/comments*"
+      "gh api repos/*/pulls/*"
+      "gh api repos/*/pulls/*/comments*"
+      "gh api repos/*/pulls/*/reviews*"
+    ];
+
+    ghMutationArgumentPatterns = [
+      "gh?*--field*"
+      "gh?*--input*"
+      "gh?*--method*"
+      "gh?*--raw-field*"
+      "gh?*-F*"
+      "gh?*-X*"
+      "gh?*-f*"
+    ];
+
+    ghShellOperatorPatterns = denyShellOperatorsFor ["gh"];
+
     addRulesToOps = ops: rules: perm:
       builtins.foldl' (
         acc: op:
@@ -273,37 +299,18 @@ delib.module {
               "yarn npm logout*"
               "yarn npm publish*"
             ]
-            // allow [
-              "gh auth status*"
-              "gh issue view*"
-              "gh pr diff*"
-              "gh pr list*"
-              "gh pr view*"
-              "gh repo view*"
-              "gh api repos/*/issues/*"
-              "gh api repos/*/issues/*/comments*"
-              "gh api repos/*/pulls/*"
-              "gh api repos/*/pulls/*/comments*"
-              "gh api repos/*/pulls/*/reviews*"
-            ]
-            // ask [
-              "gh?*--field*"
-              "gh?*--input*"
-              "gh?*--method*"
-              "gh?*--raw-field*"
-              "gh?*-F*"
-              "gh?*-X*"
-              "gh?*-f*"
-              "gh?*$(*"
-              "gh?*&&*"
-              "gh?*<*"
-              "gh?*>*"
-              "gh?*`*"
-              "gh?*|*"
-              "gh?*;*"
-              "git?*push*"
-              "git?*send-pack*"
-            ]
+            // allow ghInspectionCommands
+            // ask (
+              ghMutationArgumentPatterns
+              ++ ghShellOperatorPatterns
+              ++ [
+                "gh?*$(*"
+                "gh?*<*"
+                "gh?*`*"
+                "git?*push*"
+                "git?*send-pack*"
+              ]
+            )
             // askAmbiguousShellEffectsFor (localCommands ++ ["gh"]);
         };
 
@@ -326,13 +333,7 @@ delib.module {
               "git show*"
               "git status*"
             ]
-            // deny [
-              "git?*&&*"
-              "git?*>*"
-              "git?*|*"
-              "git?*;*"
-              "git?*--output*"
-            ];
+            // deny (denyShellOperatorsFor ["git"] ++ ["git?*--output*"]);
         };
 
         gitBranchPreparation = {
@@ -354,51 +355,14 @@ delib.module {
               "nix flake show*"
               "nix-instantiate --parse*"
             ]
-            // deny [
-              "git?*&&*"
-              "git?*>*"
-              "git?*|*"
-              "git?*;*"
-              "nix?*&&*"
-              "nix?*>*"
-              "nix?*|*"
-              "nix?*;*"
-              "nix-instantiate?*&&*"
-              "nix-instantiate?*>*"
-              "nix-instantiate?*|*"
-              "nix-instantiate?*;*"
-            ];
+            // deny (denyShellOperatorsFor ["git" "nix" "nix-instantiate"]);
         };
 
         ghReviewInspection = {
           bash =
             denyAll
-            // allow [
-              "gh auth status*"
-              "gh issue view*"
-              "gh pr diff*"
-              "gh pr list*"
-              "gh pr view*"
-              "gh repo view*"
-              "gh api repos/*/issues/*"
-              "gh api repos/*/issues/*/comments*"
-              "gh api repos/*/pulls/*"
-              "gh api repos/*/pulls/*/comments*"
-              "gh api repos/*/pulls/*/reviews*"
-            ]
-            // deny [
-              "gh?*&&*"
-              "gh?*>*"
-              "gh?*|*"
-              "gh?*;*"
-              "gh?*--field*"
-              "gh?*--input*"
-              "gh?*--method*"
-              "gh?*--raw-field*"
-              "gh?*-F*"
-              "gh?*-X*"
-              "gh?*-f*"
-            ];
+            // allow ghInspectionCommands
+            // deny (ghShellOperatorPatterns ++ ghMutationArgumentPatterns);
         };
       };
 

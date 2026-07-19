@@ -11,7 +11,6 @@ delib.module {
   home.ifEnabled.programs.nixvim = {
     plugins = {
       hlchunk = {
-        # enable = true;
         lazyLoad = {
           enable = true;
           settings = {
@@ -60,7 +59,6 @@ delib.module {
       render-markdown = let
         ft = ["markdown"];
       in {
-        # enable = true;
         lazyLoad = {
           enable = true;
           settings = {
@@ -72,14 +70,12 @@ delib.module {
         };
       };
       smear-cursor = {
-        # enable = true;
         settings = {
           distance_stop_animating = 40;
           smear_to_cmd = false;
         };
       };
       tiny-inline-diagnostic = {
-        # enable = true;
         lazyLoad = {
           enable = true;
           settings = {
@@ -100,7 +96,6 @@ delib.module {
         };
       };
       treesitter-context = {
-        # enable = true;
         settings = {
           separator = "―";
         };
@@ -108,7 +103,6 @@ delib.module {
     };
     extraPlugins = with pkgs.vimPlugins; [
       quick-scope
-      # nvim_context_vt
     ];
   };
 }

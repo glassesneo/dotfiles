@@ -11,7 +11,6 @@ delib.module {
   home.ifEnabled.programs.nixvim = {
     plugins = {
       dashboard = {
-        # enable = true;
         settings.theme = "doom";
       };
       fidget = {
@@ -35,14 +34,6 @@ delib.module {
       noice = {
         enable = true;
         settings = {
-          # routes = [
-          # {
-          # filter = {
-          # find = "--------------. -\n: $";
-          # };
-          # view = "popup";
-          # }
-          # ];
           views = {
             mini = {
               timeout = 5000;
@@ -66,7 +57,6 @@ delib.module {
           };
           messages = {
             enabled = true;
-            # view = "messages";
             view_warn = "mini";
           };
           notify.enabled = true;
@@ -74,7 +64,6 @@ delib.module {
         };
       };
       notify = {
-        # enable = true;
         settings = {
           stages = "slide";
           max_width = 50;
@@ -84,15 +73,6 @@ delib.module {
           vim.notify = require("notify")
         '';
       };
-      # scrollview = {
-      # enable = true;
-      # settings = {
-      # execluded_filetypes = [
-      # "ddu-ff"
-      # "ddu-filer"
-      # ];
-      # };
-      # };
     };
   };
 }

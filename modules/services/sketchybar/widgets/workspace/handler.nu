@@ -205,17 +205,6 @@ def inactive_workspace_options [hidden: bool] {
   ]
 }
 
-def focused_workspace_start_options [] {
-  (workspace_text_options $colors.text_primary) ++ [
-    $"label.background.x_offset=($workspace_bar_x_offset)"
-    $"label.background.y_offset=($workspace_bar_hidden_y_offset)"
-  ]
-}
-
-def inactive_workspace_label_options [] {
-  workspace_text_options $colors.text_primary
-}
-
 def focused_workspace_options [hidden: bool] {
   let y_offset = if $hidden { $workspace_bar_hidden_y_offset } else { $workspace_bar_visible_y_offset }
   (workspace_text_options $colors.text_primary) ++ [
@@ -224,20 +213,28 @@ def focused_workspace_options [hidden: bool] {
   ]
 }
 
-def hidden_workspace_bar_options [] {
+def focused_workspace_start_options [] {
+  focused_workspace_options true
+}
+
+def inactive_workspace_label_options [] {
+  workspace_text_options $colors.text_primary
+}
+
+def workspace_bar_options [y_offset: int] {
   [
     label.background.drawing=on
     $"label.background.x_offset=($workspace_bar_x_offset)"
-    $"label.background.y_offset=($workspace_bar_hidden_y_offset)"
+    $"label.background.y_offset=($y_offset)"
   ]
 }
 
+def hidden_workspace_bar_options [] {
+  workspace_bar_options $workspace_bar_hidden_y_offset
+}
+
 def visible_workspace_bar_options [] {
-  [
-    label.background.drawing=on
-    $"label.background.x_offset=($workspace_bar_x_offset)"
-    $"label.background.y_offset=($workspace_bar_visible_y_offset)"
-  ]
+  workspace_bar_options $workspace_bar_visible_y_offset
 }
 
 def workspace_widget_options [workspace: record] {

@@ -23,7 +23,6 @@ delib.module {
           "/usr/bin/open"
           "-gj"
           "-a"
-          # "${brewCasks.bettertouchtool}/Applications/BetterTouchTool"
           "BetterTouchTool"
         ];
         RunAtLoad = true;

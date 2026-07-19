@@ -8,8 +8,6 @@
   ...
 }: let
   shared = {
-    # useUserPackages = true;
-    # useGlobalPkgs = true;
     backupFileExtension = "home_manager_backup";
   };
 in

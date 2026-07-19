@@ -80,7 +80,6 @@ in
             window-inherit-working-directory = false;
             macos-titlebar-style = "hidden";
             background-opacity-cells = true;
-            # cursor-style = "block";
             cursor-style-blink = false;
             shell-integration-features = "no-cursor";
             custom-shader = lib.mkIf (cfg.shader-profile != null) shaderProfiles.${cfg.shader-profile};

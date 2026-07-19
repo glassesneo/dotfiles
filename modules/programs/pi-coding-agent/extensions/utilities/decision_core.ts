@@ -109,6 +109,38 @@ export function optionDisplayText(option: QuestionOption): string {
     return option.description === undefined ? option.label : `${option.label} — ${option.description}`;
 }
 
+export interface QuestionAnswerFormatPolicy {
+    formatText?: (value: string) => string;
+    formatAnswerNote?: (value: string) => string;
+    formatOptionNote?: (value: string) => string;
+}
+
+export function formatQuestionAnswer(
+    question: QuestionItem,
+    answer: QuestionAnswer,
+    policy: QuestionAnswerFormatPolicy = {},
+): string {
+    const formatText = policy.formatText ?? (value => value);
+    const formatAnswerNote = policy.formatAnswerNote ?? (value => ` — note: ${value}`);
+    const formatOptionNote = policy.formatOptionNote ?? formatAnswerNote;
+    const noteSuffix = (note: string | undefined, formatter: (value: string) => string): string =>
+        note === undefined ? "" : formatter(note);
+    const optionLabel = (value: string): string =>
+        question.options?.find(option => option.value === value)?.label ?? value;
+
+    if (answer.kind === "text") return formatText(answer.value);
+    if (answer.kind === "confirm") {
+        return `${answer.value ? "Yes" : "No"}${noteSuffix(answer.note, formatAnswerNote)}`;
+    }
+    if (answer.kind === "single") {
+        return `${optionLabel(answer.value)}${noteSuffix(answer.note, formatAnswerNote)}`;
+    }
+    const values = answer.values
+        .map(selected => `${optionLabel(selected.value)}${noteSuffix(selected.note, formatOptionNote)}`)
+        .join(", ");
+    return `${values}${noteSuffix(answer.note, formatAnswerNote)}`;
+}
+
 function requireNonBlank(value: string, message: string): void {
     if (value.trim().length === 0) throw new Error(message);
 }

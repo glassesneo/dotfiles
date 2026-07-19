@@ -7,7 +7,6 @@ delib.module {
   home.ifEnabled.programs.nixvim = {
     plugins = {
       toggleterm = {
-        # enable = true;
         settings = {
           direction = "float";
           float_opts = {
@@ -16,7 +15,6 @@ delib.module {
             width = 130;
           };
           open_mapping = "[[<C-\\>]]";
-          # insert_mappings = false;
         };
         lazyLoad = {
           enable = true;

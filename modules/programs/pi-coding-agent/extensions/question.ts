@@ -6,6 +6,7 @@ import {
 import { Text } from "@earendil-works/pi-tui";
 import {
     buildQuestionToolResult,
+    formatQuestionAnswer,
     questionParameters,
     unavailableResult,
     validateQuestionParameters,
@@ -25,18 +26,11 @@ function inline(value: string): string {
 }
 
 function answerDisplay(question: QuestionItem, answer: QuestionAnswer, expanded: boolean): string {
-    const note = (value: string | undefined) => value === undefined ? "" : ` — note: ${expanded ? value : inline(value)}`;
-    if (answer.kind === "text") return expanded ? answer.value : inline(answer.value);
-    if (answer.kind === "confirm") return `${answer.value ? "Yes" : "No"}${note(answer.note)}`;
-    if (answer.kind === "single") {
-        const label = question.options?.find(option => option.value === answer.value)?.label ?? answer.value;
-        return `${label}${note(answer.note)}`;
-    }
-    const values = answer.values.map(selected => {
-        const label = question.options?.find(option => option.value === selected.value)?.label ?? selected.value;
-        return `${label}${note(selected.note)}`;
-    }).join(", ");
-    return `${values}${note(answer.note)}`;
+    const formatValue = expanded ? (value: string) => value : inline;
+    return formatQuestionAnswer(question, answer, {
+        formatText: formatValue,
+        formatAnswerNote: value => ` — note: ${formatValue(value)}`,
+    });
 }
 
 export const questionPromptGuidelines = [

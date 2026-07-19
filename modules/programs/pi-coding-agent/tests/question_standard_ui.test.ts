@@ -4,7 +4,7 @@ import type { ExtensionUIContext } from "@earendil-works/pi-coding-agent";
 import { runStandardQuestionFlow } from "../extensions/utilities/decision_standard_ui.ts";
 import type { QuestionItem } from "../extensions/utilities/decision_core.ts";
 
-type UI = Pick<ExtensionUIContext, "select" | "input" | "editor" | "notify">;
+type UI = Pick<ExtensionUIContext, "select" | "editor" | "notify">;
 
 function scriptedUI(script: Array<string | undefined>) {
     const calls: Array<{ method: string; args: unknown[] }> = [];
@@ -12,10 +12,6 @@ function scriptedUI(script: Array<string | undefined>) {
     const ui: UI = {
         async select(...args) {
             calls.push({ method: "select", args });
-            return next();
-        },
-        async input(...args) {
-            calls.push({ method: "input", args });
             return next();
         },
         async editor(...args) {
@@ -276,7 +272,6 @@ test("text retries blanks and abort after editor discards its value", async () =
     const controller = new AbortController();
     const ui: UI = {
         async select() { return "Answer this question"; },
-        async input() { throw new Error("unused"); },
         async editor() {
             controller.abort();
             return "must be discarded";

@@ -14,8 +14,6 @@ delib.module {
   home.ifEnabled = let
     plugin_names = [
       "gstat"
-      # "net"
-      # "skim"
       "query"
     ];
 

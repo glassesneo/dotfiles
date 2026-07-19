@@ -23,9 +23,6 @@ delib.module {
     in {
       enable = true;
       inherit (cfg) style active_color inactive_color width order;
-      # whitelist = [
-      # "ghostty"
-      # ];
       hidpi = hi-spec-flag;
       ax_focus = hi-spec-flag;
     };

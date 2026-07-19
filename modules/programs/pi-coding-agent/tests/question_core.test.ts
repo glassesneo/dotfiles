@@ -3,6 +3,7 @@ import test from "node:test";
 import Value from "typebox/value";
 import {
     buildQuestionToolResult,
+    formatQuestionAnswer,
     normalizeQuestionAnswer,
     optionDisplayText,
     QuestionProgress,
@@ -114,6 +115,36 @@ test("display text includes descriptions for stable reverse lookup", () => {
         "Safe — Small",
     );
     assert.equal(optionDisplayText({ value: "safe", label: "Safe" }), "Safe");
+});
+
+test("answer formatting shares labels while preserving presentation policies", () => {
+    const multi: QuestionItem = {
+        id: "targets",
+        prompt: "Targets",
+        kind: "multi",
+        options: [
+            { value: "a", label: "A" },
+            { value: "b", label: "B" },
+        ],
+    };
+    const answer = {
+        kind: "multi" as const,
+        values: [{ value: "a", note: "first\nline" }, { value: "b" }],
+        note: "overall\nnote",
+    };
+
+    assert.equal(
+        formatQuestionAnswer(multi, answer),
+        "A — note: first\nline, B — note: overall\nnote",
+    );
+    assert.equal(
+        formatQuestionAnswer(multi, answer, {
+            formatText: value => value.replace(/\n/g, " ⏎ "),
+            formatAnswerNote: value => ` — note: ${value.replace(/\n/g, " ⏎ ")}`,
+            formatOptionNote: value => ` (note: ${value})`,
+        }),
+        "A (note: first\nline), B — note: overall ⏎ note",
+    );
 });
 
 test("answers normalize notes and multi values in option definition order", () => {

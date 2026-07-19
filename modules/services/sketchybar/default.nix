@@ -200,11 +200,5 @@ in
       home.packages = [
         pkgs.nerd-fonts.hack
       ];
-      # home.activation.sketchybarHackNerdFont = homeConfig.lib.dag.entryAfter ["linkGeneration"] ''
-      # mkdir -p "$HOME/Library/Fonts"
-      # rm -f "$HOME"/Library/Fonts/HackGen*NF*.ttf
-      # cp -f ${pkgs.nerd-fonts.hack}/share/fonts/truetype/NerdFonts/Hack/*.ttf "$HOME/Library/Fonts/"
-      # atsutil databases -removeUser >/dev/null 2>&1 || true
-      # '';
     };
   }

@@ -61,7 +61,6 @@ delib.module {
         };
       };
       gitblame = {
-        # enable = true;
         settings = {
           delay = 500;
         };

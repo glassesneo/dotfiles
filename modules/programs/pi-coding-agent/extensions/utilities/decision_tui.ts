@@ -1,6 +1,6 @@
 import type { ExtensionUIContext, KeybindingsManager, Theme } from "@earendil-works/pi-coding-agent";
 import { Editor, truncateToWidth, visibleWidth, wrapTextWithAnsi, type Component, type EditorTheme, type Focusable, type TUI } from "@earendil-works/pi-tui";
-import { decisionNoteRequirement, noteMode, QuestionProgress, shouldAutoSubmitSingle, type DecisionFlowPolicy, type DecisionNoteRequirement, type PendingQuestionAnswer, type QuestionAnswer, type QuestionItem, type QuestionOption, type QuestionResultDetails } from "./decision_core.ts";
+import { decisionNoteRequirement, formatQuestionAnswer, noteMode, QuestionProgress, shouldAutoSubmitSingle, type DecisionFlowPolicy, type DecisionNoteRequirement, type PendingQuestionAnswer, type QuestionAnswer, type QuestionItem, type QuestionOption, type QuestionResultDetails } from "./decision_core.ts";
 import { loadQuestionKeymapConfig, questionHelp, resolveQuestionKeymap, resolveUiAction, type QuestionContext, type ResolvedQuestionKeymap, type UiAction } from "./decision_keymap.ts";
 
 interface DisplayChoice { value: string; label: string; description?: string; }
@@ -46,14 +46,6 @@ function draftFrom(question: QuestionItem, answer?: QuestionAnswer): QuestionDra
 function notePreview(note: string | undefined): string | undefined {
     return note?.split(/\r?\n/).map(line => line.trim()).find(line => line.length > 0);
 }
-function answerSummary(question: QuestionItem, answer: QuestionAnswer): string {
-    if (answer.kind === "text") return answer.value;
-    if (answer.kind === "confirm") return `${answer.value ? "Yes" : "No"}${answer.note ? ` — note: ${answer.note}` : ""}`;
-    if (answer.kind === "single") return `${question.options?.find(option => option.value === answer.value)?.label ?? answer.value}${answer.note ? ` — note: ${answer.note}` : ""}`;
-    const values = answer.values.map(item => `${question.options?.find(option => option.value === item.value)?.label ?? item.value}${item.note ? ` (${item.note})` : ""}`).join(", ");
-    return `${values}${answer.note ? ` — note: ${answer.note}` : ""}`;
-}
-
 export class DecisionComponent implements Component, Focusable {
     readonly #tui: Pick<TUI, "requestRender">;
     readonly #theme: Theme;
@@ -276,7 +268,9 @@ export class DecisionComponent implements Component, Focusable {
             const text = `Q${index + 1} ${answer ? "✓ Answered" : "○ Unanswered"}: ${question.prompt}`;
             const styled = this.#theme.fg(focused ? "accent" : answer ? "success" : "warning", focused ? this.#theme.bold(text) : text);
             appendWrapped(lines, width, styled, focused ? "> " : "  ", focused ? line => this.#theme.bg("selectedBg", line) : undefined);
-            if (answer) appendWrapped(lines, width, this.#theme.fg("muted", answerSummary(question, answer)), "    ");
+            if (answer) appendWrapped(lines, width, this.#theme.fg("muted", formatQuestionAnswer(question, answer, {
+                formatOptionNote: note => ` (${note})`,
+            })), "    ");
         });
     }
     render(width: number): string[] {

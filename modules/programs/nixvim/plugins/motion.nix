@@ -18,15 +18,6 @@ delib.module {
           ge = "ge";
           w = "w";
         };
-        # lazyLoad = {
-        # enable = true;
-        # settings.keys = [
-        # "b"
-        # "e"
-        # "ge"
-        # "w"
-        # ];
-        # };
       };
     };
     extraPlugins = [
