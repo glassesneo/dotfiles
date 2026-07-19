@@ -10,20 +10,14 @@ inactive without preventing the editor from starting.
 | Language/project | LSP command | Formatter command |
 |---|---|---|
 | Shell | `bash-language-server` | `shfmt` |
-| Elm | `elm-language-server` | `elm-format` |
-| Haskell | `haskell-language-server-wrapper` | `fourmolu` |
-| Kotlin | `kotlin-language-server` | `ktlint` |
 | Markdown | `marksman` | none |
 | Typst | `tinymist` | `typstyle` |
-| Python | `basedpyright-langserver` | `ruff` |
 | Deno | `deno` | Deno LSP |
 | Biome web project | `biome` | `biome` |
 | Other TypeScript/JavaScript | `typescript-language-server` | TypeScript LSP |
-| Go | `gopls` | `goimports` (then `gofmt`) |
 | Nushell | `nu` | none |
 | Zig | `zls` | Zig LSP |
 | Lua | `emmylua_ls` | EmmyLua LSP |
-| Swift | `sourcekit-lsp` | `swift-format` |
 | MoonBit | `moonbit-lsp` | MoonBit LSP when supported |
 
 Web routing is exclusive. An ancestor `deno.json`/`deno.jsonc` selects Deno;

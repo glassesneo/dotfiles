@@ -31,12 +31,6 @@ local function nearest_marker(path, markers)
   return nil
 end
 
-local function project_root(markers)
-  return function (path)
-    return nearest_marker(path, markers)
-  end
-end
-
 local function file_root(path)
   return vim.fs.dirname(path)
 end
@@ -122,22 +116,6 @@ local servers = {
     filetypes = { "bash", "sh" },
     root_dir = gated_root("bash-language-server", file_root),
   },
-  elmls = {
-    cmd = { "elm-language-server" },
-    filetypes = { "elm" },
-    root_dir = gated_root("elm-language-server", project_root({ "elm.json" })),
-  },
-  hls = {
-    cmd = { "haskell-language-server-wrapper", "--lsp" },
-    filetypes = { "haskell", "lhaskell" },
-    root_dir = gated_root("haskell-language-server-wrapper", file_root),
-    settings = { haskell = { formattingProvider = "fourmolu" } },
-  },
-  kotlin_language_server = {
-    cmd = { "kotlin-language-server" },
-    filetypes = { "kotlin" },
-    root_dir = gated_root("kotlin-language-server", file_root),
-  },
   marksman = {
     cmd = { "marksman", "server" },
     filetypes = { "markdown", "markdown.mdx" },
@@ -148,16 +126,6 @@ local servers = {
     filetypes = { "typst" },
     root_dir = gated_root("tinymist", file_root),
     settings = { formatterMode = "typstyle" },
-  },
-  basedpyright = {
-    cmd = { "basedpyright-langserver", "--stdio" },
-    filetypes = { "python" },
-    root_dir = gated_root("basedpyright-langserver", file_root),
-  },
-  gopls = {
-    cmd = { "gopls" },
-    filetypes = { "go", "gomod", "gowork", "gotmpl" },
-    root_dir = gated_root("gopls", file_root),
   },
   nushell = {
     cmd = { "nu", "--no-config-file", "--lsp" },
@@ -188,11 +156,6 @@ local servers = {
         strict = { requirePath = true },
       },
     },
-  },
-  sourcekit = {
-    cmd = { "sourcekit-lsp" },
-    filetypes = { "swift" },
-    root_dir = gated_root("sourcekit-lsp", file_root),
   },
   moonbit = {
     cmd = { "moonbit-lsp" },
