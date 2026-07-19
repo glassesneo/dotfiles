@@ -14,7 +14,6 @@ delib.module {
         tabstop = 4;
         shiftwidth = 4;
         expandtab = true;
-        clipboard = "unnamed";
         hlsearch = true;
         ignorecase = true;
         smartcase = true;

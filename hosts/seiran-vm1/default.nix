@@ -41,6 +41,10 @@ delib.host {
     user.uid = 502;
   };
 
+  home = {
+    programs.nvf.settings.vim.globals.clipboard = "osc52";
+  };
+
   darwin = {
     environment.systemPackages = [pkgs.kitty.terminfo];
 
