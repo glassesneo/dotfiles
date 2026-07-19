@@ -1,0 +1,7 @@
+{
+  "open": ["ctrl+shift+p"],
+  "moveUp": ["ctrl+p"],
+  "moveDown": ["ctrl+n"],
+  "confirm": ["enter"],
+  "cancel": ["escape", "ctrl+c"]
+}

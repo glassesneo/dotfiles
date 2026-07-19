@@ -17,6 +17,7 @@ or macOS bindings own copying selected terminal text.
 | Line start / end | `Ctrl-A` / `Ctrl-E` |
 | Character left / right | `Ctrl-B` / `Ctrl-F` |
 | External editor | `Ctrl-G` |
+| Open command palette | `Ctrl-Shift-P` |
 | Cycle thinking level | `Ctrl-T` |
 | Paste image | `Ctrl-V` |
 | Follow up / dequeue | `Ctrl-Enter` / `Ctrl-Up` |
@@ -36,6 +37,37 @@ cycling, thinking-block and tool-output expansion, every scoped-model command,
 and tree-filter cycling. The individual tree-filter shortcuts are also unbound.
 `Ctrl-H`, `Ctrl-J`, `Ctrl-K`, and `Ctrl-L` are reserved for tmux and have no new
 Pi assignments.
+
+## Command Palette
+
+`Ctrl-Shift-P` opens a centered searchable overlay that is independent of the
+prompt draft. Pi's extension shortcut API owns the opening key; Kitty and tmux
+must pass modified keys through without rewriting or consuming them. The palette
+never reads, edits, submits, or sends editor text. It is available in TUI mode
+while the agent is idle and provides exactly these actions:
+
+- `/model` select the authenticated model
+- `/thinking` select reasoning effort supported by the current model
+- `/tools` configure active tools, including their source
+- `/tool-output` expand or collapse tool output
+- `/session` show read-only session information
+- `/copy` copy the latest assistant text on the active branch
+- `/theme` select the live theme
+
+Every palette-owned list uses `Ctrl-P` to move up, `Ctrl-N` to move down,
+`Enter` to select, and `Esc` or `Ctrl-C` to cancel. Selection, current and active
+states, disabled reasons, status, and errors have text markers and do not rely
+on color. The candidate list uses a compact fixed-height line viewport capped
+at 18 rows, so filtering and status changes do not move the search input. Tool
+changes apply immediately and
+are not rolled back when the tool
+screen closes; disabling the final active tool requires confirmation.
+
+Home Manager installs `~/.pi/agent/command-palette-keybindings.json`. Its five
+actions are `open`, `moveUp`, `moveDown`, `confirm`, and `cancel`; each value is
+a complete key array. Unknown actions, invalid keys, empty required actions,
+and collisions are startup errors that include the configuration path. Help is
+generated from the resolved map. Run `/reload` after changing it.
 
 ## `question` tool
 
@@ -212,10 +244,12 @@ For a TUI smoke test:
 ```sh
 nix develop ../../.. --command npx pi \
   --extension ./extensions/interaction_policy.ts \
+  --extension ./extensions/command_palette.ts \
   --extension ./extensions/question.ts
 ```
 
 New files must be git-tracked before flake evaluation because flakes cannot read
 untracked files. Manually verify normal-input `Ctrl-C`, Japanese IME cursor
 placement, multiline editing, reverse navigation, review revision, and `/reload`
-help updates.
+help updates. For the palette, also verify draft preservation and `Ctrl-P` /
+`Ctrl-N` delivery in Ghostty and tmux.

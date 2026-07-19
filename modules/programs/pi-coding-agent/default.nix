@@ -19,6 +19,7 @@ in
         settings = {
           extensions = [
             "${./extensions}/agent_artifact.ts"
+            "${./extensions}/command_palette.ts"
             "${./extensions}/interaction_policy.ts"
             "${./extensions}/question.ts"
           ];
@@ -105,6 +106,8 @@ in
         };
       };
 
+      home.file."${configDir}/command-palette-keybindings.json".source =
+        ./extensions/utilities/command-palette-keybindings.json;
       home.file."${configDir}/question-keybindings.json".source =
         ./extensions/utilities/question-keybindings.json;
     };
