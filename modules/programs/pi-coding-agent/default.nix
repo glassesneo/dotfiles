@@ -26,7 +26,7 @@ in
             "${./prompts}"
           ];
           defaultModel = "gpt-5.6-sol";
-          defaultProvider = "openai";
+          defaultProvider = "openai-codex";
           defaultThinkingLevel = "medium";
 
           theme = "dark";
