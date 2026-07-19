@@ -64,6 +64,7 @@ delib.host {
       distributedBuilds = true;
 
       settings = {
+        max-jobs = 0;
         builders-use-substitutes = true;
       };
 
@@ -76,7 +77,7 @@ delib.host {
 
           system = "aarch64-darwin";
 
-          maxJobs = 8;
+          maxJobs = 4;
           speedFactor = 2;
 
           supportedFeatures = [
