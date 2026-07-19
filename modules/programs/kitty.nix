@@ -1,6 +1,7 @@
 {
   delib,
   host,
+  pkgs,
   ...
 }:
 delib.module {
@@ -10,8 +11,19 @@ delib.module {
 
   home.ifEnabled.programs.kitty = {
     enable = true;
+    settings = {
+      clear_all_shortcuts = true;
+    };
     keybindings = {
       "shift+enter" = "send_text normal,application \\e[13;2u";
+      "cmd+c" = "copy_or_noop";
+      "cmd+v" = "paste_from_clipboard";
+      "cmd+q" = "quit";
+    };
+    font = {
+      name = "UDEV Gothic NFLG";
+      package = pkgs.udev-gothic-nf;
+      size = 14;
     };
     quickAccessTerminalConfig = {
       hide_on_focus_loss = true;
@@ -20,7 +32,7 @@ delib.module {
       bold_font = "auto";
       italic_font = "auto";
       bold_italic_font = "auto";
-      font_size = 13;
+      font_size = 14;
       edge = "center-sized";
     };
   };
