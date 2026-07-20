@@ -5,8 +5,12 @@ return function (bufnr)
 
   local function web_route()
     local path = vim.api.nvim_buf_get_name(bufnr)
-    if _G.nvf_web_route and path ~= "" then
-      return _G.nvf_web_route(path)
+    if path == "" then
+      return
+    end
+    local ok, typescript = pcall(require, "nvf.typescript")
+    if ok then
+      return typescript.route(path)
     end
   end
 
@@ -17,11 +21,12 @@ return function (bufnr)
       return {
         lsp_format = "prefer",
         timeout_ms = 500,
-        filter = function(client)
+        filter = function (client)
           return client.name == "ruff"
         end,
       }
     end
+    return
   end
 
   ---@type table<string, true | nil>

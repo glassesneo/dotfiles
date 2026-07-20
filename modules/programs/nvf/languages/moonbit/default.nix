@@ -17,6 +17,7 @@ in
     name = "programs.nvf.languages.moonbit";
     options = delib.singleCascadeEnableOption;
     home.ifEnabled.programs.nvf.settings.vim = {
+      lsp.lspconfig.sources.moonbit = builtins.readFile ./lsp.lua;
       treesitter.grammars = [moonbitGrammar];
       filetype.extension = {
         mbt = "moonbit";

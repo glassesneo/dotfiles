@@ -10,11 +10,10 @@ delib.module {
       format.enable = false;
       extraDiagnostics.enable = false;
     };
-    formatter.conform-nvim = {
-      setupOpts = {
-        formatters.clang-format.command = "clang-format";
-        formatters_by_ft.c = ["clang-format"];
-      };
+    lsp.lspconfig.sources.clang = builtins.readFile ./lsp.lua;
+    formatter.conform-nvim.setupOpts = {
+      formatters.clang-format.command = "clang-format";
+      formatters_by_ft.c = ["clang-format"];
     };
   };
 }

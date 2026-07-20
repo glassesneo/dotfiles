@@ -2,9 +2,12 @@
 delib.module {
   name = "programs.nvf.languages.zig";
   options = delib.singleCascadeEnableOption;
-  home.ifEnabled.programs.nvf.settings.vim.languages.zig = {
-    enable = true;
-    treesitter.enable = true;
-    lsp.enable = false;
+  home.ifEnabled.programs.nvf.settings.vim = {
+    languages.zig = {
+      enable = true;
+      treesitter.enable = true;
+      lsp.enable = false;
+    };
+    lsp.lspconfig.sources.zig = builtins.readFile ./lsp.lua;
   };
 }

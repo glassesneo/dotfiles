@@ -13,21 +13,8 @@ delib.module {
     formatter.conform-nvim = {
       enable = true;
       setupOpts = {
-        # External formatters remain bare commands supplied by project devShells.
-        # Conform's availability check and format-on-save callback make a missing
-        # command a no-op rather than a failed editor session.
-        formatters = {
-          biome.command = "biome";
-        };
-        formatters_by_ft = {
-          sh = ["shfmt"];
-          bash = ["shfmt"];
-          typst = ["typstyle"];
-          javascript = lib.generators.mkLuaInline "function(bufnr) return _G.nvf_web_formatters(bufnr) end";
-          javascriptreact = lib.generators.mkLuaInline "function(bufnr) return _G.nvf_web_formatters(bufnr) end";
-          typescript = lib.generators.mkLuaInline "function(bufnr) return _G.nvf_web_formatters(bufnr) end";
-          typescriptreact = lib.generators.mkLuaInline "function(bufnr) return _G.nvf_web_formatters(bufnr) end";
-        };
+        # Language modules own formatter selection. This module owns only the
+        # Conform engine and save policy; unavailable project commands are no-ops.
         default_format_opts.lsp_format = "never";
         format_on_save = lib.generators.mkLuaInline (lib.removePrefix "return " (builtins.readFile ./format-on-save.lua));
         format_after_save = null;

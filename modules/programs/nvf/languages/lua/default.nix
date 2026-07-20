@@ -14,6 +14,7 @@ delib.module {
       format.enable = false;
       extraDiagnostics.enable = false;
     };
+    lsp.lspconfig.sources.lua = builtins.readFile ./lsp.lua;
     autocmds = [
       {
         event = ["FileType"];

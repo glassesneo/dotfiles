@@ -10,9 +10,10 @@ inactive without preventing the editor from starting.
 | Language/project | LSP command | Formatter command |
 |---|---|---|
 | Shell | `bash-language-server` | `shfmt` |
+| C | `clangd` | `clang-format` |
 | Markdown | `marksman` | none |
 | Typst | `tinymist` | `typstyle` |
-| Python | `ty`, `ruff server` | Ruff LSP (`ruff format` fallback) |
+| Python | `ty`, `ruff server` | Ruff LSP |
 | Deno | `deno` | Deno LSP |
 | Biome web project | `biome` | `biome` |
 | Other TypeScript/JavaScript | `typescript-language-server` | TypeScript LSP |
@@ -23,7 +24,13 @@ inactive without preventing the editor from starting.
 
 Web routing is exclusive. An ancestor `deno.json`/`deno.jsonc` selects Deno;
 otherwise `biome.json`/`biome.jsonc` selects Biome; otherwise the TypeScript
-server is used. Nix remains package-backed by the existing nvf Nix module.
+server is used. Python uses ty for type diagnostics and Ruff LSP for lint
+diagnostics and formatting. Nix remains package-backed by the existing nvf Nix
+module.
+
+The `lsp/` and `formatter/` modules own their respective engines and shared
+runtime policy. Each `languages/*` module owns its language-server definitions
+and formatter selection.
 
 ## Smoke checks
 
