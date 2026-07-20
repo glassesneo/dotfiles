@@ -1,6 +1,7 @@
 {
   delib,
   host,
+  lib,
   ...
 }:
 delib.module {
@@ -44,6 +45,21 @@ delib.module {
           };
         };
       };
+      settings.vim.autocmds = [
+        {
+          event = ["FileType"];
+          pattern = ["nix"];
+          desc = "Match Nix buffer indentation to Alejandra defaults";
+          callback = lib.generators.mkLuaInline ''
+            function(args)
+              vim.bo[args.buf].expandtab = true
+              vim.bo[args.buf].tabstop = 2
+              vim.bo[args.buf].shiftwidth = 2
+              vim.bo[args.buf].softtabstop = 2
+            end
+          '';
+        }
+      ];
     };
   };
 }

@@ -1,4 +1,8 @@
-{delib, ...}:
+{
+  delib,
+  lib,
+  ...
+}:
 delib.module {
   name = "programs.nvf.languages.bash";
   options = delib.singleCascadeEnableOption;
@@ -18,5 +22,20 @@ delib.module {
         bash = ["shfmt"];
       };
     };
+    autocmds = [
+      {
+        event = ["FileType"];
+        pattern = ["sh" "bash"];
+        desc = "Match Shell buffer indentation to shfmt defaults (tabs)";
+        callback = lib.generators.mkLuaInline ''
+          function(args)
+            vim.bo[args.buf].expandtab = false
+            vim.bo[args.buf].tabstop = 4
+            vim.bo[args.buf].shiftwidth = 4
+            vim.bo[args.buf].softtabstop = 4
+          end
+        '';
+      }
+    ];
   };
 }

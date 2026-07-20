@@ -25,5 +25,20 @@ delib.module {
         typescriptreact = lib.generators.mkLuaInline "function(bufnr) return require('nvf.typescript').formatters(bufnr) end";
       };
     };
+    autocmds = [
+      {
+        event = ["FileType"];
+        pattern = ["javascript" "javascriptreact" "typescript" "typescriptreact"];
+        desc = "Match JS/TS buffer indentation to Biome and Deno defaults";
+        callback = lib.generators.mkLuaInline ''
+          function(args)
+            vim.bo[args.buf].expandtab = true
+            vim.bo[args.buf].tabstop = 2
+            vim.bo[args.buf].shiftwidth = 2
+            vim.bo[args.buf].softtabstop = 2
+          end
+        '';
+      }
+    ];
   };
 }

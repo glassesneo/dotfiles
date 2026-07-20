@@ -27,8 +27,13 @@ in
       luaConfigRC.moonbit-treesitter = ''
         vim.api.nvim_create_autocmd("FileType", {
           pattern = "moonbit",
+          desc = "Start MoonBit Treesitter and match language formatter indentation",
           callback = function(args)
             pcall(vim.treesitter.start, args.buf)
+            vim.bo[args.buf].expandtab = true
+            vim.bo[args.buf].tabstop = 2
+            vim.bo[args.buf].shiftwidth = 2
+            vim.bo[args.buf].softtabstop = 2
           end,
         })
       '';

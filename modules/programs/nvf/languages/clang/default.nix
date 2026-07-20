@@ -1,4 +1,8 @@
-{delib, ...}:
+{
+  delib,
+  lib,
+  ...
+}:
 delib.module {
   name = "programs.nvf.languages.c";
   options = delib.singleCascadeEnableOption;
@@ -15,5 +19,20 @@ delib.module {
       formatters.clang-format.command = "clang-format";
       formatters_by_ft.c = ["clang-format"];
     };
+    autocmds = [
+      {
+        event = ["FileType"];
+        pattern = ["c"];
+        desc = "Match C buffer indentation to clang-format defaults";
+        callback = lib.generators.mkLuaInline ''
+          function(args)
+            vim.bo[args.buf].expandtab = true
+            vim.bo[args.buf].tabstop = 2
+            vim.bo[args.buf].shiftwidth = 2
+            vim.bo[args.buf].softtabstop = 2
+          end
+        '';
+      }
+    ];
   };
 }
