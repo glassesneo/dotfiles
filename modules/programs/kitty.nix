@@ -21,8 +21,7 @@ delib.module {
       "cmd+q" = "quit";
     };
     font = {
-      name = "UDEV Gothic NFLG";
-      package = pkgs.udev-gothic-nf;
+      name = "Maple Mono Normal NF CN";
       size = 14;
     };
     quickAccessTerminalConfig = {
