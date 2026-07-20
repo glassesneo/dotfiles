@@ -11,14 +11,6 @@ local function resolved(path)
   return vim.fs.normalize(value)
 end
 
-local function within(path, root)
-  if path == root then
-    return true
-  end
-  local prefix = root:match("/$") and root or (root .. "/")
-  return path:sub(1, #prefix) == prefix
-end
-
 local function sensitive_basename(path)
   local basename = vim.fs.basename(path)
   if not basename or basename == "" then

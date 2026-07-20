@@ -52,7 +52,7 @@ end
 
 local capabilities
 local function lsp_capabilities()
-  if capabilities then
+  if capabilities ~= nil then
     return capabilities
   end
 
