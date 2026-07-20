@@ -41,7 +41,14 @@ end
 
 local function python_root(path)
   return nearest_marker(path, {
-    "ty.toml", "pyproject.toml", "ruff.toml", ".ruff.toml", "setup.py", "setup.cfg", "requirements.txt", ".git",
+    "ty.toml",
+    "pyproject.toml",
+    "ruff.toml",
+    ".ruff.toml",
+    "setup.py",
+    "setup.cfg",
+    "requirements.txt",
+    ".git",
   }) or file_root(path)
 end
 
@@ -121,6 +128,11 @@ local servers = {
     cmd = { "bash-language-server", "start" },
     filetypes = { "bash", "sh" },
     root_dir = gated_root("bash-language-server", file_root),
+  },
+  clangd = {
+    cmd = { "clangd", "--clang-tidy" },
+    filetypes = { "c", "cpp", "objc", "objcpp" },
+    root_dir = gated_root("clangd", file_root),
   },
   marksman = {
     cmd = { "marksman", "server" },
