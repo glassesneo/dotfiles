@@ -154,7 +154,6 @@ local servers = {
     cmd = { "ruff", "server" },
     filetypes = { "python" },
     root_dir = gated_root("ruff", python_root),
-    init_options = { settings = { lint = { enable = false } } },
   },
   nushell = {
     cmd = { "nu", "--no-config-file", "--lsp" },
