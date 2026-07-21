@@ -31,6 +31,13 @@ delib.module {
           # ".claude/skills"
         ];
       };
+      cognitive-rhythm-writing = {
+        source = "${inputs.cognitive-rhythm-writing-skill}";
+        targetDirs = [
+          ".agents/skills"
+          # ".claude/skills"
+        ];
+      };
       agent-browser = {
         source = "${llm-agents.agent-browser}";
         subdir = "share/agent-browser/skills/agent-browser";

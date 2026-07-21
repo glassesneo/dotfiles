@@ -95,6 +95,22 @@
         "type": "github"
       }
     },
+    "cognitive-rhythm-writing-skill": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1783600534,
+        "narHash": "sha256-Zo3iVnTvVG6IfU9vBf4Zv/bEcKmNKnI2IY1D0uvzkNM=",
+        "ref": "refs/heads/main",
+        "rev": "a3b1e26beced71d582e13314fb6f5b179b023c76",
+        "revCount": 3,
+        "type": "git",
+        "url": "https://gist.github.com/k16shikano/eb2929f13ed19c97188393d297be8432"
+      },
+      "original": {
+        "type": "git",
+        "url": "https://gist.github.com/k16shikano/eb2929f13ed19c97188393d297be8432"
+      }
+    },
     "denix": {
       "inputs": {
         "home-manager": [
@@ -717,6 +733,7 @@
         "brew-api": "brew-api",
         "brew-nix": "brew-nix",
         "catppuccin": "catppuccin",
+        "cognitive-rhythm-writing-skill": "cognitive-rhythm-writing-skill",
         "denix": "denix",
         "denops-plugins": "denops-plugins",
         "flake-parts": "flake-parts_2",
