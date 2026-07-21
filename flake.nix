@@ -169,7 +169,6 @@
               emmylua-ls
               emmylua-check
               emmylua-formatter
-              just
               nickel
             ];
           };
