@@ -715,11 +715,11 @@
     "rift": {
       "flake": false,
       "locked": {
-        "lastModified": 1784430075,
-        "narHash": "sha256-itojSIa2ISB2shajf4XZSHh4evRv2iYIL5ihG5vUr6k=",
+        "lastModified": 1784606026,
+        "narHash": "sha256-CpgTZSsZidzRpxGJF026kvyEPnhSU3jOnk/9Bh7R6Pk=",
         "owner": "acsandmann",
         "repo": "rift",
-        "rev": "7a898dc5ac21a5ae3f458aaeb0a18a8faf648b28",
+        "rev": "e4b4e4ce3d01cc0e96eab1491bd90adfa4122a6f",
         "type": "github"
       },
       "original": {
