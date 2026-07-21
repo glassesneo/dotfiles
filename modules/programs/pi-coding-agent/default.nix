@@ -27,6 +27,14 @@ in
           theme = "dark";
         };
         keybindings = {
+          "tui.editor.cursorUp" = [
+            "up"
+            "ctrl+p"
+          ];
+          "tui.editor.cursorDown" = [
+            "down"
+            "ctrl+n"
+          ];
           "tui.editor.cursorLeft" = [
             "left"
             "ctrl+b"
@@ -57,6 +65,14 @@ in
           "tui.editor.yankPop" = [];
           "tui.editor.undo" = [];
           "tui.input.copy" = [];
+          "tui.select.up" = [
+            "up"
+            "ctrl+p"
+          ];
+          "tui.select.down" = [
+            "down"
+            "ctrl+n"
+          ];
 
           "app.clear" = ["ctrl+c"];
           "app.exit" = ["ctrl+d"];
@@ -64,9 +80,9 @@ in
           "app.editor.external" = ["ctrl+g"];
           "app.clipboard.pasteImage" = ["ctrl+v"];
 
-          "app.session.togglePath" = ["ctrl+p"];
+          "app.session.togglePath" = [];
           "app.session.toggleSort" = ["ctrl+s"];
-          "app.session.toggleNamedFilter" = ["ctrl+n"];
+          "app.session.toggleNamedFilter" = [];
           "app.session.rename" = ["ctrl+r"];
           "app.session.delete" = ["ctrl+d"];
           "app.session.deleteNoninvasive" = [];
