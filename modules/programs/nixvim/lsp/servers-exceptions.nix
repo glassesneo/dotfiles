@@ -1,6 +1,5 @@
 {
   delib,
-  inputs,
   pkgs,
   ...
 }:
@@ -9,14 +8,11 @@ delib.module {
 
   options = delib.singleCascadeEnableOption;
 
-  home.ifEnabled.programs.nixvim = let
-    treefmtEval = inputs.treefmt-nix.lib.evalModule pkgs ../../../../treefmt.nix;
-  in {
+  home.ifEnabled.programs.nixvim = {
     extraPackages = [
       pkgs.efm-langserver
       pkgs.nls
       pkgs.nickel
-      treefmtEval.config.build.wrapper
     ];
   };
 }

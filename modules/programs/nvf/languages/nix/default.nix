@@ -33,16 +33,6 @@ delib.module {
           formatting = {
             command = ["alejandra"];
           };
-
-          options = {
-            nix-darwin = {
-              expr = "(builtins.getFlake (builtins.toString ./.)).darwinConfigurations.${host.name}.options";
-            };
-
-            home-manager = {
-              expr = "(builtins.getFlake (builtins.toString ./.)).homeConfigurations.${host.name}.options";
-            };
-          };
         };
       };
       settings.vim.autocmds = [

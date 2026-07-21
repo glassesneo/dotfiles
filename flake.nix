@@ -7,7 +7,7 @@
     nixpkgs,
     ...
   }: let
-    lib = nixpkgs.lib;
+    inherit (nixpkgs) lib;
     homeManagerUser = "neo";
     riceNames = ["catppuccin" "everforest" "monochrome"];
 
@@ -42,21 +42,23 @@
           (base.withConfig {
             args.enable = true;
             rices.enable = true;
-            hosts.type.types = ["laptop" "server" "virtual"];
-            hosts.features.features = ["guiShell" "devCore"];
-            hosts.features.defaultByHostType = {
-              laptop = ["guiShell" "devCore"];
-              server = ["devCore"];
-              virtual = ["devCore"];
+            hosts = {
+              type.types = ["laptop" "server" "virtual"];
+              features.features = ["guiShell" "devCore"];
+              features.defaultByHostType = {
+                laptop = ["guiShell" "devCore"];
+                server = ["devCore"];
+                virtual = ["devCore"];
+              };
+              extraSubmodules = [
+                (_: {
+                  options = with denix.lib; {
+                    tier = description (enumOption ["minimal" "basic" "standard" "full"] "standard") "Performance tier of this host. Ordered: minimal < basic < standard < full.";
+                    hasNotch = description (boolOption false) "Whether this host has a display notch (e.g. MacBook Pro). Drives bar position and notch-aware layout defaults.";
+                  };
+                })
+              ];
             };
-            hosts.extraSubmodules = [
-              ({...}: {
-                options = with denix.lib; {
-                  tier = description (enumOption ["minimal" "basic" "standard" "full"] "standard") "Performance tier of this host. Ordered: minimal < basic < standard < full.";
-                  hasNotch = description (boolOption false) "Whether this host has a display notch (e.g. MacBook Pro). Drives bar position and notch-aware layout defaults.";
-                };
-              })
-            ];
           })
           overlays
         ];
@@ -94,7 +96,18 @@
         lib,
         ...
       }: {
-        treefmt = import ./treefmt.nix {inherit pkgs;};
+        treefmt = {
+          projectRootFile = "flake.nix";
+
+          programs.alejandra.enable = true;
+          programs.shfmt.enable = true;
+
+          settings.formatter.luafmt = {
+            command = "${pkgs.emmylua-formatter}/bin/luafmt";
+            options = ["--write"];
+            includes = ["*.lua"];
+          };
+        };
 
         checks =
           lib.optionalAttrs (system == "aarch64-darwin") (let
@@ -200,9 +213,11 @@
     };
     denix = {
       url = "github:yunfachi/denix";
-      inputs.nixpkgs.follows = "nixpkgs";
-      inputs.home-manager.follows = "home-manager";
-      inputs.nix-darwin.follows = "nix-darwin";
+      inputs = {
+        nixpkgs.follows = "nixpkgs";
+        home-manager.follows = "home-manager";
+        nix-darwin.follows = "nix-darwin";
+      };
     };
     nixvim = {
       url = "github:nix-community/nixvim/main";
@@ -217,9 +232,11 @@
     # };
     brew-nix = {
       url = "github:BatteredBunny/brew-nix";
-      inputs.nix-darwin.follows = "nix-darwin";
-      inputs.brew-api.follows = "brew-api";
-      inputs.nixpkgs.follows = "nixpkgs";
+      inputs = {
+        nixpkgs.follows = "nixpkgs";
+        brew-api.follows = "brew-api";
+        nix-darwin.follows = "nix-darwin";
+      };
     };
     brew-api = {
       url = "github:BatteredBunny/brew-api";
