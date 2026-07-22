@@ -47,6 +47,17 @@ in
           org_agenda_files = gtd_files;
           inherit (cfg) org_todo_keywords;
           org_capture_templates = {
+            c = {
+              description = "Just a capture";
+              template = [
+                "* %?"
+                ":PROPERTIES:"
+                ":CREATED: %U"
+                ":END:"
+              ];
+              target = inbox_file;
+            };
+
             t = {
               description = "Todo capture";
               template = [
@@ -77,7 +88,7 @@ in
                   type = "tags_todo";
                   match = "LEVEL=1";
                   org_agenda_files = [inbox_file];
-                  org_agenda_overriding_header = "Unprocessed tasks";
+                  org_agenda_overriding_header = "Unprocessed todo";
                   org_agenda_sorting_strategy = [
                     "todo-state-up"
                     "priority-down"
@@ -87,12 +98,12 @@ in
                   type = "tags";
                   match = nonTodoMatch;
                   org_agenda_files = [inbox_file];
-                  org_agenda_overriding_header = "Non-task captures";
+                  org_agenda_overriding_header = "Non-todo captures";
                 }
               ];
             };
             t = {
-              description = "Managed tasks";
+              description = "Tasks";
               types = [
                 {
                   type = "tags_todo";
