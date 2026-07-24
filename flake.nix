@@ -109,6 +109,33 @@
           };
         };
 
+        apps.sync-pi-extension-versions = let
+          system = pkgs.stdenv.hostPlatform.system;
+          piPackage = inputs.llm-agents.packages.${system}.pi;
+          piVersion = piPackage.version;
+          syncPiExtensionVersions = pkgs.writeShellApplication {
+            name = "sync-pi-extension-versions";
+            runtimeInputs = [pkgs.nodejs];
+            text = ''
+              package_dir="modules/programs/pi-coding-agent"
+
+              if [[ ! -f "$package_dir/package.json" ]]; then
+                echo "error: run this command from the dotfiles repository root" >&2
+                exit 1
+              fi
+
+              cd "$package_dir"
+              npm install --package-lock-only --save-dev --save-exact \
+                "@earendil-works/pi-ai@${piVersion}" \
+                "@earendil-works/pi-coding-agent@${piVersion}" \
+                "@earendil-works/pi-tui@${piVersion}"
+            '';
+          };
+        in {
+          type = "app";
+          program = lib.getExe syncPiExtensionVersions;
+        };
+
         checks =
           lib.optionalAttrs (system == "aarch64-darwin") (let
             homeConfigs = inputs.self.homeConfigurations;
