@@ -1,5 +1,6 @@
 {
   delib,
+  homeConfig,
   host,
   lib,
   pkgs,
@@ -23,22 +24,46 @@ delib.module {
     });
 
   home.ifEnabled = {cfg, ...}: let
+    logDir = "${homeConfig.xdg.cacheHome}/tart";
+    bootTimeout = 120;
+
     mkSshProxy = vmName:
       pkgs.writeShellScript "${vmName}-ssh-proxy" ''
-        ip="$(${lib.getExe cfg.package} ip ${lib.escapeShellArg vmName})"
+        set -eu
+
+        tart=${lib.getExe cfg.package}
+        name=${lib.escapeShellArg vmName}
+
+        if [ "$("$tart" get "$name" --format json | ${lib.getExe pkgs.jq} -r '.Running')" != "true" ]; then
+          mkdir -p ${lib.escapeShellArg logDir}
+          nohup "$tart" run --no-graphics "$name" \
+            </dev/null >>${lib.escapeShellArg "${logDir}/${vmName}.log"} 2>&1 &
+        fi
+
+        ip="$("$tart" ip "$name" --wait ${toString bootTimeout})"
         exec ${lib.getExe pkgs.socat} STDIO "TCP-CONNECT:$ip:$1"
       '';
-  in {
-    home.packages = [cfg.package];
 
-    programs.ssh.settings =
-      lib.mapAttrs (vmName: vm: {
+    mkSshSettings = vmName: vm: let
+      base = {
         User = vm.sshUser;
         IdentityFile = vm.identityFile;
         IdentitiesOnly = true;
         ForwardAgent = true;
         ProxyCommand = "${mkSshProxy vmName} %p";
-      })
-      cfg.vms;
+      };
+    in {
+      "${vmName}-raw" = base;
+      ${vmName} =
+        base
+        // {
+          RequestTTY = "yes";
+          RemoteCommand = "exec tmux new-session -A -s main";
+        };
+    };
+  in {
+    home.packages = [cfg.package];
+
+    programs.ssh.settings = lib.concatMapAttrs mkSshSettings cfg.vms;
   };
 }
