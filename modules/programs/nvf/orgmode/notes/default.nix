@@ -16,6 +16,8 @@ in
 
     home.ifEnabled = {
       programs.nvf.settings.vim = {
+        additionalRuntimePaths = [./runtime];
+
         notes.orgmode.setupOpts = {
           org_agenda_files = notes_files;
 
@@ -32,6 +34,18 @@ in
               ];
             };
           };
+        };
+
+        pluginRC.orgmode-clear-todo-on-incubate-refile = {
+          after = ["orgmode"];
+          before = [];
+          data = ''
+            require("nvf.orgmode.refile").setup({
+              clear_todo_destinations = {
+                ${builtins.toJSON incubate_file},
+              },
+            })
+          '';
         };
       };
     };
