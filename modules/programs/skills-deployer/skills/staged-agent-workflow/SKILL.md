@@ -2,11 +2,11 @@
 name: staged-agent-workflow
 disable-model-invocation: true
 description: >-
-  Use when a primary agent must coordinate an approval-gated specification,
-  planning, or implementation workflow through delegated capabilities. Trigger
-  for staged workflows that select spec-only, plan-only, spec-then-plan,
-  plan-then-implement, or implement profiles. Do not use for direct specialist
-  work that has no staged user dialogue or approval boundary.
+  Use when a primary agent must coordinate an approval-gated design or
+  implementation workflow through delegated capabilities. Trigger for staged
+  workflows that select design-only, design-then-implement, or implement
+  profiles. Do not use for direct specialist work that has no staged user
+  dialogue or approval boundary.
 ---
 
 # Staged Agent Workflow
@@ -36,9 +36,9 @@ different write, approval, validation, review, or report behavior.
 
 Profiles may require these capabilities:
 
-- **specification author**: creates or revises decision-ready spec artifacts;
-- **implementation planner**: creates complete or explicitly bounded-partial
-  plan artifacts;
+- **design author**: runs the design dialogue and creates or revises the
+  implementation-ready `design` artifact and its companion decision record,
+  through `specification-design` or `ideation-design`;
 - **source-changing implementer**: changes source or configuration within an
   authorized contract;
 - **validation runner**: runs focused checks and triages failures without
@@ -54,9 +54,10 @@ rather than user-facing workflow stages.
 
 ## Governing Context
 
-When artifacts conflict, use `spec > implementation report > plan`. Treat a
-recorded implementation-report deviation as reviewer and tester attention, not
-permission to diverge from the spec.
+When artifacts conflict, use `design > implementation report`. A decision
+record explains history only and never overrides the design. Treat a recorded
+implementation-report deviation as reviewer and tester attention, not
+permission to diverge from the design.
 
 Send delegates only confirmed decisions, governing paths, essential evidence,
 and their local output contract. Apply the same minimal-input rule when the

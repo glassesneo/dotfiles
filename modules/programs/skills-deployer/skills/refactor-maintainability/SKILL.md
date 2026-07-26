@@ -2,8 +2,7 @@
 name: refactor-maintainability
 description: >-
   Use for behavior-preserving refactoring and maintainability work across
-  specification planning, implementation planning, implementation, code review,
-  and refactor tasks. Trigger on requests to find safe cleanup candidates,
+  design, implementation, code review, and refactor tasks. Trigger on requests to find safe cleanup candidates,
   classify code smells, split a refactor plan, define behavior-preserving
   invariants, decide fix-now versus separate-change, or review
   maintainability/readability/design degradation. Do not use for feature
@@ -33,7 +32,7 @@ If a request mixes feature work and refactoring, separate them unless the user e
 
 Inspect the smallest useful set before producing findings or edits:
 
-1. User goal, confirmed spec, plan, or issue/PR description
+1. User goal, approved design, or issue/PR description
 2. Target diff or files
 3. Nearby tests, snapshots, or fixtures
 4. Public interfaces: exported functions, CLI flags, routes, schemas, events, config keys, file formats

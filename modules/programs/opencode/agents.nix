@@ -19,16 +19,12 @@ delib.module {
     implementationPermission =
       agentPerm.implementationByPolicy.${myconfig.programs.opencode.permissionPolicy};
 
-    specFilenamePolicy = readSharedPrompt "spec-filename-policy";
-    planFilenamePolicy = readSharedPrompt "plan-filename-policy";
+    designFilenamePolicy = readSharedPrompt "design-filename-policy";
     dividableTaskStructure = readSharedPrompt "task-breakdown-structure";
     researchFilenamePolicy = readSharedPrompt "research-filename-policy";
-    specAuthoringContract = renderText (readSharedPrompt "spec-authoring-contract") {
-      "{{SPEC_FILENAME_POLICY}}" = specFilenamePolicy;
-    };
-    planAuthoringContract = renderText (readSharedPrompt "plan-authoring-contract") {
+    designAuthoringContract = renderText (readSharedPrompt "design-authoring-contract") {
       "{{DIVIDABLE_TASK_STRUCTURE}}" = dividableTaskStructure;
-      "{{PLAN_FILENAME_POLICY}}" = planFilenamePolicy;
+      "{{DESIGN_FILENAME_POLICY}}" = designFilenamePolicy;
     };
   in {
     assertions = [
@@ -40,12 +36,12 @@ delib.module {
         assertion =
           agentPerm.scoutFull."edit*"."*"
           == "deny"
-          && agentPerm.scoutFull."edit*".".agents/specs/*.md" == "allow"
-          && agentPerm.scoutFull."edit*".".agents/plans/*.md" == "allow"
-          && agentPerm.scoutFull.bash."mkdir .agents/specs" == "allow"
-          && agentPerm.scoutFull.bash."mkdir .agents/plans" == "allow"
+          && agentPerm.scoutFull."edit*".".agents/designs/*.md" == "allow"
+          && agentPerm.scoutFull."edit*".".agents/decision-records/*.md" == "allow"
+          && agentPerm.scoutFull.bash."mkdir .agents/designs" == "allow"
+          && agentPerm.scoutFull.bash."mkdir .agents/decision-records" == "allow"
           && !(agentPerm.scoutFull.bash ? "mkdir .agents/**");
-        message = "OpenCode scout must write only canonical specification and plan artifacts.";
+        message = "OpenCode scout must write only canonical design and decision-record artifacts.";
       }
       {
         assertion =
@@ -98,9 +94,9 @@ delib.module {
         mode = "all";
         model = "openai/gpt-5.6-sol-fast";
         reasoningEffort = "medium";
-        description = "Implementation agent that self-explores and owns approved /act plans.";
+        description = "Implementation agent that self-explores and owns approved /act designs.";
         prompt = renderAgentPrompt "taskmaster" {
-          "{{PLAN_AUTHORING_CONTRACT}}" = planAuthoringContract;
+          "{{DESIGN_AUTHORING_CONTRACT}}" = designAuthoringContract;
         };
         permission = implementationPermission;
       };
@@ -123,10 +119,9 @@ delib.module {
         mode = "all";
         model = "openai/gpt-5.6-sol-fast";
         reasoningEffort = "high";
-        description = "Non-source-writing workflow agent that authors approved specification and plan artifacts.";
+        description = "Non-source-writing workflow agent that authors approved design artifacts.";
         prompt = renderAgentPrompt "scout" {
-          "{{SPEC_AUTHORING_CONTRACT}}" = specAuthoringContract;
-          "{{PLAN_AUTHORING_CONTRACT}}" = planAuthoringContract;
+          "{{DESIGN_AUTHORING_CONTRACT}}" = designAuthoringContract;
         };
         permission = agentPerm.scoutFull;
       };

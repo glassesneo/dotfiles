@@ -77,8 +77,8 @@ other increments.
 
 ## Planning Workflow
 
-When contributing to planning, augment the applicable plan contract rather than
-replacing its schema:
+When contributing to planning, augment the applicable design contract rather
+than replacing its schema:
 
 1. Preserve the complete final request, constraints, and completion conditions.
 2. Map the final scope into coherent responsibility increments.
@@ -175,7 +175,7 @@ that output, include at least:
 - incomplete responsibilities, the next candidate, and whether the work is
   ready to advance under the outer task contract.
 
-Do not create a new durable artifact schema. When a durable plan, report, or
+Do not create a new durable artifact schema. When a durable design, report, or
 other artifact is required, use the skill that owns that artifact format.
 
 ## Quality Gates

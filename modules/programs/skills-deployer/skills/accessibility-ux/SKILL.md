@@ -1,9 +1,8 @@
 ---
 name: accessibility-ux
 description: >-
-  Use when UI accessibility or usability must shape specification planning,
-  implementation planning, implementation, code/design review, or
-  behavior-preserving refactoring. Trigger on work involving WCAG, semantic
+  Use when UI accessibility or usability must shape design, implementation,
+  code/design review, or behavior-preserving refactoring. Trigger on work involving WCAG, semantic
   HTML, ARIA, keyboard operation, focus management, screen-reader support,
   forms, errors, contrast, reflow, status messages, or UX heuristics. Do not use
   for purely visual taste changes, legal compliance advice, framework-specific
@@ -57,7 +56,7 @@ user impact or clear implementation risk.
 
 ## References
 
-- `references/output-contracts.md`: use for spec, implementation-note, and
+- `references/output-contracts.md`: use for design, implementation-note, and
   review-finding templates, plus severity guidance.
 - `references/common-failures.md`: use for the concrete failure checklist and
   verification prompts.

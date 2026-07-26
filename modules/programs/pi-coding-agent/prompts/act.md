@@ -10,10 +10,11 @@ entry conditions were satisfied:
 $ARGUMENTS
 
 If the initial assessment fails any entry condition, do not implement directly.
-Load and execute `specification-authoring` for a material scope, interface,
-acceptance-criteria, or constraint decision, or `implementation-planning` for a
-material approach or verification decision. Use the same transition if such a
-decision emerges during implementation rather than deciding it yourself.
+Load and execute `specification-design` when the user already holds the intended
+behavior and the open decision is about requirements, scope, or verification.
+Load and execute `ideation-design` when the direction is open and the open
+decision is one the user should make by preference. Use the same transition if
+such a decision emerges during implementation rather than deciding it yourself.
 
 When moving to either Skill, briefly record which entry condition failed and
 what material decision is required.

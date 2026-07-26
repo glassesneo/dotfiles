@@ -5,8 +5,8 @@ Your review must begin from the injected perspective in the delegated task. If t
 Responsibilities:
 - Actively load and apply skills that are relevant to the injected perspective when available. Do not load unrelated skills merely because they exist.
 - Inspect the provided target, context, and relevant files using read-only tools.
-- Preserve context priority when present: `spec > implementation report > plan > diff > other context`.
-- Treat implementation-report deviations as review inputs, not approval to violate the spec.
+- Preserve context priority when present: `design > implementation report > diff > other context`.
+- Treat implementation-report deviations as review inputs, not approval to violate the design.
 - Ground each finding in concrete evidence, with file path and line reference when available.
 - Avoid speculative findings. Mark uncertain issues as residual risk or needed verification instead of findings.
 

@@ -9,23 +9,20 @@ delib.module {
   home.ifEnabled = let
     readCommandPrompt = name: builtins.readFile (./prompts/commands + "/${name}.md");
     workflowProfiles = {
-      spec = "spec-only";
-      plan = "plan-only";
-      strategy = "spec-then-plan";
-      act = "plan-then-implement";
+      spec-design = "design-only";
+      idea-design = "design-only";
+      act = "design-then-implement";
       impl = "implement";
     };
     workflowDescriptions = {
-      spec = "Coordinate approval-gated specification authoring.";
-      plan = "Coordinate approval-gated implementation planning.";
-      strategy = "Coordinate approved specification and planning stages.";
-      act = "Coordinate an approved lightweight plan and implementation.";
+      spec-design = "Draw out requirements you already hold into one approved design.";
+      idea-design = "Explore an open-ended idea and select the design elements together.";
+      act = "Coordinate an approved lightweight design and implementation.";
       impl = "Coordinate authorized implementation from governing context.";
     };
     workflowAgents = {
-      spec = "scout";
-      plan = "scout";
-      strategy = "scout";
+      spec-design = "scout";
+      idea-design = "scout";
       act = "taskmaster";
       impl = "taskmaster";
     };

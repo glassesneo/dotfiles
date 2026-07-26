@@ -1,7 +1,7 @@
-Load `staged-agent-workflow` and execute profile `plan-then-implement`.
+Load `staged-agent-workflow` and execute profile `design-then-implement`.
 
 Local capability mapping:
-- implementation planner: `taskmaster` (active agent)
+- design author: `taskmaster` (active agent)
 - source-changing implementer: `taskmaster` (active agent)
 - validation runner: `tester`
 - read-only reviewer: `review-orchestrator`

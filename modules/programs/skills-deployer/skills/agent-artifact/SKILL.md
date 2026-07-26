@@ -2,12 +2,12 @@
 name: agent-artifact
 disable-model-invocation: true
 description: >-
-  Use when creating durable agent artifacts: specifications, implementation
-  plans, research notes, implementation reports, review reports, bug reports,
-  or failure reports. Trigger when an agentic workflow needs a persisted
-  contract, reusable evidence, or handoff record. Do not use for inline review
-  comments, commit messages, transient scratch notes, or ordinary status
-  updates that do not need a durable Markdown artifact.
+  Use when creating durable agent artifacts: design documents, decision records,
+  research notes, implementation reports, review reports, bug reports, or
+  failure reports. Trigger when an agentic workflow needs a persisted contract,
+  reusable evidence, or handoff record. Do not use for inline review comments,
+  commit messages, transient scratch notes, or ordinary status updates that do
+  not need a durable Markdown artifact.
 ---
 
 # Agent Artifact
@@ -20,10 +20,10 @@ the storage tool only performs validated writes.
 
 Choose exactly one kind:
 
-- `spec` → `.agents/specs/`: a decision-ready behavior contract and acceptance
-  criteria.
-- `plan` → `.agents/plans/`: implementation-ready scope, ordered work,
-  verification, risks, and task breakdown.
+- `design` → `.agents/designs/`: an implementation-ready contract covering
+  scope, approach, acceptance criteria, scale, and verification.
+- `decision-record` → `.agents/decision-records/`: the companion history of a
+  design, holding direction changes and rejected alternatives only.
 - `research` → `.agents/research/`: reusable investigation evidence,
   alternatives, sources, and conclusions.
 - `implementation-report` → `.agents/implementation-reports/`: post-change
@@ -42,8 +42,9 @@ For a report kind, read its matching format before authoring content:
 - `references/bug-report-format.md`
 - `references/failure-report-format.md`
 
-For the artifact hierarchy and concise spec, plan, and research examples, read
-`references/spec-plan-artifact-examples.md`.
+For the artifact hierarchy, the design and decision-record formats, the rule
+for splitting content between them, and a research example, read
+`references/design-artifact-examples.md`.
 
 ## Location
 
@@ -71,14 +72,14 @@ Rules:
 For implementation and review reports, use:
 
 ```text
-spec > implementation report > plan
+design > implementation report
 ```
 
-- The confirmed spec is the contract.
+- The approved design is the contract.
 - The implementation report is the post-work record and deviation log.
-- The plan is implementation strategy, not a substitute for the spec.
+- A decision record explains history only and never overrides the design.
 
-For review reports, compare the target against the spec, plan, and existing
+For review reports, compare the target against the design and the existing
 implementation report when those artifacts exist.
 
 ## Required Report Qualities
@@ -91,8 +92,8 @@ These requirements apply to the four report kinds only:
 - If validation was not run, state why.
 - Do not imply skipped or failed checks passed.
 - Document unresolved risks and open items explicitly.
-- For implementation reports, classify each known spec deviation as
-  `no_action`, `follow_up`, `spec_update_required`, or `blocking`.
+- For implementation reports, classify each known design deviation as
+  `no_action`, `follow_up`, `design_update_required`, or `blocking`.
 
 ## Completion Checklist
 
@@ -103,5 +104,5 @@ Before returning an artifact path, confirm:
    direct fallback was created.
 3. The slug, JST timestamp, collision suffix, and no-overwrite rules hold.
 4. The content follows the matching format or example guidance.
-5. Reports cite material spec, plan, implementation, validation, and review
-   context and expose remaining uncertainty.
+5. Reports cite material design, implementation, validation, and review context
+   and expose remaining uncertainty.

@@ -13,6 +13,7 @@ import {
     readPendingArtifactContent,
     rejectPendingArtifact,
     requestPendingArtifactRevision,
+    requiresApproval,
     type ArtifactKind,
     type ArtifactSummary,
 } from "./utilities/agent_artifact_store.ts";
@@ -44,12 +45,13 @@ export interface AgentArtifactResultDetails {
 }
 
 export const agentArtifactDescription =
-    "Create a pending specification or implementation plan artifact, show it to the user for approval, and promote it to the project artifact directory only after approval.";
+    "Create a design artifact or its companion decision record. A design is shown to the user for approval and promoted to the project artifact directory only after approval; a decision record is saved directly because the design approval already covers it.";
 
 export const agentArtifactPromptGuidelines = [
-    "Use save_agent_artifact for completed specification and implementation plan drafts; do not print the full artifact in normal assistant text first.",
-    "Pass the completed Markdown content to save_agent_artifact once so the pending file, review screen, and approved artifact use the same content.",
-    "Use kind=spec for specifications and kind=plan for implementation plans.",
+    "Use save_agent_artifact for a completed design document or decision record; do not print the full artifact in normal assistant text first.",
+    "Pass the completed Markdown content to save_agent_artifact once so the pending file, review screen, and saved artifact use the same content.",
+    "Use kind=design for the implementation contract and kind=decision-record for the companion record of direction changes and rejected alternatives.",
+    "Save the design first, then save its decision record only when the dialogue produced direction changes worth recording.",
     "Provide a non-empty lowercase kebab-case slug that describes the artifact.",
     "If save_agent_artifact returns revision_requested, read the pendingPath, edit that same artifact content, and call save_agent_artifact again with the same pendingId instead of creating a new artifact.",
     "After save_agent_artifact returns approved, mention the finalPath if useful but do not repeat the artifact body.",
@@ -175,6 +177,11 @@ async function selectApprovalAction(
     return undefined;
 }
 
+async function persistWithoutApproval(ctx: ExtensionContext, summary: ArtifactSummary): Promise<AgentArtifactResultDetails> {
+    const approved = artifactSummary(await approvePendingArtifact(ctx.cwd, summary.id));
+    return detailsFrom(approved, "approved", `Saved to ${approved.finalPath}; this kind does not need its own approval.`);
+}
+
 async function runApprovalFlow(ctx: ExtensionContext, summary: ArtifactSummary, signal?: AbortSignal): Promise<AgentArtifactResultDetails> {
     if (!ctx.hasUI || (ctx.mode !== "tui" && ctx.mode !== "rpc")) {
         return detailsFrom(summary, "unavailable", "Approval UI is unavailable; pending artifact was not promoted.");
@@ -220,7 +227,10 @@ export function createAgentArtifactToolDefinition(): ToolDefinition<typeof artif
                 content: params.content,
                 pendingId: params.pendingId,
             });
-            const details = await runApprovalFlow(ctx, artifactSummary(pending), signal);
+            const summary = artifactSummary(pending);
+            const details = requiresApproval(params.kind)
+                ? await runApprovalFlow(ctx, summary, signal)
+                : await persistWithoutApproval(ctx, summary);
             return { content: [{ type: "text", text: resultText(details) }], details };
         },
         renderCall(args, theme) {

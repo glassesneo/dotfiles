@@ -6,8 +6,7 @@ and include `none`, `not applicable`, or `not run` where a section has no data.
 ```markdown
 # Implementation Report: <title>
 
-Spec: <path-to-spec>
-Plan: <path-to-plan>
+Design: <path-to-design>
 
 ## Summary
 
@@ -17,22 +16,22 @@ Plan: <path-to-plan>
 
 - <path>: <what changed>
 
-## Spec Alignment
+## Design Alignment
 
-- <how the implementation satisfies the referenced spec, or `not assessed` with reason>
+- <how the implementation satisfies the referenced design, or `not assessed` with reason>
 
 ## What Was Implemented
 
 - <actual changes made>
 
-## Plan Deviations
+## Scale Contract Adherence
 
-- <deviation from plan, or `none`>
+- <observed footprint against the design's scale contract, or `not assessed` with reason>
 
-## Spec Deviations
+## Design Deviations
 
-- <classification: no_action | follow_up | spec_update_required | blocking>
-- <deviation from spec, or `none`>
+- <classification: no_action | follow_up | design_update_required | blocking>
+- <deviation from design, or `none`>
 
 ## Reason for Deviations
 

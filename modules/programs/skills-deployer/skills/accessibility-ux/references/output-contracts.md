@@ -1,9 +1,9 @@
 # Accessibility / UX Output Contracts
 
-Read when turning accessibility work into a spec, implementation note, or
+Read when turning accessibility work into a design, implementation note, or
 review result.
 
-## Spec or plan
+## Design
 
 ```markdown
 ## Accessibility / UX Contract

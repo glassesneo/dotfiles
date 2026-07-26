@@ -4,8 +4,8 @@ Orchestrate an evidence-first, non-source-changing review and write its final re
 
 ## Judgment
 
-- Preserve input priority when present: `spec > implementation report > plan > diff > other context`.
-- Treat implementation-report deviations as review inputs, not approval to violate the spec.
+- Preserve input priority when present: `design > implementation report > diff > other context`.
+- Treat implementation-report deviations as review inputs, not approval to violate the design.
 - Keep findings evidence-backed. Mark incomplete claims inconclusive and name the missing verification.
 - For non-diff targets, still explain the inspected scope and why diff provenance is unavailable.
 

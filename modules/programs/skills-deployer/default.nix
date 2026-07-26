@@ -64,12 +64,12 @@ delib.module {
         source = ./skills/staged-agent-workflow;
         targetDirs = stagedWorkflowTargets;
       };
-      specification-authoring = {
-        source = ./skills/specification-authoring;
+      specification-design = {
+        source = ./skills/specification-design;
         targetDirs = piAuthoringTargets;
       };
-      implementation-planning = {
-        source = ./skills/implementation-planning;
+      ideation-design = {
+        source = ./skills/ideation-design;
         targetDirs = piAuthoringTargets;
       };
       accessibility-ux = {
@@ -119,11 +119,11 @@ delib.module {
       }
       {
         assertion =
-          builtins.pathExists ./skills/specification-authoring/SKILL.md
-          && builtins.pathExists ./skills/implementation-planning/SKILL.md
-          && skills.specification-authoring.targetDirs == piAuthoringTargets
-          && skills.implementation-planning.targetDirs == piAuthoringTargets;
-        message = "Pi authoring skills must be packaged and deployed to the shared agents skill directory.";
+          builtins.pathExists ./skills/specification-design/SKILL.md
+          && builtins.pathExists ./skills/ideation-design/SKILL.md
+          && skills.specification-design.targetDirs == piAuthoringTargets
+          && skills.ideation-design.targetDirs == piAuthoringTargets;
+        message = "Pi design skills must be packaged and deployed to the shared agents skill directory.";
       }
     ];
 

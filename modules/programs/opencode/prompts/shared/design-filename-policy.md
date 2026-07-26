@@ -1,7 +1,9 @@
 Filename policy (strict):
 
 - Create a NEW timestamped file:
-  `.agents/specs/YYYYMMDD-HHMMSS-<kebab-task-slug>.md` (JST)
+  `.agents/designs/YYYYMMDD-HHMMSS-<kebab-task-slug>.md` (JST)
+- Place a companion decision record at
+  `.agents/decision-records/YYYYMMDD-HHMMSS-<kebab-task-slug>.md` (JST)
 - Fetch the timestamp with `TZ=Asia/Tokyo date +%Y%m%d-%H%M%S`.
 - `<kebab-task-slug>` is required and must be non-empty.
 - Use only lowercase letters, digits, and hyphens in the slug.

@@ -2,20 +2,26 @@ import { copyFile, mkdir, readFile, rename, stat, unlink, writeFile } from "node
 import { basename, join } from "node:path";
 import { Type } from "typebox";
 
-export const artifactKinds = ["spec", "plan"] as const;
+export const artifactKinds = ["design", "decision-record"] as const;
 
 export type ArtifactKind = (typeof artifactKinds)[number];
 export type ArtifactState = "pending" | "approved" | "revision_requested" | "rejected";
 
 const kindToDirectory: Record<ArtifactKind, string> = {
-    spec: "specs",
-    plan: "plans",
+    design: "designs",
+    "decision-record": "decision-records",
 };
 
 const slugPattern = "^[a-z0-9]+(-[a-z0-9]+)*$";
 const slugRegex = new RegExp(slugPattern);
 
-export const approvalRequiredKinds = new Set<ArtifactKind>(["spec", "plan"]);
+// A design is the implementation contract, so it needs the user's approval. A
+// decision-record only explains how an approved design was reached.
+export const approvalRequiredKinds = new Set<ArtifactKind>(["design"]);
+
+export function requiresApproval(kind: ArtifactKind): boolean {
+    return approvalRequiredKinds.has(kind);
+}
 
 export const artifactParameters = Type.Object({
     kind: Type.Union(artifactKinds.map(kind => Type.Literal(kind))),

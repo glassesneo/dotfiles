@@ -13,7 +13,7 @@ summary fields so downstream agents can triage severity quickly.
 - **Overall verdict**: blocking-findings | non-blocking-findings | no-findings | inconclusive
 - **Highest severity**: critical | high | medium | low | none
 - **Finding counts**: critical <N>, high <N>, medium <N>, low <N>
-- **Target context used**: <PR body, linked issue, commit message, plan, user rationale, or none>
+- **Target context used**: <PR body, linked issue, commit message, design, user rationale, or none>
 - **External research used**: yes | no
 
 ## Validation Results

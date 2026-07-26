@@ -3,7 +3,7 @@
 - Engage conversationally when the user has only a rough idea, intuition, or problem feeling.
 - Help surface what they actually want before any implementation thinking begins.
 - Perform a small read-only sizing pass, then delegate codebase discovery to `explore` when the shared repository exploration guidance calls for it.
-- Keep output chat-first; reserve formal plan/spec artifacts for the planning workflow.
+- Keep output chat-first; reserve formal design artifacts for the design workflow.
 - Prefer the `question` tool for focused clarification prompts so the user can respond directly with minimal back-and-forth.
 
 ## Standing delegation policy
@@ -48,14 +48,14 @@ When the idea is clear enough to hand off, summarize in this format and stop:
 - **Desired outcome**: <what does success look like>
 - **Key constraints**: <known constraints or non-goals>
 - **Open questions**: <what still needs to be answered, if any>
-- **Suggested next step**: planning / research first / prototype first
+- **Suggested next step**: design / research first / prototype first
 ```
 
 ## Handoff behavior
 
-- This summary is intended to be handed off to the planning workflow.
+- This summary is intended to be handed off to the design workflow.
 - After the user confirms the idea feels right, or explicitly asks for the summary, produce the `## Idea Summary` using both repository findings and user-provided clarification.
-- Recommend handing off to planning while keeping the same chat history so context is preserved.
+- Recommend handing off to the design workflow while keeping the same chat history so context is preserved.
 - Do not produce this summary until the user confirms the idea feels right or explicitly asks for it.
 
 Idea target: $ARGUMENTS

@@ -89,13 +89,13 @@ delib.module {
         dirs = [".agents"];
         files = [".agents/**"];
       };
-      plans = {
-        dirs = [".agents/plans"];
-        files = [".agents/plans/*.md"];
+      designs = {
+        dirs = [".agents/designs"];
+        files = [".agents/designs/*.md"];
       };
-      specs = {
-        dirs = [".agents/specs"];
-        files = [".agents/specs/*.md"];
+      decisionRecords = {
+        dirs = [".agents/decision-records"];
+        files = [".agents/decision-records/*.md"];
       };
       reports = {
         dirs = [
@@ -189,11 +189,11 @@ delib.module {
             denyAll
             // allow [
               "mkdir .agents"
-              "mkdir .agents/plans"
-              "mkdir .agents/specs"
+              "mkdir .agents/designs"
+              "mkdir .agents/decision-records"
               "mkdir -p .agents"
-              "mkdir -p .agents/plans"
-              "mkdir -p .agents/specs"
+              "mkdir -p .agents/designs"
+              "mkdir -p .agents/decision-records"
             ]
             // deny (denyShellOperatorsFor ["mkdir"]);
         };
@@ -444,16 +444,16 @@ delib.module {
       };
 
       scope = {
-        plans = ops: base:
+        designs = ops: base:
           grantScope {
-            name = "plans";
+            name = "designs";
             inherit ops;
           }
           base;
 
-        specs = ops: base:
+        decisionRecords = ops: base:
           grantScope {
-            name = "specs";
+            name = "decisionRecords";
             inherit ops;
           }
           base;
@@ -552,7 +552,7 @@ delib.module {
       ];
 
       scoutFull = mergeMany [
-        (perm.scope.plans ["edit*"] (perm.scope.specs ["edit*"] readOnlyBase))
+        (perm.scope.designs ["edit*"] (perm.scope.decisionRecords ["edit*"] readOnlyBase))
         perm.execute.workflowArtifactDirectoryCreation
         perm.execute.safeGitInspection
         perm.execute.safeValidation
