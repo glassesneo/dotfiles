@@ -48,8 +48,12 @@ Conduct the dialogue as a conversation, not an interview:
 5. Let answers change the agenda. When a choice makes later questions moot or
    reframes them, drop them and re-open with free text.
 
-When a structured question capability is available, use it for commitment
-points. Ordinary chat remains the main channel.
+When a `question` capability is available, use it whenever you ask the user for
+an answer. Use `text` for free-text exploration and `single`, `multi`, or
+`confirm` for selection and commitment. Keep ordinary chat for investigation
+results, reflection, and explanation; do not request an answer there. If the
+capability is unavailable, ask the same necessary question in ordinary chat.
+Continue to group related questions and ask only the minimum needed.
 
 ## Selection Quality
 
@@ -64,8 +68,10 @@ points. Ordinary chat remains the main channel.
 
 ## Workflow
 
-1. **Draw out intent.** Free-text exploration of what the user wants and why
-   the current situation dissatisfies them.
+1. **Draw out intent.** Explore in free text what the user wants and why the
+   current situation dissatisfies them. Use a `text` question when the
+   capability is available; free text describes the answer format, not the
+   conversation channel.
 2. **Investigate.** Establish what the repository actually constrains, so the
    option space is real. Weak constraints still bound some choices.
 3. **Frame and select.** Work through the decisions that shape the result,
@@ -73,8 +79,9 @@ points. Ordinary chat remains the main channel.
    own words.
 4. **Estimate scale.** Before assembling, propose the expected footprint, the
    new interfaces the work does need, and an explicit do-not-build list.
-   Confirm it with the user. An open-ended brief is where over-building starts;
-   this contract is what constrains the implementer.
+   Confirm it with the user through `confirm` when the capability is available.
+   An open-ended brief is where over-building starts; this contract is what
+   constrains the implementer.
 5. **Recap and assemble.** Restate the settled decisions compactly, then build
    the design from them. The user should recognize the document as the choices
    they already made, not meet it for the first time at approval.

@@ -53,7 +53,7 @@ export function createQuestionToolDefinition(): ToolDefinition<
         label: "Question",
         description: questionDescription,
         promptSnippet:
-            "Ask the user for task-blocking decisions or missing information, with optional notes on selections",
+            "Ask the user to make user-owned decisions or provide missing information that affects the current task, with optional notes on selections",
         promptGuidelines: questionPromptGuidelines,
         parameters: questionParameters,
         executionMode: "sequential",

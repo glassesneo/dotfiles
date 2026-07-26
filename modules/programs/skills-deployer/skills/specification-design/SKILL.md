@@ -47,13 +47,19 @@ Conduct the dialogue as a conversation, not an interview:
 4. Let answers change the agenda. When an answer invalidates the direction of
    your remaining questions, drop them and re-open with free text.
 
-When a structured question capability is available, use it for commitment
-points. Ordinary chat remains the main channel.
+When a `question` capability is available, use it whenever you ask the user for
+an answer. Use `text` for free-text exploration and `single`, `multi`, or
+`confirm` for selection and commitment. Keep ordinary chat for investigation
+results, reflection, and explanation; do not request an answer there. If the
+capability is unavailable, ask the same necessary question in ordinary chat.
+Continue to group related questions and ask only the minimum needed.
 
 ## Workflow
 
 1. **Elicit.** Ask the user to describe the intended behavior, the parts they
-   consider fixed, and what they know is still open. Keep this in free text.
+   consider fixed, and what they know is still open. Use a `text` question when
+   the capability is available; free text describes the answer format, not the
+   conversation channel.
 2. **Investigate.** Resolve discoverable facts: existing interfaces, ownership
    boundaries, constraints, and prior art. Bring evidence back into the
    dialogue.
@@ -65,8 +71,9 @@ points. Ordinary chat remains the main channel.
    criteria, or approach.
 5. **Estimate scale.** Before assembling, propose the expected footprint, the
    new interfaces the work does need, and an explicit do-not-build list.
-   Confirm it with the user. Frontier models over-build by default; this
-   contract is what constrains the implementer.
+   Confirm it with the user through `confirm` when the capability is available.
+   Frontier models over-build by default; this contract is what constrains the
+   implementer.
 6. **Recap and assemble.** Restate the settled decisions compactly, then build
    the design from them. The user should recognize the document as the
    decisions they already made, not meet it for the first time at approval.
