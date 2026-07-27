@@ -1,44 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type {
-  ExtensionAPI,
-  ExtensionContext,
-  ExtensionUIContext,
-} from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { TUI } from "@earendil-works/pi-tui";
 import registerQuestion, {
   createQuestionToolDefinition,
   questionPromptGuidelines,
 } from "../extensions_src/question.ts";
 import type { QuestionResultDetails } from "../extensions_src/utilities/decision_core.ts";
-
-function resultText(content: { type: string; text?: string }): string {
-  assert.equal(content.type, "text");
-  assert.equal(typeof content.text, "string");
-  return content.text as string;
-}
-
-function context(options: {
-  mode: ExtensionContext["mode"];
-  hasUI: boolean;
-  ui?: Partial<ExtensionUIContext>;
-}): ExtensionContext {
-  const unexpected = () => {
-    throw new Error("Unexpected UI call");
-  };
-  return {
-    mode: options.mode,
-    hasUI: options.hasUI,
-    ui: {
-      select: unexpected,
-      input: unexpected,
-      editor: unexpected,
-      notify: unexpected,
-      custom: unexpected,
-      ...options.ui,
-    } as ExtensionUIContext,
-  } as ExtensionContext;
-}
+import { extensionContext as context, textResult as resultText } from "./test_helpers.ts";
 
 const params = {
   questions: [

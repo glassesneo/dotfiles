@@ -289,5 +289,4 @@ export async function runTuiDecisionFlow(context: TuiQuestionContext, questions:
     return context.ui.custom<QuestionResultDetails>((tui, theme, keybindings, done) => new DecisionComponent({ tui, theme, keybindings, keymapConfig: loaded.config, keymapPath: loaded.path, questions, progress, policy, signal, done }));
 }
 
-export { DecisionComponent as QuestionComponent };
 export const runTuiQuestionFlow = runTuiDecisionFlow;

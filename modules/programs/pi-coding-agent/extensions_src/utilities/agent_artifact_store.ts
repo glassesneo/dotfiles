@@ -1,6 +1,8 @@
-import { copyFile, mkdir, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
-import { basename, join } from "node:path";
+import { randomUUID } from "node:crypto";
+import { mkdir, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { Type } from "typebox";
+import { withPendingArtifactLock } from "./agent_artifact_lock.ts";
 
 export const artifactKinds = ["design", "decision-record"] as const;
 
@@ -93,10 +95,6 @@ export function getJstTimestamp(date = new Date()): string {
 
 function isAlreadyExistsError(error: unknown): boolean {
     return error instanceof Error && "code" in error && error.code === "EEXIST";
-}
-
-function isCrossDeviceError(error: unknown): boolean {
-    return error instanceof Error && "code" in error && error.code === "EXDEV";
 }
 
 function assertSlug(slug: string, label = "Artifact slug"): void {
@@ -194,31 +192,73 @@ function summarizeContent(content: string, slug: string): Pick<ArtifactSummary, 
     };
 }
 
-async function writeArtifact(directory: string, timestamp: string, slug: string, content: string): Promise<string> {
-    await mkdir(directory, { recursive: true });
-    for (let version = 1; version <= 99; version += 1) {
+function artifactCandidates(directory: string, timestamp: string, slug: string): string[] {
+    return Array.from({ length: 99 }, (_, index) => {
+        const version = index + 1;
         const suffix = version === 1 ? "" : `-v${version}`;
-        const artifactPath = join(directory, `${timestamp}-${slug}${suffix}.md`);
-        try {
-            await writeFile(artifactPath, content, { flag: "wx" });
-            return artifactPath;
-        } catch (error) {
-            if (!isAlreadyExistsError(error)) throw error;
-        }
-    }
-    throw new Error(`Could not save artifact after trying the base filename and suffixes through -v99 in ${directory}`);
+        return join(directory, `${timestamp}-${slug}${suffix}.md`);
+    });
 }
 
-async function nextArtifactPath(directory: string, timestamp: string, slug: string): Promise<string> {
+function promotionClaimPath(finalPath: string): string {
+    return `${finalPath}.pending-approval`;
+}
+
+async function removeIfPresent(path: string): Promise<void> {
+    try {
+        await unlink(path);
+    } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+}
+
+async function promoteContentWithoutClobber(
+    directory: string,
+    timestamp: string,
+    slug: string,
+    pendingId: string,
+    content: string,
+): Promise<{ finalPath: string; claimPath: string }> {
     await mkdir(directory, { recursive: true });
-    for (let version = 1; version <= 99; version += 1) {
-        const suffix = version === 1 ? "" : `-v${version}`;
-        const artifactPath = join(directory, `${timestamp}-${slug}${suffix}.md`);
+    for (const finalPath of artifactCandidates(directory, timestamp, slug)) {
+        const claimPath = promotionClaimPath(finalPath);
+        let claim: "new" | "recovered" | "other" | undefined;
+        while (claim === undefined) {
+            try {
+                await writeFile(claimPath, `${pendingId}\n`, { encoding: "utf8", flag: "wx" });
+                claim = "new";
+            } catch (error) {
+                if (!isAlreadyExistsError(error)) throw error;
+                const owner = await readFile(claimPath, "utf8").catch(readError => {
+                    if ((readError as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+                    throw readError;
+                });
+                if (owner === undefined) continue;
+                claim = owner.trim() === pendingId ? "recovered" : "other";
+            }
+        }
+        if (claim === "other") continue;
+
+        if (claim === "recovered") {
+            const existing = await readFile(finalPath, "utf8").catch(async error => {
+                if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+                try {
+                    await writeFile(finalPath, content, { encoding: "utf8", flag: "wx" });
+                    return content;
+                } catch (writeError) {
+                    if (!isAlreadyExistsError(writeError)) throw writeError;
+                    return readFile(finalPath, "utf8");
+                }
+            });
+            if (existing !== content) throw new Error(`Pending artifact promotion content mismatch: ${pendingId}`);
+            return { finalPath, claimPath };
+        }
+
         try {
-            await writeFile(artifactPath, "", { flag: "wx" });
-            await unlink(artifactPath);
-            return artifactPath;
+            await writeFile(finalPath, content, { encoding: "utf8", flag: "wx" });
+            return { finalPath, claimPath };
         } catch (error) {
+            await removeIfPresent(claimPath);
             if (!isAlreadyExistsError(error)) throw error;
         }
     }
@@ -236,10 +276,17 @@ function pendingPaths(cwd: string, id: string): { contentPath: string; metadataP
 }
 
 async function writeMetadata(metadata: PendingArtifactMetadata): Promise<void> {
-    await writeFile(metadata.metadataPath, `${JSON.stringify(metadata, null, 2)}\n`);
+    const temporaryPath = `${metadata.metadataPath}.${process.pid}.${randomUUID()}.tmp`;
+    try {
+        await writeFile(temporaryPath, `${JSON.stringify(metadata, null, 2)}\n`, { encoding: "utf8", flag: "wx", mode: 0o600 });
+        await rename(temporaryPath, metadata.metadataPath);
+    } catch (error) {
+        await removeIfPresent(temporaryPath);
+        throw error;
+    }
 }
 
-async function buildMetadata(cwd: string, base: Omit<PendingArtifactMetadata, "title" | "summary" | "lineCount" | "fileSize">, content: string): Promise<PendingArtifactMetadata> {
+async function buildMetadata(base: Omit<PendingArtifactMetadata, "title" | "summary" | "lineCount" | "fileSize">, content: string): Promise<PendingArtifactMetadata> {
     const file = await stat(base.contentPath);
     return { ...base, ...summarizeContent(content, base.slug), fileSize: file.size };
 }
@@ -256,24 +303,13 @@ async function nextPendingId(cwd: string, timestamp: string, slug: string): Prom
         const id = `${timestamp}-${slug}${suffix}`;
         const { contentPath } = pendingPaths(cwd, id);
         try {
-            await writeFile(contentPath, "", { flag: "wx" });
-            await unlink(contentPath);
+            await writeFile(contentPath, "", { flag: "wx", mode: 0o600 });
             return id;
         } catch (error) {
             if (!isAlreadyExistsError(error)) throw error;
         }
     }
     throw new Error("Could not allocate pending artifact id");
-}
-
-export interface SaveAgentArtifactOptions { cwd: string; kind: ArtifactKind; slug: string; content: string; now?: Date; }
-export interface SavedAgentArtifact { projectPath: string; timestamp: string; }
-
-export async function saveAgentArtifact({ cwd, kind, slug, content, now = new Date() }: SaveAgentArtifactOptions): Promise<SavedAgentArtifact> {
-    assertSlug(slug);
-    const timestamp = getJstTimestamp(now);
-    const projectPath = await writeArtifact(join(cwd, ".agents", directoryForKind(kind)), timestamp, slug, content);
-    return { projectPath, timestamp };
 }
 
 export interface CreateOrUpdatePendingOptions { cwd: string; kind: ArtifactKind; slug: string; content: string; pendingId?: string; now?: Date; }
@@ -312,7 +348,7 @@ export async function createOrUpdatePendingArtifact({ cwd, kind, slug, content, 
         pendingPath: contentPath,
         plannedFinalPath,
     };
-    const metadata = await buildMetadata(cwd, base, content);
+    const metadata = await buildMetadata(base, content);
     await writeMetadata(metadata);
     return metadata;
 }
@@ -327,32 +363,38 @@ export async function readPendingArtifactContent(cwd: string, pendingId: string)
     return readFile(contentPath, "utf8");
 }
 
-async function moveFile(source: string, destination: string): Promise<void> {
-    try {
-        await rename(source, destination);
-    } catch (error) {
-        if (!isCrossDeviceError(error)) throw error;
-        await copyFile(source, destination);
-        await unlink(source);
-    }
-}
-
 export async function approvePendingArtifact(cwd: string, pendingId: string, now = new Date()): Promise<PendingArtifactMetadata> {
-    const metadata = await readPendingArtifact(cwd, pendingId);
-    const directory = join(cwd, ".agents", directoryForKind(metadata.kind));
-    const finalPath = await nextArtifactPath(directory, metadata.timestamp, metadata.slug);
-    await moveFile(metadata.contentPath, finalPath);
-    const approved: PendingArtifactMetadata = {
-        ...metadata,
-        state: "approved",
-        updatedAt: now.toISOString(),
-        finalPath,
-        plannedFinalPath: finalPath,
-        contentPath: finalPath,
-        pendingPath: metadata.pendingPath,
-    };
-    await writeMetadata(approved);
-    return approved;
+    return withPendingArtifactLock(projectPendingDirectory(cwd), pendingId, async () => {
+        const metadata = await readPendingArtifact(cwd, pendingId);
+        if (metadata.state === "approved" && metadata.finalPath !== undefined) {
+            await removeIfPresent(metadata.pendingPath);
+            await removeIfPresent(promotionClaimPath(metadata.finalPath));
+            return metadata;
+        }
+
+        const content = await readFile(metadata.pendingPath, "utf8");
+        const directory = join(cwd, ".agents", directoryForKind(metadata.kind));
+        const { finalPath, claimPath } = await promoteContentWithoutClobber(
+            directory,
+            metadata.timestamp,
+            metadata.slug,
+            metadata.id,
+            content,
+        );
+        const approved: PendingArtifactMetadata = {
+            ...metadata,
+            state: "approved",
+            updatedAt: now.toISOString(),
+            finalPath,
+            plannedFinalPath: finalPath,
+            contentPath: finalPath,
+            pendingPath: metadata.pendingPath,
+        };
+        await writeMetadata(approved);
+        await removeIfPresent(metadata.pendingPath);
+        await removeIfPresent(claimPath);
+        return approved;
+    });
 }
 
 export async function requestPendingArtifactRevision(cwd: string, pendingId: string, instructions: string, now = new Date()): Promise<PendingArtifactMetadata> {
@@ -371,8 +413,4 @@ export async function rejectPendingArtifact(cwd: string, pendingId: string, now 
 
 export function artifactSummary(metadata: PendingArtifactMetadata): ArtifactSummary {
     return toSummary(metadata);
-}
-
-export function artifactFilename(path: string): string {
-    return basename(path);
 }

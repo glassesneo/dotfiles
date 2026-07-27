@@ -13,6 +13,7 @@ in
     options = with delib;
       moduleOptions {
         enable = boolOption true;
+        configDir = readOnly (strOption configDir);
         defaultExtensions = readOnly (listOfOption str [
           "profile"
         ]);
@@ -41,30 +42,35 @@ in
         then item.module.extensionPaths
         else [])
       selected;
+      duplicateNames = lib.unique (builtins.filter (name: lib.count (candidate: candidate == name) cfg.defaultExtensions > 1) cfg.defaultExtensions);
+      missingNames = map (item: item.name) (builtins.filter (item: item.module == null) selected);
+      disabledNames = map (item: item.name) (builtins.filter (item: item.module != null && !(item.module ? enable && item.module.enable)) selected);
+      emptyPathNames = map (item: item.name) (builtins.filter (item: item.module != null && !(item.module ? extensionPaths && item.module.extensionPaths != [])) selected);
+      names = values: lib.concatStringsSep ", " values;
     in {
       assertions = [
         {
           assertion = !duplicates;
-          message = "Pi defaultExtensions must not contain duplicate module names.";
+          message = "Pi defaultExtensions must not contain duplicate module names: ${names duplicateNames}.";
         }
         {
           assertion = builtins.all (item: item.module != null) selected;
-          message = "Pi defaultExtensions must reference existing modules below programs.pi-coding-agent.";
+          message = "Pi defaultExtensions must reference existing modules below programs.pi-coding-agent; missing: ${names missingNames}.";
         }
         {
           assertion = builtins.all (item: item.module == null || (item.module ? enable && item.module.enable)) selected;
-          message = "Pi selected default extension modules must be enabled.";
+          message = "Pi selected default extension modules must be enabled; disabled: ${names disabledNames}.";
         }
         {
           assertion = builtins.all (item: item.module == null || (item.module ? extensionPaths && item.module.extensionPaths != [])) selected;
-          message = "Pi selected default extension modules must expose non-empty extensionPaths.";
+          message = "Pi selected default extension modules must expose non-empty extensionPaths; invalid: ${names emptyPathNames}.";
         }
       ];
 
       programs.pi-coding-agent = {
         enable = true;
         package = llm-agents.pi;
-        inherit configDir;
+        inherit (cfg) configDir;
         settings = {
           extensions = lib.mkBefore extensionPaths;
           prompts = [

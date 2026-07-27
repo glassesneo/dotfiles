@@ -4,7 +4,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import {
+    appendEvent,
+    appendTerminalEvent,
     createRun,
+    failRun,
     finishRun,
     finishStoppedRun,
     patchStatus,
@@ -101,8 +104,9 @@ test("run store enforces state transitions and writes result before terminal sta
 test("concurrent stale-lock reclaimers preserve mutual exclusion", async () => {
     const { config } = await fixture();
     const run = await createRun(config, "full", fullProfile, "Stale lock", "task", "/work");
-    await mkdir(run.paths.lock);
-    await writeFile(join(run.paths.lock, "owner.json"), JSON.stringify({ pid: 99_999_999, acquiredAt: "now", token: "dead" }));
+    const lockDirectory = join(run.paths.directory, ".lock");
+    await mkdir(lockDirectory);
+    await writeFile(join(lockDirectory, "owner.json"), JSON.stringify({ pid: 99_999_999, acquiredAt: "now", token: "dead" }));
     let active = 0;
     let maximumActive = 0;
     const operation = () => withRunLock(run.paths.directory, async () => {
@@ -113,6 +117,25 @@ test("concurrent stale-lock reclaimers preserve mutual exclusion", async () => {
     });
     await Promise.all([operation(), operation()]);
     assert.equal(maximumActive, 1);
+});
+
+test("terminal event append is atomic, unique, and follows the persisted sequence", async () => {
+    const { config } = await fixture();
+    const run = await createRun(config, "full", fullProfile, "Terminal event", "task", "/work");
+    await appendEvent(run.paths, {
+        schemaVersion: 2, sequence: 4, timestamp: "start", type: "run_started", data: { profile: "full" },
+    });
+    const terminal = {
+        schemaVersion: 2 as const, sequence: 1, timestamp: "finish", type: "run_finished" as const, data: { outcome: "stopped" },
+    };
+
+    const appended = await Promise.all([
+        appendTerminalEvent(run.paths, terminal),
+        appendTerminalEvent(run.paths, terminal),
+    ]);
+    assert.deepEqual(appended.sort(), [false, true]);
+    const events = (await readFile(run.paths.events, "utf8")).trim().split("\n").map(line => JSON.parse(line) as { sequence: number; type: string });
+    assert.deepEqual(events.map(event => [event.sequence, event.type]), [[4, "run_started"], [5, "run_finished"]]);
 });
 
 test("run lock does not mistake an operation EEXIST error for lock contention", async () => {
@@ -146,6 +169,17 @@ test("stop wins terminalization after stopping and legacy live statuses are reje
     assert.equal(snapshot.status, "stopped");
     assert.equal(snapshot.result?.outcome, "stopped");
     assert.ok(snapshot.result?.stopMethod === "cooperative" || snapshot.result?.stopMethod === "forced");
+
+    const failing = await createRun(config, "full", fullProfile, "Stop versus failure", "task", "/work");
+    await patchStatus(failing.paths, { status: "starting" });
+    await patchStatus(failing.paths, { status: "running", startedAt: "start" });
+    await requestRunStop(failing.paths);
+    const failed = await failRun(failing.paths, { category: "harness", message: "too late" }, "start");
+    assert.equal(failed.status, "stopping");
+    await finishStoppedRun(failing.paths, "cooperative");
+    const failingSnapshot = await readSnapshot(config.stateRoot, failing.request.runId);
+    assert.equal(failingSnapshot.status, "stopped");
+    assert.equal(failingSnapshot.result?.outcome, "stopped");
 
     const legacy = await createRun(config, "full", fullProfile, "Legacy live", "task", "/work");
     const legacyStatus = JSON.parse(await readFile(legacy.paths.status, "utf8")) as Record<string, unknown>;

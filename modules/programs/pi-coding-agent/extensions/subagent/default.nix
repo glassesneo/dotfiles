@@ -8,7 +8,6 @@
   ...
 }: let
   moduleName = "programs.pi-coding-agent.subagent";
-  configDir = "${homeConfig.home.homeDirectory}/.pi/agent";
   profileExtension = "${./../../extensions_src}/profile.ts";
   subagentExtension = "${./../../extensions_src}/subagent.ts";
 in
@@ -29,14 +28,39 @@ in
         tools = ["subagent_start" "subagent_get" "subagent_wait" "subagent_stop"];
         extensions.subagent.allowedTargets = ["focused-reviewer"];
       };
-      # scout = {
-      # tools = ["subagent_start" "subagent_get" "subagent_wait" "subagent_stop"];
-      # };
     };
 
     home.always = {myconfig, ...}: let
       profiles = myconfig.programs.pi-coding-agent.profile.profiles;
       profileNames = builtins.attrNames profiles;
+      runtimeWhitespace = map builtins.fromJSON [
+        ''"\u0009"''
+        ''"\u000a"''
+        ''"\u000b"''
+        ''"\u000c"''
+        ''"\u000d"''
+        ''"\u0020"''
+        ''"\u00a0"''
+        ''"\u1680"''
+        ''"\u2000"''
+        ''"\u2001"''
+        ''"\u2002"''
+        ''"\u2003"''
+        ''"\u2004"''
+        ''"\u2005"''
+        ''"\u2006"''
+        ''"\u2007"''
+        ''"\u2008"''
+        ''"\u2009"''
+        ''"\u200a"''
+        ''"\u2028"''
+        ''"\u2029"''
+        ''"\u202f"''
+        ''"\u205f"''
+        ''"\u3000"''
+        ''"\ufeff"''
+      ];
+      nonBlank = value: builtins.replaceStrings runtimeWhitespace (map (_: "") runtimeWhitespace) value != "";
       validFacet = profile: let
         facet = profile.extensions.subagent or null;
         keys =
@@ -54,7 +78,7 @@ in
           builtins.isAttrs facet
           && builtins.all (key: key == "allowedTargets") keys
           && builtins.isList targets
-          && builtins.all (target: builtins.isString target && target != "") targets
+          && builtins.all (target: builtins.isString target && nonBlank target) targets
           && lib.length targets == lib.length (lib.unique targets)
           && builtins.all (target: builtins.elem target profileNames) targets
         );
@@ -67,7 +91,11 @@ in
       ];
     };
 
-    home.ifEnabled = {cfg, ...}: {
+    home.ifEnabled = {
+      cfg,
+      myconfig,
+      ...
+    }: {
       assertions = [
         {
           assertion = cfg.maxDepth >= 0;
@@ -77,7 +105,7 @@ in
 
       programs.pi-coding-agent.settings.extensions = [subagentExtension];
 
-      home.file."${configDir}/subagent.json".text = builtins.toJSON {
+      home.file."${myconfig.programs.pi-coding-agent.configDir}/subagent.json".text = builtins.toJSON {
         schemaVersion = 1;
         stateRoot = "${homeConfig.xdg.stateHome}/pi/subagents/runs";
         runner = {

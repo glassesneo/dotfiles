@@ -45,7 +45,6 @@ export interface RunPaths {
     result: string;
     usageClaim: string;
     launcher: string;
-    lock: string;
 }
 
 export function assertRunId(runId: string): void {
@@ -59,7 +58,7 @@ export function runPaths(stateRoot: string, runId: string): RunPaths {
         directory,
         request: join(directory, "request.json"), resolved: join(directory, "resolved.json"), status: join(directory, "status.json"),
         events: join(directory, "events.jsonl"), stderr: join(directory, "stderr.log"), result: join(directory, "result.json"),
-        usageClaim: join(directory, "usage-claim.json"), launcher: join(directory, "launch.sh"), lock: join(directory, ".lock"),
+        usageClaim: join(directory, "usage-claim.json"), launcher: join(directory, "launch.sh"),
     };
 }
 
@@ -164,8 +163,25 @@ export async function attachTmux(paths: RunPaths, tmux: TmuxRunReference): Promi
     return patchStatus(paths, { tmux });
 }
 
+async function readEvents(paths: RunPaths): Promise<NormalizedEvent[]> {
+    return (await readFile(paths.events, "utf8"))
+        .split("\n")
+        .filter(Boolean)
+        .map(line => JSON.parse(line) as NormalizedEvent);
+}
+
 export async function appendEvent(paths: RunPaths, event: NormalizedEvent): Promise<void> {
     await appendFile(paths.events, `${JSON.stringify(event)}\n`, { encoding: "utf8", mode: 0o600 });
+}
+
+export async function appendTerminalEvent(paths: RunPaths, event: NormalizedEvent): Promise<boolean> {
+    return withRunLock(paths.directory, async () => {
+        const events = await readEvents(paths);
+        if (events.some(existing => existing.type === "run_finished")) return false;
+        const sequence = events.reduce((maximum, existing) => Math.max(maximum, existing.sequence), 0) + 1;
+        await appendFile(paths.events, `${JSON.stringify({ ...event, sequence })}\n`, { encoding: "utf8", mode: 0o600 });
+        return true;
+    });
 }
 
 export async function appendStderr(paths: RunPaths, text: string): Promise<void> {

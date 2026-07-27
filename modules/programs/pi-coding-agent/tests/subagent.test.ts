@@ -27,6 +27,15 @@ import type { CommandExecutor } from "../extensions_src/utilities/subagent_tmux.
 import type { AgentProfileConfig } from "../extensions_src/utilities/profile_types.ts";
 import type { SubagentRuntimeConfig } from "../extensions_src/utilities/subagent_types.ts";
 
+async function runFinishedEvents(path: string): Promise<Array<{ data: { outcome?: string; method?: string } }>> {
+    return (await readFile(path, "utf8"))
+        .split("\n")
+        .filter(Boolean)
+        .map(line => JSON.parse(line) as { type: string; data: { outcome?: string; method?: string } })
+        .filter(event => event.type === "run_finished")
+        .map(event => ({ data: event.data }));
+}
+
 function context(cwd: string): ExtensionContext {
     return {
         cwd,
@@ -764,6 +773,9 @@ printf '%s\\n' \\
         paneId: "%1",
         windowName: "sa-test",
     });
+    await writeFile(run.paths.events, `${JSON.stringify({
+        schemaVersion: 2, sequence: 7, timestamp: "before-restart", type: "diagnostic", data: { category: "protocol", message: "prior attempt" },
+    })}\n`);
 
     await runSubagent(run.paths.directory);
     const snapshot = await readSnapshot(fixture.config.stateRoot, run.request.runId);
@@ -777,7 +789,10 @@ printf '%s\\n' \\
     assert.match(args, /-e\n\/profile\.ts\n-e\n\/subagent\.ts/);
     assert.match(args, /--profile\nfull/);
     assert.equal((await readFile(envPath, "utf8")).trim(), `1|${run.request.runId}|session`);
+    const events = (await readFile(run.paths.events, "utf8")).trim().split("\n").map(line => JSON.parse(line) as { sequence: number });
+    assert.ok(events.every((event, index) => index === 0 || event.sequence > events[index - 1]!.sequence));
     assert.match(await readFile(run.paths.events, "utf8"), /assistant_text/);
+    assert.deepEqual(await runFinishedEvents(run.paths.events), [{ data: { outcome: "succeeded" } }]);
 });
 
 test("runner cooperatively stops the child process and persists a stopped result", async () => {
@@ -801,6 +816,9 @@ test("runner cooperatively stops the child process and persists a stopped result
     const snapshot = await readSnapshot(fixture.config.stateRoot, run.request.runId);
     assert.equal(snapshot.status, "stopped");
     assert.equal(snapshot.result?.stopMethod, "cooperative");
+    assert.deepEqual(await runFinishedEvents(run.paths.events), [{
+        data: { outcome: "stopped", method: "cooperative" },
+    }]);
 });
 
 test("runner rejects split lineage before spawning Pi", async () => {
@@ -824,6 +842,7 @@ test("runner rejects split lineage before spawning Pi", async () => {
     assert.equal(snapshot, undefined);
     assert.equal(existsSync(marker), false);
     assert.match(await readFile(run.paths.stderr, "utf8"), /metadata disagree/);
+    assert.deepEqual(await runFinishedEvents(run.paths.events), [{ data: { outcome: "failed" } }]);
 
     const legacy = await createRun(fixture.config, "full", fixture.profiles.profiles.full!, "Legacy live runner", "task", fixture.root, {
         callerProfile: "full", depth: 1, originSessionId: "session",
@@ -837,6 +856,7 @@ test("runner rejects split lineage before spawning Pi", async () => {
     process.exitCode = undefined;
     assert.equal(existsSync(marker), false);
     assert.match(await readFile(legacy.paths.stderr, "utf8"), /legacy status schema v2/);
+    assert.deepEqual(await runFinishedEvents(legacy.paths.events), [{ data: { outcome: "failed" } }]);
 });
 
 test("stop terminalizes only the target, preserves immediate children, and is idempotent", async () => {

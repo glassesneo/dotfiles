@@ -1,11 +1,9 @@
 {
   delib,
-  homeConfig,
   lib,
   ...
 }: let
   moduleName = "programs.pi-coding-agent.profile";
-  configDir = "${homeConfig.home.homeDirectory}/.pi/agent";
   profileType = delib.submodule {
     options = with delib; {
       model = noDefault (strOption null);
@@ -71,14 +69,54 @@ in
       };
     };
 
-    home.ifEnabled = {cfg, ...}: let
+    home.ifEnabled = {
+      cfg,
+      myconfig,
+      ...
+    }: let
       profileNames = builtins.attrNames cfg.profiles;
+      profiles = builtins.attrValues cfg.profiles;
+      runtimeWhitespace = map builtins.fromJSON [
+        ''"\u0009"''
+        ''"\u000a"''
+        ''"\u000b"''
+        ''"\u000c"''
+        ''"\u000d"''
+        ''"\u0020"''
+        ''"\u00a0"''
+        ''"\u1680"''
+        ''"\u2000"''
+        ''"\u2001"''
+        ''"\u2002"''
+        ''"\u2003"''
+        ''"\u2004"''
+        ''"\u2005"''
+        ''"\u2006"''
+        ''"\u2007"''
+        ''"\u2008"''
+        ''"\u2009"''
+        ''"\u200a"''
+        ''"\u2028"''
+        ''"\u2029"''
+        ''"\u202f"''
+        ''"\u205f"''
+        ''"\u3000"''
+        ''"\ufeff"''
+      ];
+      nonBlank = value: builtins.replaceStrings runtimeWhitespace (map (_: "") runtimeWhitespace) value != "";
       referencesExist = names: builtins.all (name: builtins.elem name profileNames) names;
       knownFacets = builtins.attrNames cfg.facetOwners;
       profileFacetsKnown = profile:
         builtins.all (facet: builtins.elem facet knownFacets) (builtins.attrNames profile.extensions);
       modelValid = profile: builtins.match "[^/[:space:]]+/[^/[:space:]]+" profile.model != null;
-      descriptionValid = profile: profile.description != "" && builtins.stringLength profile.description <= 512;
+      descriptionValid = profile: nonBlank profile.description && builtins.stringLength profile.description <= 512;
+      toolsValid = profile:
+        builtins.all nonBlank (
+          if profile.allowAllTools
+          then profile.tools
+          else cfg.defaultTools ++ profile.tools
+        );
+      instructionsValid = profile: profile.instructions == null || nonBlank profile.instructions;
       serializeProfile = profile:
         cleanProfile (
           if profile.allowAllTools
@@ -101,27 +139,35 @@ in
           message = "Pi profileCycle must contain one or more unique existing profile names.";
         }
         {
-          assertion = builtins.all (name: name != "") profileNames;
-          message = "Pi agent profile names must not be empty.";
+          assertion = builtins.all nonBlank profileNames;
+          message = "Pi agent profile names must be non-blank.";
         }
         {
-          assertion = builtins.all modelValid (builtins.attrValues cfg.profiles);
+          assertion = builtins.all modelValid profiles;
           message = "Pi profile models must use provider/model format.";
         }
         {
-          assertion = builtins.all descriptionValid (builtins.attrValues cfg.profiles);
-          message = "Pi profile descriptions must be non-empty and at most 512 UTF-8 bytes.";
+          assertion = builtins.all descriptionValid profiles;
+          message = "Pi profile descriptions must be non-blank and at most 512 UTF-8 bytes.";
         }
         {
-          assertion = builtins.all (profile: !(profile.allowAllTools && profile.tools != [])) (builtins.attrValues cfg.profiles);
+          assertion = builtins.all toolsValid profiles;
+          message = "Pi profile tools must be non-blank.";
+        }
+        {
+          assertion = builtins.all instructionsValid profiles;
+          message = "Pi profile instructions must be null or non-blank.";
+        }
+        {
+          assertion = builtins.all (profile: !(profile.allowAllTools && profile.tools != [])) profiles;
           message = "Pi profiles with allowAllTools enabled must not also declare tools.";
         }
         {
-          assertion = builtins.all profileFacetsKnown (builtins.attrValues cfg.profiles);
+          assertion = builtins.all profileFacetsKnown profiles;
           message = "Pi profile extension facets must have a registered facet owner.";
         }
       ];
 
-      home.file."${configDir}/agent-profiles.json".text = builtins.toJSON runtimeConfig;
+      home.file."${myconfig.programs.pi-coding-agent.configDir}/agent-profiles.json".text = builtins.toJSON runtimeConfig;
     };
   }

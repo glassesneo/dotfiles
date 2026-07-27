@@ -64,6 +64,38 @@ test("schema accepts all four kinds and multiple questions", () => {
     );
 });
 
+test("schema characterizes required fields, closed objects, and option/note shapes", () => {
+    const valid = {
+        questions: [{
+            id: "choice", prompt: "Choose", kind: "single",
+            options: [{ value: "a", label: "A", description: "First" }],
+            note: { mode: "per-option", prompt: "Why?", placeholder: "Reason" },
+        }],
+    };
+    assert.equal(Value.Check(questionParameters, valid), true);
+
+    const invalid: unknown[] = [
+        {},
+        { questions: [{ prompt: "Choose", kind: "single" }] },
+        { questions: [{ id: "choice", kind: "single" }] },
+        { questions: [{ id: "choice", prompt: "Choose" }] },
+        { questions: [{ id: "choice", prompt: "Choose", kind: "single", extra: true }] },
+        { questions: [{ id: "choice", prompt: "Choose", kind: "single", options: [{ label: "A" }] }] },
+        { questions: [{ id: "choice", prompt: "Choose", kind: "single", options: [{ value: "a" }] }] },
+        { questions: [{ id: "choice", prompt: "Choose", kind: "single", options: [{ value: "a", label: "A", extra: true }] }] },
+        { questions: [{ id: "choice", prompt: "Choose", kind: "single", note: {} }] },
+        { questions: [{ id: "choice", prompt: "Choose", kind: "single", note: { mode: "other" } }] },
+        { questions: [{ id: "choice", prompt: "Choose", kind: "single", note: { mode: "answer", extra: true } }] },
+        { questions: valid.questions, extra: true },
+    ];
+    for (const value of invalid) assert.equal(Value.Check(questionParameters, value), false, JSON.stringify(value));
+
+    // Kind-specific option counts and combinations are intentionally enforced by runtime validation, not TypeBox.
+    assert.equal(Value.Check(questionParameters, {
+        questions: [{ id: "choice", prompt: "Choose", kind: "single", options: [] }],
+    }), true);
+});
+
 test("runtime validation rejects duplicate and kind-specific violations", () => {
     assert.doesNotThrow(() => validateQuestionParameters({ questions }));
 

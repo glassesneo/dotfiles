@@ -3,7 +3,7 @@ import { getEventListeners } from "node:events";
 import test from "node:test";
 import type { Theme } from "@earendil-works/pi-coding-agent";
 import { visibleWidth, type TUI } from "@earendil-works/pi-tui";
-import { QuestionComponent, runTuiQuestionFlow } from "../extensions_src/utilities/decision_tui.ts";
+import { DecisionComponent, runTuiDecisionFlow } from "../extensions_src/utilities/decision_tui.ts";
 import type { DecisionFlowPolicy, QuestionItem, QuestionResultDetails } from "../extensions_src/utilities/decision_core.ts";
 
 const theme = {
@@ -21,7 +21,7 @@ const single: QuestionItem = { id: "single", prompt: "Choose one", kind: "single
 function harness(questions: readonly QuestionItem[], signal?: AbortSignal, policy?: DecisionFlowPolicy, renderedTheme: Theme = theme) {
     const results: QuestionResultDetails[] = []; let renders = 0;
     const tui = { terminal: { rows: 24, columns: 80 }, requestRender() { renders += 1; } } as TUI;
-    const component = new QuestionComponent({ tui, theme: renderedTheme, keybindings: manager, questions, policy, signal, done: result => { results.push(result); } });
+    const component = new DecisionComponent({ tui, theme: renderedTheme, keybindings: manager, questions, policy, signal, done: result => { results.push(result); } });
     component.focused = true;
     return { component, results, get renders() { return renders; } };
 }
@@ -268,7 +268,7 @@ test("completion, abort, and disposal remove listeners and finish once", () => {
 });
 
 test("TUI adapter injects the app keybinding manager", async () => {
-    const result = await runTuiQuestionFlow({ ui: { async custom(factory) {
+    const result = await runTuiDecisionFlow({ ui: { async custom(factory) {
         let resolved: QuestionResultDetails | undefined;
         const component = await factory({ terminal: { rows: 24, columns: 80 }, requestRender() {} } as TUI, theme, manager, value => { resolved = value as QuestionResultDetails; });
         component.handleInput?.(keys.enter); component.handleInput?.(keys.enter); return resolved as never;

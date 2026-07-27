@@ -72,29 +72,23 @@ export interface QuestionToolResult {
     details: QuestionResultDetails;
 }
 
-// Generic aliases keep the shared flow free to serve tools other than `question`
-// while preserving the question tool's existing public TypeScript API.
-export type DecisionKind = QuestionKind;
-export type DecisionOption = QuestionOption;
-export type DecisionNoteConfig = QuestionNoteConfig;
+// The artifact approval flow shares the decision UI without becoming a question tool.
 export type DecisionItem = QuestionItem;
-export type DecisionAnswer = QuestionAnswer;
 export type DecisionResultDetails = QuestionResultDetails;
-export type PendingDecisionAnswer = PendingQuestionAnswer;
 
 export type DecisionNoteRequirement = "none" | "optional" | "required";
 export interface DecisionFlowPolicy {
     autoSubmitSingle?: boolean;
     noteRequirement?: (
-        item: DecisionItem,
-        option?: DecisionOption,
+        item: QuestionItem,
+        option?: QuestionOption,
     ) => DecisionNoteRequirement;
 }
 
 export function decisionNoteRequirement(
     policy: DecisionFlowPolicy | undefined,
-    item: DecisionItem,
-    option?: DecisionOption,
+    item: QuestionItem,
+    option?: QuestionOption,
 ): DecisionNoteRequirement {
     return policy?.noteRequirement?.(item, option) ?? "optional";
 }
@@ -288,11 +282,6 @@ export class QuestionProgress {
         return includeCurrentQuestion ? { ...base, currentQuestionId: this.current.id } : base;
     }
 }
-
-export const DecisionProgress = QuestionProgress;
-export type DecisionProgress = QuestionProgress;
-export const normalizeDecisionAnswer = normalizeQuestionAnswer;
-export const validateDecisionParameters = validateQuestionParameters;
 
 export function unavailableResult(): QuestionResultDetails { return { status: "unavailable", answers: {} }; }
 export function buildQuestionToolResult(details: QuestionResultDetails): QuestionToolResult {

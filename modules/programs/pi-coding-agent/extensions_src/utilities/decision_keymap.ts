@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { getAgentDir, type KeybindingsManager } from "@earendil-works/pi-coding-agent";
 import { matchesKey, type KeyId } from "@earendil-works/pi-tui";
+import { canonicalKeyId, isValidKeyId } from "./private_key_id.ts";
 
 export const questionContexts = [
     "question.single", "question.multi", "question.confirm", "question.text",
@@ -46,15 +47,6 @@ const required: Partial<Record<QuestionContext, UiAction[][]>> = {
     "question.review": [["accept"], ["move-up", "move-down", "next-question", "previous-question"], ["back", "cancel"]],
 };
 
-function validKey(key: string): boolean {
-    const parts = key.split("+");
-    if (parts.some(part => part.length === 0)) return false;
-    const base = parts.at(-1)!;
-    const modifiers = parts.slice(0, -1);
-    if (new Set(modifiers).size !== modifiers.length || modifiers.some(mod => !["ctrl", "shift", "alt"].includes(mod))) return false;
-    return /^[a-z0-9]$/.test(base) || /^(escape|esc|enter|return|tab|space|backspace|delete|insert|clear|home|end|pageUp|pageDown|up|down|left|right|f(?:[1-9]|1[0-2])|[`\-=\[\]\\;',./!@#$%^&*()_+|~{}:<>?])$/.test(base);
-}
-
 export function validateQuestionKeymapConfig(config: unknown, path = "question-keybindings.json"): QuestionKeymapConfig {
     if (config === null || typeof config !== "object" || Array.isArray(config)) throw new Error(`${path}: expected an object`);
     for (const [context, actions] of Object.entries(config)) {
@@ -63,7 +55,7 @@ export function validateQuestionKeymapConfig(config: unknown, path = "question-k
         for (const [action, keys] of Object.entries(actions)) {
             if (!(uiActions as readonly string[]).includes(action)) throw new Error(`${path}: ${context}: unknown action ${action}`);
             if (!Array.isArray(keys) || keys.some(key => typeof key !== "string")) throw new Error(`${path}: ${context}.${action} must be an array of keys`);
-            for (const key of keys as string[]) if (!validKey(key)) throw new Error(`${path}: ${context}.${action}: invalid key ${JSON.stringify(key)}`);
+            for (const key of keys as string[]) if (!isValidKeyId(key)) throw new Error(`${path}: ${context}.${action}: invalid key ${JSON.stringify(key)}`);
         }
     }
     return config as QuestionKeymapConfig;
@@ -93,7 +85,10 @@ export function resolveQuestionKeymap(manager: Pick<KeybindingsManager, "getKeys
         const effective = { ...result["question.common"], ...result[context] };
         const byKey = new Map<string, UiAction[]>();
         for (const [action, keys] of Object.entries(effective) as Array<[UiAction, KeyId[]]>) {
-            for (const key of keys) byKey.set(key, [...(byKey.get(key) ?? []), action]);
+            for (const key of keys) {
+                const canonical = canonicalKeyId(key);
+                byKey.set(canonical, [...(byKey.get(canonical) ?? []), action]);
+            }
         }
         for (const [key, actions] of byKey) if (actions.length > 1) {
             throw new Error(`${path}: ${context}: key ${key} conflicts between actions ${actions.join(", ")}`);
@@ -133,10 +128,3 @@ export function detailedQuestionHelp(context: QuestionContext, keymap: ResolvedQ
 export function questionHelp(context: QuestionContext, keymap: ResolvedQuestionKeymap): string {
     return detailedQuestionHelp(context, keymap).map(item => `${item.keys[0]} ${item.label}`).join(" • ");
 }
-
-// Generic names for shared decision consumers; question-prefixed names remain
-// compatibility aliases for the deployed keybinding contexts and JSON format.
-export const resolveDecisionKeymap = resolveQuestionKeymap;
-export const decisionHelp = questionHelp;
-export type DecisionContext = QuestionContext;
-export type ResolvedDecisionKeymap = ResolvedQuestionKeymap;

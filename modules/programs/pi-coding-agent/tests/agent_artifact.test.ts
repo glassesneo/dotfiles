@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, readFile, readdir, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import type { ExtensionContext, ExtensionUIContext } from "@earendil-works/pi-coding-agent";
 import Value from "typebox/value";
 import { createAgentArtifactToolDefinition } from "../extensions_src/agent_artifact.ts";
+import { withPendingArtifactLock } from "../extensions_src/utilities/agent_artifact_lock.ts";
 import {
     approvePendingArtifact,
     artifactParameters,
@@ -14,8 +14,8 @@ import {
     readPendingArtifact,
     requestPendingArtifactRevision,
     requiresApproval,
-    saveAgentArtifact,
 } from "../extensions_src/utilities/agent_artifact_store.ts";
+import { extensionContext as context, textResult as resultText } from "./test_helpers.ts";
 
 const fixedDate = new Date("2026-07-17T15:31:45Z");
 
@@ -25,31 +25,6 @@ async function makeTemporaryRoot(t: test.TestContext): Promise<string> {
         await rm(root, { recursive: true, force: true });
     });
     return root;
-}
-
-function context(options: { cwd: string; mode: ExtensionContext["mode"]; hasUI: boolean; ui?: Partial<ExtensionUIContext> }): ExtensionContext {
-    const unexpected = () => {
-        throw new Error("Unexpected UI call");
-    };
-    return {
-        cwd: options.cwd,
-        mode: options.mode,
-        hasUI: options.hasUI,
-        ui: {
-            select: unexpected,
-            input: unexpected,
-            editor: unexpected,
-            notify: unexpected,
-            custom: unexpected,
-            ...options.ui,
-        } as ExtensionUIContext,
-    } as ExtensionContext;
-}
-
-function resultText(content: { type: string; text?: string }): string {
-    assert.equal(content.type, "text");
-    assert.equal(typeof content.text, "string");
-    return content.text as string;
 }
 
 function toolParams(kind: "design" | "decision-record", slug: string, content: string, pendingId?: string): never {
@@ -82,20 +57,6 @@ test("JST timestamps are deterministic for an injected date", () => {
     assert.equal(getJstTimestamp(fixedDate), "20260718-003145");
 });
 
-test("saveAgentArtifact keeps legacy direct-save collision behavior", async t => {
-    const root = await makeTemporaryRoot(t);
-    const project = join(root, "project");
-    await mkdir(project);
-
-    const first = await saveAgentArtifact({ cwd: project, kind: "decision-record", slug: "pi-workflow", content: "first", now: fixedDate });
-    const second = await saveAgentArtifact({ cwd: project, kind: "decision-record", slug: "pi-workflow", content: "second", now: fixedDate });
-
-    assert.equal(first.projectPath, join(project, ".agents", "decision-records", "20260718-003145-pi-workflow.md"));
-    assert.equal(second.projectPath, join(project, ".agents", "decision-records", "20260718-003145-pi-workflow-v2.md"));
-    assert.equal(await readFile(first.projectPath, "utf8"), "first");
-    assert.equal(await readFile(second.projectPath, "utf8"), "second");
-});
-
 test("pending creation writes content and metadata outside final directories", async t => {
     const root = await makeTemporaryRoot(t);
     const pending = await createOrUpdatePendingArtifact({
@@ -115,6 +76,17 @@ test("pending creation writes content and metadata outside final directories", a
     assert.equal(await readFile(pending.pendingPath, "utf8"), "# Design\n\nShort summary.\n");
     assert.deepEqual(await readdir(join(root, ".agents", "pending-artifacts")), ["20260718-003145-pi-workflow.json", "20260718-003145-pi-workflow.md"]);
     await assert.rejects(readdir(join(root, ".agents", "designs")));
+});
+
+test("parallel pending creation reserves distinct ids without losing content", async t => {
+    const root = await makeTemporaryRoot(t);
+    const [first, second] = await Promise.all([
+        createOrUpdatePendingArtifact({ cwd: root, kind: "design", slug: "parallel", content: "first", now: fixedDate }),
+        createOrUpdatePendingArtifact({ cwd: root, kind: "design", slug: "parallel", content: "second", now: fixedDate }),
+    ]);
+
+    assert.notEqual(first.id, second.id);
+    assert.deepEqual(new Set([await readFile(first.pendingPath, "utf8"), await readFile(second.pendingPath, "utf8")]), new Set(["first", "second"]));
 });
 
 test("summary extraction prefers the Summary section over status metadata", async t => {
@@ -177,6 +149,16 @@ test("summary extraction reports no summary when no body paragraph exists", asyn
     assert.equal(pending.summary, "No summary available.");
 });
 
+test("approval lock reclaims an ownerless lock left before owner publication", async t => {
+    const root = await makeTemporaryRoot(t);
+    const pendingDirectory = join(root, ".agents", "pending-artifacts");
+    const pendingId = "20260718-003145-lock-recovery";
+    await mkdir(join(pendingDirectory, `${pendingId}.approval-lock`), { recursive: true });
+    let called = false;
+    await withPendingArtifactLock(pendingDirectory, pendingId, async () => { called = true; });
+    assert.equal(called, true);
+});
+
 test("approve promotes pending content to final and keeps metadata", async t => {
     const root = await makeTemporaryRoot(t);
     const pending = await createOrUpdatePendingArtifact({ cwd: root, kind: "design", slug: "pi-workflow", content: "# Design\n", now: fixedDate });
@@ -190,13 +172,76 @@ test("approve promotes pending content to final and keeps metadata", async t => 
     assert.equal(recovered.state, "approved");
 });
 
-test("approval uses -v2 when the final path collides", async t => {
+test("approval uses -v2 without clobbering an existing final", async t => {
     const root = await makeTemporaryRoot(t);
-    await saveAgentArtifact({ cwd: root, kind: "design", slug: "pi-workflow", content: "existing", now: fixedDate });
+    const directory = join(root, ".agents", "designs");
+    const existingPath = join(directory, "20260718-003145-pi-workflow.md");
+    await mkdir(directory, { recursive: true });
+    await writeFile(existingPath, "existing");
     const pending = await createOrUpdatePendingArtifact({ cwd: root, kind: "design", slug: "pi-workflow", content: "new", now: fixedDate });
     const approved = await approvePendingArtifact(root, pending.id, fixedDate);
-    assert.equal(approved.finalPath, join(root, ".agents", "designs", "20260718-003145-pi-workflow-v2.md"));
+    assert.equal(approved.finalPath, join(directory, "20260718-003145-pi-workflow-v2.md"));
+    assert.equal(await readFile(existingPath, "utf8"), "existing");
     assert.equal(await readFile(approved.finalPath!, "utf8"), "new");
+});
+
+test("parallel approval of different pending artifacts preserves every content", async t => {
+    const root = await makeTemporaryRoot(t);
+    const first = await createOrUpdatePendingArtifact({ cwd: root, kind: "design", slug: "parallel", content: "first", now: fixedDate });
+    const second = await createOrUpdatePendingArtifact({ cwd: root, kind: "design", slug: "parallel", content: "second", now: fixedDate });
+
+    const approved = await Promise.all([
+        approvePendingArtifact(root, first.id, fixedDate),
+        approvePendingArtifact(root, second.id, fixedDate),
+    ]);
+
+    assert.equal(new Set(approved.map(item => item.finalPath)).size, 2);
+    assert.deepEqual(new Set(await Promise.all(approved.map(item => readFile(item.finalPath!, "utf8")))), new Set(["first", "second"]));
+    assert.deepEqual(await readdir(join(root, ".agents", "designs")), [
+        "20260718-003145-parallel-v2.md",
+        "20260718-003145-parallel.md",
+    ]);
+});
+
+test("parallel approval of the same pending id is serialized and idempotent", async t => {
+    const root = await makeTemporaryRoot(t);
+    const pending = await createOrUpdatePendingArtifact({ cwd: root, kind: "design", slug: "same-pending", content: "one copy", now: fixedDate });
+
+    const [first, second] = await Promise.all([
+        approvePendingArtifact(root, pending.id, fixedDate),
+        approvePendingArtifact(root, pending.id, fixedDate),
+    ]);
+
+    assert.equal(first.finalPath, second.finalPath);
+    assert.deepEqual(await readdir(join(root, ".agents", "designs")), ["20260718-003145-same-pending.md"]);
+    assert.deepEqual(await readdir(join(root, ".agents", "pending-artifacts")), [`${pending.id}.json`]);
+});
+
+test("approved metadata is idempotent and does not allocate another suffix", async t => {
+    const root = await makeTemporaryRoot(t);
+    const pending = await createOrUpdatePendingArtifact({ cwd: root, kind: "design", slug: "retry-approved", content: "content", now: fixedDate });
+    const first = await approvePendingArtifact(root, pending.id, fixedDate);
+    const second = await approvePendingArtifact(root, pending.id, new Date("2026-07-18T01:00:00Z"));
+
+    assert.deepEqual(second, first);
+    assert.deepEqual(await readdir(join(root, ".agents", "designs")), ["20260718-003145-retry-approved.md"]);
+});
+
+test("approval recovers an injected interruption after final creation and before metadata update", async t => {
+    const root = await makeTemporaryRoot(t);
+    const pending = await createOrUpdatePendingArtifact({ cwd: root, kind: "design", slug: "recover", content: "recover me", now: fixedDate });
+    const directory = join(root, ".agents", "designs");
+    const finalPath = join(directory, "20260718-003145-recover.md");
+    await mkdir(directory, { recursive: true });
+    await writeFile(`${finalPath}.pending-approval`, `${pending.id}\n`, { flag: "wx" });
+    await writeFile(finalPath, "recover me", { flag: "wx" });
+
+    const recovered = await approvePendingArtifact(root, pending.id, fixedDate);
+
+    assert.equal(recovered.finalPath, finalPath);
+    assert.equal((await readPendingArtifact(root, pending.id)).state, "approved");
+    assert.deepEqual(await readdir(directory), ["20260718-003145-recover.md"]);
+    assert.deepEqual(await readdir(join(root, ".agents", "pending-artifacts")), [`${pending.id}.json`]);
 });
 
 test("revision request preserves pending and allows same id update", async t => {
@@ -384,8 +429,11 @@ test("View full text displays pending content and loops back to approval", async
     assert.equal(editorCalls.filter(call => call.title.startsWith("Full text:")).length, 1);
 });
 
-test("saveAgentArtifact rejects an invalid slug before writing", async t => {
+test("pending creation rejects an invalid slug before writing", async t => {
     const root = await makeTemporaryRoot(t);
-    await assert.rejects(saveAgentArtifact({ cwd: root, kind: "design", slug: "Invalid Slug", content: "content", now: fixedDate }), /lowercase kebab-case/);
+    await assert.rejects(
+        createOrUpdatePendingArtifact({ cwd: root, kind: "design", slug: "Invalid Slug", content: "content", now: fixedDate }),
+        /lowercase kebab-case/,
+    );
     assert.deepEqual(await readdir(root), []);
 });

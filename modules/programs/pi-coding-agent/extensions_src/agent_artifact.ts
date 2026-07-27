@@ -25,7 +25,7 @@ import {
 import { runStandardDecisionFlow } from "./utilities/decision_standard_ui.ts";
 import { runTuiDecisionFlow } from "./utilities/decision_tui.ts";
 
-export type AgentArtifactStatus = "approved" | "revision_requested" | "rejected" | "unavailable" | "error";
+export type AgentArtifactStatus = "approved" | "revision_requested" | "rejected" | "unavailable";
 
 export interface AgentArtifactResultDetails {
     status: AgentArtifactStatus;

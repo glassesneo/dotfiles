@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { basename, dirname } from "node:path";
 import { pathToFileURL } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
@@ -5,6 +6,7 @@ import { HarnessRunError, HarnessStoppedError, runPiHarness, type PiNormalizedIn
 import {
     appendEvent,
     appendStderr,
+    appendTerminalEvent,
     failRun,
     finishRun,
     finishStoppedRun,
@@ -35,11 +37,23 @@ function displayEvent(event: PiNormalizedInput): void {
     if (event.type === "tool_finished") process.stdout.write(`← ${event.data.tool}${event.data.isError ? " failed" : " done"}\n`);
 }
 
+async function lastPersistedSequence(path: string): Promise<number> {
+    const content = await readFile(path, "utf8").catch(error => {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") return "";
+        throw error;
+    });
+    return content.split("\n").filter(Boolean).reduce((maximum, line) => {
+        const event = JSON.parse(line) as Partial<NormalizedEvent>;
+        return typeof event.sequence === "number" ? Math.max(maximum, event.sequence) : maximum;
+    }, 0);
+}
+
 export async function runSubagent(runDirectory: string): Promise<void> {
     const runId = basename(runDirectory);
     const paths = runPaths(dirname(runDirectory), runId);
-    let sequence = 0;
+    let sequence = await lastPersistedSequence(paths.events);
     let startedAt: string | undefined;
+    let terminalEventAttempted = false;
     const emit = async (type: NormalizedEvent["type"], data: Record<string, unknown>) => {
         const event: NormalizedEvent = {
             schemaVersion: 2,
@@ -49,6 +63,24 @@ export async function runSubagent(runDirectory: string): Promise<void> {
             data,
         };
         await appendEvent(paths, event);
+    };
+    const emitCommittedTerminal = async (): Promise<RunResult> => {
+        const [status, result] = await Promise.all([readStatus(paths), readJson<RunResult>(paths.result)]);
+        if (status.status !== result.outcome) throw new Error(`Run ${runId} status and result disagree`);
+        if (!terminalEventAttempted) {
+            terminalEventAttempted = true;
+            const data: Record<string, unknown> = { outcome: result.outcome };
+            if (result.outcome === "stopped") data.method = result.stopMethod;
+            const event: NormalizedEvent = {
+                schemaVersion: 2,
+                sequence: ++sequence,
+                timestamp: new Date().toISOString(),
+                type: "run_finished",
+                data,
+            };
+            await appendTerminalEvent(paths, event);
+        }
+        return result;
     };
 
     try {
@@ -66,6 +98,8 @@ export async function runSubagent(runDirectory: string): Promise<void> {
         const running = await markRunRunning(paths, startedAt, process.pid);
         if (running.status === "stopping") {
             await finishStoppedRun(paths, "cooperative");
+            const committed = await emitCommittedTerminal();
+            process.stdout.write(`\n[subagent ${runId}] ${committed.outcome}\n`);
             return;
         }
         if (running.status !== "running") return;
@@ -109,20 +143,18 @@ export async function runSubagent(runDirectory: string): Promise<void> {
             startedAt,
             finishedAt,
         };
-        await emit("run_finished", { outcome: "succeeded" });
         const terminal = await finishRun(paths, result);
         if (terminal.status === "stopping") {
             await finishStoppedRun(paths, "cooperative", completed.usage, completed.turns, completed.output, startedAt);
-            process.stdout.write(`\n[subagent ${runId}] stopped\n`);
-            return;
         }
-        process.stdout.write(`\n[subagent ${runId}] succeeded\n`);
+        const committed = await emitCommittedTerminal();
+        process.stdout.write(`\n[subagent ${runId}] ${committed.outcome}\n`);
     } catch (error) {
         if (error instanceof HarnessStoppedError) {
             try {
-                await emit("run_finished", { outcome: "stopped", method: error.method });
                 await finishStoppedRun(paths, error.method, error.usage, error.turns, error.output, startedAt);
-                process.stdout.write(`\n[subagent ${runId}] stopped\n`);
+                const committed = await emitCommittedTerminal();
+                process.stdout.write(`\n[subagent ${runId}] ${committed.outcome}\n`);
                 return;
             } catch (persistError) {
                 process.stderr.write(`Could not persist stopped runner: ${persistError instanceof Error ? persistError.message : String(persistError)}\n`);
@@ -136,7 +168,6 @@ export async function runSubagent(runDirectory: string): Promise<void> {
         try {
             await appendStderr(paths, `${failure.message}\n`);
             await emit("diagnostic", { category: failure.category, message: failure.message });
-            await emit("run_finished", { outcome: "failed" });
             const terminal = await failRun(
                 paths,
                 failure,
@@ -153,7 +184,10 @@ export async function runSubagent(runDirectory: string): Promise<void> {
                     "",
                     startedAt,
                 );
-                process.stdout.write(`\n[subagent ${runId}] stopped\n`);
+            }
+            const committed = await emitCommittedTerminal();
+            if (committed.outcome !== "failed") {
+                process.stdout.write(`\n[subagent ${runId}] ${committed.outcome}\n`);
                 return;
             }
         } catch (persistError) {
