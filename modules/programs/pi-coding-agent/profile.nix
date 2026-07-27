@@ -25,7 +25,7 @@ in
         enable = readOnly (boolOption (parent.enable && builtins.elem "profile" parent.defaultExtensions));
         extensionPaths = readOnly (listOfOption str ["${./extensions_src}/profile.ts"]);
         defaultProfile = strOption "full";
-        profileCycle = listOfOption str ["scout" "full"];
+        profileCycle = listOfOption str ["full" "taskmaster" "scout"];
         defaultTools = listOfOption str [];
         profiles = attrsOfOption profileType {};
         facetOwners = attrsOfOption str {};
