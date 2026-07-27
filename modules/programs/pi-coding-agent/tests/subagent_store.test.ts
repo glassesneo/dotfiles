@@ -17,11 +17,17 @@ async function fixture(): Promise<{ root: string; config: SubagentRuntimeConfig 
     return {
         root,
         config: {
-            schemaVersion: 1,
+            schemaVersion: 2,
             stateRoot: join(root, "runs"),
-            runner: { node: "/nix/store/node/bin/node", script: "/nix/store/subagent_runner.ts" },
+            runner: { node: "/nix/store/node/bin/node", script: "/nix/store/subagent_runner.ts", extension: "/nix/store/subagent.ts" },
             harnesses: { pi: { command: "/nix/store/pi/bin/pi" } },
-            profiles: { coding: { harness: "pi", model: "provider/model", tools: ["read"] } },
+            defaultProfile: "full",
+            profileCycle: ["scout", "full"],
+            maxDepth: 3,
+            profiles: {
+                scout: { harness: "pi", model: "provider/model", allowAllTools: false, tools: ["read"], allowedSubagents: ["scout"] },
+                full: { harness: "pi", model: "provider/model", allowAllTools: true, tools: [], allowedSubagents: ["scout", "full"] },
+            },
         },
     };
 }
@@ -29,7 +35,7 @@ async function fixture(): Promise<{ root: string; config: SubagentRuntimeConfig 
 test("run store creates private canonical files without interpolating prompt into launcher", async () => {
     const { config } = await fixture();
     const prompt = "secret prompt with 'quotes'";
-    const run = await createRun(config, "coding", prompt, "/work");
+    const run = await createRun(config, "full", prompt, "/work");
 
     assert.match(run.request.runId, /^[0-9a-f-]{36}$/);
     assert.equal((await stat(run.paths.directory)).mode & 0o777, 0o700);
@@ -41,18 +47,22 @@ test("run store creates private canonical files without interpolating prompt int
 
 test("run store enforces state transitions and writes result before terminal status", async () => {
     const { config } = await fixture();
-    const run = await createRun(config, "coding", "task", "/work");
+    const run = await createRun(config, "full", "task", "/work");
     await patchStatus(run.paths, { status: "starting" });
     await patchStatus(run.paths, { status: "running", startedAt: "2026-01-01T00:00:00.000Z" });
     await assert.rejects(patchStatus(run.paths, { status: "created" }), /Invalid run state transition/);
 
     await finishRun(run.paths, {
-        schemaVersion: 1,
+        schemaVersion: 2,
         runId: run.request.runId,
         outcome: "succeeded",
         output: "done",
         error: null,
-        usage: { inputTokens: 1, outputTokens: 2, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: 0, turns: 1 },
+        usage: {
+            input: 1, output: 2, cacheRead: 0, cacheWrite: 0, totalTokens: 3,
+            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+        },
+        turns: 1,
         startedAt: "2026-01-01T00:00:00.000Z",
         finishedAt: "2026-01-01T00:00:01.000Z",
     });
@@ -70,14 +80,24 @@ test("unknown profile fails before allocating state", async () => {
 });
 
 test("runtime config rejects unsupported versions, harnesses, and empty models", () => {
+    const profile = { harness: "pi", model: "provider/model", allowAllTools: false, tools: [], allowedSubagents: [] };
     const base = {
-        schemaVersion: 1,
+        schemaVersion: 2,
         stateRoot: "/state",
-        runner: { node: "/node", script: "/runner" },
+        runner: { node: "/node", script: "/runner", extension: "/extension" },
         harnesses: { pi: { command: "/pi" } },
-        profiles: { test: { harness: "pi", model: "model" } },
+        defaultProfile: "test",
+        profileCycle: ["test"],
+        maxDepth: 3,
+        profiles: { test: profile },
     };
-    assert.throws(() => validateRuntimeConfig({ ...base, schemaVersion: 2 }), /schemaVersion/);
-    assert.throws(() => validateRuntimeConfig({ ...base, profiles: { test: { harness: "cursor", model: "model" } } }), /unsupported/);
-    assert.throws(() => validateRuntimeConfig({ ...base, profiles: { test: { harness: "pi", model: "" } } }), /non-empty/);
+    assert.throws(() => validateRuntimeConfig({ ...base, schemaVersion: 1 }), /schemaVersion/);
+    assert.throws(() => validateRuntimeConfig({ ...base, profiles: { test: { ...profile, harness: "cursor" } } }), /unsupported/);
+    assert.throws(() => validateRuntimeConfig({ ...base, profiles: { test: { ...profile, model: "" } } }), /non-empty/);
+    assert.throws(() => validateRuntimeConfig({ ...base, maxDepth: -1 }), /maxDepth/);
+    assert.throws(() => validateRuntimeConfig({ ...base, stateRoot: "x".repeat(4097) }), /4096/);
+    assert.throws(() => validateRuntimeConfig({ ...base, defaultProfile: "missing" }), /unknown profile/);
+    assert.throws(() => validateRuntimeConfig({ ...base, profileCycle: ["test", "test"] }), /duplicates/);
+    assert.throws(() => validateRuntimeConfig({ ...base, profiles: { test: { ...profile, allowedSubagents: ["missing"] } } }), /unknown profile/);
+    assert.throws(() => validateRuntimeConfig({ ...base, profiles: { test: { ...profile, allowAllTools: true, tools: ["read"] } } }), /cannot set tools/);
 });

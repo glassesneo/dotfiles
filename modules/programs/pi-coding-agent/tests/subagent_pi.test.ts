@@ -33,13 +33,34 @@ test("Pi event normalizer converts streaming, tool, final output, and usage", ()
     }));
     assert.equal(normalizer.finalOutput, "final");
     assert.deepEqual(normalizer.usage, {
-        inputTokens: 10,
-        outputTokens: 4,
-        cacheReadTokens: 3,
-        cacheWriteTokens: 2,
-        costUsd: 0.01,
-        turns: 1,
+        input: 10,
+        output: 4,
+        cacheRead: 3,
+        cacheWrite: 2,
+        totalTokens: 19,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0.01 },
     });
+    assert.equal(normalizer.turns, 1);
+});
+
+test("Pi event normalizer aggregates nested tool usage exactly once", () => {
+    const normalizer = new PiEventNormalizer();
+    const nestedUsage = {
+        input: 5, output: 6, cacheRead: 1, cacheWrite: 2, reasoning: 3, cacheWrite1h: 1, totalTokens: 14,
+        cost: { input: 0.1, output: 0.2, cacheRead: 0.01, cacheWrite: 0.02, total: 0.33 },
+    };
+    normalizer.consume(JSON.stringify({
+        type: "tool_execution_end", toolCallId: "nested", toolName: "subagent_get", isError: false,
+        result: { usage: nestedUsage },
+    }));
+    normalizer.consume(JSON.stringify({
+        type: "message_end", message: { role: "toolResult", toolCallId: "nested", usage: nestedUsage },
+    }));
+    assert.equal(normalizer.usage.input, 5);
+    assert.equal(normalizer.usage.output, 6);
+    assert.equal(normalizer.usage.reasoning, 3);
+    assert.equal(normalizer.usage.cacheWrite1h, 1);
+    assert.equal(normalizer.usage.cost.total, 0.33);
 });
 
 test("Pi event normalizer records malformed protocol input", () => {
@@ -58,13 +79,18 @@ async function fakePi(script: string): Promise<string> {
 
 async function invokeFake(command: string) {
     return runPiHarness(
-        { schemaVersion: 1, runId: "run", profile: "test", harness: "pi", model: "fake/model", command },
+        {
+            schemaVersion: 2, runId: "550e8400-e29b-41d4-a716-446655440000", profile: "test",
+            callerProfile: "full", targetProfile: "test", depth: 1, originSessionId: "session",
+            harness: "pi", model: "fake/model", allowAllTools: false, tools: ["read"], allowedSubagents: [],
+            command, extension: "/subagent.ts",
+        },
         { prompt: "secret", cwd: tmpdir() },
         { onEvent() {}, onStderr() {} },
     );
 }
 
-test("Pi harness classifies malformed JSON and nonzero exits", async () => {
+test("Pi harness classifies malformed JSON and nonzero exits while preserving partial usage", async () => {
     const malformed = await fakePi("printf 'not-json\\n'");
     await assert.rejects(invokeFake(malformed), (error: unknown) => {
         assert.ok(error instanceof HarnessRunError);
@@ -72,11 +98,13 @@ test("Pi harness classifies malformed JSON and nonzero exits", async () => {
         return true;
     });
 
-    const failed = await fakePi("exit 7");
+    const failed = await fakePi(`printf '%s\\n' '{"type":"message_end","message":{"role":"assistant","content":[],"stopReason":"error","errorMessage":"failed","usage":{"input":9,"output":1,"cacheRead":0,"cacheWrite":0,"totalTokens":10,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0.5}}}}'; exit 7`);
     await assert.rejects(invokeFake(failed), (error: unknown) => {
         assert.ok(error instanceof HarnessRunError);
         assert.equal(error.category, "harness");
         assert.equal(error.exitCode, 7);
+        assert.equal(error.usage.input, 9);
+        assert.equal(error.usage.cost.total, 0.5);
         return true;
     });
 });

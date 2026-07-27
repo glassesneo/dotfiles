@@ -40,7 +40,7 @@ export async function runSubagent(runDirectory: string): Promise<void> {
     let startedAt: string | undefined;
     const emit = async (type: NormalizedEvent["type"], data: Record<string, unknown>) => {
         const event: NormalizedEvent = {
-            schemaVersion: 1,
+            schemaVersion: 2,
             sequence: ++sequence,
             timestamp: new Date().toISOString(),
             type,
@@ -53,7 +53,7 @@ export async function runSubagent(runDirectory: string): Promise<void> {
         await waitForTmuxReference(paths);
         const request = await readJson<RunRequest>(paths.request);
         const resolved = await readJson<ResolvedRun>(paths.resolved);
-        if (request.schemaVersion !== 1 || resolved.schemaVersion !== 1 || request.runId !== runId || resolved.runId !== runId) {
+        if (request.schemaVersion !== 2 || resolved.schemaVersion !== 2 || request.runId !== runId || resolved.runId !== runId) {
             throw new HarnessRunError("protocol", "Run request or resolved metadata is invalid");
         }
 
@@ -75,12 +75,13 @@ export async function runSubagent(runDirectory: string): Promise<void> {
 
         const finishedAt = new Date().toISOString();
         const result: RunResult = {
-            schemaVersion: 1,
+            schemaVersion: 2,
             runId,
             outcome: "succeeded",
             output: completed.output,
             error: null,
             usage: completed.usage,
+            turns: completed.turns,
             startedAt,
             finishedAt,
         };
@@ -95,7 +96,13 @@ export async function runSubagent(runDirectory: string): Promise<void> {
             await appendStderr(paths, `${failure.message}\n`);
             await emit("diagnostic", { category: failure.category, message: failure.message });
             await emit("run_finished", { outcome: "failed" });
-            await failRun(paths, failure, startedAt);
+            await failRun(
+                paths,
+                failure,
+                startedAt,
+                error instanceof HarnessRunError ? error.usage : undefined,
+                error instanceof HarnessRunError ? error.turns : 0,
+            );
         } catch (persistError) {
             process.stderr.write(`Could not persist runner failure: ${persistError instanceof Error ? persistError.message : String(persistError)}\n`);
         }

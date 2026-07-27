@@ -24,17 +24,29 @@ import type { CommandExecutor } from "../extensions_src/utilities/subagent_tmux.
 import type { SubagentRuntimeConfig } from "../extensions_src/utilities/subagent_types.ts";
 
 function context(cwd: string): ExtensionContext {
-    return { cwd } as ExtensionContext;
+    return {
+        cwd,
+        sessionManager: {
+            getSessionId: () => "session",
+            getSessionFile: () => join(cwd, "session.jsonl"),
+        },
+    } as ExtensionContext;
 }
 
 async function configFixture(): Promise<{ root: string; path: string; config: SubagentRuntimeConfig }> {
     const root = await mkdtemp(join(tmpdir(), "subagent-tool-"));
     const config: SubagentRuntimeConfig = {
-        schemaVersion: 1,
+        schemaVersion: 2,
         stateRoot: join(root, "runs"),
-        runner: { node: process.execPath, script: "/runner.ts" },
+        runner: { node: process.execPath, script: "/runner.ts", extension: "/subagent.ts" },
         harnesses: { pi: { command: "/pi" } },
-        profiles: { coding: { harness: "pi", model: "provider/model", tools: ["read"] } },
+        defaultProfile: "full",
+        profileCycle: ["scout", "full"],
+        maxDepth: 3,
+        profiles: {
+            scout: { harness: "pi", model: "provider/model", allowAllTools: false, tools: ["read"], allowedSubagents: ["scout"] },
+            full: { harness: "pi", model: "provider/model", allowAllTools: true, tools: [], allowedSubagents: ["scout", "full"] },
+        },
     };
     const path = join(root, "config.json");
     await writeFile(path, JSON.stringify(config));
@@ -45,6 +57,7 @@ test("extension registers no tools unless tmux is verifiably available", async (
     const registered: string[] = [];
     const pi = {
         registerTool(tool: { name: string }) { registered.push(tool.name); },
+        registerFlag() {}, registerCommand() {}, registerShortcut() {}, on() {},
         async exec() { return { stdout: "$0\tmain\t%1\n", stderr: "", code: 0, killed: false }; },
     } as unknown as ExtensionAPI;
 
@@ -59,7 +72,7 @@ test("wait exposes the bounded required input schema", () => {
     const schema = tool.parameters as unknown as {
         required: string[];
         properties: {
-            runIds: { minItems: number; uniqueItems: boolean };
+            runIds: { minItems: number; maxItems: number; uniqueItems: boolean };
             condition: { enum: string[] };
             timeoutSeconds: { type: string; minimum: number; maximum: number };
         };
@@ -70,6 +83,7 @@ test("wait exposes the bounded required input schema", () => {
         type: "array",
         items: { type: "string", description: "UUID returned by subagent_start" },
         minItems: 1,
+        maxItems: 128,
         uniqueItems: true,
     });
     assert.deepEqual(schema.properties.condition.enum, ["any", "all"]);
@@ -107,13 +121,14 @@ test("start returns in starting state and get marks a disappeared runner failed"
     const deps: SubagentDependencies = { configPath: fixture.path, env: { TMUX: "yes" }, exec };
     const started = await createSubagentStartTool(deps).execute(
         "call",
-        { profile: "coding", prompt: "task" },
+        { profile: "full", prompt: "task" },
         undefined,
         undefined,
         context(fixture.root),
     );
     assert.equal(started.details.status, "starting");
-    assert.equal(started.details.tmux?.windowId, "@2");
+    const startedText = started.content[0]?.type === "text" ? started.content[0].text : "{}";
+    assert.equal((JSON.parse(startedText) as { tmux?: { windowId?: string } }).tmux?.windowId, "@2");
 
     paneAlive = false;
     const fetched = await createSubagentGetTool(deps).execute(
@@ -124,11 +139,14 @@ test("start returns in starting state and get marks a disappeared runner failed"
         context(fixture.root),
     );
     assert.equal(fetched.details.status, "failed");
-    assert.equal(fetched.details.result?.error?.category, "runner_lost");
+    const fetchedText = fetched.content[0]?.type === "text" ? fetched.content[0].text : "{}";
+    assert.equal((JSON.parse(fetchedText) as { result?: { error?: { category?: string } } }).result?.error?.category, "runner_lost");
 });
 
 async function runningRun(fixture: Awaited<ReturnType<typeof configFixture>>, paneId: string) {
-    const run = await createRun(fixture.config, "coding", `task ${paneId}`, fixture.root);
+    const run = await createRun(fixture.config, "full", `task ${paneId}`, fixture.root, {
+        callerProfile: "full", depth: 1, originSessionId: "session", originSessionFile: join(fixture.root, "session.jsonl"),
+    });
     await patchStatus(run.paths, { status: "starting" });
     await attachTmux(run.paths, {
         sessionId: "$0",
@@ -144,12 +162,16 @@ async function runningRun(fixture: Awaited<ReturnType<typeof configFixture>>, pa
 function successfulResult(runId: string, output = "done") {
     const startedAt = new Date().toISOString();
     return {
-        schemaVersion: 1 as const,
+        schemaVersion: 2 as const,
         runId,
         outcome: "succeeded" as const,
         output,
         error: null,
-        usage: { inputTokens: 1, outputTokens: 1, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: 0, turns: 1 },
+        usage: {
+            input: 1, output: 1, cacheRead: 0, cacheWrite: 0, totalTokens: 2,
+            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+        },
+        turns: 1,
         startedAt,
         finishedAt: startedAt,
     };
@@ -357,7 +379,9 @@ test("wait reconciles a disappeared runner before evaluating the condition", asy
 
     assert.equal(waited.details.reason, "condition_met");
     assert.equal(waited.details.runs[0]?.status, "failed");
-    assert.equal(waited.details.runs[0]?.result?.error?.category, "runner_lost");
+    const waitedText = waited.content[0]?.type === "text" ? waited.content[0].text : "{}";
+    const waitedModel = JSON.parse(waitedText) as { runs: Array<{ result?: { error?: { category?: string } } }> };
+    assert.equal(waitedModel.runs[0]?.result?.error?.category, "runner_lost");
 });
 
 test("wait aborts without changing a live run", async () => {
@@ -410,13 +434,17 @@ test("wait keeps aggregate model JSON below 50KB and links omitted results", asy
     assert.equal(parsed.runs.length, 2);
     assert.match(parsed.runs[0]?.result.output ?? "", /result\.json/);
     assert.match(parsed.runs[1]?.result.output ?? "", /result\.json/);
-    assert.equal(waited.details.runs[0]?.result?.output.length, 100_000);
+    assert.equal("result" in (waited.details.runs[0] ?? {}), false);
 });
 
 test("standalone runner normalizes a fake Pi JSON stream into persisted result", async () => {
     const fixture = await configFixture();
     const fakePi = join(fixture.root, "fake-pi");
+    const argsPath = join(fixture.root, "pi-args.txt");
+    const envPath = join(fixture.root, "pi-env.txt");
     await writeFile(fakePi, `#!/bin/sh
+printf '%s\\n' "$@" > '${argsPath}'
+printf '%s\\n' "$PI_SUBAGENT_DEPTH|$PI_SUBAGENT_RUN_ID|$PI_SUBAGENT_ORIGIN_SESSION_ID" > '${envPath}'
 cat >/dev/null
 printf '%s\\n' \\
   '{"type":"message_update","assistantMessageEvent":{"type":"text_delta","delta":"hello"}}' \\
@@ -424,7 +452,9 @@ printf '%s\\n' \\
 `);
     await chmod(fakePi, 0o700);
     fixture.config.harnesses.pi.command = fakePi;
-    const run = await createRun(fixture.config, "coding", "private prompt", fixture.root);
+    const run = await createRun(fixture.config, "full", "private prompt", fixture.root, {
+        callerProfile: "full", depth: 1, originSessionId: "session", originSessionFile: join(fixture.root, "session.jsonl"),
+    });
     await patchStatus(run.paths, { status: "starting" });
     await attachTmux(run.paths, {
         sessionId: "$0",
@@ -438,6 +468,12 @@ printf '%s\\n' \\
     const snapshot = await readSnapshot(fixture.config.stateRoot, run.request.runId);
     assert.equal(snapshot.status, "succeeded");
     assert.equal(snapshot.result?.output, "final answer");
-    assert.equal(snapshot.result?.usage.inputTokens, 2);
+    assert.equal(snapshot.result?.usage.input, 2);
+    assert.equal(snapshot.result?.turns, 1);
+    const args = await readFile(argsPath, "utf8");
+    assert.match(args, /--no-extensions/);
+    assert.match(args, /-e\n\/subagent\.ts/);
+    assert.match(args, /--profile\nfull/);
+    assert.equal((await readFile(envPath, "utf8")).trim(), `1|${run.request.runId}|session`);
     assert.match(await readFile(run.paths.events, "utf8"), /assistant_text/);
 });
