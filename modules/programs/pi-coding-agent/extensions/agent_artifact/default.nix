@@ -5,7 +5,7 @@ delib.module {
   options = delib.singleCascadeEnableOption;
 
   myconfig.ifEnabled.programs.pi-coding-agent.profile.profiles = {
-    scout.tools = ["agent_artifact"];
+    scout.tools = ["save_agent_artifact"];
   };
 
   home.ifEnabled = {
