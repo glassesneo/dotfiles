@@ -80,10 +80,10 @@ async function fakePi(script: string): Promise<string> {
 async function invokeFake(command: string) {
     return runPiHarness(
         {
-            schemaVersion: 2, runId: "550e8400-e29b-41d4-a716-446655440000", profile: "test",
+            schemaVersion: 3, runId: "550e8400-e29b-41d4-a716-446655440000", profile: "test",
             callerProfile: "full", targetProfile: "test", depth: 1, originSessionId: "session",
-            harness: "pi", model: "fake/model", allowAllTools: false, tools: ["read"], allowedSubagents: [],
-            command, extension: "/subagent.ts",
+            profileSnapshot: { model: "fake/model", allowAllTools: false, tools: ["read"], extensions: { subagent: { allowedTargets: [] } } },
+            command, extensionPaths: ["/profile.ts", "/subagent.ts"],
         },
         { prompt: "secret", cwd: tmpdir() },
         { onEvent() {}, onStderr() {} },

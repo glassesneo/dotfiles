@@ -53,7 +53,7 @@ export async function runSubagent(runDirectory: string): Promise<void> {
         await waitForTmuxReference(paths);
         const request = await readJson<RunRequest>(paths.request);
         const resolved = await readJson<ResolvedRun>(paths.resolved);
-        if (request.schemaVersion !== 2 || resolved.schemaVersion !== 2 || request.runId !== runId || resolved.runId !== runId) {
+        if (request.schemaVersion !== 2 || resolved.schemaVersion !== 3 || request.runId !== runId || resolved.runId !== runId) {
             throw new HarnessRunError("protocol", "Run request or resolved metadata is invalid");
         }
 

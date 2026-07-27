@@ -10,24 +10,21 @@ import {
     readSnapshot,
     readStatus,
 } from "../extensions_src/utilities/subagent_store.ts";
-import { validateRuntimeConfig, type SubagentRuntimeConfig } from "../extensions_src/utilities/subagent_types.ts";
+import { validateProfileConfig, type AgentProfile } from "../extensions_src/utilities/profile_types.ts";
+import { validateSubagentRuntimeConfig, type SubagentRuntimeConfig } from "../extensions_src/utilities/subagent_types.ts";
+
+const fullProfile: AgentProfile = { model: "provider/model", allowAllTools: true, tools: [], extensions: { subagent: { allowedTargets: ["scout", "full"] } } };
 
 async function fixture(): Promise<{ root: string; config: SubagentRuntimeConfig }> {
     const root = await mkdtemp(join(tmpdir(), "subagent-store-"));
     return {
         root,
         config: {
-            schemaVersion: 2,
+            schemaVersion: 1,
             stateRoot: join(root, "runs"),
-            runner: { node: "/nix/store/node/bin/node", script: "/nix/store/subagent_runner.ts", extension: "/nix/store/subagent.ts" },
+            runner: { node: "/nix/store/node/bin/node", script: "/nix/store/subagent_runner.ts", extensions: ["/nix/store/profile.ts", "/nix/store/subagent.ts"] },
             harnesses: { pi: { command: "/nix/store/pi/bin/pi" } },
-            defaultProfile: "full",
-            profileCycle: ["scout", "full"],
             maxDepth: 3,
-            profiles: {
-                scout: { harness: "pi", model: "provider/model", allowAllTools: false, tools: ["read"], allowedSubagents: ["scout"] },
-                full: { harness: "pi", model: "provider/model", allowAllTools: true, tools: [], allowedSubagents: ["scout", "full"] },
-            },
         },
     };
 }
@@ -35,7 +32,7 @@ async function fixture(): Promise<{ root: string; config: SubagentRuntimeConfig 
 test("run store creates private canonical files without interpolating prompt into launcher", async () => {
     const { config } = await fixture();
     const prompt = "secret prompt with 'quotes'";
-    const run = await createRun(config, "full", prompt, "/work");
+    const run = await createRun(config, "full", fullProfile, prompt, "/work");
 
     assert.match(run.request.runId, /^[0-9a-f-]{36}$/);
     assert.equal((await stat(run.paths.directory)).mode & 0o777, 0o700);
@@ -47,7 +44,7 @@ test("run store creates private canonical files without interpolating prompt int
 
 test("run store enforces state transitions and writes result before terminal status", async () => {
     const { config } = await fixture();
-    const run = await createRun(config, "full", "task", "/work");
+    const run = await createRun(config, "full", fullProfile, "task", "/work");
     await patchStatus(run.paths, { status: "starting" });
     await patchStatus(run.paths, { status: "running", startedAt: "2026-01-01T00:00:00.000Z" });
     await assert.rejects(patchStatus(run.paths, { status: "created" }), /Invalid run state transition/);
@@ -74,30 +71,23 @@ test("run store enforces state transitions and writes result before terminal sta
     await assert.rejects(patchStatus(run.paths, { status: "failed" }), /Invalid run state transition/);
 });
 
-test("unknown profile fails before allocating state", async () => {
-    const { config } = await fixture();
-    await assert.rejects(createRun(config, "missing", "task", "/work"), /Unknown subagent profile/);
-});
-
-test("runtime config rejects unsupported versions, harnesses, and empty models", () => {
-    const profile = { harness: "pi", model: "provider/model", allowAllTools: false, tools: [], allowedSubagents: [] };
-    const base = {
-        schemaVersion: 2,
-        stateRoot: "/state",
-        runner: { node: "/node", script: "/runner", extension: "/extension" },
-        harnesses: { pi: { command: "/pi" } },
-        defaultProfile: "test",
-        profileCycle: ["test"],
-        maxDepth: 3,
-        profiles: { test: profile },
+test("runtime configs validate profile and subagent responsibilities independently", () => {
+    const subagent = {
+        schemaVersion: 1, stateRoot: "/state", runner: { node: "/node", script: "/runner", extensions: ["/profile", "/subagent"] },
+        harnesses: { pi: { command: "/pi" } }, maxDepth: 3,
     };
-    assert.throws(() => validateRuntimeConfig({ ...base, schemaVersion: 1 }), /schemaVersion/);
-    assert.throws(() => validateRuntimeConfig({ ...base, profiles: { test: { ...profile, harness: "cursor" } } }), /unsupported/);
-    assert.throws(() => validateRuntimeConfig({ ...base, profiles: { test: { ...profile, model: "" } } }), /non-empty/);
-    assert.throws(() => validateRuntimeConfig({ ...base, maxDepth: -1 }), /maxDepth/);
-    assert.throws(() => validateRuntimeConfig({ ...base, stateRoot: "x".repeat(4097) }), /4096/);
-    assert.throws(() => validateRuntimeConfig({ ...base, defaultProfile: "missing" }), /unknown profile/);
-    assert.throws(() => validateRuntimeConfig({ ...base, profileCycle: ["test", "test"] }), /duplicates/);
-    assert.throws(() => validateRuntimeConfig({ ...base, profiles: { test: { ...profile, allowedSubagents: ["missing"] } } }), /unknown profile/);
-    assert.throws(() => validateRuntimeConfig({ ...base, profiles: { test: { ...profile, allowAllTools: true, tools: ["read"] } } }), /cannot set tools/);
+    assert.throws(() => validateSubagentRuntimeConfig({ ...subagent, schemaVersion: 2 }), /schemaVersion/);
+    assert.throws(() => validateSubagentRuntimeConfig({ ...subagent, maxDepth: -1 }), /maxDepth/);
+    assert.throws(() => validateSubagentRuntimeConfig({ ...subagent, stateRoot: "x".repeat(4097) }), /4096/);
+
+    const profile = { model: "provider/model", allowAllTools: false, tools: [], extensions: {} };
+    const base = { schemaVersion: 1, defaultProfile: "test", profileCycle: ["test"], profiles: { test: profile } };
+    assert.throws(() => validateProfileConfig({ ...base, schemaVersion: 2 }), /schemaVersion/);
+    assert.throws(() => validateProfileConfig({ ...base, profiles: { test: { ...profile, model: "" } } }), /non-empty/);
+    assert.throws(() => validateProfileConfig({ ...base, profiles: { test: { ...profile, model: "missing-provider" } } }), /provider\/model/);
+    assert.throws(() => validateProfileConfig({ ...base, defaultProfile: "missing" }), /unknown profile/);
+    assert.throws(() => validateProfileConfig({ ...base, profileCycle: [] }), /must not be empty/);
+    assert.throws(() => validateProfileConfig({ ...base, profileCycle: ["test", "test"] }), /duplicates/);
+    assert.throws(() => validateProfileConfig({ ...base, profiles: { test: { ...profile, allowAllTools: true, tools: ["read"] } } }), /cannot set tools/);
+    assert.throws(() => validateProfileConfig({ ...base, profiles: { test: { ...profile, unexpected: true } } }), /unknown keys/);
 });

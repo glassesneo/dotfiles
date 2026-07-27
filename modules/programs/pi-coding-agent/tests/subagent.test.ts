@@ -21,6 +21,7 @@ import {
     readSnapshot,
 } from "../extensions_src/utilities/subagent_store.ts";
 import type { CommandExecutor } from "../extensions_src/utilities/subagent_tmux.ts";
+import type { AgentProfileConfig } from "../extensions_src/utilities/profile_types.ts";
 import type { SubagentRuntimeConfig } from "../extensions_src/utilities/subagent_types.ts";
 
 function context(cwd: string): ExtensionContext {
@@ -33,31 +34,36 @@ function context(cwd: string): ExtensionContext {
     } as ExtensionContext;
 }
 
-async function configFixture(): Promise<{ root: string; path: string; config: SubagentRuntimeConfig }> {
+async function configFixture(): Promise<{ root: string; path: string; profilePath: string; config: SubagentRuntimeConfig; profiles: AgentProfileConfig }> {
     const root = await mkdtemp(join(tmpdir(), "subagent-tool-"));
     const config: SubagentRuntimeConfig = {
-        schemaVersion: 2,
+        schemaVersion: 1,
         stateRoot: join(root, "runs"),
-        runner: { node: process.execPath, script: "/runner.ts", extension: "/subagent.ts" },
+        runner: { node: process.execPath, script: "/runner.ts", extensions: ["/profile.ts", "/subagent.ts"] },
         harnesses: { pi: { command: "/pi" } },
+        maxDepth: 3,
+    };
+    const profiles: AgentProfileConfig = {
+        schemaVersion: 1,
         defaultProfile: "full",
         profileCycle: ["scout", "full"],
-        maxDepth: 3,
         profiles: {
-            scout: { harness: "pi", model: "provider/model", allowAllTools: false, tools: ["read"], allowedSubagents: ["scout"] },
-            full: { harness: "pi", model: "provider/model", allowAllTools: true, tools: [], allowedSubagents: ["scout", "full"] },
+            scout: { model: "provider/model", allowAllTools: false, tools: ["read"], extensions: { subagent: { allowedTargets: ["scout"] } } },
+            full: { model: "provider/model", allowAllTools: true, tools: [], extensions: { subagent: { allowedTargets: ["scout", "full"] } } },
         },
     };
-    const path = join(root, "config.json");
+    const path = join(root, "subagent.json");
+    const profilePath = join(root, "agent-profiles.json");
     await writeFile(path, JSON.stringify(config));
-    return { root, path, config };
+    await writeFile(profilePath, JSON.stringify(profiles));
+    return { root, path, profilePath, config, profiles };
 }
 
 test("extension registers no tools unless tmux is verifiably available", async () => {
     const registered: string[] = [];
     const pi = {
         registerTool(tool: { name: string }) { registered.push(tool.name); },
-        registerFlag() {}, registerCommand() {}, registerShortcut() {}, on() {},
+        on() {}, events: { on() {}, emit() {} },
         async exec() { return { stdout: "$0\tmain\t%1\n", stderr: "", code: 0, killed: false }; },
     } as unknown as ExtensionAPI;
 
@@ -118,7 +124,13 @@ test("start returns in starting state and get marks a disappeared runner failed"
         }
         return { stdout: "", stderr: "unexpected", code: 1 };
     };
-    const deps: SubagentDependencies = { configPath: fixture.path, env: { TMUX: "yes" }, exec };
+    const deps: SubagentDependencies = {
+        configPath: fixture.path,
+        profileConfigPath: fixture.profilePath,
+        env: { TMUX: "yes" },
+        exec,
+        activeProfile: () => ({ name: "full", facet: { allowedTargets: ["scout", "full"] } }),
+    };
     const started = await createSubagentStartTool(deps).execute(
         "call",
         { profile: "full", prompt: "task" },
@@ -144,7 +156,7 @@ test("start returns in starting state and get marks a disappeared runner failed"
 });
 
 async function runningRun(fixture: Awaited<ReturnType<typeof configFixture>>, paneId: string) {
-    const run = await createRun(fixture.config, "full", `task ${paneId}`, fixture.root, {
+    const run = await createRun(fixture.config, "full", fixture.profiles.profiles.full!, `task ${paneId}`, fixture.root, {
         callerProfile: "full", depth: 1, originSessionId: "session", originSessionFile: join(fixture.root, "session.jsonl"),
     });
     await patchStatus(run.paths, { status: "starting" });
@@ -452,7 +464,7 @@ printf '%s\\n' \\
 `);
     await chmod(fakePi, 0o700);
     fixture.config.harnesses.pi.command = fakePi;
-    const run = await createRun(fixture.config, "full", "private prompt", fixture.root, {
+    const run = await createRun(fixture.config, "full", fixture.profiles.profiles.full!, "private prompt", fixture.root, {
         callerProfile: "full", depth: 1, originSessionId: "session", originSessionFile: join(fixture.root, "session.jsonl"),
     });
     await patchStatus(run.paths, { status: "starting" });
@@ -472,7 +484,7 @@ printf '%s\\n' \\
     assert.equal(snapshot.result?.turns, 1);
     const args = await readFile(argsPath, "utf8");
     assert.match(args, /--no-extensions/);
-    assert.match(args, /-e\n\/subagent\.ts/);
+    assert.match(args, /-e\n\/profile\.ts\n-e\n\/subagent\.ts/);
     assert.match(args, /--profile\nfull/);
     assert.equal((await readFile(envPath, "utf8")).trim(), `1|${run.request.runId}|session`);
     assert.match(await readFile(run.paths.events, "utf8"), /assistant_text/);

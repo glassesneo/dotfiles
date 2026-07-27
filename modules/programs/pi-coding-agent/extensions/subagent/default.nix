@@ -7,98 +7,83 @@
   pkgs,
   ...
 }: let
+  moduleName = "programs.pi-coding-agent.subagent";
   configDir = "${homeConfig.home.homeDirectory}/.pi/agent";
-  scoutTools = ["read" "grep" "find" "ls" "subagent_start" "subagent_get" "subagent_wait"];
-  profileType = delib.submodule {
-    options = with delib; {
-      harness = enumOption ["pi"] "pi";
-      model = noDefault (strOption null);
-      thinkingLevel = allowNull (enumOption ["off" "minimal" "low" "medium" "high" "xhigh" "max"] null);
-      allowAllTools = boolOption false;
-      tools = listOfOption str [];
-      allowedSubagents = listOfOption str [];
-      instructions = allowNull (strOption null);
-    };
-  };
+  profileExtension = "${./../../extensions_src}/profile.ts";
+  subagentExtension = "${./../../extensions_src}/subagent.ts";
 in
   delib.module {
-    name = "programs.pi-coding-agent.subagent";
+    name = moduleName;
 
     options = with delib;
       moduleOptions ({myconfig, ...}: {
         enable = boolOption (host.type == "virtual" && myconfig.programs.pi-coding-agent.enable);
-        defaultProfile = strOption "full";
-        profileCycle = listOfOption str ["scout" "full"];
         maxDepth = intOption 3;
-        profiles = attrsOfOption profileType {
-          scout = {
-            harness = "pi";
-            model = "openai-codex/gpt-5.6-sol";
-            thinkingLevel = "low";
-            allowAllTools = false;
-            tools = scoutTools;
-            allowedSubagents = ["scout"];
-          };
-          full = {
-            harness = "pi";
-            model = "openai-codex/gpt-5.6-sol";
-            thinkingLevel = "medium";
-            allowAllTools = true;
-            tools = [];
-            allowedSubagents = ["scout" "full"];
-          };
-        };
       });
 
-    home.ifEnabled = {cfg, ...}:
-      lib.mkIf (host.type == "virtual") (let
-        cleanProfile = profile: lib.filterAttrs (_: value: value != null) profile;
-        profileNames = builtins.attrNames cfg.profiles;
-        referencesExist = names: builtins.all (name: builtins.elem name profileNames) names;
-        runtimeConfig = {
-          schemaVersion = 2;
-          stateRoot = "${homeConfig.xdg.stateHome}/pi/subagents/runs";
-          runner = {
-            node = lib.getExe pkgs.nodejs;
-            script = "${./../../extensions_src}/subagent_runner.ts";
-            extension = "${./../../extensions_src}/subagent.ts";
-          };
-          harnesses.pi.command = lib.getExe llm-agents.pi;
-          inherit (cfg) defaultProfile profileCycle maxDepth;
-          profiles = lib.mapAttrs (_: cleanProfile) cfg.profiles;
+    myconfig.always.programs.pi-coding-agent.profile.facetOwners.subagent = moduleName;
+
+    myconfig.ifEnabled.programs.pi-coding-agent.profile.profiles = {
+      scout = {
+        tools = ["subagent_start" "subagent_get" "subagent_wait"];
+        extensions.subagent.allowedTargets = ["scout"];
+      };
+      full.extensions.subagent.allowedTargets = ["scout" "full"];
+    };
+
+    home.always = {myconfig, ...}: let
+      profiles = myconfig.programs.pi-coding-agent.profile.profiles;
+      profileNames = builtins.attrNames profiles;
+      validFacet = profile: let
+        facet = profile.extensions.subagent or null;
+        keys =
+          if builtins.isAttrs facet
+          then builtins.attrNames facet
+          else [];
+        targets =
+          if builtins.isAttrs facet && facet ? allowedTargets
+          then facet.allowedTargets
+          else null;
+      in
+        facet
+        == null
+        || (
+          builtins.isAttrs facet
+          && builtins.all (key: key == "allowedTargets") keys
+          && builtins.isList targets
+          && builtins.all (target: builtins.isString target && target != "") targets
+          && lib.length targets == lib.length (lib.unique targets)
+          && builtins.all (target: builtins.elem target profileNames) targets
+        );
+    in {
+      assertions = [
+        {
+          assertion = builtins.all validFacet (builtins.attrValues profiles);
+          message = "Pi subagent profile facets must contain only unique existing allowedTargets.";
+        }
+      ];
+    };
+
+    home.ifEnabled = {cfg, ...}: {
+      assertions = [
+        {
+          assertion = cfg.maxDepth >= 0;
+          message = "Pi subagent maxDepth must be non-negative.";
+        }
+      ];
+
+      programs.pi-coding-agent.settings.extensions = [subagentExtension];
+
+      home.file."${configDir}/subagent.json".text = builtins.toJSON {
+        schemaVersion = 1;
+        stateRoot = "${homeConfig.xdg.stateHome}/pi/subagents/runs";
+        runner = {
+          node = lib.getExe pkgs.nodejs;
+          script = "${./../../extensions_src}/subagent_runner.ts";
+          extensions = [profileExtension subagentExtension];
         };
-      in {
-        assertions = [
-          {
-            assertion = cfg.maxDepth >= 0;
-            message = "Pi agent profile maxDepth must be non-negative.";
-          }
-          {
-            assertion = builtins.elem cfg.defaultProfile profileNames;
-            message = "Pi defaultProfile must reference an existing profile.";
-          }
-          {
-            assertion = lib.length cfg.profileCycle == lib.length (lib.unique cfg.profileCycle) && referencesExist cfg.profileCycle;
-            message = "Pi profileCycle must contain unique existing profile names.";
-          }
-          {
-            assertion = builtins.all (name: name != "") profileNames;
-            message = "Pi agent profile names must not be empty.";
-          }
-          {
-            assertion = builtins.all (profile: referencesExist profile.allowedSubagents) (builtins.attrValues cfg.profiles);
-            message = "Pi allowedSubagents must reference existing profiles.";
-          }
-          {
-            assertion = builtins.all (profile: !(profile.allowAllTools && profile.tools != [])) (builtins.attrValues cfg.profiles);
-            message = "Pi profiles with allowAllTools enabled must not also declare tools.";
-          }
-        ];
-
-        programs.pi-coding-agent.settings.extensions = [
-          "${./../../extensions_src}/subagent.ts"
-        ];
-
-        home.file."${configDir}/agent-profiles.json".text = builtins.toJSON runtimeConfig;
-      });
+        harnesses.pi.command = lib.getExe llm-agents.pi;
+        inherit (cfg) maxDepth;
+      };
+    };
   }

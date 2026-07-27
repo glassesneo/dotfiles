@@ -7,16 +7,18 @@ import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { claimUsageBatch, createSubagentGetTool } from "../extensions_src/subagent.ts";
 import { boundedModelJson } from "../extensions_src/utilities/subagent_json.ts";
 import { claimRunUsage, createRun, finishRun, patchStatus } from "../extensions_src/utilities/subagent_store.ts";
+import type { AgentProfile } from "../extensions_src/utilities/profile_types.ts";
 import type { RunSnapshot, SubagentRuntimeConfig } from "../extensions_src/utilities/subagent_types.ts";
+
+const fullProfile: AgentProfile = { model: "provider/model", allowAllTools: true, tools: [], extensions: { subagent: { allowedTargets: ["full"] } } };
 
 function config(root: string): SubagentRuntimeConfig {
     return {
-        schemaVersion: 2,
+        schemaVersion: 1,
         stateRoot: join(root, "runs"),
-        runner: { node: process.execPath, script: "/runner.ts", extension: "/subagent.ts" },
+        runner: { node: process.execPath, script: "/runner.ts", extensions: ["/profile.ts", "/subagent.ts"] },
         harnesses: { pi: { command: "/pi" } },
-        defaultProfile: "full", profileCycle: ["full"], maxDepth: 3,
-        profiles: { full: { harness: "pi", model: "provider/model", allowAllTools: true, tools: [], allowedSubagents: ["full"] } },
+        maxDepth: 3,
     };
 }
 
@@ -87,9 +89,9 @@ test("a failed later usage claim rolls back earlier claims for a safe retry", as
 test("first terminal get returns top-level Pi usage and repeated get does not", async () => {
     const root = await mkdtemp(join(tmpdir(), "usage-tool-"));
     const cfg = config(root);
-    const configPath = join(root, "agent-profiles.json");
+    const configPath = join(root, "subagent.json");
     await writeFile(configPath, JSON.stringify(cfg));
-    const run = await createRun(cfg, "full", "task", root, { callerProfile: "full", depth: 1, originSessionId: "session" });
+    const run = await createRun(cfg, "full", fullProfile, "task", root, { callerProfile: "full", depth: 1, originSessionId: "session" });
     await patchStatus(run.paths, { status: "starting" });
     await patchStatus(run.paths, { status: "running", startedAt: "now" });
     await finishRun(run.paths, {
@@ -115,7 +117,7 @@ test("first terminal get returns top-level Pi usage and repeated get does not", 
 test("usage claim is exclusive across concurrent and repeated observers", async () => {
     const root = await mkdtemp(join(tmpdir(), "usage-claim-"));
     const cfg = config(root);
-    const run = await createRun(cfg, "full", "task", root, { callerProfile: "full", depth: 1, originSessionId: "session" });
+    const run = await createRun(cfg, "full", fullProfile, "task", root, { callerProfile: "full", depth: 1, originSessionId: "session" });
     await patchStatus(run.paths, { status: "starting" });
     await patchStatus(run.paths, { status: "running", startedAt: "now" });
     await finishRun(run.paths, {

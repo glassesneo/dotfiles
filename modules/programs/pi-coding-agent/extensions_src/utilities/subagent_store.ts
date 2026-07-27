@@ -1,7 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { appendFile, chmod, link, mkdir, open, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import type { AgentProfile } from "./profile_types.ts";
 import {
+    RESOLVED_RUN_SCHEMA_VERSION,
     SUBAGENT_SCHEMA_VERSION,
     emptyUsage,
     isTerminalState,
@@ -69,17 +71,16 @@ function shellQuote(value: string): string {
 export async function createRun(
     config: SubagentRuntimeConfig,
     profile: string,
+    profileConfig: AgentProfile,
     prompt: string,
     cwd: string,
     lineage: Omit<RunLineage, "targetProfile"> = {
-        callerProfile: config.defaultProfile,
+        callerProfile: profile,
         depth: 1,
         originSessionId: process.env.PI_SESSION_ID ?? "standalone",
     },
 ): Promise<{ request: RunRequest; resolved: ResolvedRun; status: RunStatus; paths: RunPaths }> {
     if (prompt.trim() === "") throw new Error("Subagent prompt must not be empty");
-    const profileConfig = config.profiles[profile];
-    if (!profileConfig) throw new Error(`Unknown subagent profile: ${profile}`);
     const runId = randomUUID();
     const paths = runPaths(config.stateRoot, runId);
     await mkdir(config.stateRoot, { recursive: true, mode: 0o700 });
@@ -90,11 +91,13 @@ export async function createRun(
     const fullLineage: RunLineage = { ...lineage, targetProfile: profile };
     const request: RunRequest = { schemaVersion: 2, runId, profile, prompt, cwd, createdAt, ...fullLineage };
     const resolved: ResolvedRun = {
-        schemaVersion: 2, runId, profile, ...fullLineage,
-        harness: "pi", model: profileConfig.model, thinkingLevel: profileConfig.thinkingLevel,
-        allowAllTools: profileConfig.allowAllTools, tools: profileConfig.tools,
-        allowedSubagents: profileConfig.allowedSubagents, instructions: profileConfig.instructions,
-        command: config.harnesses.pi.command, extension: config.runner.extension,
+        schemaVersion: RESOLVED_RUN_SCHEMA_VERSION,
+        runId,
+        profile,
+        ...fullLineage,
+        profileSnapshot: structuredClone(profileConfig),
+        command: config.harnesses.pi.command,
+        extensionPaths: [...config.runner.extensions],
     };
     const status: RunStatus = { schemaVersion: 2, runId, profile, status: "created", createdAt };
     const launcher = [

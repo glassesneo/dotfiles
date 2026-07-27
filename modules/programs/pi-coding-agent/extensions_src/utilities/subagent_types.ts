@@ -1,32 +1,25 @@
 import type { Usage } from "@earendil-works/pi-ai";
+import type { AgentProfile } from "./profile_types.ts";
 
+export const SUBAGENT_CONFIG_SCHEMA_VERSION = 1 as const;
 export const SUBAGENT_SCHEMA_VERSION = 2 as const;
+export const RESOLVED_RUN_SCHEMA_VERSION = 3 as const;
 
 export const RUN_STATES = ["created", "starting", "running", "succeeded", "failed"] as const;
 export type RunState = (typeof RUN_STATES)[number];
 export type TerminalRunState = Extract<RunState, "succeeded" | "failed">;
 export type FailureCategory = "launch" | "harness" | "protocol" | "runner_lost";
-export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
-
-export interface AgentProfile {
-    harness: "pi";
-    model: string;
-    thinkingLevel?: ThinkingLevel;
-    allowAllTools: boolean;
-    tools: string[];
-    allowedSubagents: string[];
-    instructions?: string;
-}
 
 export interface SubagentRuntimeConfig {
-    schemaVersion: 2;
+    schemaVersion: 1;
     stateRoot: string;
-    runner: { node: string; script: string; extension: string };
+    runner: { node: string; script: string; extensions: string[] };
     harnesses: { pi: { command: string } };
-    defaultProfile: string;
-    profileCycle: string[];
     maxDepth: number;
-    profiles: Record<string, AgentProfile>;
+}
+
+export interface SubagentFacet {
+    allowedTargets: string[];
 }
 
 export interface RunLineage {
@@ -48,18 +41,12 @@ export interface RunRequest extends RunLineage {
 }
 
 export interface ResolvedRun extends RunLineage {
-    schemaVersion: 2;
+    schemaVersion: 3;
     runId: string;
     profile: string;
-    harness: "pi";
-    model: string;
-    thinkingLevel?: ThinkingLevel;
-    allowAllTools: boolean;
-    tools: string[];
-    allowedSubagents: string[];
-    instructions?: string;
+    profileSnapshot: AgentProfile;
     command: string;
-    extension: string;
+    extensionPaths: string[];
 }
 
 export interface TmuxRunReference {
@@ -110,14 +97,7 @@ export interface UsageClaim {
     claimedAt: string;
 }
 
-export type NormalizedEventType =
-    | "run_started"
-    | "assistant_text"
-    | "tool_started"
-    | "tool_finished"
-    | "diagnostic"
-    | "run_finished";
-
+export type NormalizedEventType = "run_started" | "assistant_text" | "tool_started" | "tool_finished" | "diagnostic" | "run_finished";
 export interface NormalizedEvent {
     schemaVersion: 2;
     sequence: number;
@@ -145,89 +125,47 @@ function object(value: unknown, label: string): Record<string, unknown> {
     if (value === null || typeof value !== "object" || Array.isArray(value)) throw new Error(`${label} must be an object`);
     return value as Record<string, unknown>;
 }
-
 function nonBlank(value: unknown, label: string): string {
     if (typeof value !== "string" || value.trim() === "") throw new Error(`${label} must be a non-empty string`);
     return value;
 }
-
 function stringArray(value: unknown, label: string): string[] {
-    if (!Array.isArray(value) || value.some(item => typeof item !== "string" || item.trim() === "")) {
-        throw new Error(`${label} must be an array of non-empty strings`);
-    }
+    if (!Array.isArray(value) || value.some(item => typeof item !== "string" || item.trim() === "")) throw new Error(`${label} must be an array of non-empty strings`);
     return [...value] as string[];
 }
 
-export function validateRuntimeConfig(value: unknown): SubagentRuntimeConfig {
-    const root = object(value, "agent profile config");
-    if (root.schemaVersion !== SUBAGENT_SCHEMA_VERSION) throw new Error("Unsupported agent profile config schemaVersion");
+export function validateSubagentRuntimeConfig(value: unknown): SubagentRuntimeConfig {
+    const root = object(value, "subagent config");
+    if (root.schemaVersion !== SUBAGENT_CONFIG_SCHEMA_VERSION) throw new Error("Unsupported subagent config schemaVersion");
     const runner = object(root.runner, "runner");
     const harnesses = object(root.harnesses, "harnesses");
     const pi = object(harnesses.pi, "harnesses.pi");
-    const rawProfiles = object(root.profiles, "profiles");
-    const profiles: Record<string, AgentProfile> = {};
-    const thinkingLevels = new Set(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);
-
-    for (const [name, rawProfile] of Object.entries(rawProfiles)) {
-        nonBlank(name, "profile name");
-        const profile = object(rawProfile, `profiles.${name}`);
-        if (profile.harness !== "pi") throw new Error(`profiles.${name}.harness is unsupported`);
-        const thinkingLevel = profile.thinkingLevel;
-        if (thinkingLevel !== undefined && (typeof thinkingLevel !== "string" || !thinkingLevels.has(thinkingLevel))) {
-            throw new Error(`profiles.${name}.thinkingLevel is invalid`);
-        }
-        if (typeof profile.allowAllTools !== "boolean") throw new Error(`profiles.${name}.allowAllTools must be boolean`);
-        const tools = stringArray(profile.tools, `profiles.${name}.tools`);
-        if (profile.allowAllTools && tools.length > 0) throw new Error(`profiles.${name} cannot set tools when allowAllTools is true`);
-        profiles[name] = {
-            harness: "pi",
-            model: nonBlank(profile.model, `profiles.${name}.model`),
-            thinkingLevel: thinkingLevel as ThinkingLevel | undefined,
-            allowAllTools: profile.allowAllTools,
-            tools,
-            allowedSubagents: stringArray(profile.allowedSubagents, `profiles.${name}.allowedSubagents`),
-            instructions: profile.instructions === undefined ? undefined : nonBlank(profile.instructions, `profiles.${name}.instructions`),
-        };
-    }
-
-    const defaultProfile = nonBlank(root.defaultProfile, "defaultProfile");
-    const profileCycle = stringArray(root.profileCycle, "profileCycle");
     if (!Number.isInteger(root.maxDepth) || (root.maxDepth as number) < 0) throw new Error("maxDepth must be a non-negative integer");
-    if (!profiles[defaultProfile]) throw new Error(`defaultProfile references unknown profile: ${defaultProfile}`);
-    if (new Set(profileCycle).size !== profileCycle.length) throw new Error("profileCycle must not contain duplicates");
-    for (const name of profileCycle) if (!profiles[name]) throw new Error(`profileCycle references unknown profile: ${name}`);
-    for (const [name, profile] of Object.entries(profiles)) {
-        for (const target of profile.allowedSubagents) {
-            if (!profiles[target]) throw new Error(`profiles.${name}.allowedSubagents references unknown profile: ${target}`);
-        }
-    }
-
+    const extensions = stringArray(runner.extensions, "runner.extensions");
+    if (extensions.length === 0) throw new Error("runner.extensions must not be empty");
     const stateRoot = nonBlank(root.stateRoot, "stateRoot");
     if (Buffer.byteLength(stateRoot, "utf8") > 4096) throw new Error("stateRoot must be at most 4096 UTF-8 bytes");
-
     return {
-        schemaVersion: 2,
+        schemaVersion: 1,
         stateRoot,
-        runner: {
-            node: nonBlank(runner.node, "runner.node"),
-            script: nonBlank(runner.script, "runner.script"),
-            extension: nonBlank(runner.extension, "runner.extension"),
-        },
+        runner: { node: nonBlank(runner.node, "runner.node"), script: nonBlank(runner.script, "runner.script"), extensions },
         harnesses: { pi: { command: nonBlank(pi.command, "harnesses.pi.command") } },
-        defaultProfile,
-        profileCycle,
         maxDepth: root.maxDepth as number,
-        profiles,
     };
+}
+
+export function parseSubagentFacet(value: unknown): SubagentFacet {
+    const facet = object(value, "extensions.subagent");
+    const unknown = Object.keys(facet).filter(key => key !== "allowedTargets");
+    if (unknown.length > 0) throw new Error(`extensions.subagent contains unknown keys: ${unknown.join(", ")}`);
+    const allowedTargets = stringArray(facet.allowedTargets, "extensions.subagent.allowedTargets");
+    if (new Set(allowedTargets).size !== allowedTargets.length) throw new Error("extensions.subagent.allowedTargets must not contain duplicates");
+    return { allowedTargets };
 }
 
 export function emptyUsage(): Usage {
-    return {
-        input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0,
-        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-    };
+    return { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } };
 }
-
 export function addUsage(target: Usage, usage: Partial<Usage> | undefined): void {
     if (!usage) return;
     for (const key of ["input", "output", "cacheRead", "cacheWrite", "totalTokens"] as const) target[key] += usage[key] ?? 0;
@@ -235,7 +173,4 @@ export function addUsage(target: Usage, usage: Partial<Usage> | undefined): void
     if (usage.cacheWrite1h !== undefined) target.cacheWrite1h = (target.cacheWrite1h ?? 0) + usage.cacheWrite1h;
     for (const key of ["input", "output", "cacheRead", "cacheWrite", "total"] as const) target.cost[key] += usage.cost?.[key] ?? 0;
 }
-
-export function isTerminalState(state: RunState): state is TerminalRunState {
-    return state === "succeeded" || state === "failed";
-}
+export function isTerminalState(state: RunState): state is TerminalRunState { return state === "succeeded" || state === "failed"; }

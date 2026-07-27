@@ -9,6 +9,8 @@ import {
     type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+import { loadAgentProfileConfig } from "./profile.ts";
+import { onActiveProfile } from "./utilities/profile_events.ts";
 import { boundedModelJson, snapshotDetails } from "./utilities/subagent_json.ts";
 import {
     assertRunOrigin,
@@ -26,14 +28,15 @@ import {
     addUsage,
     emptyUsage,
     isTerminalState,
-    validateRuntimeConfig,
-    type AgentProfile,
+    parseSubagentFacet,
+    validateSubagentRuntimeConfig,
     type RunSnapshot,
+    type SubagentFacet,
     type SubagentRuntimeConfig,
 } from "./utilities/subagent_types.ts";
 
-const DEFAULT_CONFIG_PATH = join(getAgentDir(), "agent-profiles.json");
-const PROFILE_STATE = "agent-profile-state";
+const DEFAULT_CONFIG_PATH = join(getAgentDir(), "subagent.json");
+const DEFAULT_PROFILE_CONFIG_PATH = join(getAgentDir(), "agent-profiles.json");
 
 const startParameters = Type.Object({
     profile: Type.String({ minLength: 1, description: "Semantic subagent profile name" }),
@@ -61,26 +64,27 @@ export interface SubagentWaitResult {
     runs: RunSnapshot[];
 }
 
+export interface ActiveSubagentProfile {
+    name: string;
+    facet?: SubagentFacet;
+    error?: string;
+}
+
 export interface SubagentDependencies {
     configPath: string;
+    profileConfigPath?: string;
     env: NodeJS.ProcessEnv;
     exec: CommandExecutor;
-    activeProfile?: () => string | undefined;
+    activeProfile?: () => ActiveSubagentProfile | undefined;
     monotonicNow?: () => number;
     sleep?: (milliseconds: number, signal?: AbortSignal) => Promise<void>;
 }
 
-export async function loadAgentProfileConfig(path: string, env: NodeJS.ProcessEnv = {}): Promise<SubagentRuntimeConfig> {
+export async function loadSubagentConfig(path: string): Promise<SubagentRuntimeConfig> {
     let value: unknown;
     try { value = JSON.parse(await readFile(path, "utf8")); }
-    catch (error) { throw new Error(`Cannot read agent profile config ${path}: ${error instanceof Error ? error.message : String(error)}`); }
-    const config = validateRuntimeConfig(value);
-    if (!env.PI_SUBAGENT_RESOLVED_PROFILE) return config;
-    let override: { name?: unknown; profile?: unknown };
-    try { override = JSON.parse(env.PI_SUBAGENT_RESOLVED_PROFILE) as { name?: unknown; profile?: unknown }; }
-    catch { throw new Error("PI_SUBAGENT_RESOLVED_PROFILE is not valid JSON"); }
-    if (typeof override.name !== "string" || !override.profile) throw new Error("PI_SUBAGENT_RESOLVED_PROFILE is invalid");
-    return validateRuntimeConfig({ ...config, profiles: { ...config.profiles, [override.name]: override.profile } });
+    catch (error) { throw new Error(`Cannot read subagent config ${path}: ${error instanceof Error ? error.message : String(error)}`); }
+    return validateSubagentRuntimeConfig(value);
 }
 
 function throwIfAborted(signal?: AbortSignal): void {
@@ -199,13 +203,16 @@ export function createSubagentStartTool(deps: SubagentDependencies): ToolDefinit
         promptGuidelines: ["Use subagent_start with only a semantic profile and a complete task prompt; continue useful independent work after it returns, then use subagent_wait when the delegated result is needed."],
         parameters: startParameters, executionMode: "sequential",
         async execute(toolCallId, params, _signal, _onUpdate, ctx) {
-            const config = await loadAgentProfileConfig(deps.configPath, deps.env);
-            const callerProfile = deps.activeProfile?.() ?? config.defaultProfile;
-            const caller = config.profiles[callerProfile];
-            if (!caller) throw new Error(`Unknown caller profile: ${callerProfile}`);
-            if (!config.profiles[params.profile]) throw new Error(`Unknown subagent profile: ${params.profile}`);
-            if (!caller.allowedSubagents.includes(params.profile)) {
-                throw new Error(`Profile ${callerProfile} is not allowed to start subagent profile ${params.profile}`);
+            const config = await loadSubagentConfig(deps.configPath);
+            const profiles = await loadAgentProfileConfig(deps.profileConfigPath ?? DEFAULT_PROFILE_CONFIG_PATH, deps.env);
+            const active = deps.activeProfile?.();
+            if (!active) throw new Error("Subagent configuration unavailable: no active-profile event has been received");
+            if (active.error) throw new Error(`Subagent configuration unavailable: ${active.error}`);
+            const allowedTargets = active.facet?.allowedTargets ?? [];
+            const targetProfile = profiles.profiles[params.profile];
+            if (!targetProfile) throw new Error(`Unknown subagent profile: ${params.profile}`);
+            if (!allowedTargets.includes(params.profile)) {
+                throw new Error(`Profile ${active.name} is not allowed to start subagent profile ${params.profile}`);
             }
             const current = origin(ctx, deps.env);
             const childDepth = current.depth + 1;
@@ -213,8 +220,8 @@ export function createSubagentStartTool(deps: SubagentDependencies): ToolDefinit
             const tmuxContext = await probeTmux(deps.exec, deps.env);
             if (!tmuxContext) throw new Error("The current Pi process is no longer attached to a usable tmux session");
 
-            const run = await createRun(config, params.profile, params.prompt, ctx.cwd, {
-                callerProfile, depth: childDepth, parentRunId: current.parentRunId,
+            const run = await createRun(config, params.profile, targetProfile, params.prompt, ctx.cwd, {
+                callerProfile: active.name, depth: childDepth, parentRunId: current.parentRunId,
                 originSessionId: current.originSessionId, originSessionFile: current.originSessionFile,
             });
             await patchStatus(run.paths, { status: "starting" });
@@ -238,7 +245,7 @@ export function createSubagentGetTool(deps: SubagentDependencies): ToolDefinitio
         promptGuidelines: ["Use subagent_get for a one-time non-blocking status check or to retrieve an already completed result."],
         parameters: getParameters, executionMode: "sequential",
         async execute(toolCallId, params, _signal, _onUpdate, ctx) {
-            const config = await loadAgentProfileConfig(deps.configPath, deps.env);
+            const config = await loadSubagentConfig(deps.configPath);
             await assertRunOrigin(config.stateRoot, params.runId, origin(ctx, deps.env).originSessionId);
             const snapshot = await readReconciledSnapshot(deps, config.stateRoot, params.runId);
             return toolResult(snapshot, await claimedUsage(config, [snapshot], ctx, deps.env, toolCallId, "subagent_get"));
@@ -256,7 +263,7 @@ export function createSubagentWaitTool(deps: SubagentDependencies): ToolDefiniti
         async execute(toolCallId, params, signal, _onUpdate, ctx) {
             throwIfAborted(signal);
             if (new Set(params.runIds).size !== params.runIds.length) throw new Error("subagent_wait runIds must not contain duplicates");
-            const config = await loadAgentProfileConfig(deps.configPath, deps.env);
+            const config = await loadSubagentConfig(deps.configPath);
             const originSessionId = origin(ctx, deps.env).originSessionId;
             for (const runId of params.runIds) {
                 throwIfAborted(signal);
@@ -292,17 +299,6 @@ export function createSubagentWaitTool(deps: SubagentDependencies): ToolDefiniti
     });
 }
 
-function splitModelId(model: string): [string, string] {
-    const separator = model.indexOf("/");
-    if (separator <= 0 || separator === model.length - 1) throw new Error(`Profile model must include provider: ${model}`);
-    return [model.slice(0, separator), model.slice(separator + 1)];
-}
-
-function latestProfile(ctx: ExtensionContext): string | undefined {
-    const entry = [...ctx.sessionManager.getBranch()].reverse().find(item => item.type === "custom" && item.customType === PROFILE_STATE) as { data?: { name?: unknown } } | undefined;
-    return typeof entry?.data?.name === "string" ? entry.data.name : undefined;
-}
-
 async function reconcileSessionAccounting(config: SubagentRuntimeConfig, ctx: ExtensionContext): Promise<void> {
     const sessionId = ctx.sessionManager.getSessionId();
     for (const entry of ctx.sessionManager.getEntries()) {
@@ -319,116 +315,36 @@ async function reconcileSessionAccounting(config: SubagentRuntimeConfig, ctx: Ex
     }
 }
 
-export function registerProfileController(
-    pi: ExtensionAPI,
-    configPath = DEFAULT_CONFIG_PATH,
-    env: NodeJS.ProcessEnv = process.env,
-): { activeProfile: () => string | undefined } {
-    let config: SubagentRuntimeConfig | undefined;
-    let activeName: string | undefined;
-    let activeProfile: AgentProfile | undefined;
-
-    const syncActiveTools = (profile: AgentProfile | undefined = activeProfile) => {
-        if (!profile) return;
-        const allTools = pi.getAllTools().map(tool => tool.name);
-        pi.setActiveTools(profile.allowAllTools
-            ? allTools
-            : profile.tools.filter(tool => allTools.includes(tool)));
-    };
-
-    pi.registerFlag("profile", { description: "Agent capability profile", type: "string" });
-
-    const apply = async (name: string, ctx: ExtensionContext, persist: boolean): Promise<boolean> => {
-        if (!ctx.isIdle()) { ctx.ui.notify("Profile can only be changed while the agent is idle", "warning"); return false; }
-        config ??= await loadAgentProfileConfig(configPath, env);
-        const profile = config.profiles[name];
-        if (!profile) { ctx.ui.notify(`Unknown profile ${name}. Available: ${Object.keys(config.profiles).join(", ")}`, "error"); return false; }
-        const [provider, modelId] = splitModelId(profile.model);
-        const model = ctx.modelRegistry.find(provider, modelId);
-        if (!model) { ctx.ui.notify(`Profile ${name}: model ${profile.model} not found`, "error"); return false; }
-        if (!await pi.setModel(model)) { ctx.ui.notify(`Profile ${name}: no authentication for ${profile.model}`, "error"); return false; }
-
-        pi.setThinkingLevel(profile.thinkingLevel ?? "off");
-        syncActiveTools(profile);
-        activeName = name;
-        activeProfile = profile;
-        ctx.ui.setStatus("agent-profile", `profile:${name}`);
-        if (persist) pi.appendEntry(PROFILE_STATE, { name });
-        return true;
-    };
-
-    const choose = async (ctx: ExtensionContext) => {
-        config ??= await loadAgentProfileConfig(configPath, env);
-        if (!ctx.hasUI) { ctx.ui.notify(`Active profile: ${activeName ?? config.defaultProfile}`, "info"); return; }
-        const selected = await ctx.ui.select("Agent profile", Object.keys(config.profiles));
-        if (selected) await apply(selected, ctx, true);
-    };
-
-    pi.registerCommand("profile", {
-        description: "Show or switch the active agent profile",
-        getArgumentCompletions(prefix) {
-            if (!config) return null;
-            const items = Object.keys(config.profiles).filter(name => name.startsWith(prefix)).map(name => ({ value: name, label: name }));
-            return items.length ? items : null;
-        },
-        async handler(args, ctx) {
-            const name = args.trim();
-            if (name) await apply(name, ctx, true); else await choose(ctx);
-        },
-    });
-
-    pi.registerShortcut("shift+tab", {
-        description: "Cycle agent profiles",
-        async handler(ctx) {
-            config ??= await loadAgentProfileConfig(configPath, env);
-            const current = config.profileCycle.indexOf(activeName ?? config.defaultProfile);
-            const next = config.profileCycle[(current + 1 + config.profileCycle.length) % config.profileCycle.length];
-            if (next) await apply(next, ctx, true);
-        },
-    });
-
-    pi.on("session_start", async (_event, ctx) => {
-        config = await loadAgentProfileConfig(configPath, env);
-        const flag = pi.getFlag("profile");
-        const requested = typeof flag === "string" && flag.trim() ? flag.trim() : latestProfile(ctx) ?? config.defaultProfile;
-        if (!await apply(requested, ctx, true) && requested !== config.defaultProfile) await apply(config.defaultProfile, ctx, true);
-        try { await reconcileSessionAccounting(config, ctx); }
-        catch (error) {
-            ctx.ui.notify(`Could not reconcile subagent usage claims: ${error instanceof Error ? error.message : String(error)}`, "warning");
-        }
-    });
-    pi.on("session_tree", async (_event, ctx) => {
-        config ??= await loadAgentProfileConfig(configPath, env);
-        await apply(latestProfile(ctx) ?? config.defaultProfile, ctx, false);
-    });
-    pi.on("input", async () => {
-        syncActiveTools();
-    });
-    pi.on("before_agent_start", async event => {
-        if (!activeProfile) return;
-        syncActiveTools();
-        if (activeProfile.instructions) return { systemPrompt: `${event.systemPrompt}\n\n${activeProfile.instructions}` };
-    });
-    pi.on("tool_call", event => {
-        if (activeProfile && !activeProfile.allowAllTools && !activeProfile.tools.includes(event.toolName)) {
-            return { block: true, reason: `Tool ${event.toolName} is not allowed by profile ${activeName}` };
-        }
-    });
-    return { activeProfile: () => activeName };
-}
-
 export async function registerSubagent(
     pi: ExtensionAPI,
-    options: Partial<Pick<SubagentDependencies, "configPath" | "env">> = {},
+    options: Partial<Pick<SubagentDependencies, "configPath" | "profileConfigPath" | "env">> = {},
 ): Promise<boolean> {
     const configPath = options.configPath ?? DEFAULT_CONFIG_PATH;
+    const profileConfigPath = options.profileConfigPath ?? DEFAULT_PROFILE_CONFIG_PATH;
     const env = options.env ?? process.env;
-    const controller = registerProfileController(pi, configPath, env);
+    let activeProfile: ActiveSubagentProfile | undefined;
+    onActiveProfile(
+        pi,
+        event => {
+            const rawFacet = event.profile.extensions.subagent;
+            if (rawFacet === undefined) {
+                activeProfile = { name: event.name, facet: { allowedTargets: [] } };
+                return;
+            }
+            try { activeProfile = { name: event.name, facet: parseSubagentFacet(rawFacet) }; }
+            catch (error) { activeProfile = { name: event.name, error: error instanceof Error ? error.message : String(error) }; }
+        },
+        error => { activeProfile = { name: "unknown", error: error.message }; },
+    );
     const exec: CommandExecutor = async (command, args) => {
         const output = await pi.exec(command, args);
         return { stdout: output.stdout, stderr: output.stderr, code: output.code };
     };
-    const deps: SubagentDependencies = { configPath, env, exec, activeProfile: controller.activeProfile };
+    const deps: SubagentDependencies = { configPath, profileConfigPath, env, exec, activeProfile: () => activeProfile };
+    pi.on("session_start", async (_event, ctx) => {
+        try { await reconcileSessionAccounting(await loadSubagentConfig(configPath), ctx); }
+        catch (error) { ctx.ui.notify(`Could not reconcile subagent usage claims: ${error instanceof Error ? error.message : String(error)}`, "warning"); }
+    });
     if (!await probeTmux(exec, deps.env)) return false;
     pi.registerTool(createSubagentStartTool(deps));
     pi.registerTool(createSubagentGetTool(deps));

@@ -1,6 +1,7 @@
 {
   delib,
   homeConfig,
+  lib,
   llm-agents,
   ...
 }: let
@@ -9,14 +10,63 @@ in
   delib.module {
     name = "programs.pi-coding-agent";
 
-    options = delib.singleEnableOption true;
+    options = with delib;
+      moduleOptions {
+        enable = boolOption true;
+        defaultExtensions = readOnly (listOfOption str [
+          "profile"
+        ]);
+      };
 
     home.ifEnabled = {
+      cfg,
+      myconfig,
+      ...
+    }: let
+      duplicates = lib.length cfg.defaultExtensions != lib.length (lib.unique cfg.defaultExtensions);
+      resolveModule = name: let
+        path = ["programs" "pi-coding-agent"] ++ lib.splitString "." name;
+      in
+        if lib.hasAttrByPath path myconfig
+        then lib.attrByPath path null myconfig
+        else null;
+      selected =
+        map (name: {
+          inherit name;
+          module = resolveModule name;
+        })
+        cfg.defaultExtensions;
+      extensionPaths = lib.concatMap (item:
+        if item.module != null && item.module ? extensionPaths
+        then item.module.extensionPaths
+        else [])
+      selected;
+    in {
+      assertions = [
+        {
+          assertion = !duplicates;
+          message = "Pi defaultExtensions must not contain duplicate module names.";
+        }
+        {
+          assertion = builtins.all (item: item.module != null) selected;
+          message = "Pi defaultExtensions must reference existing modules below programs.pi-coding-agent.";
+        }
+        {
+          assertion = builtins.all (item: item.module == null || (item.module ? enable && item.module.enable)) selected;
+          message = "Pi selected default extension modules must be enabled.";
+        }
+        {
+          assertion = builtins.all (item: item.module == null || (item.module ? extensionPaths && item.module.extensionPaths != [])) selected;
+          message = "Pi selected default extension modules must expose non-empty extensionPaths.";
+        }
+      ];
+
       programs.pi-coding-agent = {
         enable = true;
         package = llm-agents.pi;
         inherit configDir;
         settings = {
+          extensions = lib.mkBefore extensionPaths;
           prompts = [
             "${./prompts}"
           ];

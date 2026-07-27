@@ -119,11 +119,14 @@ export async function runPiHarness(
     request: { prompt: string; cwd: string },
     callbacks: PiRunCallbacks,
 ): Promise<{ output: string; usage: Usage; turns: number }> {
-    const args = ["--mode", "json", "-p", "--no-session", "--no-extensions", "-e", resolved.extension, "--profile", resolved.profile, "--model", resolved.model];
-    if (resolved.thinkingLevel) args.push("--thinking", resolved.thinkingLevel);
-    if (!resolved.allowAllTools) {
-        if (resolved.tools.length === 0) args.push("--no-tools");
-        else args.push("--tools", resolved.tools.join(","));
+    const profile = resolved.profileSnapshot;
+    const args = ["--mode", "json", "-p", "--no-session", "--no-extensions"];
+    for (const extension of resolved.extensionPaths) args.push("-e", extension);
+    args.push("--profile", resolved.profile, "--model", profile.model);
+    if (profile.thinkingLevel) args.push("--thinking", profile.thinkingLevel);
+    if (!profile.allowAllTools) {
+        if (profile.tools.length === 0) args.push("--no-tools");
+        else args.push("--tools", profile.tools.join(","));
     }
 
     const normalizer = new PiEventNormalizer();
@@ -136,17 +139,9 @@ export async function runPiHarness(
             PI_SUBAGENT_DEPTH: String(resolved.depth),
             PI_SUBAGENT_RUN_ID: resolved.runId,
             PI_SUBAGENT_ORIGIN_SESSION_ID: resolved.originSessionId,
-            PI_SUBAGENT_RESOLVED_PROFILE: JSON.stringify({
+            PI_AGENT_RESOLVED_PROFILE: JSON.stringify({
                 name: resolved.profile,
-                profile: {
-                    harness: resolved.harness,
-                    model: resolved.model,
-                    thinkingLevel: resolved.thinkingLevel,
-                    allowAllTools: resolved.allowAllTools,
-                    tools: resolved.tools,
-                    allowedSubagents: resolved.allowedSubagents,
-                    instructions: resolved.instructions,
-                },
+                profile: resolved.profileSnapshot,
             }),
             ...(resolved.originSessionFile ? { PI_SUBAGENT_ORIGIN_SESSION_FILE: resolved.originSessionFile } : {}),
         },
