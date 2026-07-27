@@ -38,15 +38,23 @@ in
       profiles = {
         full = {
           model = "openai-codex/gpt-5.6-sol";
-          description = "Use for work that needs broad coding capability; include the deliverable, constraints, and verification conditions in the delegated prompt.";
+          description = "Use for work that needs broad coding capability.";
           thinkingLevel = "medium";
           allowAllTools = true;
           tools = [];
           extensions = {};
         };
+        taskmaster = {
+          model = "openai-codex/gpt-5.6-sol";
+          description = "Use for work that needs broad coding capability; include the deliverable, constraints, and verification conditions in the delegated prompt.";
+          thinkingLevel = "medium";
+          allowAllTools = false;
+          tools = ["write" "edit"];
+          extensions = {};
+        };
         scout = {
           model = "openai-codex/gpt-5.6-sol";
-          description = "Use for read-only exploration and evidence gathering; include the investigation target, question, and required evidence in the delegated prompt.";
+          description = "Use for read-only exploration and evidence gathering.";
           thinkingLevel = "high";
           allowAllTools = false;
           tools = [];

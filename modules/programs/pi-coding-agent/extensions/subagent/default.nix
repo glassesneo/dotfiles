@@ -24,11 +24,14 @@ in
     myconfig.always.programs.pi-coding-agent.profile.facetOwners.subagent = moduleName;
 
     myconfig.ifEnabled.programs.pi-coding-agent.profile.profiles = {
-      full.extensions.subagent.allowedTargets = ["scout" "full" "focused-reviewer"];
-      scout = {
+      full.extensions.subagent.allowedTargets = ["scout" "taskmaster" "focused-reviewer"];
+      taskmaster = {
         tools = ["subagent_start" "subagent_get" "subagent_wait" "subagent_stop"];
-        extensions.subagent.allowedTargets = ["scout" "focused-reviewer"];
+        extensions.subagent.allowedTargets = ["focused-reviewer"];
       };
+      # scout = {
+      # tools = ["subagent_start" "subagent_get" "subagent_wait" "subagent_stop"];
+      # };
     };
 
     home.always = {myconfig, ...}: let
