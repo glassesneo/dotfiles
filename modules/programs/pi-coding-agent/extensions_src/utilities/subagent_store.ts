@@ -4,10 +4,14 @@ import { join } from "node:path";
 import type { AgentProfile } from "./profile_types.ts";
 import {
     RESOLVED_RUN_SCHEMA_VERSION,
+    RUN_REQUEST_SCHEMA_VERSION,
     SUBAGENT_SCHEMA_VERSION,
     emptyUsage,
     isTerminalState,
+    normalizeRunRequest,
+    validateRunPurpose,
     type NormalizedEvent,
+    type NormalizedRunRequest,
     type ResolvedRun,
     type RunFailure,
     type RunLineage,
@@ -72,6 +76,7 @@ export async function createRun(
     config: SubagentRuntimeConfig,
     profile: string,
     profileConfig: AgentProfile,
+    purpose: string,
     prompt: string,
     cwd: string,
     lineage: Omit<RunLineage, "targetProfile"> = {
@@ -81,6 +86,7 @@ export async function createRun(
     },
 ): Promise<{ request: RunRequest; resolved: ResolvedRun; status: RunStatus; paths: RunPaths }> {
     if (prompt.trim() === "") throw new Error("Subagent prompt must not be empty");
+    const normalizedPurpose = validateRunPurpose(purpose);
     const runId = randomUUID();
     const paths = runPaths(config.stateRoot, runId);
     await mkdir(config.stateRoot, { recursive: true, mode: 0o700 });
@@ -89,7 +95,7 @@ export async function createRun(
 
     const createdAt = new Date().toISOString();
     const fullLineage: RunLineage = { ...lineage, targetProfile: profile };
-    const request: RunRequest = { schemaVersion: 2, runId, profile, prompt, cwd, createdAt, ...fullLineage };
+    const request: RunRequest = { schemaVersion: RUN_REQUEST_SCHEMA_VERSION, runId, profile, purpose: normalizedPurpose, prompt, cwd, createdAt, ...fullLineage };
     const resolved: ResolvedRun = {
         schemaVersion: RESOLVED_RUN_SCHEMA_VERSION,
         runId,
@@ -169,10 +175,16 @@ async function readClaim(paths: RunPaths): Promise<UsageClaim | undefined> {
     }
 }
 
-export async function assertRunOrigin(stateRoot: string, runId: string, originSessionId: string): Promise<RunRequest> {
+export async function readRunRequest(paths: RunPaths): Promise<NormalizedRunRequest> {
+    const request = normalizeRunRequest(await readJson<RunRequest>(paths.request));
+    if (!RUN_ID.test(request.runId)) throw new Error("Invalid run request file");
+    return request;
+}
+
+export async function assertRunOrigin(stateRoot: string, runId: string, originSessionId: string): Promise<NormalizedRunRequest> {
     const paths = runPaths(stateRoot, runId);
-    const request = await readJson<RunRequest>(paths.request);
-    if (request.schemaVersion !== 2 || request.runId !== runId) throw new Error(`Invalid request metadata for run ${runId}`);
+    const request = await readRunRequest(paths);
+    if (request.runId !== runId) throw new Error(`Invalid request metadata for run ${runId}`);
     if (request.originSessionId !== originSessionId) throw new Error(`Run ${runId} belongs to a different origin session`);
     return request;
 }
@@ -235,7 +247,8 @@ export async function claimRunUsage(
 
 export async function readSnapshot(stateRoot: string, runId: string): Promise<RunSnapshot> {
     const paths = runPaths(stateRoot, runId);
-    const status = await readStatus(paths);
+    const [status, request] = await Promise.all([readStatus(paths), readRunRequest(paths)]);
+    if (request.runId !== runId || request.profile !== status.profile) throw new Error(`Request and status metadata disagree for run ${runId}`);
     let result: RunResult | null = null;
     if (isTerminalState(status.status)) {
         result = await readJson<RunResult>(paths.result);
@@ -245,7 +258,7 @@ export async function readSnapshot(stateRoot: string, runId: string): Promise<Ru
     }
     const claim = await readClaim(paths);
     return {
-        schemaVersion: 2, runId, profile: status.profile, status: status.status,
+        schemaVersion: 2, runId, purpose: request.purpose, profile: status.profile, status: status.status,
         createdAt: status.createdAt, startedAt: status.startedAt, finishedAt: status.finishedAt, tmux: status.tmux,
         runDirectory: paths.directory, paths: { events: paths.events, stderr: paths.stderr, result: paths.result },
         accounting: { claimed: claim !== undefined, claim }, result,

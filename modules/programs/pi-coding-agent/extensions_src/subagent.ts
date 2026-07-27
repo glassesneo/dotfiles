@@ -6,12 +6,14 @@ import {
     getAgentDir,
     type ExtensionAPI,
     type ExtensionContext,
+    type Theme,
     type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
-import { Type } from "typebox";
+import { Text } from "@earendil-works/pi-tui";
+import { Type, type Static } from "typebox";
 import { loadAgentProfileConfig } from "./profile.ts";
 import { onActiveProfile } from "./utilities/profile_events.ts";
-import { boundedModelJson, boundedSummaryJson, minimalRun, snapshotDetails } from "./utilities/subagent_json.ts";
+import { boundedModelJson, boundedStartJson, boundedSummaryJson, minimalRun, snapshotDetails } from "./utilities/subagent_json.ts";
 import {
     assertRunOrigin,
     attachTmux,
@@ -27,8 +29,10 @@ import { isTmuxPaneAlive, launchTmuxWindow, probeTmux, type CommandExecutor } fr
 import {
     addUsage,
     emptyUsage,
+    fallbackRunPurpose,
     isTerminalState,
     parseSubagentFacet,
+    PURPOSE_MAX_LENGTH,
     validateSubagentRuntimeConfig,
     type RunSnapshot,
     type SubagentFacet,
@@ -44,6 +48,7 @@ const detailParameter = Type.Optional(Type.Boolean({
 }));
 const startParameters = Type.Object({
     profile: Type.String({ minLength: 1, description: "Semantic subagent profile name" }),
+    purpose: Type.String({ minLength: 1, maxLength: PURPOSE_MAX_LENGTH, description: "Short display purpose for this delegated run" }),
     prompt: Type.String({ minLength: 1, description: "Task prompt delegated to the subagent" }),
     detail: detailParameter,
 });
@@ -59,7 +64,7 @@ const waitParameters = Type.Object({
 });
 
 type WaitCondition = "any" | "all";
-type WaitReason = "condition_met" | "timeout";
+type WaitReason = "polling" | "condition_met" | "timeout";
 
 export interface SubagentWaitResult {
     schemaVersion: 2;
@@ -192,13 +197,11 @@ function runToolResult(
     snapshot: RunSnapshot,
     accounting: { usage?: Usage; claimedRunIds: string[] },
     detail: boolean,
-    start: boolean,
+    start = false,
 ) {
     const text = detail
         ? boundedModelJson(snapshot as unknown as Record<string, unknown>)
-        : start
-            ? JSON.stringify({ runId: snapshot.runId })
-            : boundedSummaryJson(minimalRun(snapshot));
+        : start ? boundedStartJson(snapshot) : boundedSummaryJson(minimalRun(snapshot));
     return {
         content: [{ type: "text" as const, text }],
         details: { ...snapshotDetails(snapshot), accounting: { ...snapshot.accounting, claimedRunIds: accounting.claimedRunIds } },
@@ -217,13 +220,195 @@ function waitToolResult(value: SubagentWaitResult, accounting: { usage?: Usage; 
     };
 }
 
+interface RenderResultLike {
+    content?: Array<{ type?: string; text?: string }>;
+    details?: unknown;
+}
+
+interface RunRenderDetails {
+    runId: string;
+    purpose: string;
+    profile: string;
+    status: string;
+    createdAt: string;
+    startedAt?: string;
+    finishedAt?: string;
+    paths: { result: string };
+    result?: {
+        error?: { category: string; message: string; exitCode?: number };
+        usage?: Usage;
+        turns?: number;
+    } | null;
+}
+
+function rawResultText(result: RenderResultLike): string {
+    return result.content?.filter(part => part.type === "text" && typeof part.text === "string").map(part => part.text).join("\n") ?? "";
+}
+
+function record(value: unknown): Record<string, unknown> | undefined {
+    return value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
+}
+
+function runDetails(value: unknown): RunRenderDetails | undefined {
+    const item = record(value);
+    const paths = record(item?.paths);
+    if (!item || item.schemaVersion !== 2 || typeof item.runId !== "string" || typeof item.purpose !== "string" || typeof item.profile !== "string"
+        || typeof item.status !== "string" || typeof item.createdAt !== "string" || typeof paths?.result !== "string") return undefined;
+    return item as unknown as RunRenderDetails;
+}
+
+function parsedContent(result: RenderResultLike): Record<string, unknown> | undefined {
+    try { return record(JSON.parse(rawResultText(result))); }
+    catch { return undefined; }
+}
+
+function statusDisplay(status: string, theme: Theme): string {
+    if (status === "succeeded") return theme.fg("success", "✓ succeeded");
+    if (status === "failed") return theme.fg("error", "✗ failed");
+    return theme.fg("warning", `● ${status}`);
+}
+
+function durationDisplay(details: RunRenderDetails): string {
+    const start = Date.parse(details.startedAt ?? details.createdAt);
+    const end = details.finishedAt === undefined ? Date.now() : Date.parse(details.finishedAt);
+    if (!Number.isFinite(start) || !Number.isFinite(end)) return "unknown duration";
+    const milliseconds = Math.max(0, end - start);
+    if (milliseconds < 1000) return `${milliseconds}ms`;
+    if (milliseconds < 60_000) return `${(milliseconds / 1000).toFixed(1)}s`;
+    return `${(milliseconds / 60_000).toFixed(1)}m`;
+}
+
+function usageDisplay(usage: Usage | undefined): string | undefined {
+    if (!usage) return undefined;
+    const tokens = usage.totalTokens ?? usage.input + usage.output + usage.cacheRead + usage.cacheWrite;
+    return `usage: ${tokens} tokens, $${usage.cost.total.toFixed(4)}`;
+}
+
+function outputFromContent(content: Record<string, unknown> | undefined): string | undefined {
+    const direct = typeof content?.output === "string" ? content.output : undefined;
+    if (direct !== undefined) return direct;
+    const result = record(content?.result);
+    return typeof result?.output === "string" ? result.output : undefined;
+}
+
+function previewText(value: string, maximumLines = 3, maximumCharacters = 512): { lines: string[]; truncated: boolean } {
+    const lines = value.split("\n");
+    const selected = lines.slice(0, maximumLines);
+    const joined = selected.join("\n");
+    const characters = Array.from(joined);
+    const truncated = lines.length > maximumLines || characters.length > maximumCharacters;
+    return { lines: Array.from(characters.slice(0, maximumCharacters).join("").split("\n")), truncated };
+}
+
+function errorFromContent(content: Record<string, unknown> | undefined): { category: string; message: string; exitCode?: number } | undefined {
+    const direct = record(content?.error);
+    const nested = record(record(content?.result)?.error);
+    const error = direct ?? nested;
+    if (!error || typeof error.category !== "string" || typeof error.message !== "string") return undefined;
+    return { category: error.category, message: error.message, ...(typeof error.exitCode === "number" ? { exitCode: error.exitCode } : {}) };
+}
+
+function renderRunResult(result: RenderResultLike, expanded: boolean, theme: Theme): Text {
+    try {
+        const details = runDetails(result.details);
+        const content = parsedContent(result);
+        if (!details || !content) return new Text(rawResultText(result), 0, 0);
+        const lines = [
+            `${theme.fg("accent", details.purpose)} — ${statusDisplay(details.status, theme)}`,
+            `${theme.fg("muted", details.profile)} · ${durationDisplay(details)}`,
+        ];
+        if (details.status === "succeeded") {
+            const output = outputFromContent(content) ?? "";
+            const preview = expanded ? { lines: output.split("\n"), truncated: false } : previewText(output);
+            if (preview.lines.length > 0 && preview.lines.some(line => line.length > 0)) lines.push(...preview.lines.map(line => `  ${line}`));
+            if (preview.truncated) lines.push(theme.fg("dim", "  … preview truncated"));
+        } else if (details.status === "failed") {
+            const error = errorFromContent(content) ?? details.result?.error;
+            if (error) {
+                const message = `${error.category}: ${error.message}${error.exitCode === undefined ? "" : ` (exit ${error.exitCode})`}`;
+                const preview = expanded ? { lines: message.split("\n"), truncated: false } : previewText(message);
+                lines.push(...preview.lines.map(line => theme.fg("error", line)));
+                if (preview.truncated) lines.push(theme.fg("dim", "… error preview truncated"));
+            }
+            if (!expanded) lines.push(theme.fg("dim", "Call subagent_get with detail=true for full metadata."));
+        }
+        const usage = usageDisplay(details.result?.usage);
+        if (usage) lines.push(theme.fg("dim", usage));
+        if (expanded) {
+            lines.push(theme.fg("dim", `run: ${details.runId}`));
+            lines.push(theme.fg("dim", `created: ${details.createdAt}`));
+            if (details.startedAt) lines.push(theme.fg("dim", `started: ${details.startedAt}`));
+            if (details.finishedAt) lines.push(theme.fg("dim", `finished: ${details.finishedAt}`));
+            lines.push(theme.fg("dim", `result: ${details.paths.result}`));
+        }
+        return new Text(lines.join("\n"), 0, 0);
+    } catch {
+        return new Text(rawResultText(result), 0, 0);
+    }
+}
+
+function renderWaitResult(result: RenderResultLike, expanded: boolean, theme: Theme): Text {
+    try {
+        const details = record(result.details);
+        if (!details || details.schemaVersion !== 2 || !Array.isArray(details.runs) || !Array.isArray(details.completedRunIds) || !Array.isArray(details.pendingRunIds)) {
+            return new Text(rawResultText(result), 0, 0);
+        }
+        const content = parsedContent(result);
+        if (!content) return new Text(rawResultText(result), 0, 0);
+        const contentRuns = Array.isArray(content.runs) ? content.runs.map(record) : [];
+        const runs = details.runs.map((value, index) => {
+            const run = runDetails(value);
+            if (!run) throw new Error("Malformed wait run details");
+            const modelRun = contentRuns.find(item => item?.runId === run.runId) ?? contentRuns[index];
+            const line = `${statusDisplay(run.status, theme)} ${theme.fg("accent", run.purpose)} ${theme.fg("muted", `(${run.profile}, ${durationDisplay(run)})`)}`;
+            if (!expanded) return line;
+            const output = outputFromContent(modelRun);
+            const error = errorFromContent(modelRun) ?? run.result?.error;
+            const additions = [
+                line,
+                `  run: ${run.runId}`,
+                `  duration: ${durationDisplay(run)}`,
+                `  created: ${run.createdAt}`,
+                ...(run.startedAt ? [`  started: ${run.startedAt}`] : []),
+                ...(run.finishedAt ? [`  finished: ${run.finishedAt}`] : []),
+            ];
+            if (output) additions.push(...output.split("\n").map(part => `  ${part}`));
+            if (error) additions.push(`  ${error.category}: ${error.message}`);
+            const usage = usageDisplay(run.result?.usage);
+            if (usage) additions.push(`  ${usage}`);
+            additions.push(`  result: ${run.paths.result}`);
+            return additions.join("\n");
+        });
+        const heading = `${String(details.reason ?? "polling")} — ${details.completedRunIds.length} completed, ${details.pendingRunIds.length} pending`;
+        return new Text(`${theme.fg("accent", heading)}\n${runs.join("\n")}`, 0, 0);
+    } catch {
+        return new Text(rawResultText(result), 0, 0);
+    }
+}
+
 export function createSubagentStartTool(deps: SubagentDependencies): ToolDefinition<typeof startParameters, ReturnType<typeof snapshotDetails>> {
     return defineTool({
         name: "subagent_start", label: "Start subagent",
-        description: "Start one profiled subagent in a detached tmux window without waiting for completion. Returns only a run ID by default; set detail=true for the full persisted snapshot metadata and file paths.",
-        promptSnippet: "Start an asynchronous profiled subagent and return its run ID",
-        promptGuidelines: ["Use subagent_start with only a semantic profile and a complete task prompt; continue useful independent work after it returns, then use subagent_wait when the delegated result is needed."],
-        parameters: startParameters, executionMode: "sequential",
+        description: "Start one profiled subagent in a detached tmux window without waiting for completion. Returns its run ID, purpose, profile, and status by default; set detail=true for the full persisted snapshot metadata and file paths.",
+        promptSnippet: "Start an asynchronous profiled subagent and return its observable run summary",
+        promptGuidelines: ["Use subagent_start with a semantic profile, a short purpose, and a complete task prompt; continue useful independent work after it returns, then use subagent_wait when the delegated result is needed."],
+        parameters: startParameters,
+        prepareArguments(args): Static<typeof startParameters> {
+            if (args === null || typeof args !== "object" || Array.isArray(args)) return args as Static<typeof startParameters>;
+            const input = args as { purpose?: unknown; prompt?: unknown };
+            if (input.purpose !== undefined || typeof input.prompt !== "string") return args as Static<typeof startParameters>;
+            return { ...input, purpose: fallbackRunPurpose(input.prompt) } as Static<typeof startParameters>;
+        },
+        executionMode: "sequential",
+        renderCall(args, theme, context) {
+            try {
+                const purpose = typeof args.purpose === "string" ? args.purpose : fallbackRunPurpose(args.prompt);
+                let text = `${theme.fg("toolTitle", theme.bold("subagent_start"))} ${theme.fg("muted", args.profile)} — ${theme.fg("accent", purpose)}`;
+                if (context.expanded) text += `\n${args.prompt}`;
+                return new Text(text, 0, 0);
+            } catch { return new Text("subagent_start", 0, 0); }
+        },
+        renderResult(result, options, theme) { return renderRunResult(result, options.expanded, theme); },
         async execute(toolCallId, params, _signal, _onUpdate, ctx) {
             const config = await loadSubagentConfig(deps.configPath);
             const profiles = await loadAgentProfileConfig(deps.profileConfigPath ?? DEFAULT_PROFILE_CONFIG_PATH, deps.env);
@@ -242,7 +427,7 @@ export function createSubagentStartTool(deps: SubagentDependencies): ToolDefinit
             const tmuxContext = await probeTmux(deps.exec, deps.env);
             if (!tmuxContext) throw new Error("The current Pi process is no longer attached to a usable tmux session");
 
-            const run = await createRun(config, params.profile, targetProfile, params.prompt, ctx.cwd, {
+            const run = await createRun(config, params.profile, targetProfile, params.purpose, params.prompt, ctx.cwd, {
                 callerProfile: active.name, depth: childDepth, parentRunId: current.parentRunId,
                 originSessionId: current.originSessionId, originSessionFile: current.originSessionFile,
             });
@@ -266,23 +451,38 @@ export function createSubagentGetTool(deps: SubagentDependencies): ToolDefinitio
         promptSnippet: "Read one subagent run's current state once without waiting",
         promptGuidelines: ["Use subagent_get for a one-time non-blocking status check or to retrieve an already completed result."],
         parameters: getParameters, executionMode: "sequential",
+        renderCall(args, theme, context) {
+            try { return new Text(`${theme.fg("toolTitle", theme.bold("subagent_get"))} ${theme.fg("muted", context.expanded ? args.runId : args.runId.slice(0, 8))}`, 0, 0); }
+            catch { return new Text("subagent_get", 0, 0); }
+        },
+        renderResult(result, options, theme) { return renderRunResult(result, options.expanded, theme); },
         async execute(toolCallId, params, _signal, _onUpdate, ctx) {
             const config = await loadSubagentConfig(deps.configPath);
             await assertRunOrigin(config.stateRoot, params.runId, origin(ctx, deps.env).originSessionId);
             const snapshot = await readReconciledSnapshot(deps, config.stateRoot, params.runId);
-            return runToolResult(snapshot, await claimedUsage(config, [snapshot], ctx, deps.env, toolCallId, "subagent_get"), params.detail === true, false);
+            return runToolResult(snapshot, await claimedUsage(config, [snapshot], ctx, deps.env, toolCallId, "subagent_get"), params.detail === true);
         },
     });
 }
 
-export function createSubagentWaitTool(deps: SubagentDependencies): ToolDefinition<typeof waitParameters, Omit<SubagentWaitResult, "runs"> & { runs: ReturnType<typeof snapshotDetails>[] }> {
+export function createSubagentWaitTool(deps: SubagentDependencies): ToolDefinition<
+    typeof waitParameters,
+    Omit<SubagentWaitResult, "runs"> & { runs: ReturnType<typeof snapshotDetails>[]; accounting: { claimedRunIds: string[] } }
+> {
     return defineTool({
         name: "subagent_wait", label: "Wait for subagents",
         description: "Wait until any or all specified subagent runs reach a terminal state, or until timeout. Returns the reason and actionable run summaries by default; set detail=true for full persisted snapshots and file paths. Timeout is a normal result.",
         promptSnippet: "Wait for any or all selected subagent runs to reach a terminal state",
         promptGuidelines: ["Use subagent_wait on its own only when no useful independent work remains and one or more delegated results are needed; use subagent_get instead for a one-time non-blocking status check."],
         parameters: waitParameters, executionMode: "sequential",
-        async execute(toolCallId, params, signal, _onUpdate, ctx) {
+        renderCall(args, theme, context) {
+            try {
+                const ids = context.expanded ? `\n${args.runIds.join("\n")}` : "";
+                return new Text(`${theme.fg("toolTitle", theme.bold("subagent_wait"))} ${theme.fg("muted", `${args.condition} · ${args.runIds.length} runs`)}${ids}`, 0, 0);
+            } catch { return new Text("subagent_wait", 0, 0); }
+        },
+        renderResult(result, options, theme) { return renderWaitResult(result, options.expanded, theme); },
+        async execute(toolCallId, params, signal, onUpdate, ctx) {
             throwIfAborted(signal);
             if (new Set(params.runIds).size !== params.runIds.length) throw new Error("subagent_wait runIds must not contain duplicates");
             const config = await loadSubagentConfig(deps.configPath);
@@ -304,13 +504,17 @@ export function createSubagentWaitTool(deps: SubagentDependencies): ToolDefiniti
                 const completedRunIds = runs.filter(snapshot => isTerminalState(snapshot.status)).map(snapshot => snapshot.runId);
                 const completed = new Set(completedRunIds);
                 const pendingRunIds = params.runIds.filter(runId => !completed.has(runId));
+                const current: SubagentWaitResult = {
+                    schemaVersion: 2, condition: params.condition, reason: "polling",
+                    timeoutSeconds: params.timeoutSeconds, startedAt, finishedAt: new Date().toISOString(),
+                    completedRunIds, pendingRunIds, runs,
+                };
+                onUpdate?.(waitToolResult(current, { claimedRunIds: [] }, params.detail === true));
                 const conditionMet = params.condition === "any" ? completedRunIds.length > 0 : pendingRunIds.length === 0;
                 const timedOut = monotonicNow() >= deadline;
                 if (conditionMet || timedOut) {
                     const value: SubagentWaitResult = {
-                        schemaVersion: 2, condition: params.condition, reason: conditionMet ? "condition_met" : "timeout",
-                        timeoutSeconds: params.timeoutSeconds, startedAt, finishedAt: new Date().toISOString(),
-                        completedRunIds, pendingRunIds, runs,
+                        ...current, reason: conditionMet ? "condition_met" : "timeout", finishedAt: new Date().toISOString(),
                     };
                     const accounting = await claimedUsage(config, runs, ctx, deps.env, toolCallId, "subagent_wait");
                     return waitToolResult(value, accounting, params.detail === true);

@@ -157,10 +157,10 @@ test("delegation fails closed and rejects policy or depth before resource alloca
     const exec = async () => { execCalls += 1; return { stdout: "$0\tmain\t%1\n", stderr: "", code: 0 }; };
     const base = { configPath: fixtureValue.subagentPath, profileConfigPath: fixtureValue.profilePath, env: { TMUX: "yes" }, exec };
 
-    await assert.rejects(createSubagentStartTool(base).execute("call", { profile: "scout", prompt: "task" }, undefined, undefined, toolContext(fixtureValue.root)), /no active-profile event/);
-    await assert.rejects(createSubagentStartTool({ ...base, activeProfile: () => ({ name: "scout", error: "malformed facet" }) }).execute("call", { profile: "scout", prompt: "task" }, undefined, undefined, toolContext(fixtureValue.root)), /malformed facet/);
-    await assert.rejects(createSubagentStartTool({ ...base, activeProfile: () => ({ name: "scout", facet: { allowedTargets: ["scout"] } }) }).execute("call", { profile: "full", prompt: "task" }, undefined, undefined, toolContext(fixtureValue.root)), /not allowed/);
-    await assert.rejects(createSubagentStartTool({ ...base, env: { TMUX: "yes", PI_SUBAGENT_DEPTH: "3" }, activeProfile: () => ({ name: "full", facet: { allowedTargets: ["scout"] } }) }).execute("call", { profile: "scout", prompt: "task" }, undefined, undefined, toolContext(fixtureValue.root)), /exceeds maxDepth/);
+    await assert.rejects(createSubagentStartTool(base).execute("call", { profile: "scout", purpose: "Policy task", prompt: "task" }, undefined, undefined, toolContext(fixtureValue.root)), /no active-profile event/);
+    await assert.rejects(createSubagentStartTool({ ...base, activeProfile: () => ({ name: "scout", error: "malformed facet" }) }).execute("call", { profile: "scout", purpose: "Policy task", prompt: "task" }, undefined, undefined, toolContext(fixtureValue.root)), /malformed facet/);
+    await assert.rejects(createSubagentStartTool({ ...base, activeProfile: () => ({ name: "scout", facet: { allowedTargets: ["scout"] } }) }).execute("call", { profile: "full", purpose: "Policy task", prompt: "task" }, undefined, undefined, toolContext(fixtureValue.root)), /not allowed/);
+    await assert.rejects(createSubagentStartTool({ ...base, env: { TMUX: "yes", PI_SUBAGENT_DEPTH: "3" }, activeProfile: () => ({ name: "full", facet: { allowedTargets: ["scout"] } }) }).execute("call", { profile: "scout", purpose: "Policy task", prompt: "task" }, undefined, undefined, toolContext(fixtureValue.root)), /exceeds maxDepth/);
     await assert.rejects(access(fixtureValue.subagentConfig.stateRoot));
     assert.equal(execCalls, 0);
 });

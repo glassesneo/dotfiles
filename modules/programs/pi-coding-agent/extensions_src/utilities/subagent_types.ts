@@ -3,7 +3,11 @@ import type { AgentProfile } from "./profile_types.ts";
 
 export const SUBAGENT_CONFIG_SCHEMA_VERSION = 1 as const;
 export const SUBAGENT_SCHEMA_VERSION = 2 as const;
+export const RUN_REQUEST_SCHEMA_VERSION = 3 as const;
 export const RESOLVED_RUN_SCHEMA_VERSION = 3 as const;
+
+export const PURPOSE_MAX_LENGTH = 120;
+export const FALLBACK_PURPOSE_MAX_LENGTH = 96;
 
 export const RUN_STATES = ["created", "starting", "running", "succeeded", "failed"] as const;
 export type RunState = (typeof RUN_STATES)[number];
@@ -31,14 +35,25 @@ export interface RunLineage {
     originSessionFile?: string;
 }
 
-export interface RunRequest extends RunLineage {
-    schemaVersion: 2;
+interface RunRequestBase extends RunLineage {
     runId: string;
     profile: string;
     prompt: string;
     cwd: string;
     createdAt: string;
 }
+
+export interface LegacyRunRequest extends RunRequestBase {
+    schemaVersion: 2;
+}
+
+export interface CurrentRunRequest extends RunRequestBase {
+    schemaVersion: 3;
+    purpose: string;
+}
+
+export type RunRequest = LegacyRunRequest | CurrentRunRequest;
+export type NormalizedRunRequest = RunRequest & { purpose: string };
 
 export interface ResolvedRun extends RunLineage {
     schemaVersion: 3;
@@ -109,6 +124,7 @@ export interface NormalizedEvent {
 export interface RunSnapshot {
     schemaVersion: 2;
     runId: string;
+    purpose: string;
     profile: string;
     status: RunState;
     createdAt: string;
@@ -132,6 +148,38 @@ function nonBlank(value: unknown, label: string): string {
 function stringArray(value: unknown, label: string): string[] {
     if (!Array.isArray(value) || value.some(item => typeof item !== "string" || item.trim() === "")) throw new Error(`${label} must be an array of non-empty strings`);
     return [...value] as string[];
+}
+
+function compactWhitespace(value: string): string {
+    return value.replace(/\s+/gu, " ").trim();
+}
+
+function truncateCharacters(value: string, maximum: number): string {
+    return Array.from(value).slice(0, maximum).join("");
+}
+
+export function fallbackRunPurpose(prompt: string): string {
+    const firstLine = prompt.split(/\r?\n/u).map(compactWhitespace).find(line => line.length > 0) ?? compactWhitespace(prompt);
+    return truncateCharacters(firstLine, FALLBACK_PURPOSE_MAX_LENGTH);
+}
+
+export function validateRunPurpose(purpose: unknown): string {
+    const normalized = typeof purpose === "string" ? compactWhitespace(purpose) : "";
+    if (normalized.length === 0) throw new Error("Subagent purpose must not be empty");
+    if (Array.from(normalized).length > PURPOSE_MAX_LENGTH) throw new Error(`Subagent purpose must be at most ${PURPOSE_MAX_LENGTH} characters`);
+    return normalized;
+}
+
+export function normalizeRunRequest(request: RunRequest): NormalizedRunRequest {
+    if (request === null || typeof request !== "object" || Array.isArray(request)) throw new Error("Run request must be an object");
+    if (request.schemaVersion !== 2 && request.schemaVersion !== RUN_REQUEST_SCHEMA_VERSION) throw new Error("Unsupported run request schemaVersion");
+    if (typeof request.prompt !== "string" || request.prompt.trim() === "") throw new Error("Run request prompt must be a non-empty string");
+    if (typeof request.runId !== "string" || typeof request.profile !== "string" || request.profile.trim() === "") throw new Error("Run request identity is invalid");
+    const purpose = request.schemaVersion === RUN_REQUEST_SCHEMA_VERSION
+        ? validateRunPurpose(request.purpose)
+        : fallbackRunPurpose(request.prompt);
+    if (purpose.length === 0) throw new Error("Legacy subagent prompt cannot produce a purpose");
+    return { ...request, purpose };
 }
 
 export function validateSubagentRuntimeConfig(value: unknown): SubagentRuntimeConfig {

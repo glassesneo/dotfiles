@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, stat } from "node:fs/promises";
+import { mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -32,19 +32,43 @@ async function fixture(): Promise<{ root: string; config: SubagentRuntimeConfig 
 test("run store creates private canonical files without interpolating prompt into launcher", async () => {
     const { config } = await fixture();
     const prompt = "secret prompt with 'quotes'";
-    const run = await createRun(config, "full", fullProfile, prompt, "/work");
+    await assert.rejects(
+        createRun(config, "full", fullProfile, "x".repeat(121), prompt, "/work"),
+        /at most 120 characters/,
+    );
+    const run = await createRun(config, "full", fullProfile, "Store contract", prompt, "/work");
 
     assert.match(run.request.runId, /^[0-9a-f-]{36}$/);
     assert.equal((await stat(run.paths.directory)).mode & 0o777, 0o700);
     assert.equal((await stat(run.paths.request)).mode & 0o777, 0o600);
     assert.equal((await stat(run.paths.launcher)).mode & 0o777, 0o700);
-    assert.doesNotMatch(await readFile(run.paths.launcher, "utf8"), /secret prompt/);
-    assert.equal(JSON.parse(await readFile(run.paths.request, "utf8")).prompt, prompt);
+    const launcher = await readFile(run.paths.launcher, "utf8");
+    assert.doesNotMatch(launcher, /secret prompt/);
+    assert.doesNotMatch(launcher, /Store contract/);
+    const persisted = JSON.parse(await readFile(run.paths.request, "utf8")) as { schemaVersion: number; purpose: string; prompt: string };
+    assert.deepEqual({ schemaVersion: persisted.schemaVersion, purpose: persisted.purpose, prompt: persisted.prompt }, {
+        schemaVersion: 3,
+        purpose: "Store contract",
+        prompt,
+    });
+});
+
+test("run store normalizes legacy request v2 purpose from the first non-empty prompt line", async () => {
+    const { config } = await fixture();
+    const run = await createRun(config, "full", fullProfile, "Current purpose", "\n  Legacy   task  title  \nmore detail", "/work");
+    const request = JSON.parse(await readFile(run.paths.request, "utf8")) as Record<string, unknown>;
+    delete request.purpose;
+    request.schemaVersion = 2;
+    await writeFile(run.paths.request, `${JSON.stringify(request)}\n`);
+
+    const snapshot = await readSnapshot(config.stateRoot, run.request.runId);
+    assert.equal(snapshot.purpose, "Legacy task title");
+    assert.equal(snapshot.profile, "full");
 });
 
 test("run store enforces state transitions and writes result before terminal status", async () => {
     const { config } = await fixture();
-    const run = await createRun(config, "full", fullProfile, "task", "/work");
+    const run = await createRun(config, "full", fullProfile, "State transitions", "task", "/work");
     await patchStatus(run.paths, { status: "starting" });
     await patchStatus(run.paths, { status: "running", startedAt: "2026-01-01T00:00:00.000Z" });
     await assert.rejects(patchStatus(run.paths, { status: "created" }), /Invalid run state transition/);

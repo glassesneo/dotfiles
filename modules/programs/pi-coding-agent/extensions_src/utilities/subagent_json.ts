@@ -6,17 +6,22 @@ const MODEL_JSON_MAX_LINES = 1500;
 
 type JsonRecord = Record<string, unknown>;
 
+interface MinimalRunBase {
+    runId: string;
+    purpose: string;
+    profile: string;
+}
+
 export type MinimalRun =
-    | { runId: string; status: Exclude<RunState, "succeeded" | "failed"> }
-    | { runId: string; status: "succeeded"; output: string }
-    | {
-        runId: string;
+    | (MinimalRunBase & { status: Exclude<RunState, "succeeded" | "failed"> })
+    | (MinimalRunBase & { status: "succeeded"; output: string })
+    | (MinimalRunBase & {
         status: "failed";
         error: { category: FailureCategory; message: string; exitCode?: number };
-    };
+    });
 
 export interface MinimalWait {
-    reason: "condition_met" | "timeout";
+    reason: "polling" | "condition_met" | "timeout";
     runs: MinimalRun[];
 }
 
@@ -63,6 +68,7 @@ function compactEnvelope(value: JsonRecord): JsonRecord {
     const rawRuns = Array.isArray(value.runs) ? value.runs as RunSnapshot[] : [value as unknown as RunSnapshot];
     const runs = rawRuns.map(run => ({
         runId: run.runId,
+        purpose: run.purpose,
         profile: run.profile,
         status: run.status,
         outputOmitted: Boolean(run.result?.output),
@@ -84,7 +90,7 @@ function compactEnvelope(value: JsonRecord): JsonRecord {
 
 export function minimalRun(snapshot: RunSnapshot): MinimalRun {
     if (snapshot.status === "succeeded") {
-        return { runId: snapshot.runId, status: snapshot.status, output: snapshot.result?.output ?? "" };
+        return { runId: snapshot.runId, purpose: snapshot.purpose, profile: snapshot.profile, status: snapshot.status, output: snapshot.result?.output ?? "" };
     }
     if (snapshot.status === "failed") {
         const error = snapshot.result?.error ?? {
@@ -93,6 +99,8 @@ export function minimalRun(snapshot: RunSnapshot): MinimalRun {
         };
         return {
             runId: snapshot.runId,
+            purpose: snapshot.purpose,
+            profile: snapshot.profile,
             status: snapshot.status,
             error: {
                 category: error.category,
@@ -101,7 +109,7 @@ export function minimalRun(snapshot: RunSnapshot): MinimalRun {
             },
         };
     }
-    return { runId: snapshot.runId, status: snapshot.status };
+    return { runId: snapshot.runId, purpose: snapshot.purpose, profile: snapshot.profile, status: snapshot.status };
 }
 
 function summaryRuns(value: MinimalRun | MinimalWait): MinimalRun[] {
@@ -133,6 +141,36 @@ function withSummaryBudgets<T extends MinimalRun | MinimalWait>(value: T, budget
     return clone;
 }
 
+function compactSummary(value: MinimalRun | MinimalWait): MinimalRun | MinimalWait {
+    const compactField = (field: string): string => {
+        const characters = Array.from(field);
+        return characters.length <= 24 ? field : `${characters.slice(0, 24).join("")}…`;
+    };
+    const compactRun = (run: MinimalRun): MinimalRun => {
+        const base = { runId: run.runId, purpose: compactField(run.purpose), profile: compactField(run.profile) };
+        if (run.status === "succeeded") return { ...base, status: run.status, output: OUTPUT_TRUNCATED_NOTICE };
+        if (run.status === "failed") return {
+            ...base,
+            status: run.status,
+            error: { ...run.error, message: ERROR_TRUNCATED_NOTICE },
+        };
+        return { ...base, status: run.status };
+    };
+    return "runs" in value
+        ? { reason: value.reason, runs: value.runs.map(compactRun) }
+        : compactRun(value);
+}
+
+export function boundedStartJson(snapshot: RunSnapshot): string {
+    const value = { runId: snapshot.runId, purpose: snapshot.purpose, profile: snapshot.profile, status: snapshot.status };
+    let text = JSON.stringify(value);
+    if (bytes(text) <= MODEL_JSON_MAX_BYTES) return text;
+    const profile = `${Array.from(snapshot.profile).slice(0, 32).join("")}…`;
+    text = JSON.stringify({ ...value, profile });
+    if (bytes(text) <= MODEL_JSON_MAX_BYTES) return text;
+    return JSON.stringify({ compact: true, metadataOmitted: true, runId: snapshot.runId, status: snapshot.status });
+}
+
 /** Serialize a minimal run or wait summary as valid JSON no larger than Pi's 50KB limit. */
 export function boundedSummaryJson<T extends MinimalRun | MinimalWait>(value: T): string {
     const maximums = summaryRuns(value).map(run => Array.from(lineCap(summaryText(run) ?? "").value).length);
@@ -155,7 +193,9 @@ export function boundedSummaryJson<T extends MinimalRun | MinimalWait>(value: T)
     }
     if (best !== undefined) return best;
 
-    throw new Error("Minimal subagent summary metadata exceeds Pi's 50KB tool output limit");
+    text = JSON.stringify(compactSummary(value));
+    if (bytes(text) <= MODEL_JSON_MAX_BYTES) return text;
+    return JSON.stringify({ compact: true, metadataOmitted: true, count: summaryRuns(value).length });
 }
 
 /** Serialize a normal tool payload as valid JSON no larger than Pi's 50KB limit. */
@@ -204,10 +244,26 @@ export function boundedModelJson<T extends JsonRecord>(value: T): string {
     return JSON.stringify({ compact: true, metadataOmitted: true, count: rawRuns.length, runIds: rawRuns.slice(0, 16).map(run => run.runId) });
 }
 
+function rendererError(snapshot: RunSnapshot) {
+    const error = snapshot.result?.error;
+    if (!error) return undefined;
+    const lines = error.message.split("\n");
+    const lineBounded = lines.slice(0, 20).join("\n");
+    const characters = Array.from(lineBounded);
+    const truncated = lines.length > 20 || characters.length > 2048;
+    const message = characters.slice(0, 2048).join("");
+    return {
+        category: error.category,
+        message: truncated ? `${message}\n[Error preview truncated. Full metadata: ${snapshot.paths.result}]` : message,
+        ...(error.exitCode === undefined ? {} : { exitCode: error.exitCode }),
+    };
+}
+
 export function snapshotDetails(snapshot: RunSnapshot) {
     return {
         schemaVersion: snapshot.schemaVersion,
         runId: snapshot.runId,
+        purpose: snapshot.purpose,
         profile: snapshot.profile,
         status: snapshot.status,
         createdAt: snapshot.createdAt,
@@ -216,5 +272,13 @@ export function snapshotDetails(snapshot: RunSnapshot) {
         runDirectory: snapshot.runDirectory,
         paths: snapshot.paths,
         accounting: { ...snapshot.accounting, claimedRunIds: [] as string[] },
+        result: snapshot.result === null ? null : {
+            outcome: snapshot.result.outcome,
+            error: rendererError(snapshot),
+            usage: snapshot.result.usage,
+            turns: snapshot.result.turns,
+            startedAt: snapshot.result.startedAt,
+            finishedAt: snapshot.result.finishedAt,
+        },
     };
 }

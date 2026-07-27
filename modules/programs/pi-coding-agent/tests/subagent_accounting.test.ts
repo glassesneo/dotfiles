@@ -5,7 +5,7 @@ import { join } from "node:path";
 import test from "node:test";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { claimUsageBatch, createSubagentGetTool } from "../extensions_src/subagent.ts";
-import { boundedModelJson, boundedSummaryJson } from "../extensions_src/utilities/subagent_json.ts";
+import { boundedModelJson, boundedStartJson, boundedSummaryJson } from "../extensions_src/utilities/subagent_json.ts";
 import { claimRunUsage, createRun, finishRun, patchStatus } from "../extensions_src/utilities/subagent_store.ts";
 import type { AgentProfile } from "../extensions_src/utilities/profile_types.ts";
 import type { RunSnapshot, SubagentRuntimeConfig } from "../extensions_src/utilities/subagent_types.ts";
@@ -34,7 +34,7 @@ test("bounded serializer measures escaped UTF-8 JSON and links full terminal out
     const resultPath = `/tmp/${runId}/result.json`;
     const output = `quote:\" slash:\\\ncontrol:\u0001 emoji:😀\n`.repeat(10_000);
     const snapshot: RunSnapshot = {
-        schemaVersion: 2, runId, profile: "full", status: "succeeded", createdAt: "now", finishedAt: "now",
+        schemaVersion: 2, runId, purpose: "Bound output", profile: "full", status: "succeeded", createdAt: "now", finishedAt: "now",
         runDirectory: `/tmp/${runId}`,
         paths: { events: "/tmp/events", stderr: "/tmp/stderr", result: resultPath },
         accounting: { claimed: false },
@@ -52,13 +52,62 @@ test("bounded serializer measures escaped UTF-8 JSON and links full terminal out
     assert.doesNotThrow(() => JSON.parse(oversized));
 });
 
+test("start, get, and wait serializers bound accepted oversized profile metadata", () => {
+    const runId = "550e8400-e29b-41d4-a716-446655440000";
+    const profile = "profile-".repeat(20_000);
+    const snapshot: RunSnapshot = {
+        schemaVersion: 2,
+        runId,
+        purpose: "Observe oversized profile",
+        profile,
+        status: "succeeded",
+        createdAt: "now",
+        finishedAt: "now",
+        runDirectory: `/tmp/${runId}`,
+        paths: { events: "/tmp/events", stderr: "/tmp/stderr", result: `/tmp/${runId}/result.json` },
+        accounting: { claimed: false },
+        result: {
+            schemaVersion: 2, runId, outcome: "succeeded", output: "done", error: null,
+            usage: usage(), turns: 1, startedAt: "now", finishedAt: "now",
+        },
+    };
+    const payloads = [
+        boundedStartJson(snapshot),
+        boundedSummaryJson({ runId, purpose: snapshot.purpose, profile, status: "succeeded", output: "done" }),
+        boundedSummaryJson({ reason: "condition_met", runs: [{ runId, purpose: snapshot.purpose, profile, status: "succeeded", output: "done" }] }),
+    ];
+    for (const text of payloads) {
+        assert.ok(Buffer.byteLength(text, "utf8") <= 50 * 1024);
+        assert.doesNotThrow(() => JSON.parse(text));
+        assert.match(text, /Observe oversized profil/);
+    }
+});
+
+test("maximum wait cardinality retains per-run observability after metadata compaction", () => {
+    const runs = Array.from({ length: 128 }, (_, index) => ({
+        runId: `${index.toString().padStart(8, "0")}-0000-4000-8000-000000000000`,
+        purpose: "😀".repeat(120),
+        profile: "profile-".repeat(20_000),
+        status: "succeeded" as const,
+        output: "done",
+    }));
+    const text = boundedSummaryJson({ reason: "condition_met", runs });
+    const parsed = JSON.parse(text) as { compact?: boolean; runs?: Array<{ runId: string; purpose: string; profile: string; status: string }> };
+
+    assert.ok(Buffer.byteLength(text, "utf8") <= 50 * 1024);
+    assert.equal(parsed.compact, undefined);
+    assert.equal(parsed.runs?.length, 128);
+    assert.deepEqual(parsed.runs?.map(run => run.runId), runs.map(run => run.runId));
+    assert.ok(parsed.runs?.every(run => run.purpose.length > 0 && run.profile.length > 0 && run.status === "succeeded"));
+});
+
 test("minimal summary serializer bounds escaped UTF-8 fairly without exposing paths", () => {
     const output = `quote:\" slash:\\\ncontrol:\u0001 emoji:😀\n`.repeat(10_000);
     const text = boundedSummaryJson({
         reason: "condition_met",
         runs: [
-            { runId: "run-1", status: "succeeded", output },
-            { runId: "run-2", status: "succeeded", output },
+            { runId: "run-1", purpose: "First", profile: "full", status: "succeeded", output },
+            { runId: "run-2", purpose: "Second", profile: "full", status: "succeeded", output },
         ],
     });
     const parsed = JSON.parse(text) as { runs: Array<{ output: string }> };
@@ -73,6 +122,8 @@ test("minimal summary serializer bounds escaped UTF-8 fairly without exposing pa
 test("minimal summary serializer bounds oversized failure messages", () => {
     const text = boundedSummaryJson({
         runId: "run-1",
+        purpose: "Failure",
+        profile: "full",
         status: "failed",
         error: { category: "harness", message: "failure 😀\\\"\n".repeat(20_000), exitCode: 17 },
     });
@@ -87,6 +138,7 @@ test("a failed later usage claim rolls back earlier claims for a safe retry", as
     const snapshots = ["run-1", "run-2"].map(runId => ({
         schemaVersion: 2 as const,
         runId,
+        purpose: `Purpose ${runId}`,
         profile: "full",
         status: "succeeded" as const,
         createdAt: "now",
@@ -122,7 +174,7 @@ test("first terminal get returns top-level Pi usage and repeated get does not", 
     const cfg = config(root);
     const configPath = join(root, "subagent.json");
     await writeFile(configPath, JSON.stringify(cfg));
-    const run = await createRun(cfg, "full", fullProfile, "task", root, { callerProfile: "full", depth: 1, originSessionId: "session" });
+    const run = await createRun(cfg, "full", fullProfile, "Accounting task", "task", root, { callerProfile: "full", depth: 1, originSessionId: "session" });
     await patchStatus(run.paths, { status: "starting" });
     await patchStatus(run.paths, { status: "running", startedAt: "now" });
     await finishRun(run.paths, {
@@ -139,7 +191,7 @@ test("first terminal get returns top-level Pi usage and repeated get does not", 
     const first = await tool.execute("call-1", { runId: run.request.runId }, undefined, undefined, ctx);
     const second = await tool.execute("call-2", { runId: run.request.runId }, undefined, undefined, ctx);
     const firstText = first.content[0]?.type === "text" ? first.content[0].text : "{}";
-    assert.deepEqual(JSON.parse(firstText), { runId: run.request.runId, status: "succeeded", output: "done" });
+    assert.deepEqual(JSON.parse(firstText), { runId: run.request.runId, purpose: "Accounting task", profile: "full", status: "succeeded", output: "done" });
     assert.equal(first.usage?.input, 7);
     assert.equal(first.usage?.cost.total, 1);
     assert.equal(second.usage, undefined);
@@ -150,7 +202,7 @@ test("first terminal get returns top-level Pi usage and repeated get does not", 
 test("usage claim is exclusive across concurrent and repeated observers", async () => {
     const root = await mkdtemp(join(tmpdir(), "usage-claim-"));
     const cfg = config(root);
-    const run = await createRun(cfg, "full", fullProfile, "task", root, { callerProfile: "full", depth: 1, originSessionId: "session" });
+    const run = await createRun(cfg, "full", fullProfile, "Exclusive claim", "task", root, { callerProfile: "full", depth: 1, originSessionId: "session" });
     await patchStatus(run.paths, { status: "starting" });
     await patchStatus(run.paths, { status: "running", startedAt: "now" });
     await finishRun(run.paths, {

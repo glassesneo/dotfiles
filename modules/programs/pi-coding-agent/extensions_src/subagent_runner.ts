@@ -9,13 +9,13 @@ import {
     finishRun,
     patchStatus,
     readJson,
+    readRunRequest,
     readStatus,
     runPaths,
 } from "./utilities/subagent_store.ts";
 import type {
     NormalizedEvent,
     ResolvedRun,
-    RunRequest,
     RunResult,
 } from "./utilities/subagent_types.ts";
 
@@ -51,9 +51,9 @@ export async function runSubagent(runDirectory: string): Promise<void> {
 
     try {
         await waitForTmuxReference(paths);
-        const request = await readJson<RunRequest>(paths.request);
+        const request = await readRunRequest(paths);
         const resolved = await readJson<ResolvedRun>(paths.resolved);
-        if (request.schemaVersion !== 2 || resolved.schemaVersion !== 3 || request.runId !== runId || resolved.runId !== runId) {
+        if (resolved.schemaVersion !== 3 || request.runId !== runId || resolved.runId !== runId) {
             throw new HarnessRunError("protocol", "Run request or resolved metadata is invalid");
         }
 
