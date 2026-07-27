@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import type { Usage } from "@earendil-works/pi-ai";
-import { addUsage, emptyUsage, type ResolvedRun } from "./subagent_types.ts";
+import { addUsage, emptyUsage, type ResolvedRun, type StopMethod } from "./subagent_types.ts";
 
 export type PiNormalizedInput =
     | { type: "assistant_text"; data: { text: string } }
@@ -55,6 +55,21 @@ function normalizedUsage(value: unknown): Usage {
             total: typeof cost.total === "number" ? cost.total : 0,
         },
     };
+}
+
+export class HarnessStoppedError extends Error {
+    readonly usage: Usage;
+    readonly turns: number;
+    readonly output: string;
+    readonly method: StopMethod;
+
+    constructor(method: StopMethod, usage: Usage, turns: number, output: string) {
+        super("Subagent stop requested");
+        this.method = method;
+        this.usage = structuredClone(usage);
+        this.turns = turns;
+        this.output = output;
+    }
 }
 
 export class PiEventNormalizer {
@@ -118,6 +133,7 @@ export async function runPiHarness(
     resolved: ResolvedRun,
     request: { prompt: string; cwd: string },
     callbacks: PiRunCallbacks,
+    signal?: AbortSignal,
 ): Promise<{ output: string; usage: Usage; turns: number }> {
     const profile = resolved.profileSnapshot;
     const args = ["--mode", "json", "-p", "--no-session", "--no-extensions"];
@@ -148,6 +164,20 @@ export async function runPiHarness(
     });
     let stdoutBuffer = "";
     let pending = Promise.resolve();
+    let stopMethod: StopMethod = "cooperative";
+    let killTimer: NodeJS.Timeout | undefined;
+    const stopChild = () => {
+        if (child.exitCode !== null || child.signalCode !== null) return;
+        child.kill("SIGTERM");
+        killTimer = setTimeout(() => {
+            if (child.exitCode === null && child.signalCode === null) {
+                stopMethod = "forced";
+                child.kill("SIGKILL");
+            }
+        }, 1000);
+    };
+    if (signal?.aborted) stopChild();
+    else signal?.addEventListener("abort", stopChild, { once: true });
     const enqueue = (work: () => Promise<void>) => { pending = pending.then(work); };
     const consumeLine = async (line: string) => { for (const event of normalizer.consume(line)) await callbacks.onEvent(event); };
 
@@ -164,9 +194,12 @@ export async function runPiHarness(
         child.once("error", reject);
         child.once("close", code => resolve(code ?? 1));
     }).catch(error => { throw new HarnessRunError("harness", error instanceof Error ? error.message : String(error), undefined, normalizer.usage, normalizer.turns); });
+    if (killTimer) clearTimeout(killTimer);
+    signal?.removeEventListener("abort", stopChild);
     if (stdoutBuffer.trim()) enqueue(() => consumeLine(stdoutBuffer));
     await pending;
 
+    if (signal?.aborted) throw new HarnessStoppedError(stopMethod, normalizer.usage, normalizer.turns, normalizer.finalOutput);
     if (normalizer.malformedLine !== undefined) throw new HarnessRunError("protocol", "Pi emitted a malformed JSON event", exitCode, normalizer.usage, normalizer.turns);
     if (exitCode !== 0) throw new HarnessRunError("harness", normalizer.errorMessage ?? `Pi exited with code ${exitCode}`, exitCode, normalizer.usage, normalizer.turns);
     if (normalizer.stopReason === "error" || normalizer.stopReason === "aborted") {

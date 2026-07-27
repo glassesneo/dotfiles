@@ -1,10 +1,12 @@
-export const PROFILE_SCHEMA_VERSION = 1 as const;
+export const PROFILE_SCHEMA_VERSION = 2 as const;
+export const PROFILE_DESCRIPTION_MAX_BYTES = 512;
 
 export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
 export type ProfileFacet = Record<string, unknown>;
 
 export interface AgentProfile {
     model: string;
+    description: string;
     thinkingLevel?: ThinkingLevel;
     allowAllTools: boolean;
     tools: string[];
@@ -13,7 +15,7 @@ export interface AgentProfile {
 }
 
 export interface AgentProfileConfig {
-    schemaVersion: 1;
+    schemaVersion: 2;
     defaultProfile: string;
     profileCycle: string[];
     profiles: Record<string, AgentProfile>;
@@ -52,7 +54,7 @@ export function validateProfileConfig(value: unknown): AgentProfileConfig {
     for (const [name, rawProfile] of Object.entries(rawProfiles)) {
         nonBlank(name, "profile name");
         const profile = object(rawProfile, `profiles.${name}`);
-        exactKeys(profile, ["model", "thinkingLevel", "allowAllTools", "tools", "instructions", "extensions"], `profiles.${name}`);
+        exactKeys(profile, ["model", "description", "thinkingLevel", "allowAllTools", "tools", "instructions", "extensions"], `profiles.${name}`);
         const thinkingLevel = profile.thinkingLevel;
         if (thinkingLevel !== undefined && (typeof thinkingLevel !== "string" || !thinkingLevels.has(thinkingLevel))) {
             throw new Error(`profiles.${name}.thinkingLevel is invalid`);
@@ -68,8 +70,13 @@ export function validateProfileConfig(value: unknown): AgentProfileConfig {
         }
         const model = nonBlank(profile.model, `profiles.${name}.model`);
         if (!/^[^/\s]+\/[^/\s]+$/.test(model)) throw new Error(`profiles.${name}.model must use provider/model format`);
+        const description = nonBlank(profile.description, `profiles.${name}.description`);
+        if (Buffer.byteLength(description, "utf8") > PROFILE_DESCRIPTION_MAX_BYTES) {
+            throw new Error(`profiles.${name}.description must be at most ${PROFILE_DESCRIPTION_MAX_BYTES} UTF-8 bytes`);
+        }
         profiles[name] = {
             model,
+            description,
             thinkingLevel: thinkingLevel as ThinkingLevel | undefined,
             allowAllTools: profile.allowAllTools,
             tools,
@@ -85,13 +92,13 @@ export function validateProfileConfig(value: unknown): AgentProfileConfig {
     if (new Set(profileCycle).size !== profileCycle.length) throw new Error("profileCycle must not contain duplicates");
     for (const name of profileCycle) if (!profiles[name]) throw new Error(`profileCycle references unknown profile: ${name}`);
 
-    return { schemaVersion: 1, defaultProfile, profileCycle, profiles };
+    return { schemaVersion: 2, defaultProfile, profileCycle, profiles };
 }
 
 export function validateResolvedProfile(value: unknown): { name: string; profile: AgentProfile } {
     const root = object(value, "PI_AGENT_RESOLVED_PROFILE");
     exactKeys(root, ["name", "profile"], "PI_AGENT_RESOLVED_PROFILE");
     const name = nonBlank(root.name, "PI_AGENT_RESOLVED_PROFILE.name");
-    const config = validateProfileConfig({ schemaVersion: 1, defaultProfile: name, profileCycle: [name], profiles: { [name]: root.profile } });
+    const config = validateProfileConfig({ schemaVersion: 2, defaultProfile: name, profileCycle: [name], profiles: { [name]: root.profile } });
     return { name, profile: config.profiles[name]! };
 }

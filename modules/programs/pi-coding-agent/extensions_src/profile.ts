@@ -93,7 +93,11 @@ export function registerProfileController(
         description: "Show or switch the active agent profile",
         getArgumentCompletions(prefix) {
             if (!config) return null;
-            const items = Object.keys(config.profiles).filter(name => name.startsWith(prefix)).map(name => ({ value: name, label: name }));
+            const items = Object.keys(config.profiles).filter(name => name.startsWith(prefix)).map(name => ({
+                value: name,
+                label: name,
+                description: config!.profiles[name]!.description,
+            }));
             return items.length ? items : null;
         },
         async handler(args, ctx) {

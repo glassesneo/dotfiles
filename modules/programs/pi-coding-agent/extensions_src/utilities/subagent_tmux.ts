@@ -62,3 +62,10 @@ export async function isTmuxPaneAlive(exec: CommandExecutor, paneId: string): Pr
     const result = await exec("tmux", ["display-message", "-p", "-t", paneId, "#{pane_dead}"]);
     return result.code === 0 && result.stdout.trim() === "0";
 }
+
+export async function killTmuxPane(exec: CommandExecutor, paneId: string): Promise<void> {
+    const result = await exec("tmux", ["kill-pane", "-t", paneId]);
+    if (result.code !== 0 && !/can't find pane|no such pane/iu.test(result.stderr)) {
+        throw new Error(result.stderr.trim() || `Could not kill tmux pane ${paneId}`);
+    }
+}

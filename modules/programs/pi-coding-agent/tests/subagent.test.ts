@@ -8,6 +8,7 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 import {
     createSubagentGetTool,
     createSubagentStartTool,
+    createSubagentStopTool,
     createSubagentWaitTool,
     registerSubagent,
     type SubagentDependencies,
@@ -20,6 +21,7 @@ import {
     finishRun,
     patchStatus,
     readSnapshot,
+    requestRunStop,
 } from "../extensions_src/utilities/subagent_store.ts";
 import type { CommandExecutor } from "../extensions_src/utilities/subagent_tmux.ts";
 import type { AgentProfileConfig } from "../extensions_src/utilities/profile_types.ts";
@@ -45,12 +47,12 @@ async function configFixture(): Promise<{ root: string; path: string; profilePat
         maxDepth: 3,
     };
     const profiles: AgentProfileConfig = {
-        schemaVersion: 1,
+        schemaVersion: 2,
         defaultProfile: "full",
         profileCycle: ["scout", "full"],
         profiles: {
-            scout: { model: "provider/model", allowAllTools: false, tools: ["read"], extensions: { subagent: { allowedTargets: ["scout"] } } },
-            full: { model: "provider/model", allowAllTools: true, tools: [], extensions: { subagent: { allowedTargets: ["scout", "full"] } } },
+            scout: { model: "provider/model", description: "Read-only exploration.", allowAllTools: false, tools: ["read"], extensions: { subagent: { allowedTargets: ["scout"] } } },
+            full: { model: "provider/model", description: "Broad coding work.", allowAllTools: true, tools: [], extensions: { subagent: { allowedTargets: ["scout", "full"] } } },
         },
     };
     const path = join(root, "subagent.json");
@@ -71,7 +73,7 @@ test("extension registers no tools unless tmux is verifiably available", async (
     assert.equal(await registerSubagent(pi, { env: {} }), false);
     assert.deepEqual(registered, []);
     assert.equal(await registerSubagent(pi, { env: { TMUX: "/tmp/tmux,1,0" } }), true);
-    assert.deepEqual(registered, ["subagent_start", "subagent_get", "subagent_wait"]);
+    assert.deepEqual(registered, ["subagent_start", "subagent_get", "subagent_wait", "subagent_stop"]);
 });
 
 test("subagent tools expose optional detail without changing required inputs", () => {
@@ -81,6 +83,7 @@ test("subagent tools expose optional detail without changing required inputs", (
         startTool.parameters,
         createSubagentGetTool(deps).parameters,
         createSubagentWaitTool(deps).parameters,
+        createSubagentStopTool(deps).parameters,
     ] as unknown as Array<{
         required: string[];
         properties: { detail: { type: string; default: boolean; description: string } };
@@ -90,6 +93,7 @@ test("subagent tools expose optional detail without changing required inputs", (
         ["profile", "purpose", "prompt"],
         ["runId"],
         ["runIds", "condition", "timeoutSeconds"],
+        ["runId"],
     ]);
     for (const schema of schemas) {
         assert.equal(schema.properties.detail.type, "boolean");
@@ -306,6 +310,14 @@ test("tool cards render observable calls, terminal previews, expanded metadata, 
         { expanded: false } as never,
     )?.render(160).join("\n") ?? "";
     assert.match(legacyCall, /scout.*Legacy observable task/);
+    const collapsedCall = startTool.renderCall?.(
+        { profile: "scout", purpose: "Preview", prompt: "line 1\nline 2\nline 3\nline 4" },
+        renderTheme,
+        { expanded: false } as never,
+    )?.render(160).join("\n") ?? "";
+    assert.match(collapsedCall, /line 1\s*\n\s*line 2\s*\n\s*line 3/);
+    assert.doesNotMatch(collapsedCall, /line 4/);
+    assert.match(collapsedCall, /prompt preview truncated/);
     const expandedCall = startTool.renderCall?.(
         { profile: "scout", purpose: "Observable task", prompt: "full prompt body" },
         renderTheme,
@@ -766,4 +778,109 @@ printf '%s\\n' \\
     assert.match(args, /--profile\nfull/);
     assert.equal((await readFile(envPath, "utf8")).trim(), `1|${run.request.runId}|session`);
     assert.match(await readFile(run.paths.events, "utf8"), /assistant_text/);
+});
+
+test("runner cooperatively stops the child process and persists a stopped result", async () => {
+    const fixture = await configFixture();
+    const fakePi = join(fixture.root, "slow-pi");
+    await writeFile(fakePi, "#!/bin/sh\ncat >/dev/null\nexec sleep 10\n");
+    await chmod(fakePi, 0o700);
+    fixture.config.harnesses.pi.command = fakePi;
+    const run = await createRun(fixture.config, "full", fixture.profiles.profiles.full!, "Cooperative stop", "task", fixture.root, {
+        callerProfile: "full", depth: 1, originSessionId: "session",
+    });
+    await patchStatus(run.paths, { status: "starting" });
+    await attachTmux(run.paths, { sessionId: "$0", session: "test", windowId: "@1", paneId: "%1", windowName: "sa-test" });
+    const running = runSubagent(run.paths.directory);
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+        if ((await readSnapshot(fixture.config.stateRoot, run.request.runId)).status === "running") break;
+        await new Promise(resolve => setTimeout(resolve, 20));
+    }
+    await requestRunStop(run.paths);
+    await running;
+    const snapshot = await readSnapshot(fixture.config.stateRoot, run.request.runId);
+    assert.equal(snapshot.status, "stopped");
+    assert.equal(snapshot.result?.stopMethod, "cooperative");
+});
+
+test("runner rejects split lineage before spawning Pi", async () => {
+    const fixture = await configFixture();
+    const marker = join(fixture.root, "spawned");
+    const fakePi = join(fixture.root, "marker-pi");
+    await writeFile(fakePi, `#!/bin/sh\ntouch '${marker}'\n`);
+    await chmod(fakePi, 0o700);
+    fixture.config.harnesses.pi.command = fakePi;
+    const run = await createRun(fixture.config, "full", fixture.profiles.profiles.full!, "Integrity failure", "task", fixture.root, {
+        callerProfile: "full", depth: 1, originSessionId: "session",
+    });
+    const resolved = JSON.parse(await readFile(run.paths.resolved, "utf8")) as Record<string, unknown>;
+    resolved.targetProfile = "scout";
+    await writeFile(run.paths.resolved, `${JSON.stringify(resolved)}\n`);
+    await patchStatus(run.paths, { status: "starting" });
+    await attachTmux(run.paths, { sessionId: "$0", session: "test", windowId: "@1", paneId: "%1", windowName: "sa-test" });
+    await runSubagent(run.paths.directory);
+    process.exitCode = undefined;
+    const snapshot = await readSnapshot(fixture.config.stateRoot, run.request.runId).catch(() => undefined);
+    assert.equal(snapshot, undefined);
+    assert.equal(existsSync(marker), false);
+    assert.match(await readFile(run.paths.stderr, "utf8"), /metadata disagree/);
+
+    const legacy = await createRun(fixture.config, "full", fixture.profiles.profiles.full!, "Legacy live runner", "task", fixture.root, {
+        callerProfile: "full", depth: 1, originSessionId: "session",
+    });
+    await patchStatus(legacy.paths, { status: "starting" });
+    await attachTmux(legacy.paths, { sessionId: "$0", session: "test", windowId: "@2", paneId: "%2", windowName: "sa-legacy" });
+    const legacyStatus = JSON.parse(await readFile(legacy.paths.status, "utf8")) as Record<string, unknown>;
+    legacyStatus.schemaVersion = 2;
+    await writeFile(legacy.paths.status, `${JSON.stringify(legacyStatus)}\n`);
+    await runSubagent(legacy.paths.directory);
+    process.exitCode = undefined;
+    assert.equal(existsSync(marker), false);
+    assert.match(await readFile(legacy.paths.stderr, "utf8"), /legacy status schema v2/);
+});
+
+test("stop terminalizes only the target, preserves immediate children, and is idempotent", async () => {
+    const fixture = await configFixture();
+    const parent = await createRun(fixture.config, "full", fixture.profiles.profiles.full!, "Parent task", "parent prompt", fixture.root, {
+        callerProfile: "full", depth: 1, originSessionId: "session",
+    });
+    await patchStatus(parent.paths, { status: "starting" });
+    await patchStatus(parent.paths, { status: "running", startedAt: "now" });
+    await attachTmux(parent.paths, { sessionId: "$0", session: "test", windowId: "@1", paneId: "%parent", windowName: "sa-parent" });
+
+    const child = await createRun(fixture.config, "scout", fixture.profiles.profiles.scout!, "Child task", "line one\nline two\nline three\nline four", fixture.root, {
+        callerProfile: "full", depth: 2, parentRunId: parent.request.runId, originSessionId: "session",
+    });
+    await patchStatus(child.paths, { status: "starting" });
+    await patchStatus(child.paths, { status: "running", startedAt: "now" });
+    await attachTmux(child.paths, { sessionId: "$0", session: "test", windowId: "@2", paneId: "%child", windowName: "sa-child" });
+
+    let now = 0;
+    const killed: string[] = [];
+    const tool = createSubagentStopTool({
+        configPath: fixture.path,
+        env: {},
+        monotonicNow: () => now,
+        sleep: async () => { now = 3000; },
+        exec: async (command, args) => {
+            if (command === "tmux" && args[0] === "display-message") return { stdout: "0\n", stderr: "", code: 0 };
+            if (command === "tmux" && args[0] === "kill-pane") { killed.push(args.at(-1)!); return { stdout: "", stderr: "", code: 0 }; }
+            return { stdout: "", stderr: "unexpected", code: 1 };
+        },
+    });
+    const stopped = await tool.execute("stop-1", { runId: parent.request.runId }, undefined, undefined, context(fixture.root));
+    const text = stopped.content[0]?.type === "text" ? stopped.content[0].text : "{}";
+    const payload = JSON.parse(text) as { run: { status: string }; children: Array<{ runId: string; status: string; promptPreview: string; request?: unknown }> };
+    assert.equal(payload.run.status, "stopped");
+    assert.deepEqual(killed, ["%parent"]);
+    assert.deepEqual(payload.children.map(item => item.runId), [child.request.runId]);
+    assert.equal(payload.children[0]?.status, "running");
+    assert.match(payload.children[0]?.promptPreview ?? "", /line one\nline two\nline three\n… prompt preview truncated/);
+    assert.equal(payload.children[0]?.request, undefined);
+    assert.equal((await readSnapshot(fixture.config.stateRoot, child.request.runId)).status, "running");
+    assert.equal((await readSnapshot(fixture.config.stateRoot, parent.request.runId)).result?.stopMethod, "forced");
+
+    const repeated = await tool.execute("stop-2", { runId: parent.request.runId }, undefined, undefined, context(fixture.root));
+    assert.deepEqual(killed, ["%parent"]);
+    assert.equal(repeated.usage, undefined);
 });

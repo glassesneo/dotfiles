@@ -1,19 +1,22 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import {
     createRun,
     finishRun,
+    finishStoppedRun,
     patchStatus,
+    requestRunStop,
     readSnapshot,
     readStatus,
 } from "../extensions_src/utilities/subagent_store.ts";
 import { validateProfileConfig, type AgentProfile } from "../extensions_src/utilities/profile_types.ts";
+import { withRunLock } from "../extensions_src/utilities/subagent_lock.ts";
 import { validateSubagentRuntimeConfig, type SubagentRuntimeConfig } from "../extensions_src/utilities/subagent_types.ts";
 
-const fullProfile: AgentProfile = { model: "provider/model", allowAllTools: true, tools: [], extensions: { subagent: { allowedTargets: ["scout", "full"] } } };
+const fullProfile: AgentProfile = { model: "provider/model", description: "Broad coding work.", allowAllTools: true, tools: [], extensions: { subagent: { allowedTargets: ["scout", "full"] } } };
 
 async function fixture(): Promise<{ root: string; config: SubagentRuntimeConfig }> {
     const root = await mkdtemp(join(tmpdir(), "subagent-store-"));
@@ -95,6 +98,81 @@ test("run store enforces state transitions and writes result before terminal sta
     await assert.rejects(patchStatus(run.paths, { status: "failed" }), /Invalid run state transition/);
 });
 
+test("concurrent stale-lock reclaimers preserve mutual exclusion", async () => {
+    const { config } = await fixture();
+    const run = await createRun(config, "full", fullProfile, "Stale lock", "task", "/work");
+    await mkdir(run.paths.lock);
+    await writeFile(join(run.paths.lock, "owner.json"), JSON.stringify({ pid: 99_999_999, acquiredAt: "now", token: "dead" }));
+    let active = 0;
+    let maximumActive = 0;
+    const operation = () => withRunLock(run.paths.directory, async () => {
+        active += 1;
+        maximumActive = Math.max(maximumActive, active);
+        await new Promise(resolve => setTimeout(resolve, 20));
+        active -= 1;
+    });
+    await Promise.all([operation(), operation()]);
+    assert.equal(maximumActive, 1);
+});
+
+test("run lock does not mistake an operation EEXIST error for lock contention", async () => {
+    const { config } = await fixture();
+    const run = await createRun(config, "full", fullProfile, "Lock error", "task", "/work");
+    let calls = 0;
+    await assert.rejects(withRunLock(run.paths.directory, async () => {
+        calls += 1;
+        const error = new Error("operation collision") as NodeJS.ErrnoException;
+        error.code = "EEXIST";
+        throw error;
+    }), /operation collision/);
+    assert.equal(calls, 1);
+});
+
+test("stop wins terminalization after stopping and legacy live statuses are rejected", async () => {
+    const { config } = await fixture();
+    const run = await createRun(config, "full", fullProfile, "Stop state", "task", "/work");
+    await patchStatus(run.paths, { status: "starting" });
+    await patchStatus(run.paths, { status: "running", startedAt: "start" });
+    const stopping = await requestRunStop(run.paths);
+    assert.equal(stopping.status, "stopping");
+    const completion = await finishRun(run.paths, {
+        schemaVersion: 3, runId: run.request.runId, outcome: "succeeded", output: "too late", error: null,
+        usage: { input: 1, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 1, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
+        turns: 1, startedAt: "start", finishedAt: "finish",
+    });
+    assert.equal(completion.status, "stopping");
+    await Promise.all([finishStoppedRun(run.paths, "cooperative"), finishStoppedRun(run.paths, "forced")]);
+    const snapshot = await readSnapshot(config.stateRoot, run.request.runId);
+    assert.equal(snapshot.status, "stopped");
+    assert.equal(snapshot.result?.outcome, "stopped");
+    assert.ok(snapshot.result?.stopMethod === "cooperative" || snapshot.result?.stopMethod === "forced");
+
+    const legacy = await createRun(config, "full", fullProfile, "Legacy live", "task", "/work");
+    const legacyStatus = JSON.parse(await readFile(legacy.paths.status, "utf8")) as Record<string, unknown>;
+    legacyStatus.schemaVersion = 2;
+    await writeFile(legacy.paths.status, `${JSON.stringify(legacyStatus)}\n`);
+    await assert.rejects(requestRunStop(legacy.paths), /legacy live status schema v2/);
+});
+
+test("snapshot rejects split profile and lineage metadata", async () => {
+    const { config } = await fixture();
+    const run = await createRun(config, "full", fullProfile, "Integrity", "task", "/work", {
+        callerProfile: "full", depth: 1, originSessionId: "session",
+    });
+    const resolved = JSON.parse(await readFile(run.paths.resolved, "utf8")) as Record<string, unknown>;
+    resolved.callerProfile = "scout";
+    await writeFile(run.paths.resolved, `${JSON.stringify(resolved)}\n`);
+    await assert.rejects(readSnapshot(config.stateRoot, run.request.runId), /metadata disagree.*callerProfile/);
+
+    const statusRun = await createRun(config, "full", fullProfile, "Status integrity", "task", "/work", {
+        callerProfile: "full", depth: 1, originSessionId: "session",
+    });
+    const status = JSON.parse(await readFile(statusRun.paths.status, "utf8")) as Record<string, unknown>;
+    status.originSessionId = "other-session";
+    await writeFile(statusRun.paths.status, `${JSON.stringify(status)}\n`);
+    await assert.rejects(readSnapshot(config.stateRoot, statusRun.request.runId), /metadata disagree.*originSessionId/);
+});
+
 test("runtime configs validate profile and subagent responsibilities independently", () => {
     const subagent = {
         schemaVersion: 1, stateRoot: "/state", runner: { node: "/node", script: "/runner", extensions: ["/profile", "/subagent"] },
@@ -104,10 +182,12 @@ test("runtime configs validate profile and subagent responsibilities independent
     assert.throws(() => validateSubagentRuntimeConfig({ ...subagent, maxDepth: -1 }), /maxDepth/);
     assert.throws(() => validateSubagentRuntimeConfig({ ...subagent, stateRoot: "x".repeat(4097) }), /4096/);
 
-    const profile = { model: "provider/model", allowAllTools: false, tools: [], extensions: {} };
-    const base = { schemaVersion: 1, defaultProfile: "test", profileCycle: ["test"], profiles: { test: profile } };
-    assert.throws(() => validateProfileConfig({ ...base, schemaVersion: 2 }), /schemaVersion/);
+    const profile = { model: "provider/model", description: "Test routing.", allowAllTools: false, tools: [], extensions: {} };
+    const base = { schemaVersion: 2, defaultProfile: "test", profileCycle: ["test"], profiles: { test: profile } };
+    assert.throws(() => validateProfileConfig({ ...base, schemaVersion: 1 }), /schemaVersion/);
     assert.throws(() => validateProfileConfig({ ...base, profiles: { test: { ...profile, model: "" } } }), /non-empty/);
+    assert.throws(() => validateProfileConfig({ ...base, profiles: { test: { ...profile, description: "" } } }), /non-empty/);
+    assert.throws(() => validateProfileConfig({ ...base, profiles: { test: { ...profile, description: "😀".repeat(129) } } }), /512 UTF-8 bytes/);
     assert.throws(() => validateProfileConfig({ ...base, profiles: { test: { ...profile, model: "missing-provider" } } }), /provider\/model/);
     assert.throws(() => validateProfileConfig({ ...base, defaultProfile: "missing" }), /unknown profile/);
     assert.throws(() => validateProfileConfig({ ...base, profileCycle: [] }), /must not be empty/);

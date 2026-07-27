@@ -1,15 +1,17 @@
 import { basename, dirname } from "node:path";
 import { pathToFileURL } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
-import { HarnessRunError, runPiHarness, type PiNormalizedInput } from "./utilities/subagent_pi.ts";
+import { HarnessRunError, HarnessStoppedError, runPiHarness, type PiNormalizedInput } from "./utilities/subagent_pi.ts";
 import {
     appendEvent,
     appendStderr,
     failRun,
     finishRun,
-    patchStatus,
+    finishStoppedRun,
+    markRunRunning,
     readJson,
     readRunRequest,
+    readSnapshot,
     readStatus,
     runPaths,
 } from "./utilities/subagent_store.ts";
@@ -51,31 +53,53 @@ export async function runSubagent(runDirectory: string): Promise<void> {
 
     try {
         await waitForTmuxReference(paths);
+        const integrityStatus = await readStatus(paths);
+        if (integrityStatus.schemaVersion !== 3) {
+            throw new HarnessRunError("protocol", `Live run ${runId} uses legacy status schema v2 and cannot be launched safely`);
+        }
+        await readSnapshot(dirname(runDirectory), runId);
         const request = await readRunRequest(paths);
         const resolved = await readJson<ResolvedRun>(paths.resolved);
-        if (resolved.schemaVersion !== 3 || request.runId !== runId || resolved.runId !== runId) {
-            throw new HarnessRunError("protocol", "Run request or resolved metadata is invalid");
-        }
+        const canonicalProfile = resolved.targetProfile;
 
         startedAt = new Date().toISOString();
-        await patchStatus(paths, { status: "running", startedAt, runnerPid: process.pid });
-        await emit("run_started", { profile: request.profile });
-        process.stdout.write(`[subagent ${runId}] ${request.profile} started\n`);
+        const running = await markRunRunning(paths, startedAt, process.pid);
+        if (running.status === "stopping") {
+            await finishStoppedRun(paths, "cooperative");
+            return;
+        }
+        if (running.status !== "running") return;
+        await emit("run_started", { profile: canonicalProfile });
+        process.stdout.write(`[subagent ${runId}] ${canonicalProfile} started\n`);
 
-        const completed = await runPiHarness(resolved, request, {
-            async onEvent(event) {
-                displayEvent(event);
-                await emit(event.type, event.data);
-            },
-            async onStderr(text) {
-                process.stderr.write(text);
-                await appendStderr(paths, text);
-            },
-        });
+        const controller = new AbortController();
+        let harnessFinished = false;
+        const stopMonitor = (async () => {
+            while (!harnessFinished) {
+                if ((await readStatus(paths)).status === "stopping") { controller.abort(); return; }
+                await delay(50);
+            }
+        })();
+        let completed: Awaited<ReturnType<typeof runPiHarness>>;
+        try {
+            completed = await runPiHarness(resolved, request, {
+                async onEvent(event) {
+                    displayEvent(event);
+                    await emit(event.type, event.data);
+                },
+                async onStderr(text) {
+                    process.stderr.write(text);
+                    await appendStderr(paths, text);
+                },
+            }, controller.signal);
+        } finally {
+            harnessFinished = true;
+            await stopMonitor;
+        }
 
         const finishedAt = new Date().toISOString();
         const result: RunResult = {
-            schemaVersion: 2,
+            schemaVersion: 3,
             runId,
             outcome: "succeeded",
             output: completed.output,
@@ -86,9 +110,26 @@ export async function runSubagent(runDirectory: string): Promise<void> {
             finishedAt,
         };
         await emit("run_finished", { outcome: "succeeded" });
-        await finishRun(paths, result);
+        const terminal = await finishRun(paths, result);
+        if (terminal.status === "stopping") {
+            await finishStoppedRun(paths, "cooperative", completed.usage, completed.turns, completed.output, startedAt);
+            process.stdout.write(`\n[subagent ${runId}] stopped\n`);
+            return;
+        }
         process.stdout.write(`\n[subagent ${runId}] succeeded\n`);
     } catch (error) {
+        if (error instanceof HarnessStoppedError) {
+            try {
+                await emit("run_finished", { outcome: "stopped", method: error.method });
+                await finishStoppedRun(paths, error.method, error.usage, error.turns, error.output, startedAt);
+                process.stdout.write(`\n[subagent ${runId}] stopped\n`);
+                return;
+            } catch (persistError) {
+                process.stderr.write(`Could not persist stopped runner: ${persistError instanceof Error ? persistError.message : String(persistError)}\n`);
+                process.exitCode = 1;
+                return;
+            }
+        }
         const failure = error instanceof HarnessRunError
             ? { category: error.category, message: error.message, exitCode: error.exitCode }
             : { category: "protocol" as const, message: error instanceof Error ? error.message : String(error) };
@@ -96,13 +137,25 @@ export async function runSubagent(runDirectory: string): Promise<void> {
             await appendStderr(paths, `${failure.message}\n`);
             await emit("diagnostic", { category: failure.category, message: failure.message });
             await emit("run_finished", { outcome: "failed" });
-            await failRun(
+            const terminal = await failRun(
                 paths,
                 failure,
                 startedAt,
                 error instanceof HarnessRunError ? error.usage : undefined,
                 error instanceof HarnessRunError ? error.turns : 0,
             );
+            if (terminal.status === "stopping") {
+                await finishStoppedRun(
+                    paths,
+                    "cooperative",
+                    error instanceof HarnessRunError ? error.usage : undefined,
+                    error instanceof HarnessRunError ? error.turns : 0,
+                    "",
+                    startedAt,
+                );
+                process.stdout.write(`\n[subagent ${runId}] stopped\n`);
+                return;
+            }
         } catch (persistError) {
             process.stderr.write(`Could not persist runner failure: ${persistError instanceof Error ? persistError.message : String(persistError)}\n`);
         }

@@ -2,16 +2,17 @@ import type { Usage } from "@earendil-works/pi-ai";
 import type { AgentProfile } from "./profile_types.ts";
 
 export const SUBAGENT_CONFIG_SCHEMA_VERSION = 1 as const;
-export const SUBAGENT_SCHEMA_VERSION = 2 as const;
+export const SUBAGENT_SCHEMA_VERSION = 3 as const;
 export const RUN_REQUEST_SCHEMA_VERSION = 3 as const;
 export const RESOLVED_RUN_SCHEMA_VERSION = 3 as const;
 
 export const PURPOSE_MAX_LENGTH = 120;
 export const FALLBACK_PURPOSE_MAX_LENGTH = 96;
 
-export const RUN_STATES = ["created", "starting", "running", "succeeded", "failed"] as const;
+export const RUN_STATES = ["created", "starting", "running", "stopping", "succeeded", "failed", "stopped"] as const;
 export type RunState = (typeof RUN_STATES)[number];
-export type TerminalRunState = Extract<RunState, "succeeded" | "failed">;
+export type TerminalRunState = Extract<RunState, "succeeded" | "failed" | "stopped">;
+export type StopMethod = "cooperative" | "forced";
 export type FailureCategory = "launch" | "harness" | "protocol" | "runner_lost";
 
 export interface SubagentRuntimeConfig {
@@ -78,8 +79,7 @@ export interface RunFailure {
     exitCode?: number;
 }
 
-export interface RunStatus {
-    schemaVersion: 2;
+interface RunStatusBase {
     runId: string;
     profile: string;
     status: RunState;
@@ -89,12 +89,14 @@ export interface RunStatus {
     runnerPid?: number;
     tmux?: TmuxRunReference;
     error?: RunFailure;
+    stopRequestedAt?: string;
 }
 
-export interface RunResult {
-    schemaVersion: 2;
+export type RunStatus = (RunStatusBase & { schemaVersion: 2; status: Exclude<RunState, "stopping" | "stopped"> })
+    | (RunStatusBase & RunLineage & { schemaVersion: typeof SUBAGENT_SCHEMA_VERSION });
+
+interface RunResultBase {
     runId: string;
-    outcome: TerminalRunState;
     output: string;
     error: RunFailure | null;
     usage: Usage;
@@ -103,11 +105,16 @@ export interface RunResult {
     finishedAt: string;
 }
 
+export type RunResult =
+    | (RunResultBase & { schemaVersion: 2; outcome: "succeeded" | "failed"; stopMethod?: never })
+    | (RunResultBase & { schemaVersion: 3; outcome: "succeeded" | "failed"; stopMethod?: never })
+    | (RunResultBase & { schemaVersion: 3; outcome: "stopped"; stopMethod: StopMethod });
+
 export interface UsageClaim {
     schemaVersion: 1;
     originSessionId: string;
     toolCallId: string;
-    toolName: "subagent_start" | "subagent_get" | "subagent_wait";
+    toolName: "subagent_start" | "subagent_get" | "subagent_wait" | "subagent_stop";
     runId: string;
     claimedAt: string;
 }
@@ -122,7 +129,7 @@ export interface NormalizedEvent {
 }
 
 export interface RunSnapshot {
-    schemaVersion: 2;
+    schemaVersion: typeof SUBAGENT_SCHEMA_VERSION;
     runId: string;
     purpose: string;
     profile: string;
@@ -221,4 +228,4 @@ export function addUsage(target: Usage, usage: Partial<Usage> | undefined): void
     if (usage.cacheWrite1h !== undefined) target.cacheWrite1h = (target.cacheWrite1h ?? 0) + usage.cacheWrite1h;
     for (const key of ["input", "output", "cacheRead", "cacheWrite", "total"] as const) target.cost[key] += usage.cost?.[key] ?? 0;
 }
-export function isTerminalState(state: RunState): state is TerminalRunState { return state === "succeeded" || state === "failed"; }
+export function isTerminalState(state: RunState): state is TerminalRunState { return state === "succeeded" || state === "failed" || state === "stopped"; }

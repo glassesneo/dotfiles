@@ -5,12 +5,12 @@ import { join } from "node:path";
 import test from "node:test";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { claimUsageBatch, createSubagentGetTool } from "../extensions_src/subagent.ts";
-import { boundedModelJson, boundedStartJson, boundedSummaryJson } from "../extensions_src/utilities/subagent_json.ts";
+import { boundedHandoffJson, boundedModelJson, boundedStartJson, boundedSummaryJson } from "../extensions_src/utilities/subagent_json.ts";
 import { claimRunUsage, createRun, finishRun, patchStatus } from "../extensions_src/utilities/subagent_store.ts";
 import type { AgentProfile } from "../extensions_src/utilities/profile_types.ts";
 import type { RunSnapshot, SubagentRuntimeConfig } from "../extensions_src/utilities/subagent_types.ts";
 
-const fullProfile: AgentProfile = { model: "provider/model", allowAllTools: true, tools: [], extensions: { subagent: { allowedTargets: ["full"] } } };
+const fullProfile: AgentProfile = { model: "provider/model", description: "Broad coding work.", allowAllTools: true, tools: [], extensions: { subagent: { allowedTargets: ["full"] } } };
 
 function config(root: string): SubagentRuntimeConfig {
     return {
@@ -34,7 +34,7 @@ test("bounded serializer measures escaped UTF-8 JSON and links full terminal out
     const resultPath = `/tmp/${runId}/result.json`;
     const output = `quote:\" slash:\\\ncontrol:\u0001 emoji:😀\n`.repeat(10_000);
     const snapshot: RunSnapshot = {
-        schemaVersion: 2, runId, purpose: "Bound output", profile: "full", status: "succeeded", createdAt: "now", finishedAt: "now",
+        schemaVersion: 3, runId, purpose: "Bound output", profile: "full", status: "succeeded", createdAt: "now", finishedAt: "now",
         runDirectory: `/tmp/${runId}`,
         paths: { events: "/tmp/events", stderr: "/tmp/stderr", result: resultPath },
         accounting: { claimed: false },
@@ -56,7 +56,7 @@ test("start, get, and wait serializers bound accepted oversized profile metadata
     const runId = "550e8400-e29b-41d4-a716-446655440000";
     const profile = "profile-".repeat(20_000);
     const snapshot: RunSnapshot = {
-        schemaVersion: 2,
+        schemaVersion: 3,
         runId,
         purpose: "Observe oversized profile",
         profile,
@@ -101,6 +101,22 @@ test("maximum wait cardinality retains per-run observability after metadata comp
     assert.ok(parsed.runs?.every(run => run.purpose.length > 0 && run.profile.length > 0 && run.status === "succeeded"));
 });
 
+test("handoff serializer preserves every child identity and status before prompt previews", () => {
+    const children = Array.from({ length: 128 }, (_, index) => ({
+        runId: `${index.toString().padStart(8, "0")}-0000-4000-8000-000000000000`,
+        purpose: "😀".repeat(120),
+        profile: "focused-reviewer-" + "界".repeat(120),
+        status: index % 2 === 0 ? "running" : "succeeded",
+        promptPreview: "😀".repeat(512),
+    }));
+    const text = boundedHandoffJson({ run: { runId: "parent", status: "stopped" }, children });
+    const parsed = JSON.parse(text) as { children: Array<{ runId: string; status: string }> };
+    assert.ok(Buffer.byteLength(text, "utf8") <= 50 * 1024);
+    assert.equal(parsed.children.length, 128);
+    assert.deepEqual(parsed.children.map(child => child.runId), children.map(child => child.runId));
+    assert.deepEqual(parsed.children.map(child => child.status), children.map(child => child.status));
+});
+
 test("minimal summary serializer bounds escaped UTF-8 fairly without exposing paths", () => {
     const output = `quote:\" slash:\\\ncontrol:\u0001 emoji:😀\n`.repeat(10_000);
     const text = boundedSummaryJson({
@@ -136,7 +152,7 @@ test("minimal summary serializer bounds oversized failure messages", () => {
 
 test("a failed later usage claim rolls back earlier claims for a safe retry", async () => {
     const snapshots = ["run-1", "run-2"].map(runId => ({
-        schemaVersion: 2 as const,
+        schemaVersion: 3 as const,
         runId,
         purpose: `Purpose ${runId}`,
         profile: "full",

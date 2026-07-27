@@ -13,19 +13,24 @@ import { Text } from "@earendil-works/pi-tui";
 import { Type, type Static } from "typebox";
 import { loadAgentProfileConfig } from "./profile.ts";
 import { onActiveProfile } from "./utilities/profile_events.ts";
-import { boundedModelJson, boundedStartJson, boundedSummaryJson, minimalRun, snapshotDetails } from "./utilities/subagent_json.ts";
+import { boundedHandoffJson, boundedModelJson, boundedStartJson, boundedSummaryJson, minimalRun, snapshotDetails } from "./utilities/subagent_json.ts";
+import { withRunLock } from "./utilities/subagent_lock.ts";
 import {
     assertRunOrigin,
     attachTmux,
     claimRunUsage,
     createRun,
     failRun,
+    finishStoppedRun,
+    immediateChildRequests,
     patchStatus,
     readSnapshot,
+    readStatus,
     releaseRunUsageClaim,
+    requestRunStop,
     runPaths,
 } from "./utilities/subagent_store.ts";
-import { isTmuxPaneAlive, launchTmuxWindow, probeTmux, type CommandExecutor } from "./utilities/subagent_tmux.ts";
+import { isTmuxPaneAlive, killTmuxPane, launchTmuxWindow, probeTmux, type CommandExecutor } from "./utilities/subagent_tmux.ts";
 import {
     addUsage,
     emptyUsage,
@@ -34,6 +39,7 @@ import {
     parseSubagentFacet,
     PURPOSE_MAX_LENGTH,
     validateSubagentRuntimeConfig,
+    type NormalizedRunRequest,
     type RunSnapshot,
     type SubagentFacet,
     type SubagentRuntimeConfig,
@@ -60,6 +66,10 @@ const waitParameters = Type.Object({
     runIds: Type.Array(Type.String({ description: "UUID returned by subagent_start" }), { minItems: 1, maxItems: 128, uniqueItems: true }),
     condition: StringEnum(["any", "all"] as const),
     timeoutSeconds: Type.Integer({ minimum: 1, maximum: 3600 }),
+    detail: detailParameter,
+});
+const stopParameters = Type.Object({
+    runId: Type.String({ description: "UUID of the single subagent run to stop" }),
     detail: detailParameter,
 });
 
@@ -126,7 +136,8 @@ async function readReconciledSnapshot(deps: SubagentDependencies, stateRoot: str
     if (!isTerminalState(snapshot.status)) {
         const alive = snapshot.tmux ? await isTmuxPaneAlive(deps.exec, snapshot.tmux.paneId) : false;
         if (!alive) {
-            await failRun(paths, { category: "runner_lost", message: "The tmux runner pane disappeared before the run reached a terminal state" });
+            if (snapshot.status === "stopping") await finishStoppedRun(paths, "forced");
+            else await failRun(paths, { category: "runner_lost", message: "The tmux runner pane disappeared before the run reached a terminal state" });
             snapshot = await readSnapshot(stateRoot, runId);
         }
     }
@@ -153,7 +164,7 @@ export async function claimUsageBatch(
     snapshots: RunSnapshot[],
     sessionId: string,
     toolCallId: string,
-    toolName: "subagent_start" | "subagent_get" | "subagent_wait",
+    toolName: "subagent_start" | "subagent_get" | "subagent_wait" | "subagent_stop",
     operations: UsageClaimOperations = { claim: claimRunUsage, release: releaseRunUsageClaim },
 ): Promise<{ usage?: Usage; claimedRunIds: string[] }> {
     const aggregate = emptyUsage();
@@ -188,7 +199,7 @@ async function claimedUsage(
     ctx: ExtensionContext,
     env: NodeJS.ProcessEnv,
     toolCallId: string,
-    toolName: "subagent_start" | "subagent_get" | "subagent_wait",
+    toolName: "subagent_start" | "subagent_get" | "subagent_wait" | "subagent_stop",
 ): Promise<{ usage?: Usage; claimedRunIds: string[] }> {
     return claimUsageBatch(config.stateRoot, snapshots, origin(ctx, env).originSessionId, toolCallId, toolName);
 }
@@ -252,7 +263,7 @@ function record(value: unknown): Record<string, unknown> | undefined {
 function runDetails(value: unknown): RunRenderDetails | undefined {
     const item = record(value);
     const paths = record(item?.paths);
-    if (!item || item.schemaVersion !== 2 || typeof item.runId !== "string" || typeof item.purpose !== "string" || typeof item.profile !== "string"
+    if (!item || (item.schemaVersion !== 2 && item.schemaVersion !== 3) || typeof item.runId !== "string" || typeof item.purpose !== "string" || typeof item.profile !== "string"
         || typeof item.status !== "string" || typeof item.createdAt !== "string" || typeof paths?.result !== "string") return undefined;
     return item as unknown as RunRenderDetails;
 }
@@ -265,6 +276,7 @@ function parsedContent(result: RenderResultLike): Record<string, unknown> | unde
 function statusDisplay(status: string, theme: Theme): string {
     if (status === "succeeded") return theme.fg("success", "✓ succeeded");
     if (status === "failed") return theme.fg("error", "✗ failed");
+    if (status === "stopped") return theme.fg("warning", "■ stopped");
     return theme.fg("warning", `● ${status}`);
 }
 
@@ -317,7 +329,7 @@ function renderRunResult(result: RenderResultLike, expanded: boolean, theme: The
             `${theme.fg("accent", details.purpose)} — ${statusDisplay(details.status, theme)}`,
             `${theme.fg("muted", details.profile)} · ${durationDisplay(details)}`,
         ];
-        if (details.status === "succeeded") {
+        if (details.status === "succeeded" || details.status === "stopped") {
             const output = outputFromContent(content) ?? "";
             const preview = expanded ? { lines: output.split("\n"), truncated: false } : previewText(output);
             if (preview.lines.length > 0 && preview.lines.some(line => line.length > 0)) lines.push(...preview.lines.map(line => `  ${line}`));
@@ -361,9 +373,18 @@ function renderWaitResult(result: RenderResultLike, expanded: boolean, theme: Th
             if (!run) throw new Error("Malformed wait run details");
             const modelRun = contentRuns.find(item => item?.runId === run.runId) ?? contentRuns[index];
             const line = `${statusDisplay(run.status, theme)} ${theme.fg("accent", run.purpose)} ${theme.fg("muted", `(${run.profile}, ${durationDisplay(run)})`)}`;
-            if (!expanded) return line;
             const output = outputFromContent(modelRun);
             const error = errorFromContent(modelRun) ?? run.result?.error;
+            if (!expanded) {
+                const previewSource = output ?? (error ? `${error.category}: ${error.message}` : undefined);
+                if (!previewSource) return line;
+                const preview = previewText(previewSource);
+                return [
+                    line,
+                    ...preview.lines.map(part => `  ${part}`),
+                    ...(preview.truncated ? [theme.fg("dim", "  … preview truncated")] : []),
+                ].join("\n");
+            }
             const additions = [
                 line,
                 `  run: ${run.runId}`,
@@ -391,7 +412,7 @@ export function createSubagentStartTool(deps: SubagentDependencies): ToolDefinit
         name: "subagent_start", label: "Start subagent",
         description: "Start one profiled subagent in a detached tmux window without waiting for completion. Returns its run ID, purpose, profile, and status by default; set detail=true for the full persisted snapshot metadata and file paths.",
         promptSnippet: "Start an asynchronous profiled subagent and return its observable run summary",
-        promptGuidelines: ["Use subagent_start with a semantic profile, a short purpose, and a complete task prompt; continue useful independent work after it returns, then use subagent_wait when the delegated result is needed."],
+        promptGuidelines: ["Use subagent_start with a semantic profile, a short purpose, and a complete task prompt; after it returns, continue useful independent main-agent work. Use subagent_wait only when the result is needed for the next work and no useful independent work remains."],
         parameters: startParameters,
         prepareArguments(args): Static<typeof startParameters> {
             if (args === null || typeof args !== "object" || Array.isArray(args)) return args as Static<typeof startParameters>;
@@ -404,7 +425,13 @@ export function createSubagentStartTool(deps: SubagentDependencies): ToolDefinit
             try {
                 const purpose = typeof args.purpose === "string" ? args.purpose : fallbackRunPurpose(args.prompt);
                 let text = `${theme.fg("toolTitle", theme.bold("subagent_start"))} ${theme.fg("muted", args.profile)} — ${theme.fg("accent", purpose)}`;
-                if (context.expanded) text += `\n${args.prompt}`;
+                if (context.expanded) {
+                    text += `\n${args.prompt}`;
+                } else {
+                    const preview = previewText(args.prompt);
+                    text += `\n${preview.lines.map(line => `  ${line}`).join("\n")}`;
+                    if (preview.truncated) text += theme.fg("dim", "\n  … prompt preview truncated");
+                }
                 return new Text(text, 0, 0);
             } catch { return new Text("subagent_start", 0, 0); }
         },
@@ -427,19 +454,145 @@ export function createSubagentStartTool(deps: SubagentDependencies): ToolDefinit
             const tmuxContext = await probeTmux(deps.exec, deps.env);
             if (!tmuxContext) throw new Error("The current Pi process is no longer attached to a usable tmux session");
 
-            const run = await createRun(config, params.profile, targetProfile, params.purpose, params.prompt, ctx.cwd, {
-                callerProfile: active.name, depth: childDepth, parentRunId: current.parentRunId,
-                originSessionId: current.originSessionId, originSessionFile: current.originSessionFile,
-            });
-            await patchStatus(run.paths, { status: "starting" });
-            try {
-                const tmux = await launchTmuxWindow(deps.exec, tmuxContext, { runId: run.request.runId, cwd: ctx.cwd, launcher: run.paths.launcher });
-                await attachTmux(run.paths, tmux);
-            } catch (error) {
-                await failRun(run.paths, { category: "launch", message: error instanceof Error ? error.message : String(error) });
-            }
+            const createAttachedRun = async () => {
+                if (current.parentRunId) {
+                    const parentStatus = await readStatus(runPaths(config.stateRoot, current.parentRunId));
+                    if (parentStatus.status === "stopping" || isTerminalState(parentStatus.status)) {
+                        throw new Error(`Parent subagent ${current.parentRunId} is no longer runnable`);
+                    }
+                }
+                const run = await createRun(config, params.profile, targetProfile, params.purpose, params.prompt, ctx.cwd, {
+                    callerProfile: active.name, depth: childDepth, parentRunId: current.parentRunId,
+                    originSessionId: current.originSessionId, originSessionFile: current.originSessionFile,
+                });
+                await patchStatus(run.paths, { status: "starting" });
+                try {
+                    const tmux = await launchTmuxWindow(deps.exec, tmuxContext, { runId: run.request.runId, cwd: ctx.cwd, launcher: run.paths.launcher });
+                    await attachTmux(run.paths, tmux);
+                } catch (error) {
+                    await failRun(run.paths, { category: "launch", message: error instanceof Error ? error.message : String(error) });
+                }
+                return run;
+            };
+            const run = current.parentRunId
+                ? await withRunLock(runPaths(config.stateRoot, current.parentRunId).directory, createAttachedRun)
+                : await createAttachedRun();
             const snapshot = await readSnapshot(config.stateRoot, run.request.runId);
             return runToolResult(snapshot, await claimedUsage(config, [snapshot], ctx, deps.env, toolCallId, "subagent_start"), params.detail === true, true);
+        },
+    });
+}
+
+interface ChildHandoff {
+    runId: string;
+    purpose: string;
+    profile: string;
+    status: string;
+    promptPreview: string;
+    requestPath: string;
+    runDirectory: string;
+    paths: { request: string; result: string };
+    request?: NormalizedRunRequest;
+}
+
+function childPromptPreview(prompt: string): string {
+    const preview = previewText(prompt);
+    return `${preview.lines.join("\n")}${preview.truncated ? "\n… prompt preview truncated" : ""}`;
+}
+
+async function childHandoffs(config: SubagentRuntimeConfig, parent: NormalizedRunRequest, detail: boolean): Promise<ChildHandoff[]> {
+    const requests = await immediateChildRequests(config.stateRoot, parent);
+    return Promise.all(requests.map(async request => {
+        const paths = runPaths(config.stateRoot, request.runId);
+        const status = await readStatus(paths).then(value => value.status).catch(() => "unknown");
+        return {
+            runId: request.runId, purpose: request.purpose, profile: request.profile, status,
+            promptPreview: childPromptPreview(request.prompt), requestPath: paths.request,
+            runDirectory: paths.directory, paths: { request: paths.request, result: paths.result },
+            ...(detail ? { request } : {}),
+        };
+    }));
+}
+
+function renderStopResult(result: RenderResultLike, expanded: boolean, theme: Theme): Text {
+    try {
+        const details = record(result.details);
+        const run = runDetails(details?.run);
+        const children = Array.isArray(details?.children) ? details.children.map(record) : [];
+        if (!run || children.some(child => !child)) return new Text(rawResultText(result), 0, 0);
+        const lines = [
+            `${theme.fg("accent", run.purpose)} — ${statusDisplay(run.status, theme)}`,
+            `${theme.fg("muted", run.profile)} · ${durationDisplay(run)}`,
+            theme.fg("muted", `${children.length} immediate child${children.length === 1 ? "" : "ren"} handed off`),
+        ];
+        for (const child of children) {
+            lines.push(`  ${statusDisplay(String(child!.status), theme)} ${theme.fg("accent", String(child!.purpose))} ${theme.fg("muted", `(${String(child!.profile)}, ${String(child!.runId).slice(0, expanded ? undefined : 8)})`)}`);
+            const preview = typeof child!.promptPreview === "string" ? child!.promptPreview : "";
+            if (preview) lines.push(...preview.split("\n").map(part => `    ${part}`));
+            if (expanded && typeof child!.requestPath === "string") lines.push(theme.fg("dim", `    request: ${String(child!.requestPath)}`));
+        }
+        return new Text(lines.join("\n"), 0, 0);
+    } catch { return new Text(rawResultText(result), 0, 0); }
+}
+
+export function createSubagentStopTool(deps: SubagentDependencies): ToolDefinition<typeof stopParameters, Record<string, unknown>> {
+    return defineTool({
+        name: "subagent_stop", label: "Stop subagent",
+        description: "Stop exactly one subagent run from the same origin session. Immediate children are not stopped; the terminal result returns their run IDs, status, purpose, profile, and prompt preview for explicit handoff.",
+        promptSnippet: "Stop one subagent run without recursively stopping its children",
+        promptGuidelines: ["After subagent_stop, decide for every handed-off immediate child whether to continue with subagent_get or subagent_wait, take over its work, or stop that child individually with subagent_stop."],
+        parameters: stopParameters, executionMode: "sequential",
+        renderCall(args, theme, context) {
+            try { return new Text(`${theme.fg("toolTitle", theme.bold("subagent_stop"))} ${theme.fg("muted", context.expanded ? args.runId : args.runId.slice(0, 8))}`, 0, 0); }
+            catch { return new Text("subagent_stop", 0, 0); }
+        },
+        renderResult(result, options, theme) { return renderStopResult(result, options.expanded, theme); },
+        async execute(toolCallId, params, signal, _onUpdate, ctx) {
+            throwIfAborted(signal);
+            const config = await loadSubagentConfig(deps.configPath);
+            const originSessionId = origin(ctx, deps.env).originSessionId;
+            const parent = await assertRunOrigin(config.stateRoot, params.runId, originSessionId);
+            const paths = runPaths(config.stateRoot, params.runId);
+            await requestRunStop(paths);
+
+            const sleep = deps.sleep ?? abortableSleep;
+            const deadline = (deps.monotonicNow?.() ?? performance.now()) + 2500;
+            let snapshot = await readSnapshot(config.stateRoot, params.runId);
+            while (!isTerminalState(snapshot.status) && (deps.monotonicNow?.() ?? performance.now()) < deadline) {
+                throwIfAborted(signal);
+                await sleep(50, signal);
+                snapshot = await readSnapshot(config.stateRoot, params.runId);
+            }
+            if (!isTerminalState(snapshot.status)) {
+                const status = await readStatus(paths);
+                if (status.tmux && await isTmuxPaneAlive(deps.exec, status.tmux.paneId)) await killTmuxPane(deps.exec, status.tmux.paneId);
+                await finishStoppedRun(paths, "forced");
+                snapshot = await readSnapshot(config.stateRoot, params.runId);
+            }
+            if (!isTerminalState(snapshot.status)) throw new Error(`Run ${params.runId} could not be terminalized; current status is ${snapshot.status}`);
+
+            const children = await childHandoffs(config, parent, true);
+            const modelChildren = params.detail === true ? children : children.map(child => ({
+                runId: child.runId,
+                purpose: child.purpose,
+                profile: child.profile,
+                status: child.status,
+                promptPreview: child.promptPreview,
+            }));
+            const accounting = await claimedUsage(config, [snapshot], ctx, deps.env, toolCallId, "subagent_stop");
+            const payload = {
+                run: params.detail === true ? snapshot : minimalRun(snapshot),
+                children: modelChildren,
+                guidance: "Immediate children continue independently; choose get/wait, take over, or stop each child explicitly.",
+            };
+            return {
+                content: [{ type: "text" as const, text: boundedHandoffJson(payload) }],
+                details: {
+                    schemaVersion: 1, run: snapshotDetails(snapshot), children,
+                    accounting: { ...snapshot.accounting, claimedRunIds: accounting.claimedRunIds },
+                },
+                usage: accounting.usage,
+            };
         },
     });
 }
@@ -530,7 +683,7 @@ async function reconcileSessionAccounting(config: SubagentRuntimeConfig, ctx: Ex
     for (const entry of ctx.sessionManager.getEntries()) {
         if (entry.type !== "message" || entry.message.role !== "toolResult" || !entry.message.usage) continue;
         const toolName = entry.message.toolName;
-        if (toolName !== "subagent_start" && toolName !== "subagent_get" && toolName !== "subagent_wait") continue;
+        if (toolName !== "subagent_start" && toolName !== "subagent_get" && toolName !== "subagent_wait" && toolName !== "subagent_stop") continue;
         const details = entry.message.details as { accounting?: { claimedRunIds?: unknown } } | undefined;
         const runIds = details?.accounting?.claimedRunIds;
         if (!Array.isArray(runIds)) continue;
@@ -567,6 +720,16 @@ export async function registerSubagent(
         return { stdout: output.stdout, stderr: output.stderr, code: output.code };
     };
     const deps: SubagentDependencies = { configPath, profileConfigPath, env, exec, activeProfile: () => activeProfile };
+    pi.on("before_agent_start", async event => {
+        if (!activeProfile?.facet || activeProfile.error || !pi.getActiveTools().includes("subagent_start")) return;
+        const profiles = await loadAgentProfileConfig(profileConfigPath, env);
+        const entries = activeProfile.facet.allowedTargets.flatMap(name => {
+            const profile = profiles.profiles[name];
+            return profile ? [`- ${name}: ${profile.description}`] : [];
+        });
+        if (entries.length === 0) return;
+        return { systemPrompt: `${event.systemPrompt}\n\nAvailable subagent routing profiles:\n${entries.join("\n")}` };
+    });
     pi.on("session_start", async (_event, ctx) => {
         try { await reconcileSessionAccounting(await loadSubagentConfig(configPath), ctx); }
         catch (error) { ctx.ui.notify(`Could not reconcile subagent usage claims: ${error instanceof Error ? error.message : String(error)}`, "warning"); }
@@ -575,6 +738,7 @@ export async function registerSubagent(
     pi.registerTool(createSubagentStartTool(deps));
     pi.registerTool(createSubagentGetTool(deps));
     pi.registerTool(createSubagentWaitTool(deps));
+    pi.registerTool(createSubagentStopTool(deps));
     return true;
 }
 

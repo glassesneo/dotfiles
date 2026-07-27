@@ -26,7 +26,7 @@ in
     myconfig.ifEnabled.programs.pi-coding-agent.profile.profiles = {
       full.extensions.subagent.allowedTargets = ["scout" "full" "focused-reviewer"];
       scout = {
-        tools = ["subagent_start" "subagent_get" "subagent_wait"];
+        tools = ["subagent_start" "subagent_get" "subagent_wait" "subagent_stop"];
         extensions.subagent.allowedTargets = ["scout" "focused-reviewer"];
       };
     };

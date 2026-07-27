@@ -1,11 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { appendFile, chmod, link, mkdir, open, readFile, rename, unlink, writeFile } from "node:fs/promises";
+import { appendFile, chmod, link, mkdir, open, readFile, readdir, rename, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { AgentProfile } from "./profile_types.ts";
+import { withRunLock } from "./subagent_lock.ts";
 import {
     RESOLVED_RUN_SCHEMA_VERSION,
     RUN_REQUEST_SCHEMA_VERSION,
-    SUBAGENT_SCHEMA_VERSION,
     emptyUsage,
     isTerminalState,
     normalizeRunRequest,
@@ -20,6 +20,7 @@ import {
     type RunSnapshot,
     type RunState,
     type RunStatus,
+    type StopMethod,
     type SubagentRuntimeConfig,
     type TmuxRunReference,
     type UsageClaim,
@@ -27,7 +28,11 @@ import {
 
 const RUN_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const TRANSITIONS: Record<RunState, readonly RunState[]> = {
-    created: ["starting", "failed"], starting: ["running", "failed"], running: ["succeeded", "failed"], succeeded: [], failed: [],
+    created: ["starting", "stopping", "failed"],
+    starting: ["running", "stopping", "failed"],
+    running: ["stopping", "succeeded", "failed"],
+    stopping: ["stopped"],
+    succeeded: [], failed: [], stopped: [],
 };
 
 export interface RunPaths {
@@ -40,6 +45,7 @@ export interface RunPaths {
     result: string;
     usageClaim: string;
     launcher: string;
+    lock: string;
 }
 
 export function assertRunId(runId: string): void {
@@ -53,7 +59,7 @@ export function runPaths(stateRoot: string, runId: string): RunPaths {
         directory,
         request: join(directory, "request.json"), resolved: join(directory, "resolved.json"), status: join(directory, "status.json"),
         events: join(directory, "events.jsonl"), stderr: join(directory, "stderr.log"), result: join(directory, "result.json"),
-        usageClaim: join(directory, "usage-claim.json"), launcher: join(directory, "launch.sh"),
+        usageClaim: join(directory, "usage-claim.json"), launcher: join(directory, "launch.sh"), lock: join(directory, ".lock"),
     };
 }
 
@@ -105,7 +111,7 @@ export async function createRun(
         command: config.harnesses.pi.command,
         extensionPaths: [...config.runner.extensions],
     };
-    const status: RunStatus = { schemaVersion: 2, runId, profile, status: "created", createdAt };
+    const status: RunStatus = { schemaVersion: 3, runId, profile, status: "created", createdAt, ...fullLineage };
     const launcher = [
         "#!/bin/sh", "set -eu",
         `exec ${shellQuote(config.runner.node)} --experimental-strip-types ${shellQuote(config.runner.script)} ${shellQuote(paths.directory)}`,
@@ -124,19 +130,34 @@ export async function createRun(
 
 export async function readStatus(paths: RunPaths): Promise<RunStatus> {
     const status = await readJson<RunStatus>(paths.status);
-    if (status.schemaVersion !== 2 || !RUN_ID.test(status.runId)) throw new Error("Invalid run status file");
+    if ((status.schemaVersion !== 2 && status.schemaVersion !== 3) || !RUN_ID.test(status.runId)
+        || !Object.hasOwn(TRANSITIONS, status.status)) throw new Error("Invalid run status file");
+    const rawState: string = status.status;
+    if (status.schemaVersion === 2 && (rawState === "stopping" || rawState === "stopped")) {
+        throw new Error("Legacy run status cannot represent stopping or stopped");
+    }
     return status;
 }
 
-export async function patchStatus(paths: RunPaths, patch: Partial<RunStatus>): Promise<RunStatus> {
+async function patchStatusUnlocked(paths: RunPaths, patch: Partial<RunStatus>): Promise<RunStatus> {
     const current = await readStatus(paths);
     if (patch.runId !== undefined && patch.runId !== current.runId) throw new Error("Cannot change run ID");
+    if (current.schemaVersion === 3) {
+        const immutable = ["callerProfile", "targetProfile", "depth", "parentRunId", "originSessionId", "originSessionFile"] as const;
+        const patchRecord = patch as Record<string, unknown>;
+        const changed = immutable.find(key => key in patchRecord && patchRecord[key] !== current[key]);
+        if (changed) throw new Error(`Cannot change run lineage field ${changed}`);
+    }
     if (patch.status !== undefined && patch.status !== current.status && !TRANSITIONS[current.status].includes(patch.status)) {
         throw new Error(`Invalid run state transition: ${current.status} -> ${patch.status}`);
     }
-    const next = { ...current, ...patch, schemaVersion: SUBAGENT_SCHEMA_VERSION, runId: current.runId, profile: current.profile };
+    const next = { ...current, ...patch, schemaVersion: current.schemaVersion, runId: current.runId, profile: current.profile } as RunStatus;
     await atomicJson(paths.status, next);
     return next;
+}
+
+export async function patchStatus(paths: RunPaths, patch: Partial<RunStatus>): Promise<RunStatus> {
+    return withRunLock(paths.directory, () => patchStatusUnlocked(paths, patch));
 }
 
 export async function attachTmux(paths: RunPaths, tmux: TmuxRunReference): Promise<RunStatus> {
@@ -151,19 +172,66 @@ export async function appendStderr(paths: RunPaths, text: string): Promise<void>
     await appendFile(paths.stderr, text, { encoding: "utf8", mode: 0o600 });
 }
 
+async function finishRunUnlocked(paths: RunPaths, result: RunResult): Promise<RunStatus> {
+    const current = await readStatus(paths);
+    if (isTerminalState(current.status)) return current;
+    if (current.status === "stopping" && result.outcome !== "stopped") return current;
+    if (!TRANSITIONS[current.status].includes(result.outcome)) throw new Error(`Invalid run state transition: ${current.status} -> ${result.outcome}`);
+    await atomicJson(paths.result, result);
+    return patchStatusUnlocked(paths, { status: result.outcome, finishedAt: result.finishedAt, error: result.error ?? undefined });
+}
+
 export async function finishRun(paths: RunPaths, result: RunResult): Promise<RunStatus> {
     if (!isTerminalState(result.outcome)) throw new Error("Result outcome must be terminal");
-    await atomicJson(paths.result, result);
-    return patchStatus(paths, { status: result.outcome, finishedAt: result.finishedAt, error: result.error ?? undefined });
+    return withRunLock(paths.directory, () => finishRunUnlocked(paths, result));
 }
 
 export async function failRun(paths: RunPaths, failure: RunFailure, startedAt?: string, usage = emptyUsage(), turns = 0): Promise<RunStatus> {
-    const current = await readStatus(paths);
-    if (isTerminalState(current.status)) return current;
-    const finishedAt = new Date().toISOString();
-    return finishRun(paths, {
-        schemaVersion: 2, runId: current.runId, outcome: "failed", output: "", error: failure, usage, turns,
-        startedAt: startedAt ?? current.startedAt ?? current.createdAt, finishedAt,
+    return withRunLock(paths.directory, async () => {
+        const current = await readStatus(paths);
+        if (isTerminalState(current.status) || current.status === "stopping") return current;
+        const finishedAt = new Date().toISOString();
+        return finishRunUnlocked(paths, {
+            schemaVersion: 3, runId: current.runId, outcome: "failed", output: "", error: failure, usage, turns,
+            startedAt: startedAt ?? current.startedAt ?? current.createdAt, finishedAt,
+        });
+    });
+}
+
+export async function markRunRunning(paths: RunPaths, startedAt: string, runnerPid: number): Promise<RunStatus> {
+    return withRunLock(paths.directory, async () => {
+        const current = await readStatus(paths);
+        if (current.status === "stopping" || isTerminalState(current.status)) return current;
+        return patchStatusUnlocked(paths, { status: "running", startedAt, runnerPid });
+    });
+}
+
+export async function requestRunStop(paths: RunPaths): Promise<RunStatus> {
+    return withRunLock(paths.directory, async () => {
+        const current = await readStatus(paths);
+        if (isTerminalState(current.status) || current.status === "stopping") return current;
+        if (current.schemaVersion === 2) throw new Error(`Run ${current.runId} uses legacy live status schema v2 and cannot be stopped safely`);
+        return patchStatusUnlocked(paths, { status: "stopping", stopRequestedAt: new Date().toISOString() });
+    });
+}
+
+export async function finishStoppedRun(
+    paths: RunPaths,
+    method: StopMethod,
+    usage = emptyUsage(),
+    turns = 0,
+    output = "",
+    startedAt?: string,
+): Promise<RunStatus> {
+    return withRunLock(paths.directory, async () => {
+        const current = await readStatus(paths);
+        if (isTerminalState(current.status)) return current;
+        if (current.status !== "stopping") throw new Error(`Run ${current.runId} is not stopping`);
+        const finishedAt = new Date().toISOString();
+        return finishRunUnlocked(paths, {
+            schemaVersion: 3, runId: current.runId, outcome: "stopped", output, error: null, usage, turns,
+            startedAt: startedAt ?? current.startedAt ?? current.createdAt, finishedAt, stopMethod: method,
+        });
     });
 }
 
@@ -245,22 +313,65 @@ export async function claimRunUsage(
     }
 }
 
+function assertLineage(request: NormalizedRunRequest, resolved: ResolvedRun, status: RunStatus, runId: string): void {
+    const pairs: Array<[string, unknown, unknown]> = [
+        ["runId", request.runId, resolved.runId], ["profile", request.profile, resolved.profile],
+        ["targetProfile", request.targetProfile, resolved.targetProfile], ["callerProfile", request.callerProfile, resolved.callerProfile],
+        ["depth", request.depth, resolved.depth], ["parentRunId", request.parentRunId, resolved.parentRunId],
+        ["originSessionId", request.originSessionId, resolved.originSessionId],
+    ];
+    const mismatch = pairs.find(([, left, right]) => left !== right);
+    const statusMismatch = status.schemaVersion === 3
+        ? pairs.find(([key, requestValue]) => key !== "runId" && key !== "profile" && requestValue !== status[key as keyof RunStatus])
+        : undefined;
+    const canonicalMismatch = request.profile !== request.targetProfile || resolved.profile !== resolved.targetProfile
+        || status.profile !== request.targetProfile;
+    if (request.runId !== runId || status.runId !== runId || status.profile !== request.profile || mismatch || statusMismatch || canonicalMismatch) {
+        const field = mismatch?.[0] ?? statusMismatch?.[0] ?? (canonicalMismatch ? "targetProfile" : undefined);
+        throw new Error(`Request, resolved, and status metadata disagree for run ${runId}${field ? ` (${field})` : ""}`);
+    }
+}
+
 export async function readSnapshot(stateRoot: string, runId: string): Promise<RunSnapshot> {
     const paths = runPaths(stateRoot, runId);
-    const [status, request] = await Promise.all([readStatus(paths), readRunRequest(paths)]);
-    if (request.runId !== runId || request.profile !== status.profile) throw new Error(`Request and status metadata disagree for run ${runId}`);
+    const [status, request, resolved] = await Promise.all([
+        readStatus(paths), readRunRequest(paths), readJson<ResolvedRun>(paths.resolved),
+    ]);
+    if (resolved.schemaVersion !== RESOLVED_RUN_SCHEMA_VERSION) throw new Error(`Invalid resolved metadata for run ${runId}`);
+    assertLineage(request, resolved, status, runId);
     let result: RunResult | null = null;
     if (isTerminalState(status.status)) {
         result = await readJson<RunResult>(paths.result);
-        if (result.schemaVersion !== 2 || result.runId !== runId || result.outcome !== status.status) {
+        const validSchema = result.schemaVersion === 2
+            ? result.outcome === "succeeded" || result.outcome === "failed"
+            : result.schemaVersion === 3;
+        if (!validSchema || result.runId !== runId || result.outcome !== status.status) {
             throw new Error(`Invalid terminal result for run ${runId}`);
         }
     }
     const claim = await readClaim(paths);
     return {
-        schemaVersion: 2, runId, purpose: request.purpose, profile: status.profile, status: status.status,
+        schemaVersion: 3, runId, purpose: request.purpose, profile: status.profile, status: status.status,
         createdAt: status.createdAt, startedAt: status.startedAt, finishedAt: status.finishedAt, tmux: status.tmux,
         runDirectory: paths.directory, paths: { events: paths.events, stderr: paths.stderr, result: paths.result },
         accounting: { claimed: claim !== undefined, claim }, result,
     };
+}
+
+export async function immediateChildRequests(stateRoot: string, parent: NormalizedRunRequest): Promise<NormalizedRunRequest[]> {
+    let entries: string[];
+    try { entries = await readdir(stateRoot); }
+    catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+        throw error;
+    }
+    const children: NormalizedRunRequest[] = [];
+    for (const runId of entries) {
+        if (!RUN_ID.test(runId)) continue;
+        try {
+            const request = await readRunRequest(runPaths(stateRoot, runId));
+            if (request.originSessionId === parent.originSessionId && request.parentRunId === parent.runId) children.push(request);
+        } catch { /* Ignore unrelated incomplete or malformed run directories. */ }
+    }
+    return children.sort((left, right) => left.createdAt.localeCompare(right.createdAt) || left.runId.localeCompare(right.runId));
 }

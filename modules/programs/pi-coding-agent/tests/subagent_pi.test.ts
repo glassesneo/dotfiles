@@ -3,7 +3,7 @@ import { chmod, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { HarnessRunError, PiEventNormalizer, runPiHarness } from "../extensions_src/utilities/subagent_pi.ts";
+import { HarnessRunError, HarnessStoppedError, PiEventNormalizer, runPiHarness } from "../extensions_src/utilities/subagent_pi.ts";
 
 test("Pi event normalizer converts streaming, tool, final output, and usage", () => {
     const normalizer = new PiEventNormalizer();
@@ -77,18 +77,35 @@ async function fakePi(script: string): Promise<string> {
     return path;
 }
 
-async function invokeFake(command: string) {
+async function invokeFake(command: string, signal?: AbortSignal) {
     return runPiHarness(
         {
             schemaVersion: 3, runId: "550e8400-e29b-41d4-a716-446655440000", profile: "test",
             callerProfile: "full", targetProfile: "test", depth: 1, originSessionId: "session",
-            profileSnapshot: { model: "fake/model", allowAllTools: false, tools: ["read"], extensions: { subagent: { allowedTargets: [] } } },
+            profileSnapshot: { model: "fake/model", description: "Fake harness profile.", allowAllTools: false, tools: ["read"], extensions: { subagent: { allowedTargets: [] } } },
             command, extensionPaths: ["/profile.ts", "/subagent.ts"],
         },
         { prompt: "secret", cwd: tmpdir() },
         { onEvent() {}, onStderr() {} },
+        signal,
     );
 }
+
+test("Pi harness escalates an ignored cooperative stop and preserves partial usage", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "fake-pi-stop-"));
+    const command = join(directory, "pi");
+    await writeFile(command, `#!${process.execPath}\nprocess.on("SIGTERM", () => {});\nprocess.stdin.resume();\nprocess.stdin.on("end", () => {\n  process.stdout.write('{"type":"message_end","message":{"role":"assistant","content":[{"type":"text","text":"partial"}],"stopReason":"end","usage":{"input":4,"output":1,"cacheRead":0,"cacheWrite":0,"totalTokens":5,"cost":{"total":0.1}}}}\\n');\n  setInterval(() => {}, 1000);\n});\n`);
+    await chmod(command, 0o700);
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(), 500);
+    await assert.rejects(invokeFake(command, controller.signal), (error: unknown) => {
+        assert.ok(error instanceof HarnessStoppedError);
+        assert.equal(error.method, "forced");
+        assert.equal(error.usage.input, 4);
+        assert.equal(error.output, "partial");
+        return true;
+    });
+});
 
 test("Pi harness classifies malformed JSON and nonzero exits while preserving partial usage", async () => {
     const malformed = await fakePi("printf 'not-json\\n'");

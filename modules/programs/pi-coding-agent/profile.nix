@@ -9,6 +9,7 @@
   profileType = delib.submodule {
     options = with delib; {
       model = noDefault (strOption null);
+      description = noDefault (strOption null);
       thinkingLevel = allowNull (enumOption ["off" "minimal" "low" "medium" "high" "xhigh" "max"] null);
       allowAllTools = boolOption false;
       tools = listOfOption str [];
@@ -37,6 +38,7 @@ in
       profiles = {
         full = {
           model = "openai-codex/gpt-5.6-sol";
+          description = "Use for work that needs broad coding capability; include the deliverable, constraints, and verification conditions in the delegated prompt.";
           thinkingLevel = "medium";
           allowAllTools = true;
           tools = [];
@@ -44,6 +46,7 @@ in
         };
         scout = {
           model = "openai-codex/gpt-5.6-sol";
+          description = "Use for read-only exploration and evidence gathering; include the investigation target, question, and required evidence in the delegated prompt.";
           thinkingLevel = "high";
           allowAllTools = false;
           tools = [];
@@ -51,6 +54,7 @@ in
         };
         focused-reviewer = {
           model = "openai-codex/gpt-5.6-terra";
+          description = "Use for a read-only review limited to a caller-specified lens; include the lens, review target, and higher-level design or implementation report in the delegated prompt.";
           thinkingLevel = "medium";
           allowAllTools = false;
           tools = [];
@@ -66,6 +70,7 @@ in
       profileFacetsKnown = profile:
         builtins.all (facet: builtins.elem facet knownFacets) (builtins.attrNames profile.extensions);
       modelValid = profile: builtins.match "[^/[:space:]]+/[^/[:space:]]+" profile.model != null;
+      descriptionValid = profile: profile.description != "" && builtins.stringLength profile.description <= 512;
       serializeProfile = profile:
         cleanProfile (
           if profile.allowAllTools
@@ -73,7 +78,7 @@ in
           else profile // {tools = lib.unique (cfg.defaultTools ++ profile.tools);}
         );
       runtimeConfig = {
-        schemaVersion = 1;
+        schemaVersion = 2;
         inherit (cfg) defaultProfile profileCycle;
         profiles = lib.mapAttrs (_: serializeProfile) cfg.profiles;
       };
@@ -94,6 +99,10 @@ in
         {
           assertion = builtins.all modelValid (builtins.attrValues cfg.profiles);
           message = "Pi profile models must use provider/model format.";
+        }
+        {
+          assertion = builtins.all descriptionValid (builtins.attrValues cfg.profiles);
+          message = "Pi profile descriptions must be non-empty and at most 512 UTF-8 bytes.";
         }
         {
           assertion = builtins.all (profile: !(profile.allowAllTools && profile.tools != [])) (builtins.attrValues cfg.profiles);

@@ -13,8 +13,9 @@ interface MinimalRunBase {
 }
 
 export type MinimalRun =
-    | (MinimalRunBase & { status: Exclude<RunState, "succeeded" | "failed"> })
+    | (MinimalRunBase & { status: Exclude<RunState, "succeeded" | "failed" | "stopped"> })
     | (MinimalRunBase & { status: "succeeded"; output: string })
+    | (MinimalRunBase & { status: "stopped"; output: string; stopMethod?: "cooperative" | "forced" })
     | (MinimalRunBase & {
         status: "failed";
         error: { category: FailureCategory; message: string; exitCode?: number };
@@ -92,6 +93,12 @@ export function minimalRun(snapshot: RunSnapshot): MinimalRun {
     if (snapshot.status === "succeeded") {
         return { runId: snapshot.runId, purpose: snapshot.purpose, profile: snapshot.profile, status: snapshot.status, output: snapshot.result?.output ?? "" };
     }
+    if (snapshot.status === "stopped") {
+        return {
+            runId: snapshot.runId, purpose: snapshot.purpose, profile: snapshot.profile, status: snapshot.status,
+            output: snapshot.result?.output ?? "", stopMethod: snapshot.result?.stopMethod,
+        };
+    }
     if (snapshot.status === "failed") {
         const error = snapshot.result?.error ?? {
             category: "protocol" as const,
@@ -117,7 +124,7 @@ function summaryRuns(value: MinimalRun | MinimalWait): MinimalRun[] {
 }
 
 function summaryText(run: MinimalRun): string | undefined {
-    if (run.status === "succeeded") return run.output;
+    if (run.status === "succeeded" || run.status === "stopped") return run.output;
     if (run.status === "failed") return run.error.message;
     return undefined;
 }
@@ -133,9 +140,9 @@ function withSummaryBudgets<T extends MinimalRun | MinimalWait>(value: T, budget
         const truncated = capped.truncated || budget < characters.length;
         if (!truncated) continue;
         const prefix = characters.slice(0, budget).join("");
-        const notice = run.status === "succeeded" ? OUTPUT_TRUNCATED_NOTICE : ERROR_TRUNCATED_NOTICE;
+        const notice = run.status === "succeeded" || run.status === "stopped" ? OUTPUT_TRUNCATED_NOTICE : ERROR_TRUNCATED_NOTICE;
         const text = prefix.length === 0 ? notice : `${prefix}\n\n${notice}`;
-        if (run.status === "succeeded") run.output = text;
+        if (run.status === "succeeded" || run.status === "stopped") run.output = text;
         else if (run.status === "failed") run.error.message = text;
     }
     return clone;
@@ -149,6 +156,7 @@ function compactSummary(value: MinimalRun | MinimalWait): MinimalRun | MinimalWa
     const compactRun = (run: MinimalRun): MinimalRun => {
         const base = { runId: run.runId, purpose: compactField(run.purpose), profile: compactField(run.profile) };
         if (run.status === "succeeded") return { ...base, status: run.status, output: OUTPUT_TRUNCATED_NOTICE };
+        if (run.status === "stopped") return { ...base, status: run.status, output: OUTPUT_TRUNCATED_NOTICE, stopMethod: run.stopMethod };
         if (run.status === "failed") return {
             ...base,
             status: run.status,
@@ -259,6 +267,46 @@ function rendererError(snapshot: RunSnapshot) {
     };
 }
 
+export function boundedHandoffJson(value: Record<string, unknown>): string {
+    let text = JSON.stringify(value);
+    if (bytes(text) <= MODEL_JSON_MAX_BYTES) return text;
+    const clone = structuredClone(value) as { children?: Array<Record<string, unknown>> };
+    const children = Array.isArray(clone.children) ? clone.children : [];
+    for (const child of children) {
+        if (typeof child.prompt === "string") child.prompt = "[Prompt omitted; read requestPath for full metadata.]";
+        if (child.request && typeof child.request === "object") {
+            const request = child.request as Record<string, unknown>;
+            if (typeof request.prompt === "string") request.prompt = "[Prompt omitted; read requestPath for full metadata.]";
+        }
+    }
+    text = JSON.stringify(clone);
+    if (bytes(text) <= MODEL_JSON_MAX_BYTES) return text;
+    for (const child of children) {
+        if (typeof child.promptPreview === "string") child.promptPreview = "[Prompt preview omitted to fit the model-visible limit.]";
+    }
+    text = JSON.stringify(clone);
+    if (bytes(text) <= MODEL_JSON_MAX_BYTES) return text;
+    const compactChildren = children.map(child => ({
+        runId: child.runId, purpose: child.purpose, profile: child.profile, status: child.status,
+        requestPath: child.requestPath,
+    }));
+    text = JSON.stringify({ compact: true, run: recordRunIdentity(value.run), children: compactChildren });
+    if (bytes(text) <= MODEL_JSON_MAX_BYTES) return text;
+    const identities = compactChildren.map(child => ({
+        runId: Array.from(String(child.runId ?? "")).slice(0, 36).join(""),
+        status: Array.from(String(child.status ?? "unknown")).slice(0, 16).join(""),
+    }));
+    text = JSON.stringify({ compact: true, metadataOmitted: true, childCount: identities.length, children: identities });
+    if (bytes(text) <= MODEL_JSON_MAX_BYTES) return text;
+    return JSON.stringify({ compact: true, metadataOmitted: true, childCount: identities.length });
+}
+
+function recordRunIdentity(value: unknown): Record<string, unknown> | undefined {
+    if (value === null || typeof value !== "object" || Array.isArray(value)) return undefined;
+    const run = value as Record<string, unknown>;
+    return { runId: run.runId, purpose: run.purpose, profile: run.profile, status: run.status };
+}
+
 export function snapshotDetails(snapshot: RunSnapshot) {
     return {
         schemaVersion: snapshot.schemaVersion,
@@ -279,6 +327,7 @@ export function snapshotDetails(snapshot: RunSnapshot) {
             turns: snapshot.result.turns,
             startedAt: snapshot.result.startedAt,
             finishedAt: snapshot.result.finishedAt,
+            stopMethod: snapshot.result.stopMethod,
         },
     };
 }

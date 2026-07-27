@@ -5,24 +5,24 @@ import { join } from "node:path";
 import test from "node:test";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { loadAgentProfileConfig, registerProfileController } from "../extensions_src/profile.ts";
-import { createSubagentStartTool } from "../extensions_src/subagent.ts";
+import { createSubagentStartTool, registerSubagent } from "../extensions_src/subagent.ts";
 import { ACTIVE_PROFILE_EVENT, onActiveProfile } from "../extensions_src/utilities/profile_events.ts";
 import type { AgentProfileConfig } from "../extensions_src/utilities/profile_types.ts";
 import type { SubagentRuntimeConfig } from "../extensions_src/utilities/subagent_types.ts";
 
 function profiles(): AgentProfileConfig {
     return {
-        schemaVersion: 1,
+        schemaVersion: 2,
         defaultProfile: "full",
         profileCycle: ["scout", "full"],
         profiles: {
             scout: {
-                model: "provider/model", thinkingLevel: "low", allowAllTools: false,
+                model: "provider/model", description: "Read-only exploration.", thinkingLevel: "low", allowAllTools: false,
                 tools: ["read", "subagent_start", "subagent_get", "subagent_wait"], instructions: "Scout only.",
                 extensions: { subagent: { allowedTargets: ["scout"] } },
             },
             full: {
-                model: "provider/model", thinkingLevel: "medium", allowAllTools: true, tools: [],
+                model: "provider/model", description: "Broad coding work.", thinkingLevel: "medium", allowAllTools: true, tools: [],
                 extensions: { subagent: { allowedTargets: ["scout", "full"] } },
             },
         },
@@ -48,7 +48,7 @@ async function fixture() {
 
 function fakeControllerPi(flag = "scout") {
     const handlers: Record<string, Array<(event: any, ctx: any) => any>> = {};
-    const commands: Record<string, { handler: (args: string, ctx: any) => Promise<void> }> = {};
+    const commands: Record<string, { handler: (args: string, ctx: any) => Promise<void>; getArgumentCompletions?: (prefix: string) => unknown }> = {};
     const shortcuts: Record<string, { handler: (ctx: any) => Promise<void> }> = {};
     const entries: any[] = [];
     const events: any[] = [];
@@ -92,6 +92,9 @@ test("profile extension applies CLI, guards tools, restores branches, and emits 
     assert.equal(fake.events.length, 1);
     assert.deepEqual((fake.events[0]!.payload as any).profile.extensions.subagent.allowedTargets, ["scout"]);
     assert.equal((fake.events[0]!.payload as any).reason, "startup");
+    assert.deepEqual(fake.commands.profile!.getArgumentCompletions?.("sc"), [
+        { value: "scout", label: "scout", description: "Read-only exploration." },
+    ]);
     assert.deepEqual(fake.handlers.tool_call![0]!({ toolName: "bash" }, fake.ctx), { block: true, reason: "Tool bash is not allowed by profile scout" });
     const patch = await fake.handlers.before_agent_start![0]!({ systemPrompt: "base" }, fake.ctx);
     assert.equal(patch.systemPrompt, "base\n\nScout only.");
@@ -137,7 +140,7 @@ test("active-profile event wrapper validates the complete payload", () => {
 test("resolved child profile overlays the generic profile snapshot", async () => {
     const { profilePath } = await fixture();
     const pinned = {
-        model: "provider/pinned", thinkingLevel: "low" as const, allowAllTools: false,
+        model: "provider/pinned", description: "Pinned exploration.", thinkingLevel: "low" as const, allowAllTools: false,
         tools: ["read"], instructions: "pinned", extensions: { subagent: { allowedTargets: ["scout"] } },
     };
     const loaded = await loadAgentProfileConfig(profilePath, {
@@ -150,6 +153,25 @@ test("resolved child profile overlays the generic profile snapshot", async () =>
 function toolContext(root: string): ExtensionContext {
     return { cwd: root, sessionManager: { getSessionId: () => "session", getSessionFile: () => join(root, "session.jsonl") } } as ExtensionContext;
 }
+
+test("subagent routing catalog exposes only active allowed targets in the model-facing prompt", async () => {
+    const value = await fixture();
+    const handlers: Record<string, Array<(event: any, ctx: any) => any>> = {};
+    let activeEvent: ((value: unknown) => void) | undefined;
+    const pi = {
+        registerTool() {},
+        on(name: string, handler: any) { (handlers[name] ??= []).push(handler); },
+        events: { on(_name: string, handler: (value: unknown) => void) { activeEvent = handler; }, emit() {} },
+        getActiveTools: () => ["subagent_start"],
+        async exec() { return { stdout: "$0\tmain\t%1\n", stderr: "", code: 0, killed: false }; },
+    } as unknown as ExtensionAPI;
+    assert.equal(await registerSubagent(pi, { configPath: value.subagentPath, profileConfigPath: value.profilePath, env: { TMUX: "yes" } }), true);
+    activeEvent!({ schemaVersion: 1, name: "scout", reason: "startup", profile: value.profileConfig.profiles.scout });
+    const patch = await handlers.before_agent_start![0]!({ systemPrompt: "base" }, {});
+    assert.match(patch.systemPrompt, /Available subagent routing profiles:/);
+    assert.match(patch.systemPrompt, /scout: Read-only exploration\./);
+    assert.doesNotMatch(patch.systemPrompt, /full: Broad coding work/);
+});
 
 test("delegation fails closed and rejects policy or depth before resource allocation", async () => {
     const fixtureValue = await fixture();

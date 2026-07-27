@@ -30,7 +30,7 @@ function validateActiveProfileEvent(value: unknown): ActiveProfileEvent {
     if (typeof raw.name !== "string" || raw.name.trim() === "") throw new Error("active-profile event name must be a non-empty string");
     if (raw.reason !== "startup" && raw.reason !== "switch" && raw.reason !== "restore") throw new Error("active-profile event reason is invalid");
     const config = validateProfileConfig({
-        schemaVersion: 1,
+        schemaVersion: 2,
         defaultProfile: raw.name,
         profileCycle: [raw.name],
         profiles: { [raw.name]: raw.profile },
