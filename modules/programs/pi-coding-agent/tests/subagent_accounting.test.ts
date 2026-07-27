@@ -5,7 +5,7 @@ import { join } from "node:path";
 import test from "node:test";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { claimUsageBatch, createSubagentGetTool } from "../extensions_src/subagent.ts";
-import { boundedModelJson } from "../extensions_src/utilities/subagent_json.ts";
+import { boundedModelJson, boundedSummaryJson } from "../extensions_src/utilities/subagent_json.ts";
 import { claimRunUsage, createRun, finishRun, patchStatus } from "../extensions_src/utilities/subagent_store.ts";
 import type { AgentProfile } from "../extensions_src/utilities/profile_types.ts";
 import type { RunSnapshot, SubagentRuntimeConfig } from "../extensions_src/utilities/subagent_types.ts";
@@ -50,6 +50,37 @@ test("bounded serializer measures escaped UTF-8 JSON and links full terminal out
     const oversized = boundedModelJson({ ...snapshot, runDirectory: "x".repeat(100_000) } as unknown as Record<string, unknown>);
     assert.ok(Buffer.byteLength(oversized, "utf8") <= 50 * 1024);
     assert.doesNotThrow(() => JSON.parse(oversized));
+});
+
+test("minimal summary serializer bounds escaped UTF-8 fairly without exposing paths", () => {
+    const output = `quote:\" slash:\\\ncontrol:\u0001 emoji:😀\n`.repeat(10_000);
+    const text = boundedSummaryJson({
+        reason: "condition_met",
+        runs: [
+            { runId: "run-1", status: "succeeded", output },
+            { runId: "run-2", status: "succeeded", output },
+        ],
+    });
+    const parsed = JSON.parse(text) as { runs: Array<{ output: string }> };
+
+    assert.ok(Buffer.byteLength(text, "utf8") <= 50 * 1024);
+    assert.match(parsed.runs[0]?.output ?? "", /Output truncated.*detail=true/s);
+    assert.match(parsed.runs[1]?.output ?? "", /Output truncated.*detail=true/s);
+    assert.ok(Math.abs(Buffer.byteLength(parsed.runs[0]!.output, "utf8") - Buffer.byteLength(parsed.runs[1]!.output, "utf8")) < 16);
+    assert.doesNotMatch(text, /resultRoot|resultFile|paths|runDirectory/);
+});
+
+test("minimal summary serializer bounds oversized failure messages", () => {
+    const text = boundedSummaryJson({
+        runId: "run-1",
+        status: "failed",
+        error: { category: "harness", message: "failure 😀\\\"\n".repeat(20_000), exitCode: 17 },
+    });
+    const parsed = JSON.parse(text) as { error: { message: string; exitCode?: number } };
+
+    assert.ok(Buffer.byteLength(text, "utf8") <= 50 * 1024);
+    assert.match(parsed.error.message, /Error message truncated.*detail=true/s);
+    assert.equal(parsed.error.exitCode, 17);
 });
 
 test("a failed later usage claim rolls back earlier claims for a safe retry", async () => {
@@ -107,6 +138,8 @@ test("first terminal get returns top-level Pi usage and repeated get does not", 
     });
     const first = await tool.execute("call-1", { runId: run.request.runId }, undefined, undefined, ctx);
     const second = await tool.execute("call-2", { runId: run.request.runId }, undefined, undefined, ctx);
+    const firstText = first.content[0]?.type === "text" ? first.content[0].text : "{}";
+    assert.deepEqual(JSON.parse(firstText), { runId: run.request.runId, status: "succeeded", output: "done" });
     assert.equal(first.usage?.input, 7);
     assert.equal(first.usage?.cost.total, 1);
     assert.equal(second.usage, undefined);

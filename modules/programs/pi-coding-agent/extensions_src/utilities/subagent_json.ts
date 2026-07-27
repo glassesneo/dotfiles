@@ -1,10 +1,27 @@
 import { dirname } from "node:path";
-import type { RunSnapshot } from "./subagent_types.ts";
+import type { FailureCategory, RunSnapshot, RunState } from "./subagent_types.ts";
 
 export const MODEL_JSON_MAX_BYTES = 50 * 1024;
 const MODEL_JSON_MAX_LINES = 1500;
 
 type JsonRecord = Record<string, unknown>;
+
+export type MinimalRun =
+    | { runId: string; status: Exclude<RunState, "succeeded" | "failed"> }
+    | { runId: string; status: "succeeded"; output: string }
+    | {
+        runId: string;
+        status: "failed";
+        error: { category: FailureCategory; message: string; exitCode?: number };
+    };
+
+export interface MinimalWait {
+    reason: "condition_met" | "timeout";
+    runs: MinimalRun[];
+}
+
+const OUTPUT_TRUNCATED_NOTICE = "[Output truncated. Call subagent_get with detail=true for full result metadata.]";
+const ERROR_TRUNCATED_NOTICE = "[Error message truncated. Call subagent_get with detail=true for full result metadata.]";
 
 function bytes(value: string): number {
     return Buffer.byteLength(value, "utf8");
@@ -63,6 +80,82 @@ function compactEnvelope(value: JsonRecord): JsonRecord {
         if (value[key] !== undefined) base[key] = value[key];
     }
     return base;
+}
+
+export function minimalRun(snapshot: RunSnapshot): MinimalRun {
+    if (snapshot.status === "succeeded") {
+        return { runId: snapshot.runId, status: snapshot.status, output: snapshot.result?.output ?? "" };
+    }
+    if (snapshot.status === "failed") {
+        const error = snapshot.result?.error ?? {
+            category: "protocol" as const,
+            message: "Subagent failed without error metadata",
+        };
+        return {
+            runId: snapshot.runId,
+            status: snapshot.status,
+            error: {
+                category: error.category,
+                message: error.message,
+                ...(error.exitCode === undefined ? {} : { exitCode: error.exitCode }),
+            },
+        };
+    }
+    return { runId: snapshot.runId, status: snapshot.status };
+}
+
+function summaryRuns(value: MinimalRun | MinimalWait): MinimalRun[] {
+    return "runs" in value ? value.runs : [value];
+}
+
+function summaryText(run: MinimalRun): string | undefined {
+    if (run.status === "succeeded") return run.output;
+    if (run.status === "failed") return run.error.message;
+    return undefined;
+}
+
+function withSummaryBudgets<T extends MinimalRun | MinimalWait>(value: T, budgets: number[]): T {
+    const clone = structuredClone(value);
+    for (const [index, run] of summaryRuns(clone).entries()) {
+        const original = summaryText(run);
+        if (original === undefined) continue;
+        const capped = lineCap(original);
+        const characters = Array.from(capped.value);
+        const budget = Math.max(0, budgets[index] ?? characters.length);
+        const truncated = capped.truncated || budget < characters.length;
+        if (!truncated) continue;
+        const prefix = characters.slice(0, budget).join("");
+        const notice = run.status === "succeeded" ? OUTPUT_TRUNCATED_NOTICE : ERROR_TRUNCATED_NOTICE;
+        const text = prefix.length === 0 ? notice : `${prefix}\n\n${notice}`;
+        if (run.status === "succeeded") run.output = text;
+        else if (run.status === "failed") run.error.message = text;
+    }
+    return clone;
+}
+
+/** Serialize a minimal run or wait summary as valid JSON no larger than Pi's 50KB limit. */
+export function boundedSummaryJson<T extends MinimalRun | MinimalWait>(value: T): string {
+    const maximums = summaryRuns(value).map(run => Array.from(lineCap(summaryText(run) ?? "").value).length);
+    let text = JSON.stringify(withSummaryBudgets(value, maximums));
+    if (bytes(text) <= MODEL_JSON_MAX_BYTES) return text;
+
+    let low = 0;
+    let high = Math.max(0, ...maximums);
+    let best: string | undefined;
+    while (low <= high) {
+        const perRun = Math.floor((low + high) / 2);
+        const budgets = maximums.map(maximum => Math.min(maximum, perRun));
+        text = JSON.stringify(withSummaryBudgets(value, budgets));
+        if (bytes(text) <= MODEL_JSON_MAX_BYTES) {
+            best = text;
+            low = perRun + 1;
+        } else {
+            high = perRun - 1;
+        }
+    }
+    if (best !== undefined) return best;
+
+    throw new Error("Minimal subagent summary metadata exceeds Pi's 50KB tool output limit");
 }
 
 /** Serialize a normal tool payload as valid JSON no larger than Pi's 50KB limit. */

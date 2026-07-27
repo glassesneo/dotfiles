@@ -73,27 +73,45 @@ test("extension registers no tools unless tmux is verifiably available", async (
     assert.deepEqual(registered, ["subagent_start", "subagent_get", "subagent_wait"]);
 });
 
-test("wait exposes the bounded required input schema", () => {
-    const tool = createSubagentWaitTool({ configPath: "", env: {}, exec: aliveExec() });
-    const schema = tool.parameters as unknown as {
+test("subagent tools expose optional detail without changing required inputs", () => {
+    const deps: SubagentDependencies = { configPath: "", env: {}, exec: aliveExec() };
+    const schemas = [
+        createSubagentStartTool(deps).parameters,
+        createSubagentGetTool(deps).parameters,
+        createSubagentWaitTool(deps).parameters,
+    ] as unknown as Array<{
         required: string[];
+        properties: { detail: { type: string; default: boolean; description: string } };
+    }>;
+
+    assert.deepEqual(schemas.map(schema => schema.required), [
+        ["profile", "prompt"],
+        ["runId"],
+        ["runIds", "condition", "timeoutSeconds"],
+    ]);
+    for (const schema of schemas) {
+        assert.equal(schema.properties.detail.type, "boolean");
+        assert.equal(schema.properties.detail.default, false);
+        assert.match(schema.properties.detail.description, /model-visible content/);
+        assert.match(schema.properties.detail.description, /Internal tool details are always retained/);
+    }
+
+    const wait = schemas[2] as unknown as {
         properties: {
             runIds: { minItems: number; maxItems: number; uniqueItems: boolean };
             condition: { enum: string[] };
             timeoutSeconds: { type: string; minimum: number; maximum: number };
         };
     };
-
-    assert.deepEqual(schema.required, ["runIds", "condition", "timeoutSeconds"]);
-    assert.deepEqual(schema.properties.runIds, {
+    assert.deepEqual(wait.properties.runIds, {
         type: "array",
         items: { type: "string", description: "UUID returned by subagent_start" },
         minItems: 1,
         maxItems: 128,
         uniqueItems: true,
     });
-    assert.deepEqual(schema.properties.condition.enum, ["any", "all"]);
-    assert.deepEqual(schema.properties.timeoutSeconds, { type: "integer", minimum: 1, maximum: 3600 });
+    assert.deepEqual(wait.properties.condition.enum, ["any", "all"]);
+    assert.deepEqual(wait.properties.timeoutSeconds, { type: "integer", minimum: 1, maximum: 3600 });
 });
 
 test("get and wait metadata distinguish observation from synchronization", () => {
@@ -102,9 +120,11 @@ test("get and wait metadata distinguish observation from synchronization", () =>
     const wait = createSubagentWaitTool(deps);
 
     assert.match(get.description, /without waiting/);
-    assert.match(get.description, /non-blocking status check/);
+    assert.match(get.description, /actionable run summary by default/);
+    assert.match(get.description, /detail=true/);
     assert.match(get.promptGuidelines?.join("\n") ?? "", /one-time non-blocking/);
-    assert.match(wait.description, /terminal state \(succeeded or failed\)/);
+    assert.match(wait.description, /actionable run summaries by default/);
+    assert.match(wait.description, /detail=true/);
     assert.match(wait.description, /Timeout is a normal result/);
     assert.match(wait.promptGuidelines?.join("\n") ?? "", /no useful independent work remains/);
     assert.match(wait.promptGuidelines?.join("\n") ?? "", /use subagent_get instead/);
@@ -140,7 +160,17 @@ test("start returns in starting state and get marks a disappeared runner failed"
     );
     assert.equal(started.details.status, "starting");
     const startedText = started.content[0]?.type === "text" ? started.content[0].text : "{}";
-    assert.equal((JSON.parse(startedText) as { tmux?: { windowId?: string } }).tmux?.windowId, "@2");
+    assert.deepEqual(JSON.parse(startedText), { runId: started.details.runId });
+
+    const detailedStart = await createSubagentStartTool(deps).execute(
+        "call-detail",
+        { profile: "full", prompt: "detailed task", detail: true },
+        undefined,
+        undefined,
+        context(fixture.root),
+    );
+    const detailedStartText = detailedStart.content[0]?.type === "text" ? detailedStart.content[0].text : "{}";
+    assert.equal((JSON.parse(detailedStartText) as { tmux?: { windowId?: string } }).tmux?.windowId, "@2");
 
     paneAlive = false;
     const fetched = await createSubagentGetTool(deps).execute(
@@ -152,7 +182,21 @@ test("start returns in starting state and get marks a disappeared runner failed"
     );
     assert.equal(fetched.details.status, "failed");
     const fetchedText = fetched.content[0]?.type === "text" ? fetched.content[0].text : "{}";
-    assert.equal((JSON.parse(fetchedText) as { result?: { error?: { category?: string } } }).result?.error?.category, "runner_lost");
+    assert.deepEqual(JSON.parse(fetchedText), {
+        runId: started.details.runId,
+        status: "failed",
+        error: { category: "runner_lost", message: "The tmux runner pane disappeared before the run reached a terminal state" },
+    });
+
+    const detailedGet = await createSubagentGetTool(deps).execute(
+        "call-detail",
+        { runId: started.details.runId, detail: true },
+        undefined,
+        undefined,
+        context(fixture.root),
+    );
+    const detailedGetText = detailedGet.content[0]?.type === "text" ? detailedGet.content[0].text : "{}";
+    assert.equal((JSON.parse(detailedGetText) as { result?: { error?: { category?: string } } }).result?.error?.category, "runner_lost");
 });
 
 async function runningRun(fixture: Awaited<ReturnType<typeof configFixture>>, paneId: string) {
@@ -224,6 +268,14 @@ test("wait any returns after the first terminal run and preserves input order", 
     assert.deepEqual(waited.details.completedRunIds, [second.request.runId]);
     assert.deepEqual(waited.details.pendingRunIds, [first.request.runId]);
     assert.deepEqual(waited.details.runs.map(run => run.runId), [first.request.runId, second.request.runId]);
+    const text = waited.content[0]?.type === "text" ? waited.content[0].text : "{}";
+    assert.deepEqual(JSON.parse(text), {
+        reason: "condition_met",
+        runs: [
+            { runId: first.request.runId, status: "running" },
+            { runId: second.request.runId, status: "succeeded", output: "done" },
+        ],
+    });
 });
 
 test("wait returns immediately when the condition is already satisfied", async () => {
@@ -281,6 +333,14 @@ test("wait all counts succeeded and failed runs as terminal", async () => {
     assert.deepEqual(waited.details.completedRunIds, [first.request.runId, second.request.runId]);
     assert.deepEqual(waited.details.pendingRunIds, []);
     assert.deepEqual(waited.details.runs.map(run => run.status), ["succeeded", "failed"]);
+    const text = waited.content[0]?.type === "text" ? waited.content[0].text : "{}";
+    assert.deepEqual(JSON.parse(text), {
+        reason: "condition_met",
+        runs: [
+            { runId: first.request.runId, status: "succeeded", output: "done" },
+            { runId: second.request.runId, status: "failed", error: { category: "harness", message: "failed" } },
+        ],
+    });
 });
 
 test("wait prefers a condition met on the deadline's final read over timeout", async () => {
@@ -335,6 +395,11 @@ test("wait returns current snapshots normally when the deadline expires", async 
     assert.deepEqual(waited.details.completedRunIds, []);
     assert.deepEqual(waited.details.pendingRunIds, [run.request.runId]);
     assert.equal(waited.details.runs[0]?.status, "running");
+    const text = waited.content[0]?.type === "text" ? waited.content[0].text : "{}";
+    assert.deepEqual(JSON.parse(text), {
+        reason: "timeout",
+        runs: [{ runId: run.request.runId, status: "running" }],
+    });
 });
 
 test("wait rejects duplicate or unknown runs before polling or reconciliation", async () => {
@@ -392,8 +457,8 @@ test("wait reconciles a disappeared runner before evaluating the condition", asy
     assert.equal(waited.details.reason, "condition_met");
     assert.equal(waited.details.runs[0]?.status, "failed");
     const waitedText = waited.content[0]?.type === "text" ? waited.content[0].text : "{}";
-    const waitedModel = JSON.parse(waitedText) as { runs: Array<{ result?: { error?: { category?: string } } }> };
-    assert.equal(waitedModel.runs[0]?.result?.error?.category, "runner_lost");
+    const waitedModel = JSON.parse(waitedText) as { runs: Array<{ error?: { category?: string } }> };
+    assert.equal(waitedModel.runs[0]?.error?.category, "runner_lost");
 });
 
 test("wait aborts without changing a live run", async () => {
@@ -424,7 +489,7 @@ test("wait aborts without changing a live run", async () => {
     assert.equal((await readSnapshot(fixture.config.stateRoot, run.request.runId)).status, "running");
 });
 
-test("wait keeps aggregate model JSON below 50KB and links omitted results", async () => {
+test("wait keeps minimal aggregate JSON below 50KB without exposing paths and detail preserves full snapshots", async () => {
     const fixture = await configFixture();
     const first = await runningRun(fixture, "%1");
     const second = await runningRun(fixture, "%2");
@@ -440,13 +505,31 @@ test("wait keeps aggregate model JSON below 50KB and links omitted results", asy
         context(fixture.root),
     );
     const text = waited.content[0]?.type === "text" ? waited.content[0].text : "";
-    const parsed = JSON.parse(text) as { runs: Array<{ result: { output: string } }> };
+    const parsed = JSON.parse(text) as { reason: string; runs: Array<{ runId: string; status: string; output: string }> };
 
     assert.ok(Buffer.byteLength(text, "utf8") <= 50 * 1024);
+    assert.deepEqual(Object.keys(parsed), ["reason", "runs"]);
     assert.equal(parsed.runs.length, 2);
-    assert.match(parsed.runs[0]?.result.output ?? "", /result\.json/);
-    assert.match(parsed.runs[1]?.result.output ?? "", /result\.json/);
+    assert.deepEqual(parsed.runs.map(run => Object.keys(run)), [
+        ["runId", "status", "output"],
+        ["runId", "status", "output"],
+    ]);
+    assert.match(parsed.runs[0]?.output ?? "", /Output truncated.*detail=true/s);
+    assert.match(parsed.runs[1]?.output ?? "", /Output truncated.*detail=true/s);
+    assert.doesNotMatch(text, /result\.json|runDirectory|paths|accounting/);
     assert.equal("result" in (waited.details.runs[0] ?? {}), false);
+
+    const detailed = await createSubagentWaitTool(deps).execute(
+        "call-detail",
+        { runIds: [first.request.runId, second.request.runId], condition: "all", timeoutSeconds: 30, detail: true },
+        undefined,
+        undefined,
+        context(fixture.root),
+    );
+    const detailedText = detailed.content[0]?.type === "text" ? detailed.content[0].text : "{}";
+    const detailedModel = JSON.parse(detailedText) as { runs: Array<{ result: { output: string } }> };
+    assert.match(detailedModel.runs[0]?.result.output ?? "", /result\.json/);
+    assert.match(detailedModel.runs[1]?.result.output ?? "", /result\.json/);
 });
 
 test("standalone runner normalizes a fake Pi JSON stream into persisted result", async () => {

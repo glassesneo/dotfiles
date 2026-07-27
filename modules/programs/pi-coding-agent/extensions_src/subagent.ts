@@ -11,7 +11,7 @@ import {
 import { Type } from "typebox";
 import { loadAgentProfileConfig } from "./profile.ts";
 import { onActiveProfile } from "./utilities/profile_events.ts";
-import { boundedModelJson, snapshotDetails } from "./utilities/subagent_json.ts";
+import { boundedModelJson, boundedSummaryJson, minimalRun, snapshotDetails } from "./utilities/subagent_json.ts";
 import {
     assertRunOrigin,
     attachTmux,
@@ -38,15 +38,24 @@ import {
 const DEFAULT_CONFIG_PATH = join(getAgentDir(), "subagent.json");
 const DEFAULT_PROFILE_CONFIG_PATH = join(getAgentDir(), "agent-profiles.json");
 
+const detailParameter = Type.Optional(Type.Boolean({
+    default: false,
+    description: "Include the full persisted snapshot metadata and file paths in model-visible content. Internal tool details are always retained.",
+}));
 const startParameters = Type.Object({
     profile: Type.String({ minLength: 1, description: "Semantic subagent profile name" }),
     prompt: Type.String({ minLength: 1, description: "Task prompt delegated to the subagent" }),
+    detail: detailParameter,
 });
-const getParameters = Type.Object({ runId: Type.String({ description: "UUID returned by subagent_start" }) });
+const getParameters = Type.Object({
+    runId: Type.String({ description: "UUID returned by subagent_start" }),
+    detail: detailParameter,
+});
 const waitParameters = Type.Object({
     runIds: Type.Array(Type.String({ description: "UUID returned by subagent_start" }), { minItems: 1, maxItems: 128, uniqueItems: true }),
     condition: StringEnum(["any", "all"] as const),
     timeoutSeconds: Type.Integer({ minimum: 1, maximum: 3600 }),
+    detail: detailParameter,
 });
 
 type WaitCondition = "any" | "all";
@@ -179,17 +188,30 @@ async function claimedUsage(
     return claimUsageBatch(config.stateRoot, snapshots, origin(ctx, env).originSessionId, toolCallId, toolName);
 }
 
-function toolResult(snapshot: RunSnapshot, accounting: { usage?: Usage; claimedRunIds: string[] }) {
+function runToolResult(
+    snapshot: RunSnapshot,
+    accounting: { usage?: Usage; claimedRunIds: string[] },
+    detail: boolean,
+    start: boolean,
+) {
+    const text = detail
+        ? boundedModelJson(snapshot as unknown as Record<string, unknown>)
+        : start
+            ? JSON.stringify({ runId: snapshot.runId })
+            : boundedSummaryJson(minimalRun(snapshot));
     return {
-        content: [{ type: "text" as const, text: boundedModelJson(snapshot as unknown as Record<string, unknown>) }],
+        content: [{ type: "text" as const, text }],
         details: { ...snapshotDetails(snapshot), accounting: { ...snapshot.accounting, claimedRunIds: accounting.claimedRunIds } },
         usage: accounting.usage,
     };
 }
 
-function waitToolResult(value: SubagentWaitResult, accounting: { usage?: Usage; claimedRunIds: string[] }) {
+function waitToolResult(value: SubagentWaitResult, accounting: { usage?: Usage; claimedRunIds: string[] }, detail: boolean) {
+    const text = detail
+        ? boundedModelJson(value as unknown as Record<string, unknown>)
+        : boundedSummaryJson({ reason: value.reason, runs: value.runs.map(minimalRun) });
     return {
-        content: [{ type: "text" as const, text: boundedModelJson(value as unknown as Record<string, unknown>) }],
+        content: [{ type: "text" as const, text }],
         details: { ...value, runs: value.runs.map(snapshotDetails), accounting: { claimedRunIds: accounting.claimedRunIds } },
         usage: accounting.usage,
     };
@@ -198,7 +220,7 @@ function waitToolResult(value: SubagentWaitResult, accounting: { usage?: Usage; 
 export function createSubagentStartTool(deps: SubagentDependencies): ToolDefinition<typeof startParameters, ReturnType<typeof snapshotDetails>> {
     return defineTool({
         name: "subagent_start", label: "Start subagent",
-        description: "Start one profiled subagent in a detached tmux window without waiting for completion. Returns a run ID for subagent_get or subagent_wait.",
+        description: "Start one profiled subagent in a detached tmux window without waiting for completion. Returns only a run ID by default; set detail=true for the full persisted snapshot metadata and file paths.",
         promptSnippet: "Start an asynchronous profiled subagent and return its run ID",
         promptGuidelines: ["Use subagent_start with only a semantic profile and a complete task prompt; continue useful independent work after it returns, then use subagent_wait when the delegated result is needed."],
         parameters: startParameters, executionMode: "sequential",
@@ -232,7 +254,7 @@ export function createSubagentStartTool(deps: SubagentDependencies): ToolDefinit
                 await failRun(run.paths, { category: "launch", message: error instanceof Error ? error.message : String(error) });
             }
             const snapshot = await readSnapshot(config.stateRoot, run.request.runId);
-            return toolResult(snapshot, await claimedUsage(config, [snapshot], ctx, deps.env, toolCallId, "subagent_start"));
+            return runToolResult(snapshot, await claimedUsage(config, [snapshot], ctx, deps.env, toolCallId, "subagent_start"), params.detail === true, true);
         },
     });
 }
@@ -240,7 +262,7 @@ export function createSubagentStartTool(deps: SubagentDependencies): ToolDefinit
 export function createSubagentGetTool(deps: SubagentDependencies): ToolDefinition<typeof getParameters, ReturnType<typeof snapshotDetails>> {
     return defineTool({
         name: "subagent_get", label: "Get subagent run",
-        description: "Read one subagent run's current persisted state without waiting. Use it for a non-blocking status check or to retrieve an already completed result. Full logs stay in the returned file paths.",
+        description: "Read one subagent run's current persisted state without waiting. Returns an actionable run summary by default; set detail=true for the full persisted snapshot metadata and file paths. Full logs remain in those files.",
         promptSnippet: "Read one subagent run's current state once without waiting",
         promptGuidelines: ["Use subagent_get for a one-time non-blocking status check or to retrieve an already completed result."],
         parameters: getParameters, executionMode: "sequential",
@@ -248,7 +270,7 @@ export function createSubagentGetTool(deps: SubagentDependencies): ToolDefinitio
             const config = await loadSubagentConfig(deps.configPath);
             await assertRunOrigin(config.stateRoot, params.runId, origin(ctx, deps.env).originSessionId);
             const snapshot = await readReconciledSnapshot(deps, config.stateRoot, params.runId);
-            return toolResult(snapshot, await claimedUsage(config, [snapshot], ctx, deps.env, toolCallId, "subagent_get"));
+            return runToolResult(snapshot, await claimedUsage(config, [snapshot], ctx, deps.env, toolCallId, "subagent_get"), params.detail === true, false);
         },
     });
 }
@@ -256,7 +278,7 @@ export function createSubagentGetTool(deps: SubagentDependencies): ToolDefinitio
 export function createSubagentWaitTool(deps: SubagentDependencies): ToolDefinition<typeof waitParameters, Omit<SubagentWaitResult, "runs"> & { runs: ReturnType<typeof snapshotDetails>[] }> {
     return defineTool({
         name: "subagent_wait", label: "Wait for subagents",
-        description: "Wait until any or all specified subagent runs reach a terminal state (succeeded or failed), or until the timeout expires. Timeout is a normal result and includes every run's latest persisted state.",
+        description: "Wait until any or all specified subagent runs reach a terminal state, or until timeout. Returns the reason and actionable run summaries by default; set detail=true for full persisted snapshots and file paths. Timeout is a normal result.",
         promptSnippet: "Wait for any or all selected subagent runs to reach a terminal state",
         promptGuidelines: ["Use subagent_wait on its own only when no useful independent work remains and one or more delegated results are needed; use subagent_get instead for a one-time non-blocking status check."],
         parameters: waitParameters, executionMode: "sequential",
@@ -291,7 +313,7 @@ export function createSubagentWaitTool(deps: SubagentDependencies): ToolDefiniti
                         completedRunIds, pendingRunIds, runs,
                     };
                     const accounting = await claimedUsage(config, runs, ctx, deps.env, toolCallId, "subagent_wait");
-                    return waitToolResult(value, accounting);
+                    return waitToolResult(value, accounting, params.detail === true);
                 }
                 await sleep(Math.min(1000, deadline - monotonicNow()), signal);
             }
