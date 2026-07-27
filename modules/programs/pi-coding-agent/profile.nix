@@ -27,24 +27,35 @@ in
         extensionPaths = readOnly (listOfOption str ["${./extensions_src}/profile.ts"]);
         defaultProfile = strOption "full";
         profileCycle = listOfOption str ["scout" "full"];
+        defaultTools = listOfOption str [];
         profiles = attrsOfOption profileType {};
         facetOwners = attrsOfOption str {};
       });
 
-    myconfig.always.programs.pi-coding-agent.profile.profiles = {
-      scout = {
-        model = "openai-codex/gpt-5.6-sol";
-        thinkingLevel = "low";
-        allowAllTools = false;
-        tools = ["read" "grep" "find" "ls"];
-        extensions = {};
-      };
-      full = {
-        model = "openai-codex/gpt-5.6-sol";
-        thinkingLevel = "medium";
-        allowAllTools = true;
-        tools = [];
-        extensions = {};
+    myconfig.always.programs.pi-coding-agent.profile = {
+      defaultTools = ["read" "grep" "find" "ls"];
+      profiles = {
+        full = {
+          model = "openai-codex/gpt-5.6-sol";
+          thinkingLevel = "medium";
+          allowAllTools = true;
+          tools = [];
+          extensions = {};
+        };
+        scout = {
+          model = "openai-codex/gpt-5.6-sol";
+          thinkingLevel = "high";
+          allowAllTools = false;
+          tools = [];
+          extensions = {};
+        };
+        focused-reviewer = {
+          model = "openai-codex/gpt-5.6-terra";
+          thinkingLevel = "medium";
+          allowAllTools = false;
+          tools = [];
+          extensions = {};
+        };
       };
     };
 
@@ -55,10 +66,16 @@ in
       profileFacetsKnown = profile:
         builtins.all (facet: builtins.elem facet knownFacets) (builtins.attrNames profile.extensions);
       modelValid = profile: builtins.match "[^/[:space:]]+/[^/[:space:]]+" profile.model != null;
+      serializeProfile = profile:
+        cleanProfile (
+          if profile.allowAllTools
+          then profile
+          else profile // {tools = lib.unique (cfg.defaultTools ++ profile.tools);}
+        );
       runtimeConfig = {
         schemaVersion = 1;
         inherit (cfg) defaultProfile profileCycle;
-        profiles = lib.mapAttrs (_: cleanProfile) cfg.profiles;
+        profiles = lib.mapAttrs (_: serializeProfile) cfg.profiles;
       };
     in {
       assertions = [
