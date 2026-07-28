@@ -2,7 +2,8 @@ import { copyToClipboard, type ExtensionContext, type ExtensionUIContext, type T
 import { Input, truncateToWidth, wrapTextWithAnsi, type Component, type Focusable, type TUI } from "@earendil-works/pi-tui";
 import { paletteHelp, paletteKeyAction, type ResolvedPaletteKeymap } from "./command_palette_keymap.ts";
 import { OriginRunDiscovery, stopSubagentRun, type ManagedSubagentRun } from "./subagent_management.ts";
-import { moveTmuxClientToRun, probeTmux, type CommandExecutor } from "./subagent_tmux.ts";
+import { probeTmux, type CommandExecutor } from "./subagent_tmux.ts";
+import { launchReplayWindow } from "./subagent_replay.ts";
 import { isTerminalState } from "./subagent_types.ts";
 
 export interface SubagentPaletteDependencies {
@@ -14,6 +15,10 @@ export interface SubagentPaletteDependencies {
     setTimeout?: typeof globalThis.setTimeout;
     clearTimeout?: typeof globalThis.clearTimeout;
     now?: () => number;
+    configPath?: string;
+    node?: string;
+    viewer?: string;
+    cwd?: string;
 }
 
 type Status = { kind: "success" | "warning" | "error"; text: string; runId?: string };
@@ -142,16 +147,13 @@ export class SubagentPaletteComponent implements Component, Focusable {
         this.#selectedIndex = (this.#selectedIndex + delta + filtered.length) % filtered.length;
         this.#selectedId = filtered[this.#selectedIndex]?.snapshot.runId; this.#selectionRevision += 1; this.#status = undefined; this.#render();
     }
-    async #act(action: "copy" | "stop" | "attach"): Promise<void> {
+    async #act(action: "copy" | "stop" | "replay"): Promise<void> {
         const run = this.#selected();
         if (!run) { this.#status = { kind: "warning", text: "Run is no longer available." }; this.#render(); return; }
         const runId = run.snapshot.runId; const token = action;
         if (this.#pending.has(token)) return;
         if (action === "stop" && (run.snapshot.status === "stopping" || isTerminalState(run.snapshot.status))) {
             this.#status = { kind: "warning", text: `Stop disabled: run is ${run.snapshot.status}.`, runId }; this.#render(); return;
-        }
-        if (action === "attach" && (isTerminalState(run.snapshot.status) || !run.snapshot.tmux)) {
-            this.#status = { kind: "warning", text: "Tmux move disabled: run has no live tmux reference.", runId }; this.#render(); return;
         }
         this.#pending.add(token); this.#status = { kind: "warning", text: `${action} in progress…`, runId }; this.#render();
         try {
@@ -168,8 +170,9 @@ export class SubagentPaletteComponent implements Component, Focusable {
                 }
             } else {
                 const context = await probeTmux(this.#deps.exec, this.#deps.env ?? process.env);
-                if (!context) throw new Error("Current Pi process is not attached to a usable tmux client");
-                await moveTmuxClientToRun(this.#deps.exec, context, run.snapshot.tmux!);
+                if (!context) throw new Error("Replay unavailable: current Pi process is not attached to a usable tmux client");
+                if (!this.#deps.configPath || !this.#deps.node || !this.#deps.viewer) throw new Error("Replay viewer runtime is not configured");
+                await launchReplayWindow(this.#deps.exec, context, { stateRoot: this.#deps.stateRoot, runId, cwd: this.#deps.cwd ?? process.cwd(), node: this.#deps.node, viewer: this.#deps.viewer, configPath: this.#deps.configPath });
                 this.close(); return;
             }
         } catch (error) { this.#status = { kind: "error", text: `${action} failed: ${message(error)}`, runId }; }
@@ -182,7 +185,6 @@ export class SubagentPaletteComponent implements Component, Focusable {
         if (action === "refresh") { void this.refresh(true); return; }
         if (action === "stop") { void this.#act("stop"); return; }
         if (action === "copyRunId") { void this.#act("copy"); return; }
-        if (action === "attachRun") { void this.#act("attach"); return; }
         if (this.#mode === "detail") {
             if (action === "moveUp") { this.#detailScroll = Math.max(0, this.#detailScroll - 1); this.#render(); }
             else if (action === "moveDown") { this.#detailScroll += 1; this.#render(); }
@@ -190,7 +192,7 @@ export class SubagentPaletteComponent implements Component, Focusable {
         }
         if (action === "moveUp") { this.#move(-1); return; }
         if (action === "moveDown") { this.#move(1); return; }
-        if (action === "confirm") { if (this.#selected()) { this.#mode = "detail"; this.#detailScroll = 0; this.#render(); } return; }
+        if (action === "confirm") { if (this.#selected()) void this.#act("replay"); return; }
         const previous = this.query; this.#input.handleInput(data);
         if (this.query !== previous) { this.#selectedIndex = 0; this.#selectedId = this.#filtered()[0]?.snapshot.runId; this.#selectionRevision += 1; this.#status = undefined; this.#render(); }
     }
@@ -241,12 +243,11 @@ export class SubagentPaletteComponent implements Component, Focusable {
         const status = warning + (visibleStatus ? `${visibleStatus.kind === "error" ? "Error" : "Status"}: ${visibleStatus.text}` : this.#refreshing ? "Refreshing…" : `${this.#filtered().length} run(s)`);
         lines.push(truncateToWidth(` ${this.#theme.fg(visibleStatus?.kind ?? (warning ? "warning" : "dim"), status)}`, w, ""));
         const selected = this.#selected();
-        const helpActions: Array<"moveUp" | "moveDown" | "confirm" | "cancel" | "refresh" | "stop" | "copyRunId" | "attachRun"> = this.#mode === "detail"
+        const helpActions: Array<"moveUp" | "moveDown" | "confirm" | "cancel" | "refresh" | "stop" | "copyRunId"> = this.#mode === "detail"
             ? ["moveUp", "moveDown", "cancel", "refresh"]
             : ["moveUp", "moveDown", "confirm", "cancel", "refresh"];
         if (selected && selected.snapshot.status !== "stopping" && !isTerminalState(selected.snapshot.status)) helpActions.push("stop");
         if (selected) helpActions.push("copyRunId");
-        if (selected?.snapshot.tmux && !isTerminalState(selected.snapshot.status)) helpActions.push("attachRun");
         lines.push(truncateToWidth(` ${this.#theme.fg("dim", paletteHelp(this.#keymap, helpActions))}`, w, ""));
         lines.push(this.#theme.fg("border", "─".repeat(w)));
         this.#cachedLines = lines.map(line => truncateToWidth(line, w, "")); this.#cachedWidth = w; return this.#cachedLines;

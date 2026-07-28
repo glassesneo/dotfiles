@@ -23,15 +23,16 @@ in
     myconfig.always.programs.pi-coding-agent.profile.facetOwners.subagent = moduleName;
 
     myconfig.ifEnabled.programs.pi-coding-agent.profile.profiles = {
-      full.extensions.subagent.allowedTargets = ["scout" "taskmaster" "focused-reviewer"];
+      full.extensions.subagent = {allowedTargets = ["scout" "taskmaster" "focused-reviewer"]; harness = "pi";};
       taskmaster = {
         tools = ["subagent_start" "subagent_get" "subagent_wait" "subagent_stop"];
-        extensions.subagent.allowedTargets = ["focused-reviewer"];
+        extensions.subagent = {allowedTargets = ["focused-reviewer"]; harness = "pi";};
       };
       scout = {
         tools = ["subagent_start" "subagent_get" "subagent_wait" "subagent_stop"];
-        extensions.subagent.allowedTargets = ["focused-reviewer"];
+        extensions.subagent = {allowedTargets = ["focused-reviewer"]; harness = "pi";};
       };
+      focused-reviewer.extensions.subagent = {allowedTargets = []; harness = "pi";};
     };
 
     home.always = {myconfig, ...}: let
@@ -80,8 +81,12 @@ in
         == null
         || (
           builtins.isAttrs facet
-          && builtins.all (key: key == "allowedTargets") keys
+          && builtins.all (key: builtins.elem key ["allowedTargets" "harness"]) keys
           && builtins.isList targets
+          && facet ? harness
+          && builtins.isString facet.harness
+          && nonBlank facet.harness
+          && builtins.elem facet.harness ["pi"]
           && builtins.all (target: builtins.isString target && nonBlank target) targets
           && lib.length targets == lib.length (lib.unique targets)
           && builtins.all (target: builtins.elem target profileNames) targets
@@ -90,7 +95,7 @@ in
       assertions = [
         {
           assertion = builtins.all validFacet (builtins.attrValues profiles);
-          message = "Pi subagent profile facets must contain only unique existing allowedTargets.";
+          message = "Pi subagent profile facets must contain only unique existing allowedTargets and an available non-blank harness.";
         }
       ];
     };
@@ -110,11 +115,14 @@ in
       programs.pi-coding-agent.settings.extensions = [subagentExtension];
 
       home.file."${myconfig.programs.pi-coding-agent.configDir}/subagent.json".text = builtins.toJSON {
-        schemaVersion = 1;
+        schemaVersion = 2;
         stateRoot = "${homeConfig.xdg.stateHome}/pi/subagents/runs";
         runner = {
           node = lib.getExe pkgs.nodejs;
           script = "${./../../extensions_src}/subagent_runner.ts";
+          supervisor = "${./../../extensions_src}/subagent_supervisor.ts";
+          viewer = "${./../../extensions_src}/subagent_viewer.ts";
+          less = lib.getExe pkgs.less;
           extensions = [profileExtension subagentExtension];
         };
         harnesses.pi.command = lib.getExe llm-agents.pi;

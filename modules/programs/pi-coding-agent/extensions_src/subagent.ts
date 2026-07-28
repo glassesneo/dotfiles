@@ -33,18 +33,16 @@ import {
 } from "./utilities/subagent_render.ts";
 import {
     assertRunOrigin,
-    attachTmux,
     claimRunUsage,
     createRun,
-    failRun,
     immediateChildRequests,
-    patchStatus,
     readSnapshot,
     readStatus,
     releaseRunUsageClaim,
     runPaths,
 } from "./utilities/subagent_store.ts";
-import { launchTmuxWindow, probeTmux, type CommandExecutor } from "./utilities/subagent_tmux.ts";
+import { type CommandExecutor } from "./utilities/subagent_tmux.ts";
+import { readHealthySupervisor } from "./utilities/subagent_supervisor.ts";
 import {
     addUsage,
     emptyUsage,
@@ -194,7 +192,7 @@ async function claimedUsage(
 export function createSubagentStartTool(deps: SubagentDependencies): ToolDefinition<typeof startParameters, ReturnType<typeof snapshotDetails>> {
     return defineTool({
         name: "subagent_start", label: "Start subagent",
-        description: "Start one profiled subagent in a detached tmux window without waiting for completion. Returns its run ID, purpose, profile, and status by default; set detail=true for the full persisted snapshot metadata and file paths.",
+        description: "Start one supervisor-managed profiled subagent asynchronously without waiting for completion. Returns its run ID, purpose, profile, and status by default; set detail=true for the full persisted snapshot metadata and file paths.",
         promptSnippet: "Start an asynchronous profiled subagent and return its observable run summary",
         promptGuidelines: ["Use subagent_start with a semantic profile, a short purpose, and a complete task prompt; after it returns, continue useful independent main-agent work. Use subagent_wait only when the result is needed for the next work and no useful independent work remains."],
         parameters: startParameters,
@@ -222,33 +220,23 @@ export function createSubagentStartTool(deps: SubagentDependencies): ToolDefinit
             const current = origin(ctx, deps.env);
             const childDepth = current.depth + 1;
             if (childDepth > config.maxDepth) throw new Error(`Subagent depth ${childDepth} exceeds maxDepth ${config.maxDepth}`);
-            const tmuxContext = await probeTmux(deps.exec, deps.env);
-            if (!tmuxContext) throw new Error("The current Pi process is no longer attached to a usable tmux session");
-
-            const createAttachedRun = async () => {
+            await readHealthySupervisor(config.stateRoot);
+            const enqueue = async () => {
                 if (current.parentRunId) {
                     const parentStatus = await readStatus(runPaths(config.stateRoot, current.parentRunId));
-                    if (parentStatus.status === "stopping" || isTerminalState(parentStatus.status)) {
-                        throw new Error(`Parent subagent ${current.parentRunId} is no longer runnable`);
-                    }
+                    if (parentStatus.status === "stopping" || isTerminalState(parentStatus.status)) throw new Error(`Parent subagent ${current.parentRunId} is no longer runnable`);
                 }
-                const run = await createRun(config, params.profile, targetProfile, params.purpose, params.prompt, ctx.cwd, {
+                return createRun(config, params.profile, targetProfile, params.purpose, params.prompt, ctx.cwd, {
                     callerProfile: active.name, depth: childDepth, parentRunId: current.parentRunId,
                     originSessionId: current.originSessionId, originSessionFile: current.originSessionFile,
                 });
-                await patchStatus(run.paths, { status: "starting" });
-                try {
-                    const tmux = await launchTmuxWindow(deps.exec, tmuxContext, { runId: run.request.runId, cwd: ctx.cwd, launcher: run.paths.launcher });
-                    await attachTmux(run.paths, tmux);
-                } catch (error) {
-                    await failRun(run.paths, { category: "launch", message: error instanceof Error ? error.message : String(error) });
-                }
-                return run;
             };
-            const run = current.parentRunId
-                ? await withRunLock(runPaths(config.stateRoot, current.parentRunId).directory, createAttachedRun)
-                : await createAttachedRun();
-            const snapshot = await readSnapshot(config.stateRoot, run.request.runId);
+            const run = current.parentRunId ? await withRunLock(runPaths(config.stateRoot, current.parentRunId).directory, enqueue) : await enqueue();
+            const deadline = performance.now() + 1000;
+            let snapshot = await readSnapshot(config.stateRoot, run.request.runId);
+            while (snapshot.status === "created" && performance.now() < deadline) {
+                await abortableSleep(25); snapshot = await readSnapshot(config.stateRoot, run.request.runId);
+            }
             return runToolResult(snapshot, await claimedUsage(config, [snapshot], ctx, deps.env, toolCallId, "subagent_start"), params.detail === true, true);
         },
     });
@@ -428,6 +416,7 @@ export async function registerSubagent(
             const config = await loadSubagentConfig(configPath);
             await openSubagentPalette(ctx, loadPaletteKeymap().keymap, {
                 stateRoot: config.stateRoot, originSessionId: origin(ctx, env).originSessionId, exec, env,
+                configPath, node: config.runner.node, viewer: config.runner.viewer, cwd: ctx.cwd,
             }, value => { component = value; managementComponents.add(value); });
         } catch (error) {
             ctx.ui.notify(`Could not open Subagents: ${error instanceof Error ? error.message : String(error)}`, "error");
@@ -438,7 +427,7 @@ export async function registerSubagent(
     };
     const unregisterManagementContribution = provideCommandPaletteContribution(pi.events, {
         owner: "subagent", id: "runs", label: "/subagent  Manage subagent runs", description: "Inspect and manage runs from the current origin session.",
-        keywords: ["runs", "agents", "tmux"], run: openManagement,
+        keywords: ["runs", "agents", "replay"], run: openManagement,
     });
     pi.registerCommand("subagent", {
         description: "Inspect and manage subagent runs",
@@ -456,7 +445,6 @@ export async function registerSubagent(
         for (const component of managementComponents) component.close();
         managementComponents.clear();
     });
-    if (!await probeTmux(exec, deps.env)) return false;
     pi.registerTool(createSubagentStartTool(deps));
     pi.registerTool(createSubagentGetTool(deps));
     pi.registerTool(createSubagentWaitTool(deps));

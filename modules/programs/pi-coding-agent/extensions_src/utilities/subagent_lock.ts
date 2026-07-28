@@ -35,7 +35,10 @@ async function tryReclaim(lockDirectory: string): Promise<boolean> {
     try { await link(temporary, claimPath); }
     catch (error) {
         const code = (error as NodeJS.ErrnoException).code;
-        if (code === "ENOENT") return false;
+        // Darwin may report EINVAL when another reclaimer renames the lock
+        // directory between path resolution and link(2); it is equivalent to
+        // losing this reclaim attempt and should be retried.
+        if (code === "ENOENT" || code === "EINVAL") return false;
         if (code === "EEXIST") {
             const directoryIdentity = await stat(lockDirectory).catch(() => undefined);
             const claimant = await readFile(claimPath, "utf8").then(value => Number.parseInt(value, 10)).catch(() => undefined);

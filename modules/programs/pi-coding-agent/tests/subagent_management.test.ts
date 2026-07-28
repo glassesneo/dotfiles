@@ -47,22 +47,21 @@ test("stable ordering uses terminal group, descending creation time, and full ru
     assert.deepEqual(sorted.map(run => run.snapshot.runId), ["a", "c", "b"]);
 });
 
-test("reusable stop operation terminalizes only the target and reports continuing immediate children", async () => {
+test("v4 stop remains durable when the supervisor is absent and does not stop children", async () => {
     const { config } = await fixture();
     const parent = await running(config, "parent", "origin");
     const child = await running(config, "child", "origin", parent.request.runId);
     let now = 0; const killed: string[] = [];
-    const result = await stopSubagentRun({
+    await assert.rejects(stopSubagentRun({
         stateRoot: config.stateRoot, runId: parent.request.runId, originSessionId: "origin", monotonicNow: () => now,
-        sleep: async () => { now = 3000; },
+        sleep: async () => { now = 6000; },
         exec: async (_command, args) => {
             if (args[0] === "display-message") return { stdout: "0\n", stderr: "", code: 0 };
             if (args[0] === "kill-pane") { killed.push(args.at(-1)!); return { stdout: "", stderr: "", code: 0 }; }
             return { stdout: "", stderr: "unexpected", code: 1 };
         },
-    });
-    assert.equal(result.run.snapshot.status, "stopped");
-    assert.deepEqual(result.children.map(request => request.runId), [child.request.runId]);
-    assert.deepEqual(killed, ["%parent"]);
+    }), /stop request is durable but timed out/);
+    assert.equal((await readSnapshot(config.stateRoot, parent.request.runId)).status, "stopping");
+    assert.deepEqual(killed, []);
     assert.equal((await readSnapshot(config.stateRoot, child.request.runId)).status, "running");
 });

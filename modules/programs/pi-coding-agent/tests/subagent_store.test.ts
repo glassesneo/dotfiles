@@ -53,7 +53,7 @@ test("run store creates private canonical files without interpolating prompt int
     assert.doesNotMatch(launcher, /Store contract/);
     const persisted = JSON.parse(await readFile(run.paths.request, "utf8")) as { schemaVersion: number; purpose: string; prompt: string };
     assert.deepEqual({ schemaVersion: persisted.schemaVersion, purpose: persisted.purpose, prompt: persisted.prompt }, {
-        schemaVersion: 3,
+        schemaVersion: 4,
         purpose: "Store contract",
         prompt,
     });
@@ -135,7 +135,15 @@ test("terminal event append is atomic, unique, and follows the persisted sequenc
     ]);
     assert.deepEqual(appended.sort(), [false, true]);
     const events = (await readFile(run.paths.events, "utf8")).trim().split("\n").map(line => JSON.parse(line) as { sequence: number; type: string });
-    assert.deepEqual(events.map(event => [event.sequence, event.type]), [[4, "run_started"], [5, "run_finished"]]);
+    assert.deepEqual(events.map(event => [event.sequence, event.type]), [[1, "parent_instruction"], [2, "run_started"], [3, "run_finished"]]);
+});
+
+test("sequenced event append repairs an interrupted tail", async () => {
+    const { config } = await fixture(); const run = await createRun(config, "full", fullProfile, "Tail repair", "task", "/work");
+    await writeFile(run.paths.events, `${await readFile(run.paths.events, "utf8")}{\"partial\":`, "utf8");
+    await appendEvent(run.paths, { schemaVersion: 4, sequence: 99, timestamp: "ignored", type: "diagnostic", data: { message: "recovered" } });
+    const events = (await readFile(run.paths.events, "utf8")).trim().split("\n").map(line => JSON.parse(line) as { sequence: number; type: string });
+    assert.deepEqual(events.map(event => [event.sequence, event.type]), [[1, "parent_instruction"], [2, "diagnostic"]]);
 });
 
 test("run lock does not mistake an operation EEXIST error for lock contention", async () => {
@@ -212,7 +220,8 @@ test("runtime configs validate profile and subagent responsibilities independent
         schemaVersion: 1, stateRoot: "/state", runner: { node: "/node", script: "/runner", extensions: ["/profile", "/subagent"] },
         harnesses: { pi: { command: "/pi" } }, maxDepth: 3,
     };
-    assert.throws(() => validateSubagentRuntimeConfig({ ...subagent, schemaVersion: 2 }), /schemaVersion/);
+    assert.equal(validateSubagentRuntimeConfig({ ...subagent, schemaVersion: 2 }).schemaVersion, 2);
+    assert.throws(() => validateSubagentRuntimeConfig({ ...subagent, schemaVersion: 3 }), /schemaVersion/);
     assert.throws(() => validateSubagentRuntimeConfig({ ...subagent, maxDepth: -1 }), /maxDepth/);
     assert.throws(() => validateSubagentRuntimeConfig({ ...subagent, stateRoot: "x".repeat(4097) }), /4096/);
 

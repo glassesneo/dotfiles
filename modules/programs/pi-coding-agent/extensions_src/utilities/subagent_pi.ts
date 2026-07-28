@@ -4,8 +4,19 @@ import { addUsage, emptyUsage, type ResolvedRun, type StopMethod } from "./subag
 
 export type PiNormalizedInput =
     | { type: "assistant_text"; data: { text: string } }
-    | { type: "tool_started"; data: { tool: string; arguments: Record<string, unknown> } }
-    | { type: "tool_finished"; data: { tool: string; isError: boolean } };
+    | { type: "tool_started"; data: { toolCallId: string; name: string; arguments: Record<string, unknown> } }
+    | { type: "tool_finished"; data: { toolCallId: string; name: string; isError: boolean; result: string } };
+
+function resultText(value: unknown): string {
+    const result = record(value);
+    if (!Array.isArray(result.content)) return "";
+    return result.content.map(part => {
+        const item = record(part);
+        if (item.type === "text" && typeof item.text === "string") return item.text;
+        if (item.type === "image") return "[image result]";
+        return "";
+    }).filter(Boolean).join("\n");
+}
 
 export class HarnessRunError extends Error {
     readonly category: "harness" | "protocol";
@@ -92,7 +103,11 @@ export class PiEventNormalizer {
             if (update.type === "text_delta" && typeof update.delta === "string") return [{ type: "assistant_text", data: { text: update.delta } }];
         }
         if (event.type === "tool_execution_start") {
-            return [{ type: "tool_started", data: { tool: typeof event.toolName === "string" ? event.toolName : "unknown", arguments: record(event.args) } }];
+            return [{ type: "tool_started", data: {
+                toolCallId: typeof event.toolCallId === "string" ? event.toolCallId : "unknown",
+                name: typeof event.toolName === "string" ? event.toolName : "unknown",
+                arguments: record(event.args),
+            } }];
         }
         if (event.type === "tool_execution_end") {
             const result = record(event.result);
@@ -101,7 +116,12 @@ export class PiEventNormalizer {
                 addUsage(this.usage, normalizedUsage(result.usage));
                 if (toolCallId) this.accountedToolCalls.add(toolCallId);
             }
-            return [{ type: "tool_finished", data: { tool: typeof event.toolName === "string" ? event.toolName : "unknown", isError: event.isError === true } }];
+            return [{ type: "tool_finished", data: {
+                toolCallId: toolCallId ?? "unknown",
+                name: typeof event.toolName === "string" ? event.toolName : "unknown",
+                isError: event.isError === true,
+                result: resultText(result),
+            } }];
         }
         if (event.type === "message_end") {
             const message = record(event.message);

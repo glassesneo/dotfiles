@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto";
-import { appendFile, chmod, link, mkdir, open, readFile, readdir, rename, unlink, writeFile } from "node:fs/promises";
+import { appendFile, chmod, link, mkdir, open, readFile, readdir, rename, truncate, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { AgentProfile } from "./profile_types.ts";
 import { withRunLock } from "./subagent_lock.ts";
+import { resolveHarnessAdapter } from "./subagent_harness.ts";
 import {
     RESOLVED_RUN_SCHEMA_VERSION,
     RUN_REQUEST_SCHEMA_VERSION,
@@ -45,6 +46,7 @@ export interface RunPaths {
     result: string;
     usageClaim: string;
     launcher: string;
+    workerHeartbeat: string;
 }
 
 export function assertRunId(runId: string): void {
@@ -59,6 +61,7 @@ export function runPaths(stateRoot: string, runId: string): RunPaths {
         request: join(directory, "request.json"), resolved: join(directory, "resolved.json"), status: join(directory, "status.json"),
         events: join(directory, "events.jsonl"), stderr: join(directory, "stderr.log"), result: join(directory, "result.json"),
         usageClaim: join(directory, "usage-claim.json"), launcher: join(directory, "launch.sh"),
+        workerHeartbeat: join(directory, "worker-heartbeat.json"),
     };
 }
 
@@ -92,6 +95,11 @@ export async function createRun(
 ): Promise<{ request: RunRequest; resolved: ResolvedRun; status: RunStatus; paths: RunPaths }> {
     if (prompt.trim() === "") throw new Error("Subagent prompt must not be empty");
     const normalizedPurpose = validateRunPurpose(purpose);
+    const facet = profileConfig.extensions.subagent as { harness?: unknown } | undefined;
+    const harness = typeof facet?.harness === "string" && facet.harness.trim() ? facet.harness : "pi";
+    const adapter = resolveHarnessAdapter(harness);
+    const harnessConfig = config.harnesses[harness];
+    if (!harnessConfig) throw new Error(`Unknown or unconfigured subagent harness: ${harness}`);
     const runId = randomUUID();
     const paths = runPaths(config.stateRoot, runId);
     await mkdir(config.stateRoot, { recursive: true, mode: 0o700 });
@@ -100,17 +108,14 @@ export async function createRun(
 
     const createdAt = new Date().toISOString();
     const fullLineage: RunLineage = { ...lineage, targetProfile: profile };
-    const request: RunRequest = { schemaVersion: RUN_REQUEST_SCHEMA_VERSION, runId, profile, purpose: normalizedPurpose, prompt, cwd, createdAt, ...fullLineage };
+    const request: RunRequest = { schemaVersion: RUN_REQUEST_SCHEMA_VERSION, runId, profile, purpose: normalizedPurpose, prompt, cwd, createdAt, harness, ...fullLineage };
     const resolved: ResolvedRun = {
-        schemaVersion: RESOLVED_RUN_SCHEMA_VERSION,
-        runId,
-        profile,
-        ...fullLineage,
-        profileSnapshot: structuredClone(profileConfig),
-        command: config.harnesses.pi.command,
-        extensionPaths: [...config.runner.extensions],
+        schemaVersion: RESOLVED_RUN_SCHEMA_VERSION, runId, profile, ...fullLineage,
+        profileSnapshot: structuredClone(profileConfig), command: harnessConfig.command,
+        extensionPaths: [...config.runner.extensions], harness,
+        adapterProtocolVersion: adapter.protocolVersion, transcriptCapabilities: adapter.capabilities,
     };
-    const status: RunStatus = { schemaVersion: 3, runId, profile, status: "created", createdAt, ...fullLineage };
+    const status: RunStatus = { schemaVersion: 4, runId, profile, status: "created", createdAt, ...fullLineage };
     const launcher = [
         "#!/bin/sh", "set -eu",
         `exec ${shellQuote(config.runner.node)} --experimental-strip-types ${shellQuote(config.runner.script)} ${shellQuote(paths.directory)}`,
@@ -119,17 +124,20 @@ export async function createRun(
 
     await atomicJson(paths.request, request);
     await atomicJson(paths.resolved, resolved);
-    await atomicJson(paths.status, status);
     await writeFile(paths.events, "", { encoding: "utf8", mode: 0o600 });
+    await appendSequencedEvent(paths, "parent_instruction", { prompt, callerProfile: fullLineage.callerProfile });
     await writeFile(paths.stderr, "", { encoding: "utf8", mode: 0o600 });
     await writeFile(paths.launcher, launcher, { encoding: "utf8", mode: 0o700 });
     await chmod(paths.launcher, 0o700);
+    // status.json is the durable queue publication point; publish it only after
+    // the canonical instruction and every immutable run input are complete.
+    await atomicJson(paths.status, status);
     return { request, resolved, status, paths };
 }
 
 export async function readStatus(paths: RunPaths): Promise<RunStatus> {
     const status = await readJson<RunStatus>(paths.status);
-    if ((status.schemaVersion !== 2 && status.schemaVersion !== 3) || !RUN_ID.test(status.runId)
+    if ((status.schemaVersion !== 2 && status.schemaVersion !== 3 && status.schemaVersion !== 4) || !RUN_ID.test(status.runId)
         || !Object.hasOwn(TRANSITIONS, status.status)) throw new Error("Invalid run status file");
     const rawState: string = status.status;
     if (status.schemaVersion === 2 && (rawState === "stopping" || rawState === "stopped")) {
@@ -141,7 +149,7 @@ export async function readStatus(paths: RunPaths): Promise<RunStatus> {
 async function patchStatusUnlocked(paths: RunPaths, patch: Partial<RunStatus>): Promise<RunStatus> {
     const current = await readStatus(paths);
     if (patch.runId !== undefined && patch.runId !== current.runId) throw new Error("Cannot change run ID");
-    if (current.schemaVersion === 3) {
+    if (current.schemaVersion === 3 || current.schemaVersion === 4) {
         const immutable = ["callerProfile", "targetProfile", "depth", "parentRunId", "originSessionId", "originSessionFile"] as const;
         const patchRecord = patch as Record<string, unknown>;
         const changed = immutable.find(key => key in patchRecord && patchRecord[key] !== current[key]);
@@ -159,30 +167,72 @@ export async function patchStatus(paths: RunPaths, patch: Partial<RunStatus>): P
     return withRunLock(paths.directory, () => patchStatusUnlocked(paths, patch));
 }
 
+export async function claimRunAndLaunchWorker(
+    paths: RunPaths,
+    claim: NonNullable<RunStatus["claim"]>,
+    pendingWorker: NonNullable<RunStatus["worker"]>,
+    expectedClaimToken: string | undefined,
+    launch: () => NonNullable<RunStatus["worker"]>,
+): Promise<RunStatus | null> {
+    return withRunLock(paths.directory, async () => {
+        const current = await readStatus(paths);
+        if (current.schemaVersion !== 4 || isTerminalState(current.status) || current.status === "stopping") return null;
+        if (current.status === "created") {
+            if (expectedClaimToken !== undefined) return null;
+            await patchStatusUnlocked(paths, { status: "starting", claim, worker: pendingWorker });
+        } else {
+            if (current.status !== "starting" || expectedClaimToken === undefined || current.claim?.token !== expectedClaimToken) return null;
+            await patchStatusUnlocked(paths, { claim, worker: pendingWorker });
+        }
+        // Keep the run lock through spawn and PID publication. A concurrent
+        // stop either wins before this claim or observes a fully launched worker.
+        return patchStatusUnlocked(paths, { worker: launch() });
+    });
+}
+
 export async function attachTmux(paths: RunPaths, tmux: TmuxRunReference): Promise<RunStatus> {
     return patchStatus(paths, { tmux });
 }
 
-async function readEvents(paths: RunPaths): Promise<NormalizedEvent[]> {
-    return (await readFile(paths.events, "utf8"))
-        .split("\n")
-        .filter(Boolean)
-        .map(line => JSON.parse(line) as NormalizedEvent);
+export async function readEvents(paths: RunPaths): Promise<NormalizedEvent[]> {
+    const content = await readFile(paths.events, "utf8").catch(error => (error as NodeJS.ErrnoException).code === "ENOENT" ? "" : Promise.reject(error));
+    const lines = content.split("\n");
+    const events: NormalizedEvent[] = [];
+    for (let index = 0; index < lines.length; index += 1) {
+        const line = lines[index]!;
+        if (!line) continue;
+        try { events.push(JSON.parse(line) as NormalizedEvent); }
+        catch {
+            if (index === lines.length - 1 && !content.endsWith("\n")) break;
+            events.push({ schemaVersion: 4, sequence: events.reduce((n, e) => Math.max(n, e.sequence), 0) + 1, timestamp: new Date().toISOString(), type: "diagnostic", data: { category: "transcript", message: `Malformed persisted event at line ${index + 1}` } });
+        }
+    }
+    return events;
 }
 
-export async function appendEvent(paths: RunPaths, event: NormalizedEvent): Promise<void> {
-    await appendFile(paths.events, `${JSON.stringify(event)}\n`, { encoding: "utf8", mode: 0o600 });
+async function repairEventTail(paths: RunPaths): Promise<NormalizedEvent[]> {
+    const content = await readFile(paths.events, "utf8").catch(error => (error as NodeJS.ErrnoException).code === "ENOENT" ? "" : Promise.reject(error));
+    if (content && !content.endsWith("\n")) {
+        const boundary = content.lastIndexOf("\n") + 1;
+        await truncate(paths.events, boundary);
+    }
+    return readEvents(paths);
 }
 
-export async function appendTerminalEvent(paths: RunPaths, event: NormalizedEvent): Promise<boolean> {
+export async function appendSequencedEvent(paths: RunPaths, type: NormalizedEvent["type"], data: Record<string, unknown>, options: { uniqueTerminal?: boolean } = {}): Promise<NormalizedEvent | null> {
     return withRunLock(paths.directory, async () => {
-        const events = await readEvents(paths);
-        if (events.some(existing => existing.type === "run_finished")) return false;
-        const sequence = events.reduce((maximum, existing) => Math.max(maximum, existing.sequence), 0) + 1;
-        await appendFile(paths.events, `${JSON.stringify({ ...event, sequence })}\n`, { encoding: "utf8", mode: 0o600 });
-        return true;
+        const events = await repairEventTail(paths);
+        if (options.uniqueTerminal && events.some(event => event.type === "run_finished")) return null;
+        const event: NormalizedEvent = { schemaVersion: 4, sequence: events.reduce((maximum, existing) => Math.max(maximum, existing.sequence), 0) + 1, timestamp: new Date().toISOString(), type, data };
+        const handle = await open(paths.events, "a", 0o600);
+        try { await handle.write(`${JSON.stringify(event)}\n`, undefined, "utf8"); await handle.sync(); } finally { await handle.close(); }
+        await chmod(paths.events, 0o600);
+        return event;
     });
 }
+
+export async function appendEvent(paths: RunPaths, event: NormalizedEvent): Promise<void> { await appendSequencedEvent(paths, event.type, event.data); }
+export async function appendTerminalEvent(paths: RunPaths, event: NormalizedEvent): Promise<boolean> { return (await appendSequencedEvent(paths, event.type, event.data, { uniqueTerminal: true })) !== null; }
 
 export async function appendStderr(paths: RunPaths, text: string): Promise<void> {
     await appendFile(paths.stderr, text, { encoding: "utf8", mode: 0o600 });
@@ -208,16 +258,19 @@ export async function failRun(paths: RunPaths, failure: RunFailure, startedAt?: 
         if (isTerminalState(current.status) || current.status === "stopping") return current;
         const finishedAt = new Date().toISOString();
         return finishRunUnlocked(paths, {
-            schemaVersion: 3, runId: current.runId, outcome: "failed", output: "", error: failure, usage, turns,
+            schemaVersion: current.schemaVersion === 4 ? 4 : 3, runId: current.runId, outcome: "failed", output: "", error: failure, usage, turns,
             startedAt: startedAt ?? current.startedAt ?? current.createdAt, finishedAt,
         });
     });
 }
 
-export async function markRunRunning(paths: RunPaths, startedAt: string, runnerPid: number): Promise<RunStatus> {
+export async function markRunRunning(paths: RunPaths, startedAt: string, runnerPid: number, workerToken?: string): Promise<RunStatus> {
     return withRunLock(paths.directory, async () => {
         const current = await readStatus(paths);
         if (current.status === "stopping" || isTerminalState(current.status)) return current;
+        if (current.schemaVersion === 4 && (workerToken === undefined || current.worker?.token !== workerToken || current.worker.pid !== runnerPid)) {
+            throw new Error(`Worker identity mismatch for run ${current.runId}`);
+        }
         return patchStatusUnlocked(paths, { status: "running", startedAt, runnerPid });
     });
 }
@@ -245,7 +298,7 @@ export async function finishStoppedRun(
         if (current.status !== "stopping") throw new Error(`Run ${current.runId} is not stopping`);
         const finishedAt = new Date().toISOString();
         return finishRunUnlocked(paths, {
-            schemaVersion: 3, runId: current.runId, outcome: "stopped", output, error: null, usage, turns,
+            schemaVersion: current.schemaVersion === 4 ? 4 : 3, runId: current.runId, outcome: "stopped", output, error: null, usage, turns,
             startedAt: startedAt ?? current.startedAt ?? current.createdAt, finishedAt, stopMethod: method,
         });
     });
@@ -337,7 +390,7 @@ function assertLineage(request: NormalizedRunRequest, resolved: ResolvedRun, sta
         ["originSessionId", request.originSessionId, resolved.originSessionId],
     ];
     const mismatch = pairs.find(([, left, right]) => left !== right);
-    const statusMismatch = status.schemaVersion === 3
+    const statusMismatch = status.schemaVersion === 3 || status.schemaVersion === 4
         ? pairs.find(([key, requestValue]) => key !== "runId" && key !== "profile" && requestValue !== status[key as keyof RunStatus])
         : undefined;
     const canonicalMismatch = request.profile !== request.targetProfile || resolved.profile !== resolved.targetProfile
@@ -353,23 +406,24 @@ export async function readSnapshot(stateRoot: string, runId: string): Promise<Ru
     const [status, request, resolved] = await Promise.all([
         readStatus(paths), readRunRequest(paths), readJson<ResolvedRun>(paths.resolved),
     ]);
-    if (resolved.schemaVersion !== RESOLVED_RUN_SCHEMA_VERSION) throw new Error(`Invalid resolved metadata for run ${runId}`);
+    if (resolved.schemaVersion !== 3 && resolved.schemaVersion !== RESOLVED_RUN_SCHEMA_VERSION) throw new Error(`Invalid resolved metadata for run ${runId}`);
     assertLineage(request, resolved, status, runId);
     let result: RunResult | null = null;
     if (isTerminalState(status.status)) {
         result = await readJson<RunResult>(paths.result);
         const validSchema = result.schemaVersion === 2
             ? result.outcome === "succeeded" || result.outcome === "failed"
-            : result.schemaVersion === 3;
+            : result.schemaVersion === 3 || result.schemaVersion === 4;
         if (!validSchema || result.runId !== runId || result.outcome !== status.status) {
             throw new Error(`Invalid terminal result for run ${runId}`);
         }
     }
     const claim = await readClaim(paths);
     return {
-        schemaVersion: 3, runId, purpose: request.purpose, profile: status.profile, status: status.status,
+        schemaVersion: 4, runId, purpose: request.purpose, profile: status.profile, status: status.status,
         createdAt: status.createdAt, startedAt: status.startedAt, finishedAt: status.finishedAt, tmux: status.tmux,
-        runDirectory: paths.directory, paths: { events: paths.events, stderr: paths.stderr, result: paths.result },
+        claim: status.claim, worker: status.worker,
+        runDirectory: paths.directory, paths: { events: paths.events, stderr: paths.stderr, result: paths.result, workerHeartbeat: paths.workerHeartbeat },
         accounting: { claimed: claim !== undefined, claim }, result,
     };
 }

@@ -12,15 +12,12 @@ test("Pi event normalizer converts streaming, tool, final output, and usage", ()
         assistantMessageEvent: { type: "text_delta", delta: "hello" },
     })), [{ type: "assistant_text", data: { text: "hello" } }]);
     assert.deepEqual(normalizer.consume(JSON.stringify({
-        type: "tool_execution_start",
-        toolName: "read",
-        args: { path: "README.md" },
-    })), [{ type: "tool_started", data: { tool: "read", arguments: { path: "README.md" } } }]);
+        type: "tool_execution_start", toolCallId: "call-1", toolName: "read", args: { path: "README.md" },
+    })), [{ type: "tool_started", data: { toolCallId: "call-1", name: "read", arguments: { path: "README.md" } } }]);
     assert.deepEqual(normalizer.consume(JSON.stringify({
-        type: "tool_execution_end",
-        toolName: "read",
-        isError: false,
-    })), [{ type: "tool_finished", data: { tool: "read", isError: false } }]);
+        type: "tool_execution_end", toolCallId: "call-1", toolName: "read", isError: false,
+        result: { content: [{ type: "text", text: "file body" }] },
+    })), [{ type: "tool_finished", data: { toolCallId: "call-1", name: "read", isError: false, result: "file body" } }]);
 
     normalizer.consume(JSON.stringify({
         type: "message_end",

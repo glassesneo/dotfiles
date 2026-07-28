@@ -4,7 +4,7 @@ import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { matchesKey, type KeyId } from "@earendil-works/pi-tui";
 import { canonicalKeyId, isValidKeyId } from "./private_key_id.ts";
 
-export const paletteActions = ["open", "moveUp", "moveDown", "confirm", "cancel", "refresh", "stop", "copyRunId", "attachRun"] as const;
+export const paletteActions = ["open", "moveUp", "moveDown", "confirm", "cancel", "refresh", "stop", "copyRunId"] as const;
 export type PaletteKeyAction = (typeof paletteActions)[number];
 export type PaletteKeymapConfig = Partial<Record<PaletteKeyAction, string[]>>;
 export type ResolvedPaletteKeymap = Record<PaletteKeyAction, KeyId[]>;
@@ -12,22 +12,25 @@ export type ResolvedPaletteKeymap = Record<PaletteKeyAction, KeyId[]>;
 export const defaultPaletteKeymap: ResolvedPaletteKeymap = {
     open: ["ctrl+shift+p"], moveUp: ["ctrl+p"], moveDown: ["ctrl+n"],
     confirm: ["enter"], cancel: ["escape", "ctrl+c"], refresh: ["ctrl+r"],
-    stop: ["ctrl+s"], copyRunId: ["ctrl+y"], attachRun: ["ctrl+a"],
+    stop: ["ctrl+s"], copyRunId: ["ctrl+y"],
 };
 
 export function validatePaletteKeymapConfig(value: unknown, path = "command-palette-keybindings.json"): PaletteKeymapConfig {
     if (value === null || typeof value !== "object" || Array.isArray(value)) throw new Error(`${path}: expected an object`);
     for (const [action, keys] of Object.entries(value)) {
-        if (!(paletteActions as readonly string[]).includes(action)) throw new Error(`${path}: unknown action ${action}`);
+        if (!(paletteActions as readonly string[]).includes(action) && action !== "attachRun") throw new Error(`${path}: unknown action ${action}`);
         if (!Array.isArray(keys) || keys.some(key => typeof key !== "string")) throw new Error(`${path}: ${action} must be an array of keys`);
         for (const key of keys as string[]) if (!isValidKeyId(key)) throw new Error(`${path}: ${action}: invalid key ${JSON.stringify(key)}`);
     }
-    return value as PaletteKeymapConfig;
+    // Accept and discard the retired attachRun key while old Home Manager
+    // generations may still leave it in the deployed configuration.
+    const { attachRun: _retired, ...current } = value as Record<string, unknown>;
+    return current as PaletteKeymapConfig;
 }
 
 export function resolvePaletteKeymap(config: PaletteKeymapConfig = {}, path = "command-palette-keybindings.json"): ResolvedPaletteKeymap {
-    validatePaletteKeymapConfig(config, path);
-    const result = Object.fromEntries(paletteActions.map(action => [action, [...(config[action] ?? defaultPaletteKeymap[action])]])) as ResolvedPaletteKeymap;
+    const validated = validatePaletteKeymapConfig(config, path);
+    const result = Object.fromEntries(paletteActions.map(action => [action, [...(validated[action] ?? defaultPaletteKeymap[action])]])) as ResolvedPaletteKeymap;
     for (const action of paletteActions) if (result[action].length === 0) throw new Error(`${path}: required action ${action} has no keys`);
     const byKey = new Map<string, PaletteKeyAction[]>();
     for (const action of paletteActions) for (const key of result[action]) {
@@ -54,7 +57,7 @@ export function paletteKeyAction(data: string, keymap: ResolvedPaletteKeymap): P
 
 const labels: Record<PaletteKeyAction, string> = {
     open: "open", moveUp: "up", moveDown: "down", confirm: "select", cancel: "cancel",
-    refresh: "refresh", stop: "stop", copyRunId: "copy ID", attachRun: "open tmux",
+    refresh: "refresh", stop: "stop", copyRunId: "copy ID",
 };
 export function paletteHelp(keymap: ResolvedPaletteKeymap, actions: readonly PaletteKeyAction[] = ["moveUp", "moveDown", "confirm", "cancel"]): string {
     return actions.map(action => `${keymap[action][0]} ${labels[action]}`).join(" • ");

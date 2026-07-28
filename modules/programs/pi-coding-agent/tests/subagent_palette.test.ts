@@ -45,7 +45,7 @@ test("subagent palette polls serially, renders textual empty state within width,
     assert.equal(renders, before);
 });
 
-test("list and detail preserve query and selection while exposing only available run actions", async () => {
+test("list Enter opens an on-demand replay window and copy remains available", async () => {
     const root = await mkdtemp(join(tmpdir(), "subagent-palette-ui-"));
     const config: SubagentRuntimeConfig = { schemaVersion: 1, stateRoot: join(root, "runs"), runner: { node: "/node", script: "/runner", extensions: ["/extension"] }, harnesses: { pi: { command: "/pi" } }, maxDepth: 3 };
     const profile: AgentProfile = { model: "provider/model", description: "Test.", allowAllTools: true, tools: [], extensions: {} };
@@ -57,46 +57,22 @@ test("list and detail preserve query and selection while exposing only available
     await patchStatus(second.paths, { status: "starting" });
     await attachTmux(second.paths, { sessionId: "$1", session: "main", windowId: "@2", paneId: "%2", windowName: "sa-second" });
     await patchStatus(second.paths, { status: "running", startedAt: new Date().toISOString() });
-    let copied = ""; let timer: (() => void) | undefined; let blockNextProbe = false; let releaseProbe: (() => void) | undefined;
+    let copied = ""; let timer: (() => void) | undefined; const calls: string[][] = []; let closed = 0;
     const component = new SubagentPaletteComponent({
         tui: { terminal: { rows: 30, columns: 100 }, requestRender() {} } as TUI, theme,
         ui: { async confirm() { return false; } }, keymap: resolvePaletteKeymap(),
         deps: {
-            stateRoot: config.stateRoot, originSessionId: "session", exec: async () => {
-                if (blockNextProbe) { blockNextProbe = false; await new Promise<void>(resolve => { releaseProbe = resolve; }); }
-                return { stdout: "0\n", stderr: "", code: 0 };
-            },
+            stateRoot: config.stateRoot, originSessionId: "session", env: { TMUX: "yes" }, configPath: "/config", node: "/node", viewer: "/viewer", cwd: root,
+            exec: async (_command, args) => { calls.push(args); if (args[0] === "display-message") return { stdout: "$1\tmain\t%0\n", stderr: "", code: 0 }; if (args[0] === "new-window") return { stdout: "@9\t%9\n", stderr: "", code: 0 }; return { stdout: "", stderr: "", code: 0 }; },
             copy: async value => { copied = value; },
             setTimeout: ((callback: () => void) => { timer = callback; return 1 as never; }) as unknown as typeof setTimeout,
             clearTimeout: (() => { timer = undefined; }) as typeof clearTimeout,
-        }, done() {},
+        }, done() { closed += 1; },
     });
-    component.focused = true; await component.refresh();
-    blockNextProbe = true;
-    const polling = component.refresh();
-    for (let attempt = 0; attempt < 20 && !releaseProbe; attempt += 1) await new Promise(resolve => setImmediate(resolve));
-    assert.ok(releaseProbe);
-    component.handleInput("\u000e");
-    const movedDuringRefresh = component.selectedRunId;
-    releaseProbe?.();
-    await polling;
-    assert.equal(component.selectedRunId, movedDuringRefresh);
-    component.handleInput("R");
-    const list = component.render(160).join("\n");
-    assert.match(list, /Run palette flow.*running/);
-    assert.match(list, /ctrl\+s stop.*ctrl\+y copy ID.*ctrl\+a open tmux/);
-    const selected = component.selectedRunId;
-    component.handleInput("\r");
-    assert.equal(component.mode, "detail");
-    assert.equal(component.query, "R");
-    assert.equal(component.selectedRunId, selected);
-    assert.match(component.render(100).join("\n"), new RegExp(selected!));
-    component.handleInput("\u0010");
-    component.handleInput("\u001b");
-    assert.equal(component.mode, "list");
-    assert.equal(component.selectedRunId, selected);
-    component.handleInput("\u0019");
-    await new Promise(resolve => setImmediate(resolve));
-    assert.equal(copied, selected);
-    component.close();
+    component.focused = true; await component.refresh(); component.handleInput("R");
+    const list = component.render(160).join("\n"); assert.match(list, /Run palette flow.*running/); assert.doesNotMatch(list, /open tmux/);
+    const selected = component.selectedRunId; component.handleInput("\u0019"); await new Promise(resolve => setImmediate(resolve)); assert.equal(copied, selected);
+    component.handleInput("\r"); await new Promise(resolve => setImmediate(resolve));
+    assert.equal(closed, 1); assert.ok(calls.some(args => args[0] === "new-window" && args.includes(`sa-view-${selected!.slice(0, 8)}`)));
+    assert.deepEqual(calls.find(args => args[0] === "set-option")?.slice(-2), ["remain-on-exit", "off"]);
 });

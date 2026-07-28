@@ -21,7 +21,7 @@ export interface ManagedRunRefresh {
 export async function readReconciledRunSnapshot(exec: CommandExecutor, stateRoot: string, runId: string): Promise<RunSnapshot> {
     const paths = runPaths(stateRoot, runId);
     let snapshot = await readSnapshot(stateRoot, runId);
-    if (!isTerminalState(snapshot.status) && snapshot.tmux) {
+    if (!isTerminalState(snapshot.status) && snapshot.tmux && (await readStatus(paths)).schemaVersion !== 4) {
         const alive = await isTmuxPaneAlive(exec, snapshot.tmux.paneId);
         if (!alive) {
             if (snapshot.status === "stopping") await finishStoppedRun(paths, "forced");
@@ -119,7 +119,8 @@ export async function stopSubagentRun(options: {
     await requestRunStop(paths);
     const now = options.monotonicNow ?? (() => performance.now());
     const wait = options.sleep ?? sleep;
-    const deadline = now() + 2500;
+    const statusAtRequest = await readStatus(paths);
+    const deadline = now() + (statusAtRequest.schemaVersion === 4 ? 5000 : 2500);
     let snapshot = await readSnapshot(options.stateRoot, options.runId);
     while (!isTerminalState(snapshot.status) && now() < deadline) {
         throwIfAborted(options.signal);
@@ -128,9 +129,11 @@ export async function stopSubagentRun(options: {
     }
     if (!isTerminalState(snapshot.status)) {
         const status = await readStatus(paths);
+        if (status.schemaVersion === 4) {
+            throw new Error(`Run ${options.runId} stop request is durable but timed out; daemon/worker state: status=${status.status}, claim=${status.claim?.instanceId ?? "none"}, worker=${status.worker?.pid ?? "none"}`);
+        }
         if (status.tmux && await isTmuxPaneAlive(options.exec, status.tmux.paneId)) await killTmuxPane(options.exec, status.tmux.paneId);
-        await finishStoppedRun(paths, "forced");
-        snapshot = await readSnapshot(options.stateRoot, options.runId);
+        await finishStoppedRun(paths, "forced"); snapshot = await readSnapshot(options.stateRoot, options.runId);
     }
     if (!isTerminalState(snapshot.status)) throw new Error(`Run ${options.runId} could not be terminalized; current status is ${snapshot.status}`);
     const children = await immediateChildRequests(options.stateRoot, parent);
