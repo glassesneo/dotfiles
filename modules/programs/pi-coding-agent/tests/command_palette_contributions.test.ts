@@ -8,7 +8,7 @@ import {
     provideCommandPaletteContribution,
 } from "../extensions_src/utilities/command_palette_contributions.ts";
 
-test("contributions replace by stable owner/id and sort independently of registration order", () => {
+void test("contributions replace by stable owner/id and sort independently of registration order", () => {
     const registry = new CommandPaletteContributionRegistry(["model"]);
     assert.equal(registry.register({ owner: "z", id: "run", label: "Zulu", description: "z", run() {} }), true);
     assert.equal(registry.register({ owner: "a", id: "run", label: "Alpha", description: "a", run() {} }), true);
@@ -18,7 +18,7 @@ test("contributions replace by stable owner/id and sort independently of registr
     assert.equal(registry.list().length, 2);
 });
 
-test("provider registration and discovery handshake are idempotent across load order", () => {
+void test("provider registration and discovery handshake are idempotent across load order", () => {
     const bus = createEventBus();
     const registry = new CommandPaletteContributionRegistry();
     const unloadStaleProvider = provideCommandPaletteContribution(bus, { owner: "subagent", id: "runs", label: "Stale Subagents", description: "Runs", run() {} });
@@ -30,7 +30,7 @@ test("provider registration and discovery handshake are idempotent across load o
     assert.deepEqual(registry.list().map(item => [item.label, item.description]), [["Subagents", "Reloaded runs"]]);
 });
 
-test("malformed contribution payloads are ignored without executing handlers", () => {
+void test("malformed contribution payloads are ignored without executing handlers", () => {
     const registry = new CommandPaletteContributionRegistry();
     for (const value of [null, {}, { owner: "Bad Owner", id: "x", label: "X", description: "x", run() {} }, { owner: "x", id: "x", label: "", description: "x", run() {} }]) {
         assert.equal(registry.register(value), false);

@@ -81,7 +81,7 @@ function fakeControllerPi(flag = "scout") {
     };
 }
 
-test("profile extension applies CLI, guards tools, restores branches, and emits only successful applies", async () => {
+void test("profile extension applies CLI, guards tools, restores branches, and emits only successful applies", async () => {
     const { profilePath } = await fixture();
     const fake = fakeControllerPi("scout");
     registerProfileController(fake.pi, profilePath);
@@ -112,7 +112,7 @@ test("profile extension applies CLI, guards tools, restores branches, and emits 
     assert.equal((fake.events.at(-1)!.payload as any).reason, "restore");
 });
 
-test("active-profile event wrapper validates the complete payload", () => {
+void test("active-profile event wrapper validates the complete payload", () => {
     let eventHandler: ((value: unknown) => void) | undefined;
     const pi = {
         events: {
@@ -137,7 +137,7 @@ test("active-profile event wrapper validates the complete payload", () => {
     assert.match(errors[2] ?? "", /unknown keys/);
 });
 
-test("resolved child profile overlays the generic profile snapshot", async () => {
+void test("resolved child profile overlays the generic profile snapshot", async () => {
     const { profilePath } = await fixture();
     const pinned = {
         model: "provider/pinned", description: "Pinned exploration.", thinkingLevel: "low" as const, allowAllTools: false,
@@ -154,7 +154,7 @@ function toolContext(root: string): ExtensionContext {
     return { cwd: root, sessionManager: { getSessionId: () => "session", getSessionFile: () => join(root, "session.jsonl") } } as ExtensionContext;
 }
 
-test("subagent routing catalog exposes only active allowed targets in the model-facing prompt", async () => {
+void test("subagent routing catalog exposes only active allowed targets in the model-facing prompt", async () => {
     const value = await fixture();
     const handlers: Record<string, Array<(event: any, ctx: any) => any>> = {};
     const eventHandlers: Record<string, Array<(value: unknown) => void>> = {};
@@ -176,7 +176,7 @@ test("subagent routing catalog exposes only active allowed targets in the model-
     assert.doesNotMatch(patch.systemPrompt, /full: Broad coding work/);
 });
 
-test("delegation fails closed and rejects policy or depth before resource allocation", async () => {
+void test("delegation fails closed and rejects policy or depth before resource allocation", async () => {
     const fixtureValue = await fixture();
     let execCalls = 0;
     const exec = async () => { execCalls += 1; return { stdout: "$0\tmain\t%1\n", stderr: "", code: 0 }; };

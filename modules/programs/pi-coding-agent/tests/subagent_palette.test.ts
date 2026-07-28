@@ -13,7 +13,7 @@ import type { SubagentRuntimeConfig } from "../extensions_src/utilities/subagent
 
 const theme = { fg(_color: string, text: string) { return text; }, bg(_color: string, text: string) { return text; }, bold(text: string) { return text; } } as Theme;
 
-test("subagent palette polls serially, renders textual empty state within width, and disposes on cancel", async () => {
+void test("subagent palette polls serially, renders textual empty state within width, and disposes on cancel", async () => {
     let renders = 0; let closed = 0; let timer: (() => void) | undefined; let clears = 0;
     const component = new SubagentPaletteComponent({
         tui: { terminal: { rows: 24, columns: 80 }, requestRender() { renders += 1; } } as TUI,
@@ -45,7 +45,7 @@ test("subagent palette polls serially, renders textual empty state within width,
     assert.equal(renders, before);
 });
 
-test("list Enter opens an on-demand replay window and copy remains available", async () => {
+void test("list Enter opens an on-demand replay window and copy remains available", async () => {
     const root = await mkdtemp(join(tmpdir(), "subagent-palette-ui-"));
     const config: SubagentRuntimeConfig = { schemaVersion: 1, stateRoot: join(root, "runs"), runner: { node: "/node", script: "/runner", extensions: ["/extension"] }, harnesses: { pi: { command: "/pi" } }, maxDepth: 3 };
     const profile: AgentProfile = { model: "provider/model", description: "Test.", allowAllTools: true, tools: [], extensions: {} };
@@ -57,7 +57,7 @@ test("list Enter opens an on-demand replay window and copy remains available", a
     await patchStatus(second.paths, { status: "starting" });
     await attachTmux(second.paths, { sessionId: "$1", session: "main", windowId: "@2", paneId: "%2", windowName: "sa-second" });
     await patchStatus(second.paths, { status: "running", startedAt: new Date().toISOString() });
-    let copied = ""; let timer: (() => void) | undefined; const calls: string[][] = []; let closed = 0;
+    let copied = ""; let _timer: (() => void) | undefined; const calls: string[][] = []; let closed = 0;
     const component = new SubagentPaletteComponent({
         tui: { terminal: { rows: 30, columns: 100 }, requestRender() {} } as TUI, theme,
         ui: { async confirm() { return false; } }, keymap: resolvePaletteKeymap(),
@@ -65,8 +65,8 @@ test("list Enter opens an on-demand replay window and copy remains available", a
             stateRoot: config.stateRoot, originSessionId: "session", env: { TMUX: "yes" }, configPath: "/config", node: "/node", viewer: "/viewer", cwd: root,
             exec: async (_command, args) => { calls.push(args); if (args[0] === "display-message") return { stdout: "$1\tmain\t%0\n", stderr: "", code: 0 }; if (args[0] === "new-window") return { stdout: "@9\t%9\n", stderr: "", code: 0 }; return { stdout: "", stderr: "", code: 0 }; },
             copy: async value => { copied = value; },
-            setTimeout: ((callback: () => void) => { timer = callback; return 1 as never; }) as unknown as typeof setTimeout,
-            clearTimeout: (() => { timer = undefined; }) as typeof clearTimeout,
+            setTimeout: ((callback: () => void) => { _timer = callback; return 1 as never; }) as unknown as typeof setTimeout,
+            clearTimeout: (() => { _timer = undefined; }) as typeof clearTimeout,
         }, done() { closed += 1; },
     });
     component.focused = true; await component.refresh(); component.handleInput("R");

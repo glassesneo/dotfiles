@@ -1,6 +1,6 @@
 const modifierOrder = ["ctrl", "shift", "alt"] as const;
 const modifiers = new Set<string>(modifierOrder);
-const namedOrSymbolKey = /^(escape|esc|enter|return|tab|space|backspace|delete|insert|clear|home|end|pageUp|pageDown|up|down|left|right|f(?:[1-9]|1[0-2])|[`\-=\[\]\\;',./!@#$%^&*()_+|~{}:<>?])$/;
+const namedOrSymbolKey = /^(escape|esc|enter|return|tab|space|backspace|delete|insert|clear|home|end|pageUp|pageDown|up|down|left|right|f(?:[1-9]|1[0-2])|[`\-=[\]\\;',./!@#$%^&*()_+|~{}:<>?])$/;
 
 export function isValidKeyId(key: string): boolean {
     const parts = key.split("+");

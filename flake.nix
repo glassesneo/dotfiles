@@ -136,8 +136,34 @@
           program = lib.getExe syncPiExtensionVersions;
         };
 
-        checks =
-          lib.optionalAttrs (system == "aarch64-darwin") (let
+        checks = let
+          piCustomizations = {
+            pi-customizations = pkgs.buildNpmPackage {
+              pname = "pi-customizations-check";
+              version = "0";
+              src = ./modules/programs/pi-coding-agent;
+
+              npmDepsHash = "sha256-Qw6kEXFEofwWUVieD4Fhf7XhRESbSodTjHxLI1ZPmCI=";
+              npmDepsFetcherVersion = 2;
+
+              dontNpmBuild = true;
+              doCheck = true;
+              checkPhase = ''
+                runHook preCheck
+                npm run check
+                runHook postCheck
+              '';
+              installPhase = ''
+                runHook preInstall
+                mkdir -p $out
+                touch $out/success
+                runHook postInstall
+              '';
+            };
+          };
+        in
+          piCustomizations
+          // lib.optionalAttrs (system == "aarch64-darwin") (let
             homeConfigs = inputs.self.homeConfigurations;
 
             hmChecks =

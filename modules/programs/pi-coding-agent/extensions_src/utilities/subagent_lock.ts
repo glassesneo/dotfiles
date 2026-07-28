@@ -26,6 +26,15 @@ async function readOwner(lockDirectory: string): Promise<LockOwner | undefined> 
     } catch { return undefined; }
 }
 
+async function removeQuarantine(quarantine: string): Promise<void> {
+    await rm(quarantine, {
+        recursive: true,
+        force: true,
+        maxRetries: 3,
+        retryDelay: RETRY_DELAY_MS,
+    });
+}
+
 async function tryReclaim(lockDirectory: string): Promise<boolean> {
     const claimPath = join(lockDirectory, "reclaim");
     const temporary = `${lockDirectory}.reclaim.${process.pid}.${randomUUID()}.tmp`;
@@ -63,7 +72,7 @@ async function tryReclaim(lockDirectory: string): Promise<boolean> {
             const quarantine = `${lockDirectory}.stale.${process.pid}.${randomUUID()}`;
             await rename(lockDirectory, quarantine);
             removed = true;
-            await rm(quarantine, { recursive: true, force: true });
+            await removeQuarantine(quarantine);
         }
         return removed;
     } finally {
@@ -88,21 +97,29 @@ export async function withRunLock<T>(runDirectory: string, operation: () => Prom
             await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
             continue;
         }
+        let operationResult!: T;
+        let operationError: unknown;
+        let operationSucceeded = false;
         try {
             await writeFile(join(lockDirectory, "owner.json"), `${JSON.stringify(owner)}\n`, { encoding: "utf8", mode: 0o600 });
-            return await operation();
-        } finally {
-            const current = await readOwner(lockDirectory);
-            if (current?.token === owner.token || current === undefined) {
-                const quarantine = `${lockDirectory}.release.${process.pid}.${randomUUID()}`;
-                try {
-                    await rename(lockDirectory, quarantine);
-                    await rm(quarantine, { recursive: true, force: true });
-                } catch (error) {
-                    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-                }
+            operationResult = await operation();
+            operationSucceeded = true;
+        } catch (error) {
+            operationError = error;
+        }
+
+        const current = await readOwner(lockDirectory);
+        if (current?.token === owner.token || current === undefined) {
+            const quarantine = `${lockDirectory}.release.${process.pid}.${randomUUID()}`;
+            try {
+                await rename(lockDirectory, quarantine);
+                await removeQuarantine(quarantine);
+            } catch (error) {
+                if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
             }
         }
+        if (!operationSucceeded) throw operationError;
+        return operationResult;
     }
     throw new Error(`Timed out acquiring subagent run lock: ${runDirectory}`);
 }

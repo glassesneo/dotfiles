@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { chmod, readFile, writeFile } from "node:fs/promises";
+import { chmod, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { ResolvedRun, RunResult, TranscriptCapabilities } from "./subagent_types.ts";
 import { isTerminalState } from "./subagent_types.ts";

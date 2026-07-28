@@ -29,10 +29,10 @@ function usage(input = 1) {
     };
 }
 
-test("bounded serializer measures escaped UTF-8 JSON and links full terminal output", () => {
+void test("bounded serializer measures escaped UTF-8 JSON and links full terminal output", () => {
     const runId = "550e8400-e29b-41d4-a716-446655440000";
     const resultPath = `/tmp/${runId}/result.json`;
-    const output = `quote:\" slash:\\\ncontrol:\u0001 emoji:😀\n`.repeat(10_000);
+    const output = `quote:" slash:\\\ncontrol:\u0001 emoji:😀\n`.repeat(10_000);
     const snapshot: RunSnapshot = {
         schemaVersion: 3, runId, purpose: "Bound output", profile: "full", status: "succeeded", createdAt: "now", finishedAt: "now",
         runDirectory: `/tmp/${runId}`,
@@ -52,7 +52,7 @@ test("bounded serializer measures escaped UTF-8 JSON and links full terminal out
     assert.doesNotThrow(() => JSON.parse(oversized));
 });
 
-test("start, get, and wait serializers bound accepted oversized profile metadata", () => {
+void test("start, get, and wait serializers bound accepted oversized profile metadata", () => {
     const runId = "550e8400-e29b-41d4-a716-446655440000";
     const profile = "profile-".repeat(20_000);
     const snapshot: RunSnapshot = {
@@ -83,7 +83,7 @@ test("start, get, and wait serializers bound accepted oversized profile metadata
     }
 });
 
-test("maximum wait cardinality retains per-run observability after metadata compaction", () => {
+void test("maximum wait cardinality retains per-run observability after metadata compaction", () => {
     const runs = Array.from({ length: 128 }, (_, index) => ({
         runId: `${index.toString().padStart(8, "0")}-0000-4000-8000-000000000000`,
         purpose: "😀".repeat(120),
@@ -101,7 +101,7 @@ test("maximum wait cardinality retains per-run observability after metadata comp
     assert.ok(parsed.runs?.every(run => run.purpose.length > 0 && run.profile.length > 0 && run.status === "succeeded"));
 });
 
-test("handoff serializer preserves every child identity and status before prompt previews", () => {
+void test("handoff serializer preserves every child identity and status before prompt previews", () => {
     const children = Array.from({ length: 128 }, (_, index) => ({
         runId: `${index.toString().padStart(8, "0")}-0000-4000-8000-000000000000`,
         purpose: "😀".repeat(120),
@@ -117,8 +117,8 @@ test("handoff serializer preserves every child identity and status before prompt
     assert.deepEqual(parsed.children.map(child => child.status), children.map(child => child.status));
 });
 
-test("minimal summary serializer bounds escaped UTF-8 fairly without exposing paths", () => {
-    const output = `quote:\" slash:\\\ncontrol:\u0001 emoji:😀\n`.repeat(10_000);
+void test("minimal summary serializer bounds escaped UTF-8 fairly without exposing paths", () => {
+    const output = `quote:" slash:\\\ncontrol:\u0001 emoji:😀\n`.repeat(10_000);
     const text = boundedSummaryJson({
         reason: "condition_met",
         runs: [
@@ -135,7 +135,7 @@ test("minimal summary serializer bounds escaped UTF-8 fairly without exposing pa
     assert.doesNotMatch(text, /resultRoot|resultFile|paths|runDirectory/);
 });
 
-test("minimal summary serializer bounds oversized failure messages", () => {
+void test("minimal summary serializer bounds oversized failure messages", () => {
     const text = boundedSummaryJson({
         runId: "run-1",
         purpose: "Failure",
@@ -150,7 +150,7 @@ test("minimal summary serializer bounds oversized failure messages", () => {
     assert.equal(parsed.error.exitCode, 17);
 });
 
-test("a failed later usage claim rolls back earlier claims for a safe retry", async () => {
+void test("a failed later usage claim rolls back earlier claims for a safe retry", async () => {
     const snapshots = ["run-1", "run-2"].map(runId => ({
         schemaVersion: 3 as const,
         runId,
@@ -185,7 +185,7 @@ test("a failed later usage claim rolls back earlier claims for a safe retry", as
     assert.deepEqual(released, ["run-1"]);
 });
 
-test("first terminal get returns top-level Pi usage and repeated get does not", async () => {
+void test("first terminal get returns top-level Pi usage and repeated get does not", async () => {
     const root = await mkdtemp(join(tmpdir(), "usage-tool-"));
     const cfg = config(root);
     const configPath = join(root, "subagent.json");
@@ -215,7 +215,7 @@ test("first terminal get returns top-level Pi usage and repeated get does not", 
     assert.deepEqual(second.details.accounting.claimedRunIds, []);
 });
 
-test("usage claim is exclusive across concurrent and repeated observers", async () => {
+void test("usage claim is exclusive across concurrent and repeated observers", async () => {
     const root = await mkdtemp(join(tmpdir(), "usage-claim-"));
     const cfg = config(root);
     const run = await createRun(cfg, "full", fullProfile, "Exclusive claim", "task", root, { callerProfile: "full", depth: 1, originSessionId: "session" });

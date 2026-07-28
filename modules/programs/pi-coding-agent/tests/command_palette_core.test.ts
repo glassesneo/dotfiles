@@ -2,13 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { extractLastAssistantText, filterPaletteItems, formatContextUsage, summarizeSession } from "../extensions_src/utilities/command_palette_core.ts";
 
-test("palette filtering searches labels, descriptions, keywords, and state", () => {
+void test("palette filtering searches labels, descriptions, keywords, and state", () => {
     const items = [{ value: "model", label: "Select model", description: "Choose provider", keywords: ["llm"], state: "Current: x" }, { value: "theme", label: "Theme" }];
     assert.deepEqual(filterPaletteItems(items, "provider current").map(item => item.value), ["model"]);
     assert.deepEqual(filterPaletteItems(items, "LLM").map(item => item.value), ["model"]);
 });
 
-test("last response extraction uses only the active entries passed and only text blocks", () => {
+void test("last response extraction uses only the active entries passed and only text blocks", () => {
     const entries = [
         { type: "message", message: { role: "assistant", content: [{ type: "text", text: "old" }] } },
         { type: "message", message: { role: "assistant", content: [{ type: "thinking", thinking: "secret" }] } },
@@ -18,7 +18,7 @@ test("last response extraction uses only the active entries passed and only text
     assert.equal(extractLastAssistantText([{ type: "message", message: { role: "assistant", content: [{ type: "thinking" }] } }]), undefined);
 });
 
-test("session summary counts messages, calls, results, and context", () => {
+void test("session summary counts messages, calls, results, and context", () => {
     const summary = summarizeSession([
         { type: "message", message: { role: "user", content: "hi" } },
         { type: "message", message: { role: "assistant", content: [{ type: "toolCall" }, { type: "text" }] } },

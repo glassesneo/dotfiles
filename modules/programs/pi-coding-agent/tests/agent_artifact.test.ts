@@ -31,7 +31,7 @@ function toolParams(kind: "design" | "decision-record", slug: string, content: s
     return { kind, slug, content, pendingId } as never;
 }
 
-test("artifact parameters accept design and decision-record with optional pending ids", () => {
+void test("artifact parameters accept design and decision-record with optional pending ids", () => {
     assert.equal(Value.Check(artifactParameters, { kind: "design", slug: "pi-workflow", content: "design" }), true);
     assert.equal(Value.Check(artifactParameters, { kind: "decision-record", slug: "pi-workflow-2", content: "record", pendingId: "20260718-003145-pi-workflow" }), true);
 
@@ -48,16 +48,16 @@ test("artifact parameters accept design and decision-record with optional pendin
     }
 });
 
-test("only the design kind requires its own approval", () => {
+void test("only the design kind requires its own approval", () => {
     assert.equal(requiresApproval("design"), true);
     assert.equal(requiresApproval("decision-record"), false);
 });
 
-test("JST timestamps are deterministic for an injected date", () => {
+void test("JST timestamps are deterministic for an injected date", () => {
     assert.equal(getJstTimestamp(fixedDate), "20260718-003145");
 });
 
-test("pending creation writes content and metadata outside final directories", async t => {
+void test("pending creation writes content and metadata outside final directories", async t => {
     const root = await makeTemporaryRoot(t);
     const pending = await createOrUpdatePendingArtifact({
         cwd: root,
@@ -78,7 +78,7 @@ test("pending creation writes content and metadata outside final directories", a
     await assert.rejects(readdir(join(root, ".agents", "designs")));
 });
 
-test("parallel pending creation reserves distinct ids without losing content", async t => {
+void test("parallel pending creation reserves distinct ids without losing content", async t => {
     const root = await makeTemporaryRoot(t);
     const [first, second] = await Promise.all([
         createOrUpdatePendingArtifact({ cwd: root, kind: "design", slug: "parallel", content: "first", now: fixedDate }),
@@ -89,7 +89,7 @@ test("parallel pending creation reserves distinct ids without losing content", a
     assert.deepEqual(new Set([await readFile(first.pendingPath, "utf8"), await readFile(second.pendingPath, "utf8")]), new Set(["first", "second"]));
 });
 
-test("summary extraction prefers the Summary section over status metadata", async t => {
+void test("summary extraction prefers the Summary section over status metadata", async t => {
     const root = await makeTemporaryRoot(t);
     const pending = await createOrUpdatePendingArtifact({
         cwd: root,
@@ -114,7 +114,7 @@ test("summary extraction prefers the Summary section over status metadata", asyn
     assert.equal(pending.summary, "Use the real summary even when it spans lines.");
 });
 
-test("summary extraction falls back to non-metadata body paragraphs", async t => {
+void test("summary extraction falls back to non-metadata body paragraphs", async t => {
     const root = await makeTemporaryRoot(t);
     const pending = await createOrUpdatePendingArtifact({
         cwd: root,
@@ -136,7 +136,7 @@ test("summary extraction falls back to non-metadata body paragraphs", async t =>
     assert.equal(pending.summary, "First useful fallback paragraph continues here.");
 });
 
-test("summary extraction reports no summary when no body paragraph exists", async t => {
+void test("summary extraction reports no summary when no body paragraph exists", async t => {
     const root = await makeTemporaryRoot(t);
     const pending = await createOrUpdatePendingArtifact({
         cwd: root,
@@ -149,7 +149,7 @@ test("summary extraction reports no summary when no body paragraph exists", asyn
     assert.equal(pending.summary, "No summary available.");
 });
 
-test("approval lock reclaims an ownerless lock left before owner publication", async t => {
+void test("approval lock reclaims an ownerless lock left before owner publication", async t => {
     const root = await makeTemporaryRoot(t);
     const pendingDirectory = join(root, ".agents", "pending-artifacts");
     const pendingId = "20260718-003145-lock-recovery";
@@ -159,7 +159,7 @@ test("approval lock reclaims an ownerless lock left before owner publication", a
     assert.equal(called, true);
 });
 
-test("approve promotes pending content to final and keeps metadata", async t => {
+void test("approve promotes pending content to final and keeps metadata", async t => {
     const root = await makeTemporaryRoot(t);
     const pending = await createOrUpdatePendingArtifact({ cwd: root, kind: "design", slug: "pi-workflow", content: "# Design\n", now: fixedDate });
     const approved = await approvePendingArtifact(root, pending.id, fixedDate);
@@ -172,7 +172,7 @@ test("approve promotes pending content to final and keeps metadata", async t => 
     assert.equal(recovered.state, "approved");
 });
 
-test("approval uses -v2 without clobbering an existing final", async t => {
+void test("approval uses -v2 without clobbering an existing final", async t => {
     const root = await makeTemporaryRoot(t);
     const directory = join(root, ".agents", "designs");
     const existingPath = join(directory, "20260718-003145-pi-workflow.md");
@@ -185,7 +185,7 @@ test("approval uses -v2 without clobbering an existing final", async t => {
     assert.equal(await readFile(approved.finalPath!, "utf8"), "new");
 });
 
-test("parallel approval of different pending artifacts preserves every content", async t => {
+void test("parallel approval of different pending artifacts preserves every content", async t => {
     const root = await makeTemporaryRoot(t);
     const first = await createOrUpdatePendingArtifact({ cwd: root, kind: "design", slug: "parallel", content: "first", now: fixedDate });
     const second = await createOrUpdatePendingArtifact({ cwd: root, kind: "design", slug: "parallel", content: "second", now: fixedDate });
@@ -203,7 +203,7 @@ test("parallel approval of different pending artifacts preserves every content",
     ]);
 });
 
-test("parallel approval of the same pending id is serialized and idempotent", async t => {
+void test("parallel approval of the same pending id is serialized and idempotent", async t => {
     const root = await makeTemporaryRoot(t);
     const pending = await createOrUpdatePendingArtifact({ cwd: root, kind: "design", slug: "same-pending", content: "one copy", now: fixedDate });
 
@@ -217,7 +217,7 @@ test("parallel approval of the same pending id is serialized and idempotent", as
     assert.deepEqual(await readdir(join(root, ".agents", "pending-artifacts")), [`${pending.id}.json`]);
 });
 
-test("approved metadata is idempotent and does not allocate another suffix", async t => {
+void test("approved metadata is idempotent and does not allocate another suffix", async t => {
     const root = await makeTemporaryRoot(t);
     const pending = await createOrUpdatePendingArtifact({ cwd: root, kind: "design", slug: "retry-approved", content: "content", now: fixedDate });
     const first = await approvePendingArtifact(root, pending.id, fixedDate);
@@ -227,7 +227,7 @@ test("approved metadata is idempotent and does not allocate another suffix", asy
     assert.deepEqual(await readdir(join(root, ".agents", "designs")), ["20260718-003145-retry-approved.md"]);
 });
 
-test("approval recovers an injected interruption after final creation and before metadata update", async t => {
+void test("approval recovers an injected interruption after final creation and before metadata update", async t => {
     const root = await makeTemporaryRoot(t);
     const pending = await createOrUpdatePendingArtifact({ cwd: root, kind: "design", slug: "recover", content: "recover me", now: fixedDate });
     const directory = join(root, ".agents", "designs");
@@ -244,7 +244,7 @@ test("approval recovers an injected interruption after final creation and before
     assert.deepEqual(await readdir(join(root, ".agents", "pending-artifacts")), [`${pending.id}.json`]);
 });
 
-test("revision request preserves pending and allows same id update", async t => {
+void test("revision request preserves pending and allows same id update", async t => {
     const root = await makeTemporaryRoot(t);
     const pending = await createOrUpdatePendingArtifact({ cwd: root, kind: "design", slug: "pi-workflow", content: "old", now: fixedDate });
     const revision = await requestPendingArtifactRevision(root, pending.id, "add criteria", fixedDate);
@@ -258,7 +258,7 @@ test("revision request preserves pending and allows same id update", async t => 
     assert.equal(await readFile(updated.pendingPath, "utf8"), "new");
 });
 
-test("tool fails closed without UI after creating only a pending design", async t => {
+void test("tool fails closed without UI after creating only a pending design", async t => {
     const root = await makeTemporaryRoot(t);
     const tool = createAgentArtifactToolDefinition();
     const result = await tool.execute(
@@ -275,7 +275,7 @@ test("tool fails closed without UI after creating only a pending design", async 
     await assert.rejects(readdir(join(root, ".agents", "designs")));
 });
 
-test("decision records are saved directly without an approval prompt", async t => {
+void test("decision records are saved directly without an approval prompt", async t => {
     const root = await makeTemporaryRoot(t);
     const tool = createAgentArtifactToolDefinition();
     const content = "# Decision Record\n\nWhy the direction changed.\n";
@@ -294,7 +294,7 @@ test("decision records are saved directly without an approval prompt", async t =
     assert.match(resultText(result.content[0]), /does not need its own approval/);
 });
 
-test("tool approve/revision/reject UI statuses and action notes are deterministic", async t => {
+void test("tool approve/revision/reject UI statuses and action notes are deterministic", async t => {
     const root = await makeTemporaryRoot(t);
     const tool = createAgentArtifactToolDefinition();
 
@@ -367,7 +367,7 @@ test("tool approve/revision/reject UI statuses and action notes are deterministi
     assert.equal(rejected.details.actionNote, "not needed");
 });
 
-test("blank revision notes re-prompt without recording an instructionless revision", async t => {
+void test("blank revision notes re-prompt without recording an instructionless revision", async t => {
     const root = await makeTemporaryRoot(t);
     const tool = createAgentArtifactToolDefinition();
     const selects = [
@@ -398,7 +398,7 @@ test("blank revision notes re-prompt without recording an instructionless revisi
     assert.deepEqual(notifications, ["Enter a non-blank note to continue."]);
 });
 
-test("View full text displays pending content and loops back to approval", async t => {
+void test("View full text displays pending content and loops back to approval", async t => {
     const root = await makeTemporaryRoot(t);
     const tool = createAgentArtifactToolDefinition();
     const content = "# Design\n\nFull body.\n";
@@ -429,7 +429,7 @@ test("View full text displays pending content and loops back to approval", async
     assert.equal(editorCalls.filter(call => call.title.startsWith("Full text:")).length, 1);
 });
 
-test("pending creation rejects an invalid slug before writing", async t => {
+void test("pending creation rejects an invalid slug before writing", async t => {
     const root = await makeTemporaryRoot(t);
     await assert.rejects(
         createOrUpdatePendingArtifact({ cwd: root, kind: "design", slug: "Invalid Slug", content: "content", now: fixedDate }),

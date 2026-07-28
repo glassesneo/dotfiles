@@ -14,25 +14,25 @@ function harness() {
     return { component, results, get renders() { return renders; } };
 }
 
-test("Ctrl-N and Ctrl-P wrap selection without changing search", () => {
+void test("Ctrl-N and Ctrl-P wrap selection without changing search", () => {
     const h = harness(); h.component.handleInput("a"); const query = h.component.query;
     h.component.handleInput(keys.up); assert.equal(h.component.selectedIndex, 2); assert.equal(h.component.query, query);
     h.component.handleInput(keys.down); assert.equal(h.component.selectedIndex, 0); assert.equal(h.component.query, query);
 });
 
-test("confirm and both cancellation keys are consumed by the palette", () => {
+void test("confirm and both cancellation keys are consumed by the palette", () => {
     const selected = harness(); selected.component.handleInput(keys.down); selected.component.handleInput(keys.enter); assert.deepEqual(selected.results, ["b"]);
     const escaped = harness(); escaped.component.handleInput(keys.escape); assert.deepEqual(escaped.results, [null]);
     const cancelled = harness(); cancelled.component.handleInput(keys.ctrlC); assert.deepEqual(cancelled.results, [null]);
 });
 
-test("search focus, textual marker, help, disabled state, and narrow rendering are visible", () => {
+void test("search focus, textual marker, help, disabled state, and narrow rendering are visible", () => {
     const h = harness(); assert.equal(h.component.focused, true); const rendered = h.component.render(80).join("\n");
     assert.match(rendered, /> Alpha/); assert.match(rendered, /ctrl\+p up.*ctrl\+n down/);
     for (const width of [20, 8, 1]) for (const line of h.component.render(width)) assert.ok(visibleWidth(line) <= width);
 });
 
-test("filtering and status changes preserve overlay height and input position", () => {
+void test("filtering and status changes preserve overlay height and input position", () => {
     const h = harness();
     const initial = h.component.render(80);
     assert.equal(initial.length, paletteTargetRows(24, true));
@@ -48,13 +48,13 @@ test("filtering and status changes preserve overlay height and input position", 
     assert.equal(h.component.render(80).length, initial.length);
 });
 
-test("palette height stays compact on standard and tall terminals", () => {
+void test("palette height stays compact on standard and tall terminals", () => {
     assert.equal(paletteTargetRows(24, true), 15);
     assert.equal(paletteTargetRows(50, true), 18);
     assert.equal(paletteTargetRows(24, false), 15);
 });
 
-test("palette lists open as centered overlays", async () => {
+void test("palette lists open as centered overlays", async () => {
     let customOptions: { overlay?: boolean; overlayOptions?: { anchor?: string; maxHeight?: string } } | undefined;
     const result = await runPaletteList({ async custom(factory: any, options: any) {
         customOptions = options;

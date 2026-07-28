@@ -8,7 +8,7 @@ const manager = { getKeys(action: string) { return ({
     "tui.input.submit": ["enter"], "tui.input.newLine": ["shift+enter", "ctrl+j"],
 } as Record<string, string[]>)[action] ?? []; } } as never;
 
-test("all contexts resolve expected defaults without retired question keys", () => {
+void test("all contexts resolve expected defaults without retired question keys", () => {
     const map = resolveQuestionKeymap(manager);
     assert.equal(resolveUiAction("\r", "question.text", map), "accept");
     assert.equal(resolveUiAction("\n", "question.text", map), "newline");
@@ -23,18 +23,18 @@ test("all contexts resolve expected defaults without retired question keys", () 
     assert.equal(resolveUiAction("\u0003", "question.review", map), "cancel");
 });
 
-test("overrides replace an action and generated help contains every key", () => {
+void test("overrides replace an action and generated help contains every key", () => {
     const map = resolveQuestionKeymap(manager, { "question.single": { "edit-note": ["alt+e", "ctrl+e"] } });
     const item = detailedQuestionHelp("question.single", map).find(entry => entry.action === "edit-note");
     assert.deepEqual(item?.keys, ["alt+e", "ctrl+e"]);
 });
 
-test("question key validation preserves the shared key ID grammar", () => {
+void test("question key validation preserves the shared key ID grammar", () => {
     for (const key of validKeyIds) assert.doesNotThrow(() => validateQuestionKeymapConfig({ "question.single": { accept: [key] } }));
     for (const key of invalidKeyIds) assert.throws(() => validateQuestionKeymapConfig({ "question.single": { accept: [key] } }), /invalid key/);
 });
 
-test("configuration rejects unknown data, conflicts, and required action removal", () => {
+void test("configuration rejects unknown data, conflicts, and required action removal", () => {
     assert.throws(() => validateQuestionKeymapConfig({ "question.unknown": {} }), /unknown context/);
     assert.throws(() => validateQuestionKeymapConfig({ "question.single": { unknown: ["x"] } }), /unknown action/);
     assert.throws(() => validateQuestionKeymapConfig({ "question.single": { accept: ["not-a-key"] } }), /invalid key/);

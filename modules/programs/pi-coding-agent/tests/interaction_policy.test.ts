@@ -11,11 +11,11 @@ function scenario(idle: boolean, initial: string) {
     return { text, aborts, clears };
 }
 
-test("Ctrl-C aborts active work before touching editor text", () => {
+void test("Ctrl-C aborts active work before touching editor text", () => {
     assert.deepEqual(scenario(false, "draft"), { text: "draft", aborts: 1, clears: 0 });
 });
 
-test("Ctrl-C clears idle non-empty input and is inert for idle empty input", () => {
+void test("Ctrl-C clears idle non-empty input and is inert for idle empty input", () => {
     assert.deepEqual(scenario(true, "draft"), { text: "", aborts: 0, clears: 1 });
     assert.deepEqual(scenario(true, ""), { text: "", aborts: 0, clears: 0 });
 });

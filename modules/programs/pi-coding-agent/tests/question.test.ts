@@ -23,7 +23,7 @@ const params = {
   ],
 };
 
-test("extension registers sequential question metadata and model guidance", () => {
+void test("extension registers sequential question metadata and model guidance", () => {
   let registered: ReturnType<typeof createQuestionToolDefinition> | undefined;
   registerQuestion({
     registerTool(tool) {
@@ -42,7 +42,7 @@ test("extension registers sequential question metadata and model guidance", () =
   assert.ok(questionPromptGuidelines.some(line => /yes\/no/.test(line)));
 });
 
-test("non-interactive and print modes return unavailable without UI", async () => {
+void test("non-interactive and print modes return unavailable without UI", async () => {
   const tool = createQuestionToolDefinition();
   for (const mode of ["print", "json"] as const) {
     const result = await tool.execute(
@@ -57,7 +57,7 @@ test("non-interactive and print modes return unavailable without UI", async () =
   }
 });
 
-test("RPC dispatch uses standard dialogs and preserves content/details", async () => {
+void test("RPC dispatch uses standard dialogs and preserves content/details", async () => {
   const tool = createQuestionToolDefinition();
   const script = ["[ ] B", "because", "Submit responses"];
   const result = await tool.execute(
@@ -87,7 +87,7 @@ test("RPC dispatch uses standard dialogs and preserves content/details", async (
   assert.deepEqual(JSON.parse(resultText(result.content[0])), result.details);
 });
 
-test("TUI dispatch uses one custom UI through confirmation", async () => {
+void test("TUI dispatch uses one custom UI through confirmation", async () => {
   const tool = createQuestionToolDefinition();
   let customCalls = 0;
   const result = await tool.execute(
@@ -136,7 +136,7 @@ test("TUI dispatch uses one custom UI through confirmation", async () => {
   });
 });
 
-test("tool renderers show question prompts, responses, notes, and untouched state", () => {
+void test("tool renderers show question prompts, responses, notes, and untouched state", () => {
   const tool = createQuestionToolDefinition();
   const renderTheme = { fg: (_color: string, text: string) => text } as never;
   const args = {
@@ -166,7 +166,7 @@ test("tool renderers show question prompts, responses, notes, and untouched stat
   assert.match(collapsedText, /Explain — Unanswered — note: need another path/);
 });
 
-test("runtime contract violations throw tool errors before UI", async () => {
+void test("runtime contract violations throw tool errors before UI", async () => {
   const tool = createQuestionToolDefinition();
   await assert.rejects(
     tool.execute(

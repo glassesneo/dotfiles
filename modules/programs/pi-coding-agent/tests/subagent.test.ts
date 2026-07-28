@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { chmod, mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import test from "node:test";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { createSubagentStartTool, registerSubagent, type SubagentDependencies } from "../extensions_src/subagent.ts";
@@ -22,21 +22,21 @@ async function fixture(): Promise<{ root: string; config: SubagentRuntimeConfig;
     return { root, config, configPath, profilePath };
 }
 
-test("extension registers supervisor-managed tools without tmux", async () => {
+void test("extension registers supervisor-managed tools without tmux", async () => {
     const registered: string[] = [];
     const pi = { registerTool(tool: { name: string }) { registered.push(tool.name); }, registerCommand() {}, on() {}, events: { on() { return () => {}; }, emit() {} }, async exec() { return { stdout: "", stderr: "", code: 1, killed: false }; }, getActiveTools() { return []; } } as unknown as ExtensionAPI;
     assert.equal(await registerSubagent(pi, { env: {} }), true);
     assert.deepEqual(registered, ["subagent_start", "subagent_get", "subagent_wait", "subagent_stop"]);
 });
 
-test("start refuses an unavailable supervisor before creating a run directory", async () => {
+void test("start refuses an unavailable supervisor before creating a run directory", async () => {
     const value = await fixture();
     const deps: SubagentDependencies = { configPath: value.configPath, profileConfigPath: value.profilePath, env: {}, exec: async () => ({ stdout: "", stderr: "", code: 1 }), activeProfile: () => ({ name: "full", facet: { allowedTargets: ["full"], harness: "pi" } }) };
     await assert.rejects(createSubagentStartTool(deps).execute("call", { profile: "full", purpose: "Unavailable", prompt: "task" }, undefined, undefined, context(value.root)), /supervisor is unavailable/);
     assert.deepEqual(await readdir(value.config.stateRoot).catch(() => []), []);
 });
 
-test("supervisor launches a v4 worker without tmux and persists tool results for replay", async () => {
+void test("supervisor launches a v4 worker without tmux and persists tool results for replay", async () => {
     const value = await fixture(); const fakePi = join(value.root, "fake-pi.sh");
     await writeFile(fakePi, `#!/bin/sh\ncat >/dev/null\nprintf '%s\\n' '${JSON.stringify({ type: "tool_execution_start", toolCallId: "tool-1", toolName: "read", args: { path: "README" } })}'\nprintf '%s\\n' '${JSON.stringify({ type: "tool_execution_end", toolCallId: "tool-1", toolName: "read", isError: false, result: { content: [{ type: "text", text: "model-visible result" }], usage: { totalTokens: 2, cost: { total: 0 } } } })}'\nprintf '%s\\n' '${JSON.stringify({ type: "message_update", assistantMessageEvent: { type: "text_delta", delta: "done" } })}'\nprintf '%s\\n' '${JSON.stringify({ type: "message_end", message: { role: "assistant", content: [{ type: "text", text: "done" }], stopReason: "end", usage: { input: 1, output: 1, totalTokens: 2, cost: { total: 0 } } } })}'\n`); await chmod(fakePi, 0o700); value.config.harnesses.pi.command = fakePi;
     const run = await createRun(value.config, "full", profile, "Supervisor run", "inspect the repository", value.root, { callerProfile: "full", depth: 1, originSessionId: "session" });
@@ -51,13 +51,13 @@ test("supervisor launches a v4 worker without tmux and persists tool results for
     const replay = await renderReplay(value.config.stateRoot, run.request.runId); assert.match(replay, /Parent instruction:\ninspect the repository/); assert.match(replay, /model-visible result/); assert.match(replay, /Usage: 4 tokens/);
 });
 
-test("supervisor deterministically terminalizes a running run with no verifiable worker", async () => {
+void test("supervisor deterministically terminalizes a running run with no verifiable worker", async () => {
     const value = await fixture(); const run = await createRun(value.config, "full", profile, "Lost worker", "task", value.root, { callerProfile: "full", depth: 1, originSessionId: "session" });
     const old = new Date(Date.now() - 10_000).toISOString(); await patchStatus(run.paths, { status: "starting", claim: { instanceId: "old", token: "claim", claimedAt: old }, worker: { token: "worker", pid: 99_999_999, processGroupId: 99_999_999, startedAt: old } }); await patchStatus(run.paths, { status: "running", startedAt: old });
     await new SubagentSupervisor(value.config).scan(); const snapshot = await readSnapshot(value.config.stateRoot, run.request.runId); assert.equal(snapshot.status, "failed"); assert.equal(snapshot.result?.error?.category, "runner_lost");
 });
 
-test("live replay exits at terminal state while history replay waits for its pager, and both clean temporary files", async () => {
+void test("live replay exits at terminal state while history replay waits for its pager, and both clean temporary files", async () => {
     const value = await fixture(); const pager = join(value.root, "fake-less.sh");
     await writeFile(pager, "#!/bin/sh\ntrap 'exit 0' TERM INT\ncase \"$*\" in *+F*) while :; do sleep 1; done;; *) sleep 0.15;; esac\n"); await chmod(pager, 0o700); value.config.runner.less = pager; await writeFile(value.configPath, JSON.stringify(value.config));
     const active = await createRun(value.config, "full", profile, "Live replay", "live instruction", value.root, { callerProfile: "full", depth: 1, originSessionId: "session" });
@@ -68,7 +68,7 @@ test("live replay exits at terminal state while history replay waits for its pag
     const started = Date.now(); await runReplayViewer(value.configPath, active.request.runId); assert.ok(Date.now() - started >= 100); assert.equal((await readdir(active.paths.directory)).some(name => name.startsWith(".replay-")), false);
 });
 
-test("unknown target harness is rejected before a run directory is allocated", async () => {
+void test("unknown target harness is rejected before a run directory is allocated", async () => {
     const value = await fixture(); const unknown = { ...profile, extensions: { subagent: { allowedTargets: [], harness: "other" } } };
     await assert.rejects(createRun(value.config, "full", unknown, "Unknown harness", "task", value.root), /Unknown or unconfigured subagent harness/);
     assert.deepEqual((await readdir(value.config.stateRoot).catch(() => [])).filter(name => /^[0-9a-f-]{36}$/i.test(name)), []);

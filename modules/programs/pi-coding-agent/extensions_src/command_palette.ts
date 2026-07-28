@@ -25,7 +25,7 @@ function actionItems(actions: readonly PaletteAction[]): PaletteListItem<Command
 }
 
 async function selectModel(pi: ExtensionAPI, ctx: ExtensionContext, keymap: ResolvedPaletteKeymap): Promise<void> {
-    ctx.modelRegistry.refresh();
+    void ctx.modelRegistry.refresh();
     const models = ctx.modelRegistry.getAvailable();
     const items: PaletteListItem<Model<any>>[] = models.map(model => ({ value: model, label: `${model.provider}/${model.id}`, description: model.name, keywords: [model.provider, model.id, model.name], state: ctx.model?.provider === model.provider && ctx.model.id === model.id ? "Current" : undefined }));
     if (items.length === 0) { ctx.ui.notify("Command Palette: no authenticated models available", "warning"); return; }
@@ -57,7 +57,7 @@ async function configureTools(pi: ExtensionAPI, ctx: ExtensionContext, keymap: R
             const confirmed = await ctx.ui.confirm("Disable last active tool?", "The model will have no active tools.");
             if (!confirmed) { component.setStatus("warning", "Last tool remains active."); return; }
         }
-        active.has(item.value) ? active.delete(item.value) : active.add(item.value);
+        if (active.has(item.value)) active.delete(item.value); else active.add(item.value);
         pi.setActiveTools([...active]); component.setItems(toolItems(tools, active)); component.setStatus("success", `${item.value} is now ${active.has(item.value) ? "active" : "inactive"}.`);
     } });
 }

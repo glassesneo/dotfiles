@@ -1,0 +1,9 @@
+{
+  "options": {
+    "typeAware": true
+  },
+  "rules": {
+    "typescript/no-misused-promises": "error",
+    "typescript/switch-exhaustiveness-check": "error"
+  }
+}

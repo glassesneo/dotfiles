@@ -31,7 +31,7 @@ const questions: QuestionItem[] = [
     },
 ];
 
-test("schema accepts three kinds and multiple questions", () => {
+void test("schema accepts three kinds and multiple questions", () => {
     assert.equal(
         Value.Check(questionParameters, {
             questions: [
@@ -68,7 +68,7 @@ test("schema accepts three kinds and multiple questions", () => {
     );
 });
 
-test("schema characterizes required fields, closed objects, and option shapes", () => {
+void test("schema characterizes required fields, closed objects, and option shapes", () => {
     const valid = {
         questions: [{
             id: "choice", prompt: "Choose", kind: "single",
@@ -96,7 +96,7 @@ test("schema characterizes required fields, closed objects, and option shapes", 
     }), true);
 });
 
-test("runtime validation rejects duplicate and kind-specific violations", () => {
+void test("runtime validation rejects duplicate and kind-specific violations", () => {
     assert.doesNotThrow(() => validateQuestionParameters({ questions }));
 
     const invalidCases: Array<[RegExp, QuestionItem[]]> = [
@@ -141,7 +141,7 @@ test("runtime validation rejects duplicate and kind-specific violations", () => 
     }
 });
 
-test("display text includes descriptions for stable reverse lookup", () => {
+void test("display text includes descriptions for stable reverse lookup", () => {
     assert.equal(
         optionDisplayText({ value: "safe", label: "Safe", description: "Small" }),
         "Safe — Small",
@@ -149,7 +149,7 @@ test("display text includes descriptions for stable reverse lookup", () => {
     assert.equal(optionDisplayText({ value: "safe", label: "Safe" }), "Safe");
 });
 
-test("response formatting shares labels while preserving presentation policies", () => {
+void test("response formatting shares labels while preserving presentation policies", () => {
     const multi: QuestionItem = {
         id: "targets",
         prompt: "Targets",
@@ -182,7 +182,7 @@ test("response formatting shares labels while preserving presentation policies",
     );
 });
 
-test("responses normalize notes and multi values in option definition order", () => {
+void test("responses normalize notes and multi values in option definition order", () => {
     const multi: QuestionItem = {
         id: "targets",
         prompt: "Targets",
@@ -226,7 +226,7 @@ test("responses normalize notes and multi values in option definition order", ()
     );
 });
 
-test("normalization rejects empty or inconsistent pending responses", () => {
+void test("normalization rejects empty or inconsistent pending responses", () => {
     assert.throws(
         () =>
             normalizeQuestionResponse(questions[0], {
@@ -253,7 +253,7 @@ test("normalization rejects empty or inconsistent pending responses", () => {
     );
 });
 
-test("progress supports movement, overwrite, cancellation contexts, and explicit submission", () => {
+void test("progress supports movement, overwrite, cancellation contexts, and explicit submission", () => {
     const progress = new QuestionProgress(questions);
     assert.equal(progress.index, 0);
     assert.equal(progress.answeredCount, 0);
@@ -294,7 +294,7 @@ test("progress supports movement, overwrite, cancellation contexts, and explicit
     assert.throws(() => progress.moveTo(2), /out of range/);
 });
 
-test("progress distinguishes answered, unanswered-with-note, and untouched", () => {
+void test("progress distinguishes answered, unanswered-with-note, and untouched", () => {
     const progress = new QuestionProgress(questions);
     progress.submit({ kind: "unanswered", note: "need more context" });
     assert.equal(progress.isAnswered("approach"), false);
@@ -307,13 +307,13 @@ test("progress distinguishes answered, unanswered-with-note, and untouched", () 
     assert.equal(progress.nextUntouched(), 1);
 });
 
-test("result content and details carry the same recoverable JSON", () => {
+void test("result content and details carry the same recoverable JSON", () => {
     const result = buildQuestionToolResult(unavailableResult());
     assert.deepEqual(JSON.parse(result.content[0].text), result.details);
     assert.deepEqual(result.details, { status: "unavailable", responses: {} });
 });
 
-test("progress safely preserves question IDs that are object prototype names", () => {
+void test("progress safely preserves question IDs that are object prototype names", () => {
     const progress = new QuestionProgress([
         { id: "__proto__", prompt: "Details", kind: "text" },
     ]);

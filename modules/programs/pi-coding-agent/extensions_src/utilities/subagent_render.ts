@@ -246,7 +246,8 @@ export function renderWaitResult(result: RenderResultLike, expanded: boolean, th
             additions.push(`  result: ${run.paths.result}`);
             return additions.join("\n");
         });
-        const heading = `${String(details.reason ?? "polling")} — ${details.completedRunIds.length} completed, ${details.pendingRunIds.length} pending`;
+        const reason = String((details.reason ?? "polling") as string | number | boolean | bigint | symbol);
+        const heading = `${reason} — ${details.completedRunIds.length} completed, ${details.pendingRunIds.length} pending`;
         return new Text(`${theme.fg("accent", heading)}\n${runs.join("\n")}`, 0, 0);
     } catch {
         return new Text(rawResultText(result), 0, 0);

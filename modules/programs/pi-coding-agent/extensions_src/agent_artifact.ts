@@ -235,12 +235,16 @@ export function createAgentArtifactToolDefinition(): ToolDefinition<typeof artif
         },
         renderCall(args, theme) {
             const pending = args.pendingId === undefined ? "new pending artifact" : `update ${args.pendingId}`;
-            return new Text(`${theme.fg("accent", "save_agent_artifact")} — ${args.kind} ${args.slug} (${pending})`);
+            const kind = String(args.kind as string | number | boolean | bigint | symbol);
+            const slug = String(args.slug as string | number | boolean | bigint | symbol);
+            return new Text(`${theme.fg("accent", "save_agent_artifact")} — ${kind} ${slug} (${pending})`);
         },
         renderResult(result, _options, theme) {
             const details = result.details;
             const path = details.finalPath ?? details.pendingPath;
-            return new Text(`${theme.fg("accent", details.status)} — ${details.kind} ${details.title}\n${details.summary}\n${path}`);
+            const kind = String(details.kind as string | number | boolean | bigint | symbol);
+            const title = String(details.title as string | number | boolean | bigint | symbol);
+            return new Text(`${theme.fg("accent", details.status)} — ${kind} ${title}\n${details.summary}\n${path}`);
         },
     });
 }

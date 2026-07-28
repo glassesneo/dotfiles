@@ -76,20 +76,28 @@ export async function withPendingArtifactLock<T>(pendingDirectory: string, pendi
             continue;
         }
 
+        let operationResult!: T;
+        let operationError: unknown;
+        let operationSucceeded = false;
         try {
-            return await operation();
-        } finally {
-            const current = await readOwner(lockDirectory);
-            if (current?.token === owner.token) {
-                const quarantine = `${lockDirectory}.release.${process.pid}.${randomUUID()}`;
-                try {
-                    await rename(lockDirectory, quarantine);
-                    await rm(quarantine, { recursive: true, force: true });
-                } catch (error) {
-                    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-                }
+            operationResult = await operation();
+            operationSucceeded = true;
+        } catch (error) {
+            operationError = error;
+        }
+
+        const current = await readOwner(lockDirectory);
+        if (current?.token === owner.token) {
+            const quarantine = `${lockDirectory}.release.${process.pid}.${randomUUID()}`;
+            try {
+                await rename(lockDirectory, quarantine);
+                await rm(quarantine, { recursive: true, force: true });
+            } catch (error) {
+                if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
             }
         }
+        if (!operationSucceeded) throw operationError;
+        return operationResult;
     }
     throw new Error(`Timed out acquiring pending artifact approval lock: ${pendingId}`);
 }

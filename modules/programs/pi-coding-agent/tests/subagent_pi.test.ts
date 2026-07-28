@@ -5,7 +5,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { HarnessRunError, HarnessStoppedError, PiEventNormalizer, runPiHarness } from "../extensions_src/utilities/subagent_pi.ts";
 
-test("Pi event normalizer converts streaming, tool, final output, and usage", () => {
+void test("Pi event normalizer converts streaming, tool, final output, and usage", () => {
     const normalizer = new PiEventNormalizer();
     assert.deepEqual(normalizer.consume(JSON.stringify({
         type: "message_update",
@@ -40,7 +40,7 @@ test("Pi event normalizer converts streaming, tool, final output, and usage", ()
     assert.equal(normalizer.turns, 1);
 });
 
-test("Pi event normalizer aggregates nested tool usage exactly once", () => {
+void test("Pi event normalizer aggregates nested tool usage exactly once", () => {
     const normalizer = new PiEventNormalizer();
     const nestedUsage = {
         input: 5, output: 6, cacheRead: 1, cacheWrite: 2, reasoning: 3, cacheWrite1h: 1, totalTokens: 14,
@@ -60,7 +60,7 @@ test("Pi event normalizer aggregates nested tool usage exactly once", () => {
     assert.equal(normalizer.usage.cost.total, 0.33);
 });
 
-test("Pi event normalizer records malformed protocol input", () => {
+void test("Pi event normalizer records malformed protocol input", () => {
     const normalizer = new PiEventNormalizer();
     assert.deepEqual(normalizer.consume("not json"), []);
     assert.equal(normalizer.malformedLine, "not json");
@@ -88,7 +88,7 @@ async function invokeFake(command: string, signal?: AbortSignal) {
     );
 }
 
-test("Pi harness escalates an ignored cooperative stop and preserves partial usage", async () => {
+void test("Pi harness escalates an ignored cooperative stop and preserves partial usage", async () => {
     const directory = await mkdtemp(join(tmpdir(), "fake-pi-stop-"));
     const command = join(directory, "pi");
     await writeFile(command, `#!${process.execPath}\nprocess.on("SIGTERM", () => {});\nprocess.stdin.resume();\nprocess.stdin.on("end", () => {\n  process.stdout.write('{"type":"message_end","message":{"role":"assistant","content":[{"type":"text","text":"partial"}],"stopReason":"end","usage":{"input":4,"output":1,"cacheRead":0,"cacheWrite":0,"totalTokens":5,"cost":{"total":0.1}}}}\\n');\n  setInterval(() => {}, 1000);\n});\n`);
@@ -104,7 +104,7 @@ test("Pi harness escalates an ignored cooperative stop and preserves partial usa
     });
 });
 
-test("Pi harness classifies malformed JSON and nonzero exits while preserving partial usage", async () => {
+void test("Pi harness classifies malformed JSON and nonzero exits while preserving partial usage", async () => {
     const malformed = await fakePi("printf 'not-json\\n'");
     await assert.rejects(invokeFake(malformed), (error: unknown) => {
         assert.ok(error instanceof HarnessRunError);

@@ -24,7 +24,7 @@ async function running(config: SubagentRuntimeConfig, purpose: string, originSes
     return run;
 }
 
-test("origin discovery includes descendants, excludes other sessions, retries malformed directories, and sorts active first", async () => {
+void test("origin discovery includes descendants, excludes other sessions, retries malformed directories, and sorts active first", async () => {
     const { config } = await fixture();
     const parent = await running(config, "parent", "origin");
     const child = await running(config, "child", "origin", parent.request.runId);
@@ -41,13 +41,13 @@ test("origin discovery includes descendants, excludes other sessions, retries ma
     assert.equal((await discovery.refresh()).malformedCount, 1);
 });
 
-test("stable ordering uses terminal group, descending creation time, and full run ID tie break", () => {
+void test("stable ordering uses terminal group, descending creation time, and full run ID tie break", () => {
     const base = (runId: string, status: "running" | "failed", createdAt: string) => ({ request: {} as never, snapshot: { runId, status, createdAt } as never });
     const sorted = sortManagedRuns([base("b", "failed", "2026-01-01"), base("c", "running", "2026-01-02"), base("a", "running", "2026-01-02")]);
     assert.deepEqual(sorted.map(run => run.snapshot.runId), ["a", "c", "b"]);
 });
 
-test("v4 stop remains durable when the supervisor is absent and does not stop children", async () => {
+void test("v4 stop remains durable when the supervisor is absent and does not stop children", async () => {
     const { config } = await fixture();
     const parent = await running(config, "parent", "origin");
     const child = await running(config, "child", "origin", parent.request.runId);

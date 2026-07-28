@@ -27,14 +27,14 @@ function harness(questions: readonly QuestionItem[], signal?: AbortSignal, polic
     return { component, results, get renders() { return renders; } };
 }
 
-test("Tab navigation preserves text drafts and Shift-Tab moves backward", () => {
+void test("Tab navigation preserves text drafts and Shift-Tab moves backward", () => {
     const h = harness([{ id: "text", prompt: "Details", kind: "text" }, single]);
     h.component.handleInput("draft"); h.component.handleInput(keys.tab); h.component.handleInput(keys.shiftTab);
     assert.match(h.component.render(80).join("\n"), /draft/);
     assert.match(h.component.render(80).join("\n"), /\[1 ●\].*\[2 ○\].*Review/);
 });
 
-test("Enter confirms text while Ctrl-J inserts a newline", () => {
+void test("Enter confirms text while Ctrl-J inserts a newline", () => {
     const h = harness([{ id: "text", prompt: "Details", kind: "text" }]);
     h.component.handleInput(keys.enter);
     assert.match(h.component.render(80).join("\n"), /non-whitespace/);
@@ -42,7 +42,7 @@ test("Enter confirms text while Ctrl-J inserts a newline", () => {
     assert.deepEqual(h.results[0]?.responses.text, { kind: "text", value: "a\nb" });
 });
 
-test("e edits a response note without changing the focused answer", () => {
+void test("e edits a response note without changing the focused answer", () => {
     const h = harness([single]);
     h.component.handleInput(keys.down); h.component.handleInput("e"); h.component.handleInput("why"); h.component.handleInput(keys.enter);
     assert.match(h.component.render(80).join("\n"), /Note: why/);
@@ -50,7 +50,7 @@ test("e edits a response note without changing the focused answer", () => {
     assert.deepEqual(h.results[0]?.responses.single, { kind: "single", value: "b", note: "why" });
 });
 
-test("single uses radio markers and Space selects a draft without confirming", () => {
+void test("single uses radio markers and Space selects a draft without confirming", () => {
     const h = harness([single]);
     assert.match(h.component.render(80).join("\n"), /> \( \) Alpha/);
     h.component.handleInput(keys.space);
@@ -64,7 +64,7 @@ test("single uses radio markers and Space selects a draft without confirming", (
     assert.deepEqual(h.results[0]?.responses.single, { kind: "single", value: "b" });
 });
 
-test("a regular option may use the former synthetic sentinel value", () => {
+void test("a regular option may use the former synthetic sentinel value", () => {
     const question: QuestionItem = {
         id: "reserved",
         prompt: "Choose",
@@ -79,7 +79,7 @@ test("a regular option may use the former synthetic sentinel value", () => {
     assert.deepEqual(h.results[0]?.responses.reserved, { kind: "single", value: "__unanswered_note__" });
 });
 
-test("single Space draft commits on Tab navigation", () => {
+void test("single Space draft commits on Tab navigation", () => {
     const h = harness([single, { ...single, id: "other", prompt: "Other" }]);
     h.component.handleInput(keys.space); h.component.handleInput(keys.tab); h.component.handleInput(keys.shiftTab);
     assert.match(h.component.render(80).join("\n"), /> \(●\) Alpha/);
@@ -87,7 +87,7 @@ test("single Space draft commits on Tab navigation", () => {
     assert.match(h.component.render(80).join("\n"), /1 answered, 0 unanswered with note, 1 untouched/);
 });
 
-test("synthetic row opens note editor and creates unanswered response", () => {
+void test("synthetic row opens note editor and creates unanswered response", () => {
     const h = harness([single]);
     h.component.handleInput(keys.down);
     h.component.handleInput(keys.down);
@@ -99,7 +99,7 @@ test("synthetic row opens note editor and creates unanswered response", () => {
     assert.deepEqual(h.results[0]?.responses.single, { kind: "unanswered", note: "none fit" });
 });
 
-test("synthetic row cancel preserves the complete existing draft", () => {
+void test("synthetic row cancel preserves the complete existing draft", () => {
     const h = harness([single]);
     h.component.handleInput(keys.space);
     h.component.handleInput(keys.down);
@@ -115,7 +115,7 @@ test("synthetic row cancel preserves the complete existing draft", () => {
     assert.doesNotMatch(restored, /discard/);
 });
 
-test("edit-note without a selection commits an unanswered response on navigation", () => {
+void test("edit-note without a selection commits an unanswered response on navigation", () => {
     const h = harness([single, { ...single, id: "other", prompt: "Other" }]);
     h.component.handleInput("e");
     h.component.handleInput("none fit");
@@ -127,7 +127,7 @@ test("edit-note without a selection commits an unanswered response on navigation
     assert.deepEqual(h.results[0]?.responses.single, { kind: "unanswered", note: "none fit" });
 });
 
-test("unanswered note carries over when selecting a regular option", () => {
+void test("unanswered note carries over when selecting a regular option", () => {
     const h = harness([single]);
     h.component.handleInput("e");
     h.component.handleInput("carry me");
@@ -137,7 +137,7 @@ test("unanswered note carries over when selecting a regular option", () => {
     assert.deepEqual(h.results[0]?.responses.single, { kind: "single", value: "a", note: "carry me" });
 });
 
-test("required and blank notes follow decision policy", () => {
+void test("required and blank notes follow decision policy", () => {
     const required = harness([single], undefined, {
         noteRequirement: (_item, option) => option?.value === "b" ? "required" : "none",
     });
@@ -157,7 +157,7 @@ test("required and blank notes follow decision policy", () => {
     assert.deepEqual(disabled.results[0]?.responses.single, { kind: "single", value: "a" });
 });
 
-test("multi uses Space and stores response-level note", () => {
+void test("multi uses Space and stores response-level note", () => {
     const question: QuestionItem = { id: "multi", prompt: "Many", kind: "multi", options: [{ value: "a", label: "A" }, { value: "b", label: "B" }] };
     const h = harness([question]);
     h.component.handleInput(keys.enter); assert.match(h.component.render(80).join("\n"), /Select at least one/);
@@ -170,7 +170,7 @@ test("multi uses Space and stores response-level note", () => {
     assert.deepEqual(h.results[0]?.responses.multi, { kind: "multi", values: ["a", "b"], note: "note A\nmore detail" });
 });
 
-test("j and k move selection like Down and Up", () => {
+void test("j and k move selection like Down and Up", () => {
     const down = harness([single]);
     down.component.handleInput("j"); down.component.handleInput(keys.enter); down.component.handleInput(keys.enter);
     assert.deepEqual(down.results[0]?.responses.single, { kind: "single", value: "b" });
@@ -180,7 +180,7 @@ test("j and k move selection like Down and Up", () => {
     assert.deepEqual(up.results[0]?.responses.single, { kind: "single", value: "a" });
 });
 
-test("last-question Tab opens review and submits untouched questions", () => {
+void test("last-question Tab opens review and submits untouched questions", () => {
     const h = harness([single, { id: "text", prompt: "Details", kind: "text" }]);
     h.component.handleInput(keys.tab); h.component.handleInput("draft"); h.component.handleInput(keys.tab);
     const review = h.component.render(80).join("\n");
@@ -193,14 +193,14 @@ test("last-question Tab opens review and submits untouched questions", () => {
     assert.deepEqual(h.results, [{ status: "submitted", responses: { text: { kind: "text", value: "draft" } } }]);
 });
 
-test("Space then Tab on single question auto-submits committed draft", () => {
+void test("Space then Tab on single question auto-submits committed draft", () => {
     const h = harness([single]);
     h.component.handleInput(keys.space);
     h.component.handleInput(keys.tab);
     assert.deepEqual(h.results, [{ status: "submitted", responses: { single: { kind: "single", value: "a" } } }]);
 });
 
-test("a single question omits review and submits directly", () => {
+void test("a single question omits review and submits directly", () => {
     const answered = harness([single]);
     assert.doesNotMatch(answered.component.render(80).join("\n"), /\[Review/);
     answered.component.handleInput(keys.down);
@@ -215,7 +215,7 @@ test("a single question omits review and submits directly", () => {
     assert.deepEqual(unanswered.results, [{ status: "submitted", responses: {} }]);
 });
 
-test("review j/k navigation and hybrid return focus follow response state", () => {
+void test("review j/k navigation and hybrid return focus follow response state", () => {
     const questions: QuestionItem[] = [
         { ...single, id: "one", prompt: "One" },
         { ...single, id: "two", prompt: "Two" },
@@ -241,14 +241,14 @@ test("review j/k navigation and hybrid return focus follow response state", () =
     assert.match(revision.component.render(80).join("\n"), /> Q1 ✓ Answered: One/);
 });
 
-test("Esc backs out without cancelling; Ctrl-C cancels the entire call", () => {
+void test("Esc backs out without cancelling; Ctrl-C cancels the entire call", () => {
     const h = harness([single]);
     h.component.handleInput(keys.escape); assert.equal(h.results.length, 0); assert.match(h.component.render(80).join("\n"), /Ctrl-C/);
     h.component.handleInput(keys.ctrlC);
     assert.deepEqual(h.results, [{ status: "cancelled", responses: {}, currentQuestionId: "single" }]);
 });
 
-test("artifact policy hides synthetic unanswered row and blocks no-selection note editing", () => {
+void test("artifact policy hides synthetic unanswered row and blocks no-selection note editing", () => {
     const approval: QuestionItem = {
         id: "artifact-action",
         prompt: "Review",
@@ -271,7 +271,7 @@ test("artifact policy hides synthetic unanswered row and blocks no-selection not
     assert.doesNotMatch(h.component.render(80).join("\n"), /Optional note|Add a note/);
 });
 
-test("render applies semantic theme roles and refreshes themed output after invalidation", () => {
+void test("render applies semantic theme roles and refreshes themed output after invalidation", () => {
     const calls = { fg: new Set<string>(), bg: new Set<string>(), bold: 0 };
     let version = 31;
     const recordingTheme = {
@@ -303,12 +303,12 @@ test("render applies semantic theme roles and refreshes themed output after inva
     assert.ok(calls.fg.has("error"));
 });
 
-test("render output never exceeds narrow widths", () => {
+void test("render output never exceeds narrow widths", () => {
     const h = harness([{ ...single, prompt: "A deliberately long question that must wrap" }]);
     for (const width of [20, 8, 4, 1]) for (const line of h.component.render(width)) assert.ok(visibleWidth(line) <= width);
 });
 
-test("completion, abort, and disposal remove listeners and finish once", () => {
+void test("completion, abort, and disposal remove listeners and finish once", () => {
     const controller = new AbortController(); const h = harness([single], controller.signal);
     assert.equal(getEventListeners(controller.signal, "abort").length, 1);
     h.component.handleInput(keys.enter); h.component.handleInput(keys.enter);
@@ -316,7 +316,7 @@ test("completion, abort, and disposal remove listeners and finish once", () => {
     const other = new AbortController(); const disposed = harness([single], other.signal); disposed.component.dispose(); assert.equal(getEventListeners(other.signal, "abort").length, 0);
 });
 
-test("TUI adapter injects the app keybinding manager", async () => {
+void test("TUI adapter injects the app keybinding manager", async () => {
     const result = await runTuiDecisionFlow({ ui: { async custom(factory) {
         let resolved: QuestionResultDetails | undefined;
         const component = await factory({ terminal: { rows: 24, columns: 80 }, requestRender() {} } as TUI, theme, manager, value => { resolved = value as QuestionResultDetails; });

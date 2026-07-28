@@ -293,8 +293,8 @@ export function boundedHandoffJson(value: Record<string, unknown>): string {
     text = JSON.stringify({ compact: true, run: recordRunIdentity(value.run), children: compactChildren });
     if (bytes(text) <= MODEL_JSON_MAX_BYTES) return text;
     const identities = compactChildren.map(child => ({
-        runId: Array.from(String(child.runId ?? "")).slice(0, 36).join(""),
-        status: Array.from(String(child.status ?? "unknown")).slice(0, 16).join(""),
+        runId: Array.from(String((child.runId ?? "") as string | number | boolean | bigint | symbol)).slice(0, 36).join(""),
+        status: Array.from(String((child.status ?? "unknown") as string | number | boolean | bigint | symbol)).slice(0, 16).join(""),
     }));
     text = JSON.stringify({ compact: true, metadataOmitted: true, childCount: identities.length, children: identities });
     if (bytes(text) <= MODEL_JSON_MAX_BYTES) return text;

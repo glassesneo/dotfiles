@@ -3,7 +3,7 @@ import test from "node:test";
 import commandPalette, { buildCommandPaletteActions } from "../extensions_src/command_palette.ts";
 import { commandPaletteActionIds } from "../extensions_src/utilities/command_palette_core.ts";
 
-test("registry contains only the seven explicit draft-orthogonal adapters", () => {
+void test("registry contains only the seven explicit draft-orthogonal adapters", () => {
     const pi = { getActiveTools: () => ["read"], getThinkingLevel: () => "medium" } as never;
     const ctx = { model: { provider: "test", id: "model" }, ui: { getToolsExpanded: () => false, theme: { name: "dark" } } } as never;
     const actions = buildCommandPaletteActions(pi, ctx);
@@ -12,7 +12,7 @@ test("registry contains only the seven explicit draft-orthogonal adapters", () =
     assert.deepEqual(actions.map(action => action.label.split(/\s+/)[0]), ["/model", "/thinking", "/tools", "/tool-output", "/session", "/copy", "/theme"]);
 });
 
-test("one registered Ctrl-Shift-P shortcut invocation opens the palette whether idle or running", async () => {
+void test("one registered Ctrl-Shift-P shortcut invocation opens the palette whether idle or running", async () => {
     let shortcutHandler: ((ctx: any) => Promise<void>) | undefined;
     let customCalls = 0; let notifications = 0;
     const pi = {
@@ -36,7 +36,7 @@ test("one registered Ctrl-Shift-P shortcut invocation opens the palette whether 
     assert.equal(notifications, 0);
 });
 
-test("a running palette suppresses duplicate opens and can reopen after closing", async () => {
+void test("a running palette suppresses duplicate opens and can reopen after closing", async () => {
     let shortcutHandler: ((ctx: any) => Promise<void>) | undefined;
     let customCalls = 0; let closeFirst: ((value: null) => void) | undefined;
     const pi = {
@@ -67,7 +67,7 @@ test("a running palette suppresses duplicate opens and can reopen after closing"
     assert.equal(customCalls, 2);
 });
 
-test("palette sources do not expose editor, prompt, message-send, abort, or idle-wait dependencies", async () => {
+void test("palette sources do not expose editor, prompt, message-send, abort, or idle-wait dependencies", async () => {
     const fs = await import("node:fs/promises");
     const sources = await Promise.all([
         fs.readFile(new URL("../extensions_src/command_palette.ts", import.meta.url), "utf8"),

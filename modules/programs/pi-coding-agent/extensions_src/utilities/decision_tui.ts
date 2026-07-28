@@ -340,7 +340,7 @@ export class DecisionComponent implements Component, Focusable {
             draft.selected.clear();
             draft.selected.add(choice.value);
         } else {
-            draft.selected.has(choice.value) ? draft.selected.delete(choice.value) : draft.selected.add(choice.value);
+            if (draft.selected.has(choice.value)) draft.selected.delete(choice.value); else draft.selected.add(choice.value);
         }
         this.#validation = undefined;
         this.#refresh();

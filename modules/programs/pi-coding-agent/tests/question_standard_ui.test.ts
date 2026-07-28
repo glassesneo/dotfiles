@@ -58,7 +58,7 @@ const allKinds: QuestionItem[] = [
     },
 ];
 
-test("standard UI answers all kinds, reviews, and explicitly submits", async () => {
+void test("standard UI answers all kinds, reviews, and explicitly submits", async () => {
     const mock = scriptedUI([
         "[ ] A — First",
         "single note",
@@ -88,7 +88,7 @@ test("standard UI answers all kinds, reviews, and explicitly submits", async () 
     assert.ok(mock.calls.some(call => call.method === "select" && call.args[0] === "Review responses (choose a question to revise)"));
 });
 
-test("a single answered question submits without opening review", async () => {
+void test("a single answered question submits without opening review", async () => {
     const mock = scriptedUI(["[ ] A — First", "single note"]);
     assert.deepEqual(
         await runStandardQuestionFlow({ hasUI: true, ui: mock.ui }, [allKinds[0]]),
@@ -104,7 +104,7 @@ test("a single answered question submits without opening review", async () => {
     assert.ok(!mock.calls.some(call => call.args[0] === "Review responses (choose a question to revise)"));
 });
 
-test("a single untouched question submits without opening review", async () => {
+void test("a single untouched question submits without opening review", async () => {
     const mock = scriptedUI(["Submit without responding"]);
     assert.deepEqual(
         await runStandardQuestionFlow({ hasUI: true, ui: mock.ui }, [allKinds[0]]),
@@ -113,7 +113,7 @@ test("a single untouched question submits without opening review", async () => {
     assert.ok(!mock.calls.some(call => call.args[0] === "Review responses (choose a question to revise)"));
 });
 
-test("single-choice note policy supports required and disabled notes", async () => {
+void test("single-choice note policy supports required and disabled notes", async () => {
     const required = scriptedUI(["[ ] B", " ", "required note"]);
     assert.deepEqual(
         await runStandardQuestionFlow(
@@ -139,7 +139,7 @@ test("single-choice note policy supports required and disabled notes", async () 
     assert.equal(disabled.calls.filter(call => call.method === "editor").length, 0);
 });
 
-test("synthetic row creates unanswered response in standard UI", async () => {
+void test("synthetic row creates unanswered response in standard UI", async () => {
     const mock = scriptedUI([`[ ] ${SYNTHETIC_UNANSWERED_LABEL}`, "none fit", "Submit responses"]);
     assert.deepEqual(
         await runStandardQuestionFlow({ hasUI: true, ui: mock.ui }, [allKinds[0]!]),
@@ -147,7 +147,7 @@ test("synthetic row creates unanswered response in standard UI", async () => {
     );
 });
 
-test("cancelling a synthetic note returns to the question without cancelling the flow", async () => {
+void test("cancelling a synthetic note returns to the question without cancelling the flow", async () => {
     const synthetic = `[ ] ${SYNTHETIC_UNANSWERED_LABEL}`;
     const mock = scriptedUI([synthetic, undefined, "[ ] A — First", "kept"]);
     assert.deepEqual(
@@ -157,7 +157,7 @@ test("cancelling a synthetic note returns to the question without cancelling the
     assert.equal(mock.calls.filter(call => call.method === "select").length, 2);
 });
 
-test("multi disambiguates a regular option from the synthetic label", async () => {
+void test("multi disambiguates a regular option from the synthetic label", async () => {
     const question: QuestionItem = {
         id: "collision",
         prompt: "Choose",
@@ -178,7 +178,7 @@ test("multi disambiguates a regular option from the synthetic label", async () =
     assert.ok(choices.includes(`${realLabel} (2)`));
 });
 
-test("review rehydrates and revises multi and text answers", async () => {
+void test("review rehydrates and revises multi and text answers", async () => {
     const questions = allKinds.slice(1, 3);
     const mock = scriptedUI([
         "[ ] A",
@@ -213,7 +213,7 @@ test("review rehydrates and revises multi and text answers", async () => {
     assert.ok(mock.calls.some(call => call.method === "editor" && call.args[1] === "old text"));
 });
 
-test("multi requires one selection before Done", async () => {
+void test("multi requires one selection before Done", async () => {
     const mock = scriptedUI([
         "Done — confirm selections",
         "[ ] B",
@@ -229,18 +229,19 @@ test("multi requires one selection before Done", async () => {
     assert.equal(mock.calls.filter(call => call.method === "notify").length, 1);
 });
 
-test("review can submit all questions untouched", async () => {
+void test("review can submit all questions untouched", async () => {
     const mock = scriptedUI(["Review responses now", "Submit responses"]);
     assert.deepEqual(await runStandardQuestionFlow({ hasUI: true, ui: mock.ui }, allKinds), {
         status: "submitted",
         responses: {},
     });
     const review = mock.calls.find(call => call.method === "select" && call.args[0] === "Review responses (choose a question to revise)");
-    assert.ok(Array.isArray(review?.args[1]));
-    assert.ok((review?.args[1] as string[]).every(label => label.includes("Untouched") || label === "Submit responses" || label === "Cancel"));
+    const reviewLabels = review?.args[1];
+    assert.ok(Array.isArray(reviewLabels));
+    assert.ok(reviewLabels.every(label => label.includes("Untouched") || label === "Submit responses" || label === "Cancel"));
 });
 
-test("initial and review cancellation retain the correct context", async () => {
+void test("initial and review cancellation retain the correct context", async () => {
     const initial = scriptedUI(["[ ] B", "", undefined]);
     assert.deepEqual(
         await runStandardQuestionFlow({ hasUI: true, ui: initial.ui }, allKinds.slice(0, 2)),
@@ -261,7 +262,7 @@ test("initial and review cancellation retain the correct context", async () => {
     );
 });
 
-test("non-interactive mode never invokes UI", async () => {
+void test("non-interactive mode never invokes UI", async () => {
     const mock = scriptedUI([]);
     assert.deepEqual(
         await runStandardQuestionFlow({ hasUI: false, ui: mock.ui }, allKinds),
@@ -270,7 +271,7 @@ test("non-interactive mode never invokes UI", async () => {
     assert.deepEqual(mock.calls, []);
 });
 
-test("text retries blanks and abort after editor discards its value", async () => {
+void test("text retries blanks and abort after editor discards its value", async () => {
     const blank = scriptedUI(["Answer this question", "  ", "answer", "Submit responses"]);
     assert.deepEqual(
         await runStandardQuestionFlow({ hasUI: true, ui: blank.ui }, [allKinds[2]]),
@@ -293,7 +294,7 @@ test("text retries blanks and abort after editor discards its value", async () =
     );
 });
 
-test("artifact policy hides synthetic unanswered row", async () => {
+void test("artifact policy hides synthetic unanswered row", async () => {
     const mock = scriptedUI(["[ ] Approve", "Submit responses"]);
     const question: QuestionItem = {
         id: "artifact-action",

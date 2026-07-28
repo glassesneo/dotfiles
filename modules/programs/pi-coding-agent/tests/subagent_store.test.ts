@@ -35,7 +35,7 @@ async function fixture(): Promise<{ root: string; config: SubagentRuntimeConfig 
     };
 }
 
-test("run store creates private canonical files without interpolating prompt into launcher", async () => {
+void test("run store creates private canonical files without interpolating prompt into launcher", async () => {
     const { config } = await fixture();
     const prompt = "secret prompt with 'quotes'";
     await assert.rejects(
@@ -59,7 +59,7 @@ test("run store creates private canonical files without interpolating prompt int
     });
 });
 
-test("run store normalizes legacy request v2 purpose from the first non-empty prompt line", async () => {
+void test("run store normalizes legacy request v2 purpose from the first non-empty prompt line", async () => {
     const { config } = await fixture();
     const run = await createRun(config, "full", fullProfile, "Current purpose", "\n  Legacy   task  title  \nmore detail", "/work");
     const request = JSON.parse(await readFile(run.paths.request, "utf8")) as Record<string, unknown>;
@@ -72,7 +72,7 @@ test("run store normalizes legacy request v2 purpose from the first non-empty pr
     assert.equal(snapshot.profile, "full");
 });
 
-test("run store enforces state transitions and writes result before terminal status", async () => {
+void test("run store enforces state transitions and writes result before terminal status", async () => {
     const { config } = await fixture();
     const run = await createRun(config, "full", fullProfile, "State transitions", "task", "/work");
     await patchStatus(run.paths, { status: "starting" });
@@ -101,12 +101,10 @@ test("run store enforces state transitions and writes result before terminal sta
     await assert.rejects(patchStatus(run.paths, { status: "failed" }), /Invalid run state transition/);
 });
 
-test("concurrent stale-lock reclaimers preserve mutual exclusion", async () => {
+void test("concurrent stale-lock reclaimers preserve mutual exclusion", async () => {
     const { config } = await fixture();
     const run = await createRun(config, "full", fullProfile, "Stale lock", "task", "/work");
     const lockDirectory = join(run.paths.directory, ".lock");
-    await mkdir(lockDirectory);
-    await writeFile(join(lockDirectory, "owner.json"), JSON.stringify({ pid: 99_999_999, acquiredAt: "now", token: "dead" }));
     let active = 0;
     let maximumActive = 0;
     const operation = () => withRunLock(run.paths.directory, async () => {
@@ -115,11 +113,15 @@ test("concurrent stale-lock reclaimers preserve mutual exclusion", async () => {
         await new Promise(resolve => setTimeout(resolve, 20));
         active -= 1;
     });
-    await Promise.all([operation(), operation()]);
+    for (let round = 0; round < 5; round += 1) {
+        await mkdir(lockDirectory);
+        await writeFile(join(lockDirectory, "owner.json"), JSON.stringify({ pid: 99_999_999, acquiredAt: "now", token: `dead-${round}` }));
+        await Promise.all([operation(), operation()]);
+    }
     assert.equal(maximumActive, 1);
 });
 
-test("terminal event append is atomic, unique, and follows the persisted sequence", async () => {
+void test("terminal event append is atomic, unique, and follows the persisted sequence", async () => {
     const { config } = await fixture();
     const run = await createRun(config, "full", fullProfile, "Terminal event", "task", "/work");
     await appendEvent(run.paths, {
@@ -133,20 +135,20 @@ test("terminal event append is atomic, unique, and follows the persisted sequenc
         appendTerminalEvent(run.paths, terminal),
         appendTerminalEvent(run.paths, terminal),
     ]);
-    assert.deepEqual(appended.sort(), [false, true]);
+    assert.deepEqual(appended.sort((left, right) => Number(left) - Number(right)), [false, true]);
     const events = (await readFile(run.paths.events, "utf8")).trim().split("\n").map(line => JSON.parse(line) as { sequence: number; type: string });
     assert.deepEqual(events.map(event => [event.sequence, event.type]), [[1, "parent_instruction"], [2, "run_started"], [3, "run_finished"]]);
 });
 
-test("sequenced event append repairs an interrupted tail", async () => {
+void test("sequenced event append repairs an interrupted tail", async () => {
     const { config } = await fixture(); const run = await createRun(config, "full", fullProfile, "Tail repair", "task", "/work");
-    await writeFile(run.paths.events, `${await readFile(run.paths.events, "utf8")}{\"partial\":`, "utf8");
+    await writeFile(run.paths.events, `${await readFile(run.paths.events, "utf8")}{"partial":`, "utf8");
     await appendEvent(run.paths, { schemaVersion: 4, sequence: 99, timestamp: "ignored", type: "diagnostic", data: { message: "recovered" } });
     const events = (await readFile(run.paths.events, "utf8")).trim().split("\n").map(line => JSON.parse(line) as { sequence: number; type: string });
     assert.deepEqual(events.map(event => [event.sequence, event.type]), [[1, "parent_instruction"], [2, "diagnostic"]]);
 });
 
-test("run lock does not mistake an operation EEXIST error for lock contention", async () => {
+void test("run lock does not mistake an operation EEXIST error for lock contention", async () => {
     const { config } = await fixture();
     const run = await createRun(config, "full", fullProfile, "Lock error", "task", "/work");
     let calls = 0;
@@ -159,7 +161,7 @@ test("run lock does not mistake an operation EEXIST error for lock contention", 
     assert.equal(calls, 1);
 });
 
-test("stop wins terminalization after stopping and legacy live statuses are rejected", async () => {
+void test("stop wins terminalization after stopping and legacy live statuses are rejected", async () => {
     const { config } = await fixture();
     const run = await createRun(config, "full", fullProfile, "Stop state", "task", "/work");
     await patchStatus(run.paths, { status: "starting" });
@@ -196,7 +198,7 @@ test("stop wins terminalization after stopping and legacy live statuses are reje
     await assert.rejects(requestRunStop(legacy.paths), /legacy live status schema v2/);
 });
 
-test("snapshot rejects split profile and lineage metadata", async () => {
+void test("snapshot rejects split profile and lineage metadata", async () => {
     const { config } = await fixture();
     const run = await createRun(config, "full", fullProfile, "Integrity", "task", "/work", {
         callerProfile: "full", depth: 1, originSessionId: "session",
@@ -215,7 +217,7 @@ test("snapshot rejects split profile and lineage metadata", async () => {
     await assert.rejects(readSnapshot(config.stateRoot, statusRun.request.runId), /metadata disagree.*originSessionId/);
 });
 
-test("runtime configs validate profile and subagent responsibilities independently", () => {
+void test("runtime configs validate profile and subagent responsibilities independently", () => {
     const subagent = {
         schemaVersion: 1, stateRoot: "/state", runner: { node: "/node", script: "/runner", extensions: ["/profile", "/subagent"] },
         harnesses: { pi: { command: "/pi" } }, maxDepth: 3,

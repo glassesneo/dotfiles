@@ -14,7 +14,7 @@ function result(stdout = "", stderr = "", code = 0): CommandResult {
     return { stdout, stderr, code };
 }
 
-test("probe requires TMUX and accepts only a successful complete context", async () => {
+void test("probe requires TMUX and accepts only a successful complete context", async () => {
     let calls = 0;
     const exec: CommandExecutor = async (command, args) => {
         calls += 1;
@@ -36,7 +36,7 @@ test("probe requires TMUX and accepts only a successful complete context", async
     assert.equal(await probeTmux(async () => result("ignored", "server unavailable", 1), { TMUX: "yes" }), null);
 });
 
-test("launch uses the owning session, enables remain-on-exit, and returns canonical IDs", async () => {
+void test("launch uses the owning session, enables remain-on-exit, and returns canonical IDs", async () => {
     const calls: Array<{ command: string; args: string[] }> = [];
     const exec: CommandExecutor = async (command, args) => {
         calls.push({ command, args: [...args] });
@@ -64,7 +64,7 @@ test("launch uses the owning session, enables remain-on-exit, and returns canoni
     });
 });
 
-test("launch preserves tmux errors and rejects malformed IDs", async () => {
+void test("launch preserves tmux errors and rejects malformed IDs", async () => {
     await assert.rejects(
         launchTmuxWindow(
             async () => result("", "tmux refused launch\n", 1),
@@ -83,7 +83,7 @@ test("launch preserves tmux errors and rejects malformed IDs", async () => {
     );
 });
 
-test("remain-on-exit failure cleans up the created window before reporting the error", async () => {
+void test("remain-on-exit failure cleans up the created window before reporting the error", async () => {
     const calls: string[][] = [];
     const exec: CommandExecutor = async (_command, args) => {
         calls.push([...args]);
@@ -103,7 +103,7 @@ test("remain-on-exit failure cleans up the created window before reporting the e
     assert.deepEqual(calls.at(-1), ["kill-window", "-t", "@4"]);
 });
 
-test("tmux client move validates session and pane before selecting the run window", async () => {
+void test("tmux client move validates session and pane before selecting the run window", async () => {
     const calls: string[][] = [];
     const exec: CommandExecutor = async (_command, args) => { calls.push([...args]); return args.includes("#{pane_dead}") ? result("0\n") : result(); };
     const target = { sessionId: "$1", session: "main", windowId: "@7", paneId: "%8", windowName: "sa-run" };
@@ -116,7 +116,7 @@ test("tmux client move validates session and pane before selecting the run windo
     await assert.rejects(moveTmuxClientToRun(async () => result("1\n"), { sessionId: "$1", session: "main", paneId: "%1" }, target), /no longer live/);
 });
 
-test("pane probes and kills distinguish dead, disappeared, and unexpected failures", async () => {
+void test("pane probes and kills distinguish dead, disappeared, and unexpected failures", async () => {
     const probeCalls: string[][] = [];
     const probe = (value: CommandResult): CommandExecutor => async (command, args) => {
         assert.equal(command, "tmux");
