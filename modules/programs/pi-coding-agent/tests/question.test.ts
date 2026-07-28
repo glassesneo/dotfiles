@@ -35,10 +35,11 @@ test("extension registers sequential question metadata and model guidance", () =
 
   assert.equal(registered?.name, "question");
   assert.equal(registered?.executionMode, "sequential");
-  assert.match(registered?.description ?? "", /notes/);
+  assert.match(registered?.description ?? "", /response note/);
   assert.ok(questionPromptGuidelines.some(line => /repository/.test(line)));
-  assert.ok(questionPromptGuidelines.some(line => /generic 'Other'/.test(line)));
+  assert.ok(questionPromptGuidelines.some(line => /unanswered note/.test(line)));
   assert.ok(questionPromptGuidelines.some(line => /Treat each note/.test(line)));
+  assert.ok(questionPromptGuidelines.some(line => /yes\/no/.test(line)));
 });
 
 test("non-interactive and print modes return unavailable without UI", async () => {
@@ -51,14 +52,14 @@ test("non-interactive and print modes return unavailable without UI", async () =
       undefined,
       context({ mode, hasUI: true }),
     );
-    assert.deepEqual(result.details, { status: "unavailable", answers: {} });
+    assert.deepEqual(result.details, { status: "unavailable", responses: {} });
     assert.deepEqual(JSON.parse(resultText(result.content[0])), result.details);
   }
 });
 
 test("RPC dispatch uses standard dialogs and preserves content/details", async () => {
   const tool = createQuestionToolDefinition();
-  const script = ["[ ] B", "because", "Submit answers"];
+  const script = ["[ ] B", "because", "Submit responses"];
   const result = await tool.execute(
     "call",
     params,
@@ -78,8 +79,8 @@ test("RPC dispatch uses standard dialogs and preserves content/details", async (
     }),
   );
   assert.deepEqual(result.details, {
-    status: "answered",
-    answers: {
+    status: "submitted",
+    responses: {
       choice: { kind: "single", value: "b", note: "because" },
     },
   });
@@ -130,12 +131,12 @@ test("TUI dispatch uses one custom UI through confirmation", async () => {
   );
   assert.equal(customCalls, 1);
   assert.deepEqual(result.details, {
-    status: "answered",
-    answers: { choice: { kind: "single", value: "a" } },
+    status: "submitted",
+    responses: { choice: { kind: "single", value: "a" } },
   });
 });
 
-test("tool renderers show question prompts, answers, notes, and unanswered state", () => {
+test("tool renderers show question prompts, responses, notes, and untouched state", () => {
   const tool = createQuestionToolDefinition();
   const renderTheme = { fg: (_color: string, text: string) => text } as never;
   const args = {
@@ -151,15 +152,18 @@ test("tool renderers show question prompts, answers, notes, and unanswered state
   const result = {
     content: [{ type: "text", text: "" }],
     details: {
-      status: "answered",
-      answers: { choice: { kind: "single", value: "b", note: "because" } },
+      status: "submitted",
+      responses: {
+        choice: { kind: "single", value: "b", note: "because" },
+        details: { kind: "unanswered", note: "need another path" },
+      },
     },
   } as never;
   const collapsed = tool.renderResult?.(result, { expanded: false } as never, renderTheme, { args } as never);
   const collapsedText = collapsed?.render(160).join("\n") ?? "";
-  assert.match(collapsedText, /1 answered, 1 unanswered/);
+  assert.match(collapsedText, /1 answered, 1 unanswered with note, 0 untouched/);
   assert.match(collapsedText, /Choose — B — note: because/);
-  assert.match(collapsedText, /Explain — Unanswered/);
+  assert.match(collapsedText, /Explain — Unanswered — note: need another path/);
 });
 
 test("runtime contract violations throw tool errors before UI", async () => {
@@ -188,5 +192,15 @@ test("runtime contract violations throw tool errors before UI", async () => {
       context({ mode: "rpc", hasUI: true }),
     ),
     /notePlaceholder is not supported/,
+  );
+  await assert.rejects(
+    tool.execute(
+      "call",
+      { questions: [{ ...params.questions[0], note: { mode: "answer" } }] } as never,
+      undefined,
+      undefined,
+      context({ mode: "rpc", hasUI: true }),
+    ),
+    /note is not supported/,
   );
 });

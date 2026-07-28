@@ -3,8 +3,8 @@ import test from "node:test";
 import Value from "typebox/value";
 import {
     buildQuestionToolResult,
-    formatQuestionAnswer,
-    normalizeQuestionAnswer,
+    formatQuestionResponse,
+    normalizeQuestionResponse,
     optionDisplayText,
     QuestionProgress,
     questionParameters,
@@ -22,7 +22,6 @@ const questions: QuestionItem[] = [
             { value: "safe", label: "Safe", description: "Small change" },
             { value: "fast", label: "Fast", description: "Broad change" },
         ],
-        note: { mode: "answer", placeholder: "Optional condition" },
     },
     {
         id: "details",
@@ -32,7 +31,7 @@ const questions: QuestionItem[] = [
     },
 ];
 
-test("schema accepts all four kinds and multiple questions", () => {
+test("schema accepts three kinds and multiple questions", () => {
     assert.equal(
         Value.Check(questionParameters, {
             questions: [
@@ -47,12 +46,17 @@ test("schema accepts all four kinds and multiple questions", () => {
                     ],
                 },
                 questions[1],
-                { id: "proceed", prompt: "Proceed?", kind: "confirm" },
             ],
         }),
         true,
     );
     assert.equal(Value.Check(questionParameters, { questions: [] }), false);
+    assert.equal(Value.Check(questionParameters, {
+        questions: [{ id: "legacy", prompt: "Legacy", kind: "confirm" }],
+    }), false);
+    assert.equal(Value.Check(questionParameters, {
+        questions: [{ id: "legacy", prompt: "Legacy", kind: "single", note: { mode: "answer" } }],
+    }), false);
     assert.equal(Value.Check(questionParameters, {
         questions: [{ id: "legacy", prompt: "Legacy", kind: "confirm", notePlaceholder: "old" }],
     }), false);
@@ -64,12 +68,11 @@ test("schema accepts all four kinds and multiple questions", () => {
     );
 });
 
-test("schema characterizes required fields, closed objects, and option/note shapes", () => {
+test("schema characterizes required fields, closed objects, and option shapes", () => {
     const valid = {
         questions: [{
             id: "choice", prompt: "Choose", kind: "single",
             options: [{ value: "a", label: "A", description: "First" }],
-            note: { mode: "per-option", prompt: "Why?", placeholder: "Reason" },
         }],
     };
     assert.equal(Value.Check(questionParameters, valid), true);
@@ -83,14 +86,11 @@ test("schema characterizes required fields, closed objects, and option/note shap
         { questions: [{ id: "choice", prompt: "Choose", kind: "single", options: [{ label: "A" }] }] },
         { questions: [{ id: "choice", prompt: "Choose", kind: "single", options: [{ value: "a" }] }] },
         { questions: [{ id: "choice", prompt: "Choose", kind: "single", options: [{ value: "a", label: "A", extra: true }] }] },
-        { questions: [{ id: "choice", prompt: "Choose", kind: "single", note: {} }] },
-        { questions: [{ id: "choice", prompt: "Choose", kind: "single", note: { mode: "other" } }] },
-        { questions: [{ id: "choice", prompt: "Choose", kind: "single", note: { mode: "answer", extra: true } }] },
+        { questions: [{ id: "choice", prompt: "Choose", kind: "single", note: { mode: "answer" } }] },
         { questions: valid.questions, extra: true },
     ];
     for (const value of invalid) assert.equal(Value.Check(questionParameters, value), false, JSON.stringify(value));
 
-    // Kind-specific option counts and combinations are intentionally enforced by runtime validation, not TypeBox.
     assert.equal(Value.Check(questionParameters, {
         questions: [{ id: "choice", prompt: "Choose", kind: "single", options: [] }],
     }), true);
@@ -133,7 +133,7 @@ test("runtime validation rejects duplicate and kind-specific violations", () => 
         ],
         [/does not accept options/, [{ ...questions[1], options: questions[0].options }]],
         [/initialValue is only valid/, [{ ...questions[0], initialValue: "x" }]],
-        [/note is not valid/, [{ ...questions[1], note: { mode: "answer" } }]],
+        [/note is not supported/, [{ ...questions[0], note: { mode: "answer" } } as never]],
     ];
 
     for (const [pattern, items] of invalidCases) {
@@ -149,7 +149,7 @@ test("display text includes descriptions for stable reverse lookup", () => {
     assert.equal(optionDisplayText({ value: "safe", label: "Safe" }), "Safe");
 });
 
-test("answer formatting shares labels while preserving presentation policies", () => {
+test("response formatting shares labels while preserving presentation policies", () => {
     const multi: QuestionItem = {
         id: "targets",
         prompt: "Targets",
@@ -159,27 +159,30 @@ test("answer formatting shares labels while preserving presentation policies", (
             { value: "b", label: "B" },
         ],
     };
-    const answer = {
+    const response = {
         kind: "multi" as const,
-        values: [{ value: "a", note: "first\nline" }, { value: "b" }],
+        values: ["a", "b"],
         note: "overall\nnote",
     };
 
     assert.equal(
-        formatQuestionAnswer(multi, answer),
-        "A — note: first\nline, B — note: overall\nnote",
+        formatQuestionResponse(multi, response),
+        "A, B — note: overall\nnote",
     );
     assert.equal(
-        formatQuestionAnswer(multi, answer, {
+        formatQuestionResponse(multi, response, {
             formatText: value => value.replace(/\n/g, " ⏎ "),
-            formatAnswerNote: value => ` — note: ${value.replace(/\n/g, " ⏎ ")}`,
-            formatOptionNote: value => ` (note: ${value})`,
+            formatResponseNote: value => ` — note: ${value.replace(/\n/g, " ⏎ ")}`,
         }),
-        "A (note: first\nline), B — note: overall ⏎ note",
+        "A, B — note: overall ⏎ note",
+    );
+    assert.equal(
+        formatQuestionResponse(questions[0], { kind: "unanswered", note: "try another way" }),
+        "Unanswered — note: try another way",
     );
 });
 
-test("answers normalize notes and multi values in option definition order", () => {
+test("responses normalize notes and multi values in option definition order", () => {
     const multi: QuestionItem = {
         id: "targets",
         prompt: "Targets",
@@ -189,31 +192,18 @@ test("answers normalize notes and multi values in option definition order", () =
             { value: "b", label: "B" },
             { value: "c", label: "C" },
         ],
-        note: { mode: "per-option" },
     };
 
     assert.deepEqual(
-        normalizeQuestionAnswer(multi, {
+        normalizeQuestionResponse(multi, {
             kind: "multi",
-            values: [
-                { value: "c", note: "line 1\nline 2" },
-                { value: "a", note: "  " },
-            ],
+            values: ["c", "a"],
+            note: "overall",
         }),
-        {
-            kind: "multi",
-            values: [{ value: "a" }, { value: "c", note: "line 1\nline 2" }],
-        },
+        { kind: "multi", values: ["a", "c"], note: "overall" },
     );
     assert.deepEqual(
-        normalizeQuestionAnswer({
-            id: "default-note", prompt: "Targets", kind: "multi",
-            options: [{ value: "a", label: "A" }, { value: "b", label: "B" }],
-        }, { kind: "multi", values: [{ value: "a", note: "ignored" }], note: "answer note" }),
-        { kind: "multi", values: [{ value: "a" }], note: "answer note" },
-    );
-    assert.deepEqual(
-        normalizeQuestionAnswer(questions[0], {
+        normalizeQuestionResponse(questions[0], {
             kind: "single",
             value: "safe",
             note: "\ncondition\n",
@@ -221,25 +211,25 @@ test("answers normalize notes and multi values in option definition order", () =
         { kind: "single", value: "safe", note: "\ncondition\n" },
     );
     assert.deepEqual(
-        normalizeQuestionAnswer(
-            { id: "ok", prompt: "OK?", kind: "confirm" },
-            { kind: "confirm", value: false, note: "not yet" },
-        ),
-        { kind: "confirm", value: false, note: "not yet" },
-    );
-    assert.deepEqual(
-        normalizeQuestionAnswer(questions[1], {
+        normalizeQuestionResponse(questions[1], {
             kind: "text",
             value: "first\nsecond",
         }),
         { kind: "text", value: "first\nsecond" },
     );
+    assert.deepEqual(
+        normalizeQuestionResponse(questions[0], {
+            kind: "unanswered",
+            note: "none fit",
+        }),
+        { kind: "unanswered", note: "none fit" },
+    );
 });
 
-test("normalization rejects empty or inconsistent pending answers", () => {
+test("normalization rejects empty or inconsistent pending responses", () => {
     assert.throws(
         () =>
-            normalizeQuestionAnswer(questions[0], {
+            normalizeQuestionResponse(questions[0], {
                 kind: "single",
                 value: "missing",
             }),
@@ -247,11 +237,19 @@ test("normalization rejects empty or inconsistent pending answers", () => {
     );
     assert.throws(
         () =>
-            normalizeQuestionAnswer(questions[1], {
+            normalizeQuestionResponse(questions[1], {
                 kind: "text",
                 value: " \n ",
             }),
         /non-blank/,
+    );
+    assert.throws(
+        () =>
+            normalizeQuestionResponse(questions[0], {
+                kind: "unanswered",
+                note: "  ",
+            }),
+        /non-blank note/,
     );
 });
 
@@ -259,19 +257,18 @@ test("progress supports movement, overwrite, cancellation contexts, and explicit
     const progress = new QuestionProgress(questions);
     assert.equal(progress.index, 0);
     assert.equal(progress.answeredCount, 0);
-    assert.equal(progress.unansweredCount, 2);
-    assert.throws(() => progress.answered(), /before all questions complete/);
-    assert.deepEqual(progress.submitted(), { status: "answered", answers: {} });
+    assert.equal(progress.untouchedCount, 2);
+    assert.deepEqual(progress.submitted(), { status: "submitted", responses: {} });
 
     progress.submit({ kind: "single", value: "safe" });
     assert.equal(progress.answeredCount, 1);
-    assert.equal(progress.unansweredCount, 1);
+    assert.equal(progress.untouchedCount, 1);
     assert.equal(progress.index, 0);
     progress.move(1);
     assert.equal(progress.index, 1);
     assert.deepEqual(progress.cancelled(), {
         status: "cancelled",
-        answers: { approach: { kind: "single", value: "safe" } },
+        responses: { approach: { kind: "single", value: "safe" } },
         currentQuestionId: "details",
     });
 
@@ -282,14 +279,14 @@ test("progress supports movement, overwrite, cancellation contexts, and explicit
     progress.submit({ kind: "single", value: "fast", note: "revised" });
     assert.deepEqual(progress.cancelled(false), {
         status: "cancelled",
-        answers: {
+        responses: {
             approach: { kind: "single", value: "fast", note: "revised" },
             details: { kind: "text", value: "line one\nline two" },
         },
     });
-    assert.deepEqual(progress.answered(), {
-        status: "answered",
-        answers: {
+    assert.deepEqual(progress.submitted(), {
+        status: "submitted",
+        responses: {
             approach: { kind: "single", value: "fast", note: "revised" },
             details: { kind: "text", value: "line one\nline two" },
         },
@@ -297,10 +294,23 @@ test("progress supports movement, overwrite, cancellation contexts, and explicit
     assert.throws(() => progress.moveTo(2), /out of range/);
 });
 
+test("progress distinguishes answered, unanswered-with-note, and untouched", () => {
+    const progress = new QuestionProgress(questions);
+    progress.submit({ kind: "unanswered", note: "need more context" });
+    assert.equal(progress.isAnswered("approach"), false);
+    assert.equal(progress.isUnansweredWithNote("approach"), true);
+    assert.equal(progress.isResponded("approach"), true);
+    assert.equal(progress.isUntouched("details"), true);
+    assert.equal(progress.answeredCount, 0);
+    assert.equal(progress.unansweredWithNoteCount, 1);
+    assert.equal(progress.respondedCount, 1);
+    assert.equal(progress.nextUntouched(), 1);
+});
+
 test("result content and details carry the same recoverable JSON", () => {
     const result = buildQuestionToolResult(unavailableResult());
     assert.deepEqual(JSON.parse(result.content[0].text), result.details);
-    assert.deepEqual(result.details, { status: "unavailable", answers: {} });
+    assert.deepEqual(result.details, { status: "unavailable", responses: {} });
 });
 
 test("progress safely preserves question IDs that are object prototype names", () => {
@@ -308,15 +318,15 @@ test("progress safely preserves question IDs that are object prototype names", (
         { id: "__proto__", prompt: "Details", kind: "text" },
     ]);
     progress.submit({ kind: "text", value: "answer" });
-    const details = progress.answered();
+    const details = progress.submitted();
     assert.deepEqual(details, {
-        status: "answered",
-        answers: Object.fromEntries([
+        status: "submitted",
+        responses: Object.fromEntries([
             ["__proto__", { kind: "text", value: "answer" }],
         ]),
     });
     assert.equal(
-        Object.prototype.hasOwnProperty.call(details.answers, "__proto__"),
+        Object.prototype.hasOwnProperty.call(details.responses, "__proto__"),
         true,
     );
     assert.deepEqual(JSON.parse(JSON.stringify(details)), details);

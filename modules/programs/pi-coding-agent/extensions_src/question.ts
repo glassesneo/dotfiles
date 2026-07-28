@@ -6,12 +6,12 @@ import {
 import { Text } from "@earendil-works/pi-tui";
 import {
     buildQuestionToolResult,
-    formatQuestionAnswer,
+    formatQuestionResponse,
     questionParameters,
     unavailableResult,
     validateQuestionParameters,
-    type QuestionAnswer,
     type QuestionItem,
+    type QuestionResponse,
     type QuestionResultDetails,
 } from "./utilities/decision_core.ts";
 import { runStandardQuestionFlow } from "./utilities/decision_standard_ui.ts";
@@ -19,29 +19,30 @@ import { runTuiQuestionFlow } from "./utilities/decision_tui.ts";
 import { loadQuestionKeymapConfig } from "./utilities/decision_keymap.ts";
 
 export const questionDescription =
-    "Ask the user for decisions or missing information required to continue the current task. Supports single-choice, multiple-choice, multiline text, and confirmation questions. Selection questions support answer-level notes by default or per-option notes when note.mode is per-option. Users may submit with questions unanswered; absent answer IDs are unanswered.";
+    "Ask the user for decisions or missing information required to continue the current task. Supports single-choice, multiple-choice, and multiline text questions. For yes/no questions, use a two-option single question. Users may add an optional response note to selected answers or submit an unanswered note when no option applies. Users may submit with questions untouched; absent response IDs are intentionally skipped.";
 
 function inline(value: string): string {
     return value.replace(/\s*\r?\n\s*/g, " ⏎ ").trim();
 }
 
-function answerDisplay(question: QuestionItem, answer: QuestionAnswer, expanded: boolean): string {
+function responseDisplay(question: QuestionItem, response: QuestionResponse, expanded: boolean): string {
     const formatValue = expanded ? (value: string) => value : inline;
-    return formatQuestionAnswer(question, answer, {
+    return formatQuestionResponse(question, response, {
         formatText: formatValue,
-        formatAnswerNote: value => ` — note: ${formatValue(value)}`,
+        formatResponseNote: value => ` — note: ${formatValue(value)}`,
     });
 }
 
 export const questionPromptGuidelines = [
     "Ask only questions whose answers affect the current task; do not ask for facts available from the repository or provided materials.",
     "Group related questions in one question call when useful, but ask the minimum number needed.",
-    "Selection questions accept optional notes. note.mode='answer' attaches one note to the answer; note.mode='per-option' attaches notes to selected options. Treat each note as decision input.",
+    "For yes/no questions, use kind='single' with Yes and No options and stable string values.",
+    "Users can add one optional response note to a selected answer, or submit an unanswered note when no option fits. Treat each note as decision input.",
     "When a user may choose a direction such as 'revise' and explain conditions, prefer that option with its note over adding a separate text question.",
     "Separate meaningful directions into options and use notes for conditions that do not fit the option label.",
-    "Do not mechanically add a generic 'Other' option because notes are always available; add it only when it is a meaningful independent branch.",
-    "A submitted question result may omit unanswered question IDs. Treat absent IDs as intentionally unanswered rather than as tool failure.",
-    "After receiving the structured answers, return to the original task.",
+    "Do not mechanically add a generic 'Other' option; users can submit an unanswered note when no option applies.",
+    "A submitted question result may omit untouched question IDs. Treat absent IDs as intentionally skipped rather than as tool failure.",
+    "After receiving the structured responses, return to the original task.",
 ];
 
 export function createQuestionToolDefinition(): ToolDefinition<
@@ -53,7 +54,7 @@ export function createQuestionToolDefinition(): ToolDefinition<
         label: "Question",
         description: questionDescription,
         promptSnippet:
-            "Ask the user to make user-owned decisions or provide missing information that affects the current task, with optional notes on selections",
+            "Ask the user to make user-owned decisions or provide missing information that affects the current task, with optional response notes",
         promptGuidelines: questionPromptGuidelines,
         parameters: questionParameters,
         executionMode: "sequential",
@@ -83,15 +84,20 @@ export function createQuestionToolDefinition(): ToolDefinition<
         renderResult(result, options, theme, context) {
             const details = result.details;
             const questions = context.args.questions;
-            const count = Object.keys(details.answers).length;
-            const unanswered = questions.length - count;
+            const responded = Object.keys(details.responses).length;
+            const untouched = questions.length - responded;
+            const answered = questions.filter(q => {
+                const r = details.responses[q.id];
+                return r?.kind === "single" || r?.kind === "multi" || r?.kind === "text";
+            }).length;
+            const withNote = questions.filter(q => details.responses[q.id]?.kind === "unanswered").length;
             const current = details.currentQuestionId === undefined ? "" : ` at ${details.currentQuestionId}`;
-            const summary = `${theme.fg("accent", details.status)} — ${count} answered, ${unanswered} unanswered${current}`;
+            const summary = `${theme.fg("accent", details.status)} — ${answered} answered, ${withNote} unanswered with note, ${untouched} untouched${current}`;
             const rows = questions.map((question, index) => {
-                const answer = details.answers[question.id];
+                const response = details.responses[question.id];
                 const title = `Q${index + 1}: ${question.prompt}`;
-                if (answer === undefined) return `${title} — Unanswered`;
-                const display = answerDisplay(question, answer, options.expanded);
+                if (response === undefined) return `${title} — Untouched`;
+                const display = responseDisplay(question, response, options.expanded);
                 return options.expanded ? `${title}\n  ${display.replace(/\n/g, "\n  ")}` : `${title} — ${display}`;
             });
             return new Text(`${summary}\n${rows.join("\n")}`);

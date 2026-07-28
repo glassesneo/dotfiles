@@ -300,7 +300,7 @@ test("tool approve/revision/reject UI statuses and action notes are deterministi
 
     const approvedContent = "# Design\n\nStatus: implementation-ready\n\n## Summary\n\nUseful approval summary.\n";
     let approvalReviewText = "";
-    const approveSelects = ["[ ] Approve", "Submit answers"];
+    const approveSelects = ["[ ] Approve", "Submit responses"];
     const approved = await tool.execute(
         "call",
         toolParams("design", "approve-me", approvedContent),
@@ -332,7 +332,7 @@ test("tool approve/revision/reject UI statuses and action notes are deterministi
     assert.match(renderedText, /Useful approval summary\./);
     assert.match(renderedText, new RegExp(approved.details.finalPath!));
 
-    const reviseSelects = ["[ ] Request revision", "Submit answers"];
+    const reviseSelects = ["[ ] Request revision", "Submit responses"];
     const revision = await tool.execute(
         "call",
         toolParams("design", "revise-me", "# Design\n"),
@@ -350,7 +350,7 @@ test("tool approve/revision/reject UI statuses and action notes are deterministi
     assert.equal(revision.details.actionNote, "tighten scope");
     assert.equal((await readPendingArtifact(root, revision.details.pendingId)).revisionInstructions, "tighten scope");
 
-    const rejectSelects = ["[ ] Reject", "Submit answers"];
+    const rejectSelects = ["[ ] Reject", "Submit responses"];
     const rejected = await tool.execute(
         "call",
         toolParams("design", "reject-me", "# Design\n"),
@@ -371,8 +371,8 @@ test("blank revision notes re-prompt without recording an instructionless revisi
     const root = await makeTemporaryRoot(t);
     const tool = createAgentArtifactToolDefinition();
     const selects = [
-        "[ ] Request revision", "Submit answers",
-        "[ ] Request revision", "Submit answers",
+        "[ ] Request revision", "Submit responses",
+        "[ ] Request revision", "Submit responses",
     ];
     const notes = ["   ", "add acceptance criteria"];
     const notifications: string[] = [];

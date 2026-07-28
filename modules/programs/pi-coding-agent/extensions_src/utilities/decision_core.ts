@@ -1,21 +1,15 @@
 import { StringEnum } from "@earendil-works/pi-ai";
 import { Type, type Static } from "typebox";
 
-export const questionKinds = ["single", "multi", "text", "confirm"] as const;
+export const questionKinds = ["single", "multi", "text"] as const;
 export type QuestionKind = (typeof questionKinds)[number];
-export const questionNoteModes = ["answer", "per-option"] as const;
-export type QuestionNoteMode = (typeof questionNoteModes)[number];
+
+export const SYNTHETIC_UNANSWERED_LABEL = "None of these — add a note";
 
 export interface QuestionOption {
     value: string;
     label: string;
     description?: string;
-}
-
-export interface QuestionNoteConfig {
-    mode: QuestionNoteMode;
-    prompt?: string;
-    placeholder?: string;
 }
 
 export interface QuestionItem {
@@ -24,20 +18,19 @@ export interface QuestionItem {
     kind: QuestionKind;
     options?: QuestionOption[];
     initialValue?: string;
-    note?: QuestionNoteConfig;
 }
 
 export interface QuestionParameters { questions: QuestionItem[]; }
 
-export type QuestionAnswer =
+export type QuestionResponse =
     | { kind: "single"; value: string; note?: string }
-    | { kind: "multi"; values: Array<{ value: string; note?: string }>; note?: string }
+    | { kind: "multi"; values: string[]; note?: string }
     | { kind: "text"; value: string }
-    | { kind: "confirm"; value: boolean; note?: string };
+    | { kind: "unanswered"; note: string };
 
 export interface QuestionResultDetails {
-    status: "answered" | "cancelled" | "unavailable";
-    answers: Record<string, QuestionAnswer>;
+    status: "submitted" | "cancelled" | "unavailable";
+    responses: Record<string, QuestionResponse>;
     currentQuestionId?: string;
 }
 
@@ -47,26 +40,19 @@ const questionOptionSchema = Type.Object({
     description: Type.Optional(Type.String()),
 }, { additionalProperties: false });
 
-const questionNoteSchema = Type.Object({
-    mode: StringEnum(questionNoteModes),
-    prompt: Type.Optional(Type.String()),
-    placeholder: Type.Optional(Type.String()),
-}, { additionalProperties: false });
-
 const questionItemSchema = Type.Object({
     id: Type.String({ minLength: 1 }),
     prompt: Type.String({ minLength: 1 }),
     kind: StringEnum(questionKinds),
     options: Type.Optional(Type.Array(questionOptionSchema)),
     initialValue: Type.Optional(Type.String()),
-    note: Type.Optional(questionNoteSchema),
 }, { additionalProperties: false });
 
 export const questionParameters = Type.Object({
     questions: Type.Array(questionItemSchema, { minItems: 1 }),
 }, { additionalProperties: false });
 export type InferredQuestionParameters = Static<typeof questionParameters>;
-export type PendingQuestionAnswer = QuestionAnswer;
+export type PendingQuestionResponse = QuestionResponse;
 export interface QuestionToolResult {
     content: Array<{ type: "text"; text: string }>;
     details: QuestionResultDetails;
@@ -77,12 +63,27 @@ export type DecisionItem = QuestionItem;
 export type DecisionResultDetails = QuestionResultDetails;
 
 export type DecisionNoteRequirement = "none" | "optional" | "required";
+export interface DecisionNotePresentation {
+    prompt?: string;
+    placeholder?: string;
+}
 export interface DecisionFlowPolicy {
     autoSubmitSingle?: boolean;
+    allowUnansweredNote?: boolean;
     noteRequirement?: (
         item: QuestionItem,
         option?: QuestionOption,
     ) => DecisionNoteRequirement;
+    notePresentation?: (
+        item: QuestionItem,
+        context: "response" | "unanswered",
+    ) => DecisionNotePresentation;
+}
+
+export function shouldAllowUnansweredNote(
+    policy: DecisionFlowPolicy | undefined,
+): boolean {
+    return policy?.allowUnansweredNote ?? true;
 }
 
 export function decisionNoteRequirement(
@@ -99,40 +100,42 @@ export function shouldAutoSubmitSingle(
     return policy?.autoSubmitSingle ?? true;
 }
 
+export function notePresentation(
+    policy: DecisionFlowPolicy | undefined,
+    item: QuestionItem,
+    context: "response" | "unanswered",
+): DecisionNotePresentation {
+    return policy?.notePresentation?.(item, context) ?? {};
+}
+
 export function optionDisplayText(option: QuestionOption): string {
     return option.description === undefined ? option.label : `${option.label} — ${option.description}`;
 }
 
-export interface QuestionAnswerFormatPolicy {
+export interface QuestionResponseFormatPolicy {
     formatText?: (value: string) => string;
-    formatAnswerNote?: (value: string) => string;
-    formatOptionNote?: (value: string) => string;
+    formatResponseNote?: (value: string) => string;
 }
 
-export function formatQuestionAnswer(
+export function formatQuestionResponse(
     question: QuestionItem,
-    answer: QuestionAnswer,
-    policy: QuestionAnswerFormatPolicy = {},
+    response: QuestionResponse,
+    policy: QuestionResponseFormatPolicy = {},
 ): string {
     const formatText = policy.formatText ?? (value => value);
-    const formatAnswerNote = policy.formatAnswerNote ?? (value => ` — note: ${value}`);
-    const formatOptionNote = policy.formatOptionNote ?? formatAnswerNote;
-    const noteSuffix = (note: string | undefined, formatter: (value: string) => string): string =>
-        note === undefined ? "" : formatter(note);
+    const formatResponseNote = policy.formatResponseNote ?? (value => ` — note: ${value}`);
+    const noteSuffix = (note: string | undefined): string =>
+        note === undefined ? "" : formatResponseNote(note);
     const optionLabel = (value: string): string =>
         question.options?.find(option => option.value === value)?.label ?? value;
 
-    if (answer.kind === "text") return formatText(answer.value);
-    if (answer.kind === "confirm") {
-        return `${answer.value ? "Yes" : "No"}${noteSuffix(answer.note, formatAnswerNote)}`;
+    if (response.kind === "text") return formatText(response.value);
+    if (response.kind === "unanswered") return `Unanswered${noteSuffix(response.note)}`;
+    if (response.kind === "single") {
+        return `${optionLabel(response.value)}${noteSuffix(response.note)}`;
     }
-    if (answer.kind === "single") {
-        return `${optionLabel(answer.value)}${noteSuffix(answer.note, formatAnswerNote)}`;
-    }
-    const values = answer.values
-        .map(selected => `${optionLabel(selected.value)}${noteSuffix(selected.note, formatOptionNote)}`)
-        .join(", ");
-    return `${values}${noteSuffix(answer.note, formatAnswerNote)}`;
+    const values = response.values.map(value => optionLabel(value)).join(", ");
+    return `${values}${noteSuffix(response.note)}`;
 }
 
 function requireNonBlank(value: string, message: string): void {
@@ -146,17 +149,15 @@ function requireUnique(values: readonly string[], message: (value: string) => st
     }
 }
 
-export function noteMode(question: QuestionItem): QuestionNoteMode | undefined {
-    if (question.kind === "text") return undefined;
-    return question.note?.mode ?? "answer";
-}
-
 export function validateQuestionParameters(params: QuestionParameters): void {
     if (params.questions.length === 0) throw new Error("questions must contain at least one question");
     requireUnique(params.questions.map(question => question.id), id => `Question id must be unique: ${id}`);
     for (const question of params.questions) {
         if (Object.prototype.hasOwnProperty.call(question, "notePlaceholder")) {
             throw new Error(`notePlaceholder is not supported: ${question.id}`);
+        }
+        if (Object.prototype.hasOwnProperty.call(question, "note")) {
+            throw new Error(`note is not supported: ${question.id}`);
         }
         requireNonBlank(question.id, "Question id must not be blank");
         requireNonBlank(question.prompt, `Question prompt must not be blank: ${question.id}`);
@@ -177,12 +178,6 @@ export function validateQuestionParameters(params: QuestionParameters): void {
         if (question.initialValue !== undefined && question.kind !== "text") {
             throw new Error(`initialValue is only valid for text questions: ${question.id}`);
         }
-        if (question.note !== undefined && question.kind === "text") {
-            throw new Error(`note is not valid for text questions: ${question.id}`);
-        }
-        if (question.note?.mode === "per-option" && question.kind === "confirm") {
-            throw new Error(`per-option note mode is not valid for confirm questions: ${question.id}`);
-        }
     }
 }
 
@@ -193,9 +188,13 @@ function optionValues(question: QuestionItem): Set<string> {
     return new Set((question.options ?? []).map(option => option.value));
 }
 
-export function normalizeQuestionAnswer(question: QuestionItem, pending: PendingQuestionAnswer): QuestionAnswer {
+export function normalizeQuestionResponse(question: QuestionItem, pending: PendingQuestionResponse): QuestionResponse {
+    if (pending.kind === "unanswered") {
+        requireNonBlank(pending.note, `unanswered response for question ${question.id} requires a non-blank note`);
+        return { kind: "unanswered", note: pending.note.trim() === pending.note ? pending.note : pending.note.trim() };
+    }
     if (pending.kind !== question.kind) {
-        throw new Error(`Answer kind ${pending.kind} does not match question ${question.id} (${question.kind})`);
+        throw new Error(`Response kind ${pending.kind} does not match question ${question.id} (${question.kind})`);
     }
     switch (pending.kind) {
         case "single": {
@@ -206,32 +205,33 @@ export function normalizeQuestionAnswer(question: QuestionItem, pending: Pending
         case "multi": {
             if (pending.values.length === 0) throw new Error(`multi question ${question.id} requires at least one selection`);
             const allowed = optionValues(question);
-            const byValue = new Map<string, string | undefined>();
-            for (const selected of pending.values) {
-                if (!allowed.has(selected.value)) throw new Error(`Unknown option value for question ${question.id}: ${selected.value}`);
-                if (byValue.has(selected.value)) throw new Error(`Duplicate selected value for question ${question.id}: ${selected.value}`);
-                byValue.set(selected.value, normalizeNote(selected.note));
+            const selected = new Set<string>();
+            for (const value of pending.values) {
+                if (!allowed.has(value)) throw new Error(`Unknown option value for question ${question.id}: ${value}`);
+                if (selected.has(value)) throw new Error(`Duplicate selected value for question ${question.id}: ${value}`);
+                selected.add(value);
             }
-            const values = (question.options ?? []).filter(option => byValue.has(option.value)).map(option => {
-                const note = noteMode(question) === "per-option" ? byValue.get(option.value) : undefined;
-                return note === undefined ? { value: option.value } : { value: option.value, note };
-            });
-            const note = noteMode(question) === "answer" ? normalizeNote(pending.note) : undefined;
+            const values = (question.options ?? []).filter(option => selected.has(option.value)).map(option => option.value);
+            const note = normalizeNote(pending.note);
             return note === undefined ? { kind: "multi", values } : { kind: "multi", values, note };
         }
         case "text":
             requireNonBlank(pending.value, `text question ${question.id} requires a non-blank answer`);
             return { kind: "text", value: pending.value };
-        case "confirm": {
-            const note = normalizeNote(pending.note);
-            return note === undefined ? { kind: "confirm", value: pending.value } : { kind: "confirm", value: pending.value, note };
-        }
     }
+}
+
+function isAnsweredResponse(response: QuestionResponse): boolean {
+    return response.kind === "single" || response.kind === "multi" || response.kind === "text";
+}
+
+function isUnansweredWithNote(response: QuestionResponse): boolean {
+    return response.kind === "unanswered";
 }
 
 export class QuestionProgress {
     readonly #questions: readonly QuestionItem[];
-    readonly #answers = new Map<string, QuestionAnswer>();
+    readonly #responses = new Map<string, QuestionResponse>();
     #index = 0;
     constructor(questions: readonly QuestionItem[]) {
         if (questions.length === 0) throw new Error("QuestionProgress requires at least one question");
@@ -251,39 +251,59 @@ export class QuestionProgress {
     }
     moveTo(index: number): void { this.questionAt(index); this.#index = index; }
     move(delta: number): void { this.#index = (this.#index + delta % this.total + this.total) % this.total; }
-    answerFor(questionOrId: QuestionItem | string): QuestionAnswer | undefined {
-        return this.#answers.get(typeof questionOrId === "string" ? questionOrId : questionOrId.id);
+    responseFor(questionOrId: QuestionItem | string): QuestionResponse | undefined {
+        return this.#responses.get(typeof questionOrId === "string" ? questionOrId : questionOrId.id);
     }
-    isAnswered(questionOrId: QuestionItem | string): boolean { return this.answerFor(questionOrId) !== undefined; }
-    get answeredCount(): number { return this.#answers.size; }
-    get unansweredCount(): number { return this.total - this.answeredCount; }
-    get allAnswered(): boolean { return this.unansweredCount === 0; }
-    nextUnanswered(after = this.#index): number | undefined {
+    isAnswered(questionOrId: QuestionItem | string): boolean {
+        const response = this.responseFor(questionOrId);
+        return response !== undefined && isAnsweredResponse(response);
+    }
+    isUnansweredWithNote(questionOrId: QuestionItem | string): boolean {
+        const response = this.responseFor(questionOrId);
+        return response !== undefined && isUnansweredWithNote(response);
+    }
+    isUntouched(questionOrId: QuestionItem | string): boolean {
+        return this.responseFor(questionOrId) === undefined;
+    }
+    isResponded(questionOrId: QuestionItem | string): boolean {
+        return !this.isUntouched(questionOrId);
+    }
+    get answeredCount(): number {
+        let count = 0;
+        for (const question of this.#questions) if (this.isAnswered(question)) count += 1;
+        return count;
+    }
+    get unansweredWithNoteCount(): number {
+        let count = 0;
+        for (const question of this.#questions) if (this.isUnansweredWithNote(question)) count += 1;
+        return count;
+    }
+    get respondedCount(): number { return this.answeredCount + this.unansweredWithNoteCount; }
+    get untouchedCount(): number { return this.total - this.respondedCount; }
+    get allAnswered(): boolean { return this.answeredCount === this.total; }
+    get allResponded(): boolean { return this.untouchedCount === 0; }
+    nextUntouched(after = this.#index): number | undefined {
         for (let offset = 1; offset <= this.total; offset += 1) {
             const index = (after + offset) % this.total;
-            if (!this.isAnswered(this.#questions[index]!)) return index;
+            if (this.isUntouched(this.#questions[index]!)) return index;
         }
         return undefined;
     }
-    submit(pending: PendingQuestionAnswer): QuestionAnswer {
-        const answer = normalizeQuestionAnswer(this.current, pending);
-        this.#answers.set(this.current.id, answer);
-        return answer;
-    }
-    answered(): QuestionResultDetails {
-        if (!this.allAnswered) throw new Error("Cannot build a complete answered result before all questions complete");
-        return this.submitted();
+    submit(pending: PendingQuestionResponse): QuestionResponse {
+        const response = normalizeQuestionResponse(this.current, pending);
+        this.#responses.set(this.current.id, response);
+        return response;
     }
     submitted(): QuestionResultDetails {
-        return { status: "answered", answers: Object.fromEntries(this.#answers) };
+        return { status: "submitted", responses: Object.fromEntries(this.#responses) };
     }
     cancelled(includeCurrentQuestion = true): QuestionResultDetails {
-        const base = { status: "cancelled" as const, answers: Object.fromEntries(this.#answers) };
+        const base = { status: "cancelled" as const, responses: Object.fromEntries(this.#responses) };
         return includeCurrentQuestion ? { ...base, currentQuestionId: this.current.id } : base;
     }
 }
 
-export function unavailableResult(): QuestionResultDetails { return { status: "unavailable", answers: {} }; }
+export function unavailableResult(): QuestionResultDetails { return { status: "unavailable", responses: {} }; }
 export function buildQuestionToolResult(details: QuestionResultDetails): QuestionToolResult {
     return { content: [{ type: "text", text: JSON.stringify(details, null, 2) }], details };
 }

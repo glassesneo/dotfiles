@@ -17,13 +17,6 @@
     "toggle": ["space"],
     "edit-note": ["e"]
   },
-  "question.confirm": {
-    "move-up": ["up", "k"],
-    "move-down": ["down", "j"],
-    "edit-note": ["e"],
-    "confirm-yes": ["y"],
-    "confirm-no": ["n"]
-  },
   "question.review": {
     "move-up": ["up", "k"],
     "move-down": ["down", "j"]

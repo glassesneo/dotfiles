@@ -1,18 +1,19 @@
 import type { ExtensionUIContext } from "@earendil-works/pi-coding-agent";
 import {
     decisionNoteRequirement,
-    formatQuestionAnswer,
-    noteMode,
-    optionDisplayText,
+    formatQuestionResponse,
+    notePresentation,
     QuestionProgress,
+    shouldAllowUnansweredNote,
     shouldAutoSubmitSingle,
+    SYNTHETIC_UNANSWERED_LABEL,
     unavailableResult,
     type DecisionFlowPolicy,
     type DecisionNoteRequirement,
-    type PendingQuestionAnswer,
-    type QuestionAnswer,
+    type PendingQuestionResponse,
     type QuestionItem,
     type QuestionOption,
+    type QuestionResponse,
     type QuestionResultDetails,
 } from "./decision_core.ts";
 
@@ -22,7 +23,7 @@ export interface StandardQuestionContext {
 }
 
 const REVIEW_NOW = Symbol("review-now");
-type QuestionStepResult = PendingQuestionAnswer | typeof REVIEW_NOW | undefined;
+type QuestionStepResult = PendingQuestionResponse | typeof REVIEW_NOW | undefined;
 
 function isCancelled(signal: AbortSignal | undefined): boolean {
     return signal?.aborted === true;
@@ -42,34 +43,33 @@ function uniqueLabel(base: string, displays: ReadonlySet<string>): string {
     return label;
 }
 
-function noteFrom(answer: QuestionAnswer | undefined, value?: string): string | undefined {
-    if (answer?.kind === "single" || answer?.kind === "confirm") return answer.note;
-    if (answer?.kind === "multi") {
-        if (value === undefined) return answer.note;
-        return answer.values.find(selected => selected.value === value)?.note;
-    }
+function noteFrom(response: QuestionResponse | undefined): string | undefined {
+    if (response?.kind === "single" || response?.kind === "multi") return response.note;
+    if (response?.kind === "unanswered") return response.note;
     return undefined;
 }
 
 async function askNote(
     ui: StandardQuestionContext["ui"],
     question: QuestionItem,
+    context: "response" | "unanswered",
     label: string,
     existing: string | undefined,
     requirement: DecisionNoteRequirement,
     signal: AbortSignal | undefined,
+    policy: DecisionFlowPolicy | undefined,
 ): Promise<string | undefined | null> {
     if (requirement === "none") return undefined;
     let prefill = existing ?? "";
     while (true) {
         if (isCancelled(signal)) return null;
-        const fallback = requirement === "required" ? `Required note for ${label}` : `Optional note for ${label}`;
-        const title = question.note?.prompt ?? fallback;
-        const placeholder = question.note?.placeholder;
-        const note = await ui.editor(
-            placeholder === undefined ? title : `${title} — ${placeholder}`,
-            prefill,
-        );
+        const presentation = notePresentation(policy, question, context);
+        const fallback = context === "unanswered"
+            ? "Add a note when none of the options apply"
+            : requirement === "required" ? `Required note for ${label}` : `Optional note for ${label}`;
+        const title = presentation.prompt ?? fallback;
+        const editorTitle = presentation.placeholder === undefined ? title : `${title} — ${presentation.placeholder}`;
+        const note = await ui.editor(editorTitle, prefill);
         if (note === undefined || isCancelled(signal)) return null;
         if (requirement !== "required" || note.trim().length > 0) return note;
         ui.notify("Enter a non-blank note to continue.", "warning");
@@ -82,15 +82,19 @@ function markedOptions(
     currentValue: string | undefined,
 ): string[] {
     return options.map(option =>
-        `${option.value === currentValue ? "[current]" : "[ ]"} ${optionDisplayText(option)}`,
+        `${option.value === currentValue ? "[current]" : "[ ]"} ${option.label}${option.description ? ` — ${option.description}` : ""}`,
     );
+}
+
+function syntheticUnansweredLabel(displays: ReadonlySet<string>): string {
+    return uniqueLabel(`[ ] ${SYNTHETIC_UNANSWERED_LABEL}`, displays);
 }
 
 async function askSingle(
     context: StandardQuestionContext,
     question: QuestionItem,
     title: string,
-    existing: QuestionAnswer | undefined,
+    existing: QuestionResponse | undefined,
     signal: AbortSignal | undefined,
     policy: DecisionFlowPolicy | undefined,
     reviewActionLabel: string,
@@ -98,48 +102,72 @@ async function askSingle(
     const options = question.options ?? [];
     const current = existing?.kind === "single" ? existing.value : undefined;
     const displays = markedOptions(options, current);
-    const reviewLabel = uniqueLabel(reviewActionLabel, new Set(displays));
-    const selected = await context.ui.select(title, [...displays, reviewLabel], { signal });
-    if (selected === undefined || isCancelled(signal)) return undefined;
-    if (selected === reviewLabel) return REVIEW_NOW;
-    const option = options[displays.indexOf(selected)];
-    if (option === undefined) throw new Error(`Standard UI returned an unknown option: ${selected}`);
-    const requirement = decisionNoteRequirement(policy, question, option);
-    const note = await askNote(context.ui, question, option.label, noteFrom(existing), requirement, signal);
-    if (note === null) return undefined;
-    return { kind: "single", value: option.value, note };
+    const displaySet = new Set(displays);
+    const syntheticLabel = shouldAllowUnansweredNote(policy) ? syntheticUnansweredLabel(displaySet) : undefined;
+    if (syntheticLabel !== undefined) displaySet.add(syntheticLabel);
+    const reviewLabel = uniqueLabel(reviewActionLabel, displaySet);
+    while (true) {
+        const selected = await context.ui.select(title, [...displays, ...(syntheticLabel ? [syntheticLabel] : []), reviewLabel], { signal });
+        if (selected === undefined || isCancelled(signal)) return undefined;
+        if (selected === reviewLabel) return REVIEW_NOW;
+        if (selected === syntheticLabel) {
+            const note = await askNote(context.ui, question, "unanswered", "alternative", noteFrom(existing), "required", signal, policy);
+            if (isCancelled(signal)) return undefined;
+            if (note === null || note === undefined) continue;
+            return { kind: "unanswered", note };
+        }
+        const option = options[displays.indexOf(selected)];
+        if (option === undefined) throw new Error(`Standard UI returned an unknown option: ${selected}`);
+        const requirement = decisionNoteRequirement(policy, question, option);
+        const note = await askNote(context.ui, question, "response", option.label, noteFrom(existing), requirement, signal, policy);
+        if (note === null) return undefined;
+        return { kind: "single", value: option.value, note };
+    }
 }
 
 async function askMulti(
     context: StandardQuestionContext,
     question: QuestionItem,
     title: string,
-    existing: QuestionAnswer | undefined,
+    existing: QuestionResponse | undefined,
     signal: AbortSignal | undefined,
     policy: DecisionFlowPolicy | undefined,
     reviewActionLabel: string,
 ): Promise<QuestionStepResult> {
     const options = question.options ?? [];
     const selectedValues = new Set(
-        existing?.kind === "multi" ? existing.values.map(selected => selected.value) : [],
+        existing?.kind === "multi" ? existing.values : [],
     );
-    const rawDisplays = new Set(options.map(optionDisplayText));
-    const doneLabel = uniqueLabel("Done — confirm selections", rawDisplays);
-    rawDisplays.add(doneLabel);
-    const reviewLabel = uniqueLabel(reviewActionLabel, rawDisplays);
+    const controlDisplays = new Set<string>();
+    for (const option of options) {
+        const display = `${option.label}${option.description ? ` — ${option.description}` : ""}`;
+        controlDisplays.add(`[ ] ${display}`);
+        controlDisplays.add(`[x] ${display}`);
+    }
+    const doneLabel = uniqueLabel("Done — confirm selections", controlDisplays);
+    controlDisplays.add(doneLabel);
+    const syntheticLabel = shouldAllowUnansweredNote(policy) ? syntheticUnansweredLabel(controlDisplays) : undefined;
+    if (syntheticLabel !== undefined) controlDisplays.add(syntheticLabel);
+    const reviewLabel = uniqueLabel(reviewActionLabel, controlDisplays);
 
     while (true) {
         if (isCancelled(signal)) return undefined;
         const displays = options.map(option =>
-            `${selectedValues.has(option.value) ? "[x]" : "[ ]"} ${optionDisplayText(option)}`,
+            `${selectedValues.has(option.value) ? "[x]" : "[ ]"} ${option.label}${option.description ? ` — ${option.description}` : ""}`,
         );
         const selected = await context.ui.select(
             `${title} (toggle items, then choose Done)`,
-            [...displays, doneLabel, reviewLabel],
+            [...displays, doneLabel, ...(syntheticLabel ? [syntheticLabel] : []), reviewLabel],
             { signal },
         );
         if (selected === undefined || isCancelled(signal)) return undefined;
         if (selected === reviewLabel) return REVIEW_NOW;
+        if (selected === syntheticLabel) {
+            const note = await askNote(context.ui, question, "unanswered", "alternative", noteFrom(existing), "required", signal, policy);
+            if (isCancelled(signal)) return undefined;
+            if (note === null || note === undefined) continue;
+            return { kind: "unanswered", note };
+        }
         if (selected === doneLabel) {
             if (selectedValues.size > 0) break;
             context.ui.notify("Select at least one option before choosing Done.", "warning");
@@ -153,64 +181,18 @@ async function askMulti(
         else selectedValues.add(option.value);
     }
 
-    const values: Array<{ value: string; note?: string }> = [];
-    if (noteMode(question) === "per-option") {
-        for (const option of options) {
-            if (!selectedValues.has(option.value)) continue;
-            const requirement = decisionNoteRequirement(policy, question, option);
-            const note = await askNote(context.ui, question, option.label, noteFrom(existing, option.value), requirement, signal);
-            if (note === null) return undefined;
-            values.push({ value: option.value, note });
-        }
-        return { kind: "multi", values };
-    }
-    for (const option of options) if (selectedValues.has(option.value)) values.push({ value: option.value });
+    const values = (question.options ?? []).filter(option => selectedValues.has(option.value)).map(option => option.value);
     const requirement = decisionNoteRequirement(policy, question);
-    const note = await askNote(context.ui, question, "answer", noteFrom(existing), requirement, signal);
+    const note = await askNote(context.ui, question, "response", "answer", noteFrom(existing), requirement, signal, policy);
     if (note === null) return undefined;
     return { kind: "multi", values, note };
-}
-
-async function askConfirm(
-    context: StandardQuestionContext,
-    question: QuestionItem,
-    title: string,
-    existing: QuestionAnswer | undefined,
-    signal: AbortSignal | undefined,
-    policy: DecisionFlowPolicy | undefined,
-    reviewActionLabel: string,
-): Promise<QuestionStepResult> {
-    const current = existing?.kind === "confirm" ? String(existing.value) : undefined;
-    const displays = [
-        `${current === "true" ? "[current]" : "[ ]"} Yes`,
-        `${current === "false" ? "[current]" : "[ ]"} No`,
-    ];
-    const reviewLabel = uniqueLabel(reviewActionLabel, new Set(displays));
-    const selected = await context.ui.select(title, [...displays, reviewLabel], { signal });
-    if (selected === undefined || isCancelled(signal)) return undefined;
-    if (selected === reviewLabel) return REVIEW_NOW;
-    const index = displays.indexOf(selected);
-    if (index < 0) throw new Error(`Standard UI returned an unknown confirmation: ${selected}`);
-    const note = await askNote(
-        context.ui,
-        question,
-        index === 0 ? "Yes" : "No",
-        noteFrom(existing),
-        decisionNoteRequirement(policy, question, {
-            value: String(index === 0),
-            label: index === 0 ? "Yes" : "No",
-        }),
-        signal,
-    );
-    if (note === null) return undefined;
-    return { kind: "confirm", value: index === 0, note };
 }
 
 async function askText(
     context: StandardQuestionContext,
     question: QuestionItem,
     title: string,
-    existing: QuestionAnswer | undefined,
+    existing: QuestionResponse | undefined,
     signal: AbortSignal | undefined,
     _policy: DecisionFlowPolicy | undefined,
     reviewActionLabel: string,
@@ -229,26 +211,30 @@ async function askText(
     }
 }
 
+function responseReviewLabel(question: QuestionItem, index: number, response: QuestionResponse | undefined): string {
+    const prefix = `Q${index + 1}: ${question.prompt} — `;
+    if (response === undefined) return `${prefix}Untouched`;
+    return `${prefix}${formatQuestionResponse(question, response)}`;
+}
+
 async function askQuestion(
     context: StandardQuestionContext,
     question: QuestionItem,
     index: number,
     total: number,
-    existing: QuestionAnswer | undefined,
+    existing: QuestionResponse | undefined,
     signal: AbortSignal | undefined,
     policy: DecisionFlowPolicy | undefined,
 ): Promise<QuestionStepResult> {
     const title = progressTitle(question, index, total);
     const reviewActionLabel = total === 1 && shouldAutoSubmitSingle(policy)
-        ? "Submit without answering"
-        : "Review answers now";
+        ? "Submit without responding"
+        : "Review responses now";
     switch (question.kind) {
         case "single":
             return askSingle(context, question, title, existing, signal, policy, reviewActionLabel);
         case "multi":
             return askMulti(context, question, title, existing, signal, policy, reviewActionLabel);
-        case "confirm":
-            return askConfirm(context, question, title, existing, signal, policy, reviewActionLabel);
         case "text":
             return askText(context, question, title, existing, signal, policy, reviewActionLabel);
     }
@@ -285,18 +271,15 @@ export async function runStandardDecisionFlow(
 
     while (true) {
         if (isCancelled(signal)) return progress.cancelled(false);
-        const questionLabels = questions.map((question, index) => {
-            const answer = progress.answerFor(question);
-            return `Q${index + 1}: ${question.prompt} — ${answer === undefined ? "Unanswered" : formatQuestionAnswer(question, answer, {
-                formatOptionNote: note => ` (note: ${note})`,
-            })}`;
-        });
+        const questionLabels = questions.map((question, index) =>
+            responseReviewLabel(question, index, progress.responseFor(question)),
+        );
         const used = new Set(questionLabels);
-        const submitLabel = uniqueLabel("Submit answers", used);
+        const submitLabel = uniqueLabel("Submit responses", used);
         used.add(submitLabel);
         const cancelLabel = uniqueLabel("Cancel", used);
         const selected = await context.ui.select(
-            "Review answers (choose a question to revise)",
+            "Review responses (choose a question to revise)",
             [...questionLabels, submitLabel, cancelLabel],
             { signal },
         );
@@ -313,7 +296,7 @@ export async function runStandardDecisionFlow(
             progress.current,
             index,
             progress.total,
-            progress.answerFor(progress.current),
+            progress.responseFor(progress.current),
             signal,
             policy,
         );

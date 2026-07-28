@@ -5,14 +5,14 @@ import { matchesKey, type KeyId } from "@earendil-works/pi-tui";
 import { canonicalKeyId, isValidKeyId } from "./private_key_id.ts";
 
 export const questionContexts = [
-    "question.single", "question.multi", "question.confirm", "question.text",
+    "question.single", "question.multi", "question.text",
     "question.note", "question.review", "question.common",
 ] as const;
 export type QuestionContext = (typeof questionContexts)[number];
 
 export const uiActions = [
     "accept", "newline", "next-question", "previous-question", "back", "cancel",
-    "move-up", "move-down", "toggle", "edit-note", "confirm-yes", "confirm-no",
+    "move-up", "move-down", "toggle", "edit-note",
 ] as const;
 export type UiAction = (typeof uiActions)[number];
 export type QuestionKeymapConfig = Partial<Record<QuestionContext, Partial<Record<UiAction, string[]>>>>;
@@ -25,14 +25,12 @@ const DEFAULT_OVERRIDES: QuestionKeymapConfig = {
     },
     "question.single": { "move-up": ["up", "k"], "move-down": ["down", "j"], toggle: ["space"], "edit-note": ["e"] },
     "question.multi": { "move-up": ["up", "k"], "move-down": ["down", "j"], toggle: ["space"], "edit-note": ["e"] },
-    "question.confirm": { "move-up": ["up", "k"], "move-down": ["down", "j"], "edit-note": ["e"], "confirm-yes": ["y"], "confirm-no": ["n"] },
     "question.review": { "move-up": ["up", "k"], "move-down": ["down", "j"] },
 };
 
 const inherited: Partial<Record<QuestionContext, Partial<Record<UiAction, string>>>> = {
     "question.single": { accept: "tui.select.confirm", "move-up": "tui.select.up", "move-down": "tui.select.down" },
     "question.multi": { accept: "tui.select.confirm", "move-up": "tui.select.up", "move-down": "tui.select.down" },
-    "question.confirm": { accept: "tui.select.confirm", "move-up": "tui.select.up", "move-down": "tui.select.down" },
     "question.text": { accept: "tui.input.submit", newline: "tui.input.newLine" },
     "question.note": { accept: "tui.input.submit", newline: "tui.input.newLine" },
     "question.review": { accept: "tui.select.confirm", "move-up": "tui.select.up", "move-down": "tui.select.down" },
@@ -41,7 +39,6 @@ const inherited: Partial<Record<QuestionContext, Partial<Record<UiAction, string
 const required: Partial<Record<QuestionContext, UiAction[][]>> = {
     "question.single": [["accept"], ["move-up", "move-down"], ["back", "cancel"]],
     "question.multi": [["accept"], ["move-up", "move-down"], ["back", "cancel"]],
-    "question.confirm": [["accept", "confirm-yes", "confirm-no"], ["move-up", "move-down"], ["back", "cancel"]],
     "question.text": [["accept"], ["newline"], ["back", "cancel"]],
     "question.note": [["accept"], ["newline"], ["back", "cancel"]],
     "question.review": [["accept"], ["move-up", "move-down", "next-question", "previous-question"], ["back", "cancel"]],
@@ -120,7 +117,7 @@ export function resolveUiAction(data: string, context: QuestionContext, keymap: 
 const actionLabels: Record<UiAction, string> = {
     accept: "confirm", newline: "newline", "next-question": "next", "previous-question": "previous",
     back: "back", cancel: "cancel", "move-up": "up", "move-down": "down", toggle: "toggle",
-    "edit-note": "edit note", "confirm-yes": "Yes", "confirm-no": "No",
+    "edit-note": "edit note",
 };
 export function detailedQuestionHelp(context: QuestionContext, keymap: ResolvedQuestionKeymap): Array<{ action: UiAction; keys: string[]; label: string }> {
     return (Object.entries(effectiveMap(keymap, context)) as Array<[UiAction, KeyId[]]>).filter(([, keys]) => keys.length > 0).map(([action, keys]) => ({ action, keys: [...keys], label: actionLabels[action] }));

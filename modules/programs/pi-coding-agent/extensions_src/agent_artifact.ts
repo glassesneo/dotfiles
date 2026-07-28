@@ -117,10 +117,14 @@ type ApprovalAction = "approve" | "revise" | "reject" | "view";
 
 const approvalDecisionPolicy: DecisionFlowPolicy = {
     autoSubmitSingle: true,
+    allowUnansweredNote: false,
     noteRequirement(_item, option) {
         if (option?.value === "view") return "none";
         if (option?.value === "revise") return "required";
         return "optional";
+    },
+    notePresentation(_item, _context) {
+        return { placeholder: "Add conditions, reasons, or revision instructions" };
     },
 };
 
@@ -135,10 +139,6 @@ function approvalQuestion(summary: ArtifactSummary): DecisionItem {
             { value: "reject", label: "Reject" },
             { value: "view", label: "View full text" },
         ],
-        note: {
-            mode: "answer",
-            placeholder: "Add conditions, reasons, or revision instructions",
-        },
     };
 }
 
@@ -160,19 +160,19 @@ async function selectApprovalAction(
 ): Promise<{ action: Exclude<ApprovalAction, "view">; note?: string } | undefined> {
     while (!signal?.aborted) {
         const decision = await askApprovalDecision(ctx, summary, signal);
-        const answer = decision.answers["artifact-action"];
-        if (decision.status !== "answered" || answer?.kind !== "single") return undefined;
-        const action = answer.value as ApprovalAction;
+        const response = decision.responses["artifact-action"];
+        if (decision.status !== "submitted" || response?.kind !== "single") return undefined;
+        const action = response.value as ApprovalAction;
         if (action === "view") {
             const content = await readPendingArtifactContent(ctx.cwd, summary.id);
             await ctx.ui.editor(`Full text: ${summary.pendingPath}`, content);
             continue;
         }
-        if (action === "revise" && answer.note === undefined) {
+        if (action === "revise" && response.note === undefined) {
             ctx.ui.notify("Request revision requires non-blank revision instructions in the action note.", "warning");
             continue;
         }
-        return { action, note: answer.note };
+        return { action, note: response.note };
     }
     return undefined;
 }

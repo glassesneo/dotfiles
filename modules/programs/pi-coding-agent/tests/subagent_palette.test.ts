@@ -23,7 +23,7 @@ test("subagent palette polls serially, renders textual empty state within width,
         deps: {
             stateRoot: "/definitely-missing/subagent-palette-test", originSessionId: "session",
             exec: async () => ({ stdout: "", stderr: "", code: 1 }),
-            setTimeout: ((callback: () => void) => { timer = callback; return 1 as never; }) as typeof setTimeout,
+            setTimeout: ((callback: () => void) => { timer = callback; return 1 as never; }) as unknown as typeof setTimeout,
             clearTimeout: (() => { clears += 1; timer = undefined; }) as typeof clearTimeout,
         },
         done: () => { closed += 1; },
@@ -67,7 +67,7 @@ test("list and detail preserve query and selection while exposing only available
                 return { stdout: "0\n", stderr: "", code: 0 };
             },
             copy: async value => { copied = value; },
-            setTimeout: ((callback: () => void) => { timer = callback; return 1 as never; }) as typeof setTimeout,
+            setTimeout: ((callback: () => void) => { timer = callback; return 1 as never; }) as unknown as typeof setTimeout,
             clearTimeout: (() => { timer = undefined; }) as typeof clearTimeout,
         }, done() {},
     });
