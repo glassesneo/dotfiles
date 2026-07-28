@@ -1,7 +1,6 @@
 {
   delib,
   homeConfig,
-  host,
   lib,
   llm-agents,
   pkgs,
@@ -16,7 +15,7 @@ in
 
     options = with delib;
       moduleOptions ({myconfig, ...}: {
-        enable = boolOption (host.type == "virtual" && myconfig.programs.pi-coding-agent.enable);
+        enable = boolOption myconfig.programs.pi-coding-agent.enable;
         maxDepth = intOption 3;
       });
 
