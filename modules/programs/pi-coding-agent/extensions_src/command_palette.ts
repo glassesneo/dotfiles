@@ -2,6 +2,7 @@ import type { Model } from "@earendil-works/pi-ai";
 import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import { copyToClipboard, type ExtensionAPI, type ExtensionContext, type ToolInfo } from "@earendil-works/pi-coding-agent";
 import { commandPaletteActionIds, extractLastAssistantText, formatContextUsage, summarizeSession, type CommandPaletteActionId, type PaletteAction, type PaletteListItem } from "./utilities/command_palette_core.ts";
+import { COMMAND_PALETTE_DISCOVER_EVENT, COMMAND_PALETTE_REGISTER_EVENT, CommandPaletteContributionRegistry, contributionIdentity } from "./utilities/command_palette_contributions.ts";
 import { loadPaletteKeymap, type ResolvedPaletteKeymap } from "./utilities/command_palette_keymap.ts";
 import { runPaletteList } from "./utilities/command_palette_tui.ts";
 
@@ -97,16 +98,32 @@ export async function executePaletteAction(id: CommandPaletteActionId, pi: Exten
 
 export default function commandPalette(pi: ExtensionAPI): void {
     const { keymap } = loadPaletteKeymap();
+    const contributions = new CommandPaletteContributionRegistry(commandPaletteActionIds);
+    const unregisterContributions = pi.events.on(COMMAND_PALETTE_REGISTER_EVENT, value => { contributions.register(value); });
+    pi.on("session_start", () => { pi.events.emit(COMMAND_PALETTE_DISCOVER_EVENT, undefined); });
+    pi.on("session_shutdown", unregisterContributions);
     let opening = false;
     const openPalette = async (ctx: ExtensionContext): Promise<void> => {
         if (opening) return;
         if (ctx.mode !== "tui") { ctx.ui.notify("Command Palette requires TUI mode", "warning"); return; }
         opening = true;
         try {
+            pi.events.emit(COMMAND_PALETTE_DISCOVER_EVENT, undefined);
+            if (contributions.invalidCount > 0) ctx.ui.notify(`Command Palette ignored ${contributions.invalidCount} invalid contribution registration(s)`, "warning");
             const actions = buildCommandPaletteActions(pi, ctx);
             if (actions.map(action => action.id).join(",") !== commandPaletteActionIds.join(",")) throw new Error("Command Palette registry is incomplete");
-            const selected = await runPaletteList(ctx.ui, { title: "Command Palette", items: actionItems(actions), keymap });
-            if (selected) await executePaletteAction(selected, pi, ctx, keymap);
+            const contributed = contributions.list();
+            const items: PaletteListItem<string>[] = [
+                ...actionItems(actions),
+                ...contributed.map(item => ({
+                    value: contributionIdentity(item), label: item.label, description: item.description, keywords: item.keywords,
+                    state: item.currentValue?.(ctx), disabledReason: item.disabledReason?.(ctx),
+                })),
+            ];
+            const selected = await runPaletteList(ctx.ui, { title: "Command Palette", items, keymap });
+            if (!selected) return;
+            if ((commandPaletteActionIds as readonly string[]).includes(selected)) await executePaletteAction(selected as CommandPaletteActionId, pi, ctx, keymap);
+            else await contributed.find(item => contributionIdentity(item) === selected)?.run(ctx);
         }
         finally { opening = false; }
     };

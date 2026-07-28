@@ -4,14 +4,15 @@ import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { matchesKey, type KeyId } from "@earendil-works/pi-tui";
 import { canonicalKeyId, isValidKeyId } from "./private_key_id.ts";
 
-export const paletteActions = ["open", "moveUp", "moveDown", "confirm", "cancel"] as const;
+export const paletteActions = ["open", "moveUp", "moveDown", "confirm", "cancel", "refresh", "stop", "copyRunId", "attachRun"] as const;
 export type PaletteKeyAction = (typeof paletteActions)[number];
 export type PaletteKeymapConfig = Partial<Record<PaletteKeyAction, string[]>>;
 export type ResolvedPaletteKeymap = Record<PaletteKeyAction, KeyId[]>;
 
 export const defaultPaletteKeymap: ResolvedPaletteKeymap = {
     open: ["ctrl+shift+p"], moveUp: ["ctrl+p"], moveDown: ["ctrl+n"],
-    confirm: ["enter"], cancel: ["escape", "ctrl+c"],
+    confirm: ["enter"], cancel: ["escape", "ctrl+c"], refresh: ["ctrl+r"],
+    stop: ["ctrl+s"], copyRunId: ["ctrl+y"], attachRun: ["ctrl+a"],
 };
 
 export function validatePaletteKeymapConfig(value: unknown, path = "command-palette-keybindings.json"): PaletteKeymapConfig {
@@ -51,7 +52,10 @@ export function paletteKeyAction(data: string, keymap: ResolvedPaletteKeymap): P
     return undefined;
 }
 
-const labels: Record<PaletteKeyAction, string> = { open: "open", moveUp: "up", moveDown: "down", confirm: "select", cancel: "cancel" };
+const labels: Record<PaletteKeyAction, string> = {
+    open: "open", moveUp: "up", moveDown: "down", confirm: "select", cancel: "cancel",
+    refresh: "refresh", stop: "stop", copyRunId: "copy ID", attachRun: "open tmux",
+};
 export function paletteHelp(keymap: ResolvedPaletteKeymap, actions: readonly PaletteKeyAction[] = ["moveUp", "moveDown", "confirm", "cancel"]): string {
     return actions.map(action => `${keymap[action][0]} ${labels[action]}`).join(" • ");
 }

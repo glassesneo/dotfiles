@@ -69,3 +69,10 @@ export async function killTmuxPane(exec: CommandExecutor, paneId: string): Promi
         throw new Error(result.stderr.trim() || `Could not kill tmux pane ${paneId}`);
     }
 }
+
+export async function moveTmuxClientToRun(exec: CommandExecutor, context: TmuxContext, target: TmuxRunReference): Promise<void> {
+    if (context.sessionId !== target.sessionId) throw new Error(`Run belongs to unavailable tmux session ${target.session}`);
+    if (!await isTmuxPaneAlive(exec, target.paneId)) throw new Error("Run tmux pane is no longer live");
+    const result = await exec("tmux", ["select-window", "-t", target.windowId]);
+    if (result.code !== 0) throw new Error(result.stderr.trim() || `Could not select tmux window ${target.windowName}`);
+}

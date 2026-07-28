@@ -16,6 +16,7 @@ in
         configDir = readOnly (strOption configDir);
         defaultExtensions = readOnly (listOfOption str [
           "profile"
+          "command_palette"
         ]);
       };
 

@@ -157,16 +157,19 @@ function toolContext(root: string): ExtensionContext {
 test("subagent routing catalog exposes only active allowed targets in the model-facing prompt", async () => {
     const value = await fixture();
     const handlers: Record<string, Array<(event: any, ctx: any) => any>> = {};
-    let activeEvent: ((value: unknown) => void) | undefined;
+    const eventHandlers: Record<string, Array<(value: unknown) => void>> = {};
     const pi = {
-        registerTool() {},
+        registerTool() {}, registerCommand() {},
         on(name: string, handler: any) { (handlers[name] ??= []).push(handler); },
-        events: { on(_name: string, handler: (value: unknown) => void) { activeEvent = handler; }, emit() {} },
+        events: {
+            on(name: string, handler: (value: unknown) => void) { (eventHandlers[name] ??= []).push(handler); return () => {}; },
+            emit(name: string, value: unknown) { for (const handler of eventHandlers[name] ?? []) handler(value); },
+        },
         getActiveTools: () => ["subagent_start"],
         async exec() { return { stdout: "$0\tmain\t%1\n", stderr: "", code: 0, killed: false }; },
     } as unknown as ExtensionAPI;
     assert.equal(await registerSubagent(pi, { configPath: value.subagentPath, profileConfigPath: value.profilePath, env: { TMUX: "yes" } }), true);
-    activeEvent!({ schemaVersion: 1, name: "scout", reason: "startup", profile: value.profileConfig.profiles.scout });
+    eventHandlers[ACTIVE_PROFILE_EVENT]![0]!({ schemaVersion: 1, name: "scout", reason: "startup", profile: value.profileConfig.profiles.scout });
     const patch = await handlers.before_agent_start![0]!({ systemPrompt: "base" }, {});
     assert.match(patch.systemPrompt, /Available subagent routing profiles:/);
     assert.match(patch.systemPrompt, /scout: Read-only exploration\./);

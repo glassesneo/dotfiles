@@ -16,6 +16,7 @@ test("one registered Ctrl-Shift-P shortcut invocation opens the palette whether 
     let shortcutHandler: ((ctx: any) => Promise<void>) | undefined;
     let customCalls = 0; let notifications = 0;
     const pi = {
+        events: { on() {}, emit() {} }, on() {},
         registerShortcut(key: string, options: { handler: (ctx: any) => Promise<void> }) {
             if (key === "ctrl+shift+p") shortcutHandler = options.handler;
         },
@@ -39,6 +40,7 @@ test("a running palette suppresses duplicate opens and can reopen after closing"
     let shortcutHandler: ((ctx: any) => Promise<void>) | undefined;
     let customCalls = 0; let closeFirst: ((value: null) => void) | undefined;
     const pi = {
+        events: { on() {}, emit() {} }, on() {},
         registerShortcut(key: string, options: { handler: (ctx: any) => Promise<void> }) {
             if (key === "ctrl+shift+p") shortcutHandler = options.handler;
         },
@@ -65,7 +67,11 @@ test("a running palette suppresses duplicate opens and can reopen after closing"
     assert.equal(customCalls, 2);
 });
 
-test("palette source does not expose editor, prompt, message-send, abort, or idle-wait dependencies", async () => {
-    const source = await import("node:fs/promises").then(fs => fs.readFile(new URL("../extensions_src/command_palette.ts", import.meta.url), "utf8"));
-    for (const forbidden of ["getEditorText(", "setEditorText(", "pasteToEditor(", "sendUserMessage(", "sendMessage(", "getCommands(", "abort(", "waitForIdle("]) assert.doesNotMatch(source, new RegExp(forbidden.replace(/[()]/g, "\\$&")));
+test("palette sources do not expose editor, prompt, message-send, abort, or idle-wait dependencies", async () => {
+    const fs = await import("node:fs/promises");
+    const sources = await Promise.all([
+        fs.readFile(new URL("../extensions_src/command_palette.ts", import.meta.url), "utf8"),
+        fs.readFile(new URL("../extensions_src/utilities/subagent_palette.ts", import.meta.url), "utf8"),
+    ]);
+    for (const source of sources) for (const forbidden of ["getEditorText(", "setEditorText(", "pasteToEditor(", "sendUserMessage(", "sendMessage(", "getCommands(", "abort(", "waitForIdle("]) assert.doesNotMatch(source, new RegExp(forbidden.replace(/[()]/g, "\\$&")));
 });

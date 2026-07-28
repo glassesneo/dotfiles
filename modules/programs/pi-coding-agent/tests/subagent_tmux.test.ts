@@ -4,6 +4,7 @@ import {
     isTmuxPaneAlive,
     killTmuxPane,
     launchTmuxWindow,
+    moveTmuxClientToRun,
     probeTmux,
     type CommandExecutor,
     type CommandResult,
@@ -100,6 +101,19 @@ test("remain-on-exit failure cleans up the created window before reporting the e
         /option denied/,
     );
     assert.deepEqual(calls.at(-1), ["kill-window", "-t", "@4"]);
+});
+
+test("tmux client move validates session and pane before selecting the run window", async () => {
+    const calls: string[][] = [];
+    const exec: CommandExecutor = async (_command, args) => { calls.push([...args]); return args.includes("#{pane_dead}") ? result("0\n") : result(); };
+    const target = { sessionId: "$1", session: "main", windowId: "@7", paneId: "%8", windowName: "sa-run" };
+    await moveTmuxClientToRun(exec, { sessionId: "$1", session: "main", paneId: "%1" }, target);
+    assert.deepEqual(calls, [
+        ["display-message", "-p", "-t", "%8", "#{pane_dead}"],
+        ["select-window", "-t", "@7"],
+    ]);
+    await assert.rejects(moveTmuxClientToRun(exec, { sessionId: "$2", session: "other", paneId: "%2" }, target), /unavailable tmux session/);
+    await assert.rejects(moveTmuxClientToRun(async () => result("1\n"), { sessionId: "$1", session: "main", paneId: "%1" }, target), /no longer live/);
 });
 
 test("pane probes and kills distinguish dead, disappeared, and unexpected failures", async () => {

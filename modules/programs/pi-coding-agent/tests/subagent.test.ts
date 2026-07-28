@@ -75,6 +75,7 @@ test("extension registers no tools unless tmux is verifiably available", async (
     const registered: string[] = [];
     const pi = {
         registerTool(tool: { name: string }) { registered.push(tool.name); },
+        registerCommand() {},
         on() {}, events: { on() {}, emit() {} },
         async exec() { return { stdout: "$0\tmain\t%1\n", stderr: "", code: 0, killed: false }; },
     } as unknown as ExtensionAPI;
@@ -83,6 +84,29 @@ test("extension registers no tools unless tmux is verifiably available", async (
     assert.deepEqual(registered, []);
     assert.equal(await registerSubagent(pi, { env: { TMUX: "/tmp/tmux,1,0" } }), true);
     assert.deepEqual(registered, ["subagent_start", "subagent_get", "subagent_wait", "subagent_stop"]);
+});
+
+test("subagent management command and contribution register even when tool tmux prerequisites are unavailable", async () => {
+    const commands: Record<string, { handler: (args: string, ctx: ExtensionContext) => Promise<void> }> = {};
+    const events: Record<string, Array<(value: unknown) => void>> = {};
+    const registrations: unknown[] = [];
+    const pi = {
+        registerTool() {}, registerCommand(name: string, options: any) { commands[name] = options; },
+        on() {},
+        events: {
+            on(name: string, handler: (value: unknown) => void) { (events[name] ??= []).push(handler); return () => {}; },
+            emit(name: string, value: unknown) { if (name === "command-palette:register") registrations.push(value); for (const handler of events[name] ?? []) handler(value); },
+        },
+        async exec() { return { stdout: "", stderr: "", code: 1, killed: false }; },
+    } as unknown as ExtensionAPI;
+    assert.equal(await registerSubagent(pi, { env: {} }), false);
+    assert.ok(commands.subagent);
+    assert.equal((registrations[0] as { owner: string; id: string }).owner, "subagent");
+    assert.equal((registrations[0] as { owner: string; id: string; label: string }).id, "runs");
+    assert.equal((registrations[0] as { label: string }).label, "/subagent  Manage subagent runs");
+    let warning = "";
+    await commands.subagent!.handler("", { mode: "print", ui: { notify(text: string) { warning = text; } } } as never);
+    assert.match(warning, /requires TUI mode/);
 });
 
 test("subagent tools expose optional detail without changing required inputs", () => {
