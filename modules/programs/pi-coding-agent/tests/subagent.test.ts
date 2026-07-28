@@ -17,7 +17,7 @@ function context(cwd: string): ExtensionContext { return { cwd, sessionManager: 
 async function fixture(): Promise<{ root: string; config: SubagentRuntimeConfig; configPath: string; profilePath: string }> {
     const root = await mkdtemp(join(tmpdir(), "subagent-v4-"));
     const config: SubagentRuntimeConfig = { schemaVersion: 2, stateRoot: join(root, "runs"), runner: { node: process.execPath, script: join(process.cwd(), "extensions_src/subagent_runner.ts"), supervisor: join(process.cwd(), "extensions_src/subagent_supervisor.ts"), viewer: join(process.cwd(), "extensions_src/subagent_viewer.ts"), less: "/usr/bin/less", extensions: [join(process.cwd(), "extensions_src/profile.ts"), join(process.cwd(), "extensions_src/subagent.ts")] }, harnesses: { pi: { command: "/missing/pi" } }, maxDepth: 3 };
-    const profiles: AgentProfileConfig = { schemaVersion: 2, defaultProfile: "full", profileCycle: ["full"], profiles: { full: { ...profile, extensions: { subagent: { allowedTargets: ["full"], harness: "pi" } } } } };
+    const profiles: AgentProfileConfig = { schemaVersion: 2, defaultProfile: "full", profileCycle: ["full"], promptRoutes: {}, profiles: { full: { ...profile, extensions: { subagent: { allowedTargets: ["full"], harness: "pi" } } } } };
     const configPath = join(root, "subagent.json"); const profilePath = join(root, "profiles.json"); await writeFile(configPath, JSON.stringify(config)); await writeFile(profilePath, JSON.stringify(profiles));
     return { root, config, configPath, profilePath };
 }

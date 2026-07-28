@@ -14,6 +14,7 @@ import {
     readPendingArtifact,
     requestPendingArtifactRevision,
     requiresApproval,
+    type ArtifactKind,
 } from "../extensions_src/utilities/agent_artifact_store.ts";
 import { extensionContext as context, textResult as resultText } from "./test_helpers.ts";
 
@@ -27,16 +28,17 @@ async function makeTemporaryRoot(t: test.TestContext): Promise<string> {
     return root;
 }
 
-function toolParams(kind: "design" | "decision-record", slug: string, content: string, pendingId?: string): never {
+function toolParams(kind: ArtifactKind, slug: string, content: string, pendingId?: string): never {
     return { kind, slug, content, pendingId } as never;
 }
 
-void test("artifact parameters accept design and decision-record with optional pending ids", () => {
-    assert.equal(Value.Check(artifactParameters, { kind: "design", slug: "pi-workflow", content: "design" }), true);
+void test("artifact parameters accept every canonical kind with optional pending ids", () => {
+    for (const kind of ["design", "decision-record", "research", "implementation-report", "review-report", "bug-report", "failure-report"]) {
+        assert.equal(Value.Check(artifactParameters, { kind, slug: "pi-workflow", content: kind }), true);
+    }
     assert.equal(Value.Check(artifactParameters, { kind: "decision-record", slug: "pi-workflow-2", content: "record", pendingId: "20260718-003145-pi-workflow" }), true);
 
     for (const input of [
-        { kind: "research", slug: "pi-workflow", content: "research" },
         { kind: "spec", slug: "pi-workflow", content: "retired kind" },
         { kind: "plan", slug: "pi-workflow", content: "retired kind" },
         { kind: "design", slug: "", content: "design" },
@@ -50,7 +52,9 @@ void test("artifact parameters accept design and decision-record with optional p
 
 void test("only the design kind requires its own approval", () => {
     assert.equal(requiresApproval("design"), true);
-    assert.equal(requiresApproval("decision-record"), false);
+    for (const kind of ["decision-record", "research", "implementation-report", "review-report", "bug-report", "failure-report"] as const) {
+        assert.equal(requiresApproval(kind), false);
+    }
 });
 
 void test("JST timestamps are deterministic for an injected date", () => {
@@ -275,23 +279,33 @@ void test("tool fails closed without UI after creating only a pending design", a
     await assert.rejects(readdir(join(root, ".agents", "designs")));
 });
 
-void test("decision records are saved directly without an approval prompt", async t => {
+void test("non-design kinds are saved directly to canonical directories", async t => {
     const root = await makeTemporaryRoot(t);
     const tool = createAgentArtifactToolDefinition();
-    const content = "# Decision Record\n\nWhy the direction changed.\n";
-    const result = await tool.execute(
-        "call",
-        toolParams("decision-record", "why-we-changed", content),
-        undefined,
-        undefined,
-        context({ cwd: root, mode: "print", hasUI: false }),
-    );
+    const directories: Record<Exclude<ArtifactKind, "design">, string> = {
+        "decision-record": "decision-records",
+        research: "research",
+        "implementation-report": "implementation-reports",
+        "review-report": "review-reports",
+        "bug-report": "bug-reports",
+        "failure-report": "failure-reports",
+    };
 
-    assert.equal(result.details.status, "approved");
-    assert.deepEqual(await readdir(join(root, ".agents", "pending-artifacts")), [result.details.pendingId + ".json"]);
-    assert.deepEqual(await readdir(join(root, ".agents", "decision-records")), [result.details.pendingId + ".md"]);
-    assert.equal(await readFile(result.details.finalPath!, "utf8"), content);
-    assert.match(resultText(result.content[0]), /does not need its own approval/);
+    for (const [kind, directory] of Object.entries(directories) as Array<[Exclude<ArtifactKind, "design">, string]>) {
+        const content = `# ${kind}\n\nDurable evidence.\n`;
+        const result = await tool.execute(
+            "call",
+            toolParams(kind, `save-${kind}`, content),
+            undefined,
+            undefined,
+            context({ cwd: root, mode: "print", hasUI: false }),
+        );
+
+        assert.equal(result.details.status, "approved");
+        assert.equal(result.details.finalPath, join(root, ".agents", directory, `${result.details.pendingId}.md`));
+        assert.equal(await readFile(result.details.finalPath!, "utf8"), content);
+        assert.match(resultText(result.content[0]), /does not need its own approval/);
+    }
 });
 
 void test("tool approve/revision/reject UI statuses and action notes are deterministic", async t => {

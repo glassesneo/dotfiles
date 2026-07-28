@@ -228,7 +228,7 @@ void test("runtime configs validate profile and subagent responsibilities indepe
     assert.throws(() => validateSubagentRuntimeConfig({ ...subagent, stateRoot: "x".repeat(4097) }), /4096/);
 
     const profile = { model: "provider/model", description: "Test routing.", allowAllTools: false, tools: [], extensions: {} };
-    const base = { schemaVersion: 2, defaultProfile: "test", profileCycle: ["test"], profiles: { test: profile } };
+    const base = { schemaVersion: 2, defaultProfile: "test", profileCycle: ["test"], promptRoutes: {}, profiles: { test: profile } };
     assert.throws(() => validateProfileConfig({ ...base, schemaVersion: 1 }), /schemaVersion/);
     assert.throws(() => validateProfileConfig({ ...base, profiles: { test: { ...profile, model: "" } } }), /non-empty/);
     assert.throws(() => validateProfileConfig({ ...base, profiles: { test: { ...profile, description: "" } } }), /non-empty/);
@@ -237,6 +237,8 @@ void test("runtime configs validate profile and subagent responsibilities indepe
     assert.throws(() => validateProfileConfig({ ...base, defaultProfile: "missing" }), /unknown profile/);
     assert.throws(() => validateProfileConfig({ ...base, profileCycle: [] }), /must not be empty/);
     assert.throws(() => validateProfileConfig({ ...base, profileCycle: ["test", "test"] }), /duplicates/);
+    assert.throws(() => validateProfileConfig({ ...base, promptRoutes: { "bad/route": "test" } }), /one command token/);
+    assert.throws(() => validateProfileConfig({ ...base, promptRoutes: { impl: "missing" } }), /unknown profile/);
     assert.throws(() => validateProfileConfig({ ...base, profiles: { test: { ...profile, allowAllTools: true, tools: ["read"] } } }), /cannot set tools/);
     assert.throws(() => validateProfileConfig({ ...base, profiles: { test: { ...profile, unexpected: true } } }), /unknown keys/);
 });

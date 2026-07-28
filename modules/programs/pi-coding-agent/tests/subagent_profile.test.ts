@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { loadAgentProfileConfig, registerProfileController } from "../extensions_src/profile.ts";
+import { loadAgentProfileConfig, registerProfileController, routedProfileForInput } from "../extensions_src/profile.ts";
 import { createSubagentStartTool, registerSubagent } from "../extensions_src/subagent.ts";
 import { ACTIVE_PROFILE_EVENT, onActiveProfile } from "../extensions_src/utilities/profile_events.ts";
 import type { AgentProfileConfig } from "../extensions_src/utilities/profile_types.ts";
@@ -15,6 +15,7 @@ function profiles(): AgentProfileConfig {
         schemaVersion: 2,
         defaultProfile: "full",
         profileCycle: ["scout", "full"],
+        promptRoutes: { impl: "full", review: "scout" },
         profiles: {
             scout: {
                 model: "provider/model", description: "Read-only exploration.", thinkingLevel: "low", allowAllTools: false,
@@ -52,9 +53,11 @@ function fakeControllerPi(flag = "scout") {
     const shortcuts: Record<string, { handler: (ctx: any) => Promise<void> }> = {};
     const entries: any[] = [];
     const events: any[] = [];
+    const notifications: string[] = [];
     let activeTools: string[] = [];
     let thinking = "off";
     let modelSucceeds = true;
+    let toolApplicationFails = false;
     const allTools = ["read", "bash", "edit", "write", "subagent_start", "subagent_get", "subagent_wait", "project_tool"];
     const pi = {
         registerFlag() {}, getFlag: () => flag,
@@ -63,21 +66,25 @@ function fakeControllerPi(flag = "scout") {
         on(name: string, handler: any) { (handlers[name] ??= []).push(handler); },
         events: { on() {}, emit(name: string, payload: unknown) { events.push({ name, payload }); } },
         getAllTools: () => allTools.map(name => ({ name })), getActiveTools: () => activeTools,
-        setActiveTools(names: string[]) { activeTools = [...names]; },
-        async setModel() { return modelSucceeds; }, setThinkingLevel(value: string) { thinking = value; },
+        setActiveTools(names: string[]) {
+            if (toolApplicationFails) { toolApplicationFails = false; throw new Error("injected tool application failure"); }
+            activeTools = [...names];
+        },
+        async setModel() { return modelSucceeds; }, getThinkingLevel: () => thinking, setThinkingLevel(value: string) { thinking = value; },
         appendEntry(customType: string, data: unknown) { entries.push({ type: "custom", customType, data }); },
     } as unknown as ExtensionAPI;
     const ctx = {
         cwd: "/work", hasUI: true, isIdle: () => true,
         modelRegistry: { find: () => ({ provider: "provider", id: "model" }) },
         sessionManager: { getBranch: () => entries, getEntries: () => entries, getSessionId: () => "session", getSessionFile: () => "/session.jsonl" },
-        ui: { notify() {}, setStatus() {}, select: async () => undefined },
+        ui: { notify(message: string) { notifications.push(message); }, setStatus() {}, select: async () => undefined },
     } as unknown as ExtensionContext;
     return {
-        pi, ctx, handlers, commands, shortcuts, entries, events,
+        pi, ctx, handlers, commands, shortcuts, entries, events, notifications,
         activeTools: () => activeTools, thinking: () => thinking,
         forceActiveTools: (names: string[]) => { activeTools = [...names]; },
         failModel: () => { modelSucceeds = false; }, passModel: () => { modelSucceeds = true; },
+        failNextToolApplication: () => { toolApplicationFails = true; },
     };
 }
 
@@ -110,6 +117,40 @@ void test("profile extension applies CLI, guards tools, restores branches, and e
     fake.entries.push({ type: "custom", customType: "agent-profile-state", data: { name: "scout" } });
     await fake.handlers.session_tree![0]!({}, fake.ctx);
     assert.equal((fake.events.at(-1)!.payload as any).reason, "restore");
+});
+
+void test("exact raw prompt commands route transactionally before expansion", async () => {
+    const { profilePath, profileConfig } = await fixture();
+    const fake = fakeControllerPi("scout");
+    registerProfileController(fake.pi, profilePath);
+    await fake.handlers.session_start![0]!({ reason: "startup" }, fake.ctx);
+
+    for (const text of ["/impl", "/impl approved.md", "/impl\ncontext"]) {
+        assert.equal(routedProfileForInput(profileConfig, text), "full");
+    }
+    for (const text of ["/implementation", "/impl-extra", "/impl/path", "/skill:impl", "run /impl", "/unknown", "ordinary text"]) {
+        assert.equal(routedProfileForInput(profileConfig, text), undefined);
+        assert.deepEqual(await fake.handlers.input![0]!({ text, source: "interactive" }, fake.ctx), { action: "continue" });
+    }
+
+    assert.deepEqual(await fake.handlers.input![0]!({ text: "/impl approved.md", source: "interactive" }, fake.ctx), { action: "continue" });
+    assert.equal((fake.events.at(-1)!.payload as any).reason, "route");
+    assert.equal(fake.entries.at(-1)?.data.name, "full");
+
+    fake.failModel();
+    assert.deepEqual(await fake.handlers.input![0]!({ text: "/review report.md", source: "interactive" }, fake.ctx), { action: "handled" });
+    assert.match(fake.notifications.at(-1) ?? "", /no authentication/);
+    assert.equal(fake.entries.at(-1)?.data.name, "full");
+
+    fake.passModel();
+    fake.failNextToolApplication();
+    const toolsBeforeFailure = fake.activeTools();
+    const thinkingBeforeFailure = fake.thinking();
+    assert.deepEqual(await fake.handlers.input![0]!({ text: "/review report.md", source: "interactive" }, fake.ctx), { action: "handled" });
+    assert.match(fake.notifications.at(-1) ?? "", /injected tool application failure/);
+    assert.deepEqual(fake.activeTools(), toolsBeforeFailure);
+    assert.equal(fake.thinking(), thinkingBeforeFailure);
+    assert.equal(fake.entries.at(-1)?.data.name, "full");
 });
 
 void test("active-profile event wrapper validates the complete payload", () => {

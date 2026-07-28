@@ -2,10 +2,10 @@
 
 ## Responsibility Boundaries
 
-- `prompts/` owns thin Pi entrypoint routing, including the choice between
-  design dialogue styles.
-- Reusable Skills own design dialogue and authoring behavior, including how the
-  user participates in decisions. Do not copy their contracts into prompts.
+- `prompts/` owns thin Pi entrypoint routing, including design-dialogue choice
+  and post-approval implementation/review entrypoints.
+- Reusable Skills own design dialogue, implementation, validation, review, and
+  composition procedures. Do not copy their contracts into prompts.
 - `extensions_src/` owns deterministic tool behavior, artifact persistence, and
   which artifact kinds need their own approval; a Skill must not duplicate its
   storage algorithm.

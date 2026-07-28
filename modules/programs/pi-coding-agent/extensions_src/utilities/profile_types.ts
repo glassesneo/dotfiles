@@ -18,6 +18,7 @@ export interface AgentProfileConfig {
     schemaVersion: 2;
     defaultProfile: string;
     profileCycle: string[];
+    promptRoutes: Record<string, string>;
     profiles: Record<string, AgentProfile>;
 }
 
@@ -45,7 +46,7 @@ function stringArray(value: unknown, label: string): string[] {
 
 export function validateProfileConfig(value: unknown): AgentProfileConfig {
     const root = object(value, "agent profile config");
-    exactKeys(root, ["schemaVersion", "defaultProfile", "profileCycle", "profiles"], "agent profile config");
+    exactKeys(root, ["schemaVersion", "defaultProfile", "profileCycle", "promptRoutes", "profiles"], "agent profile config");
     if (root.schemaVersion !== PROFILE_SCHEMA_VERSION) throw new Error("Unsupported agent profile config schemaVersion");
     const rawProfiles = object(root.profiles, "profiles");
     const profiles: Record<string, AgentProfile> = {};
@@ -87,18 +88,28 @@ export function validateProfileConfig(value: unknown): AgentProfileConfig {
 
     const defaultProfile = nonBlank(root.defaultProfile, "defaultProfile");
     const profileCycle = stringArray(root.profileCycle, "profileCycle");
+    const rawPromptRoutes = object(root.promptRoutes, "promptRoutes");
+    const promptRoutes: Record<string, string> = {};
+    for (const [command, target] of Object.entries(rawPromptRoutes)) {
+        nonBlank(command, "promptRoutes command");
+        if (/[/\s]/u.test(command)) throw new Error(`promptRoutes command must be one command token: ${command}`);
+        promptRoutes[command] = nonBlank(target, `promptRoutes.${command}`);
+    }
     if (!profiles[defaultProfile]) throw new Error(`defaultProfile references unknown profile: ${defaultProfile}`);
     if (profileCycle.length === 0) throw new Error("profileCycle must not be empty");
     if (new Set(profileCycle).size !== profileCycle.length) throw new Error("profileCycle must not contain duplicates");
     for (const name of profileCycle) if (!profiles[name]) throw new Error(`profileCycle references unknown profile: ${name}`);
+    for (const [command, target] of Object.entries(promptRoutes)) {
+        if (!profiles[target]) throw new Error(`promptRoutes.${command} references unknown profile: ${target}`);
+    }
 
-    return { schemaVersion: 2, defaultProfile, profileCycle, profiles };
+    return { schemaVersion: 2, defaultProfile, profileCycle, promptRoutes, profiles };
 }
 
 export function validateResolvedProfile(value: unknown): { name: string; profile: AgentProfile } {
     const root = object(value, "PI_AGENT_RESOLVED_PROFILE");
     exactKeys(root, ["name", "profile"], "PI_AGENT_RESOLVED_PROFILE");
     const name = nonBlank(root.name, "PI_AGENT_RESOLVED_PROFILE.name");
-    const config = validateProfileConfig({ schemaVersion: 2, defaultProfile: name, profileCycle: [name], profiles: { [name]: root.profile } });
+    const config = validateProfileConfig({ schemaVersion: 2, defaultProfile: name, profileCycle: [name], promptRoutes: {}, profiles: { [name]: root.profile } });
     return { name, profile: config.profiles[name]! };
 }

@@ -25,7 +25,8 @@ in
         enable = readOnly (boolOption (parent.enable && builtins.elem "profile" parent.defaultExtensions));
         extensionPaths = readOnly (listOfOption str ["${./../../extensions_src}/profile.ts"]);
         defaultProfile = strOption "full";
-        profileCycle = listOfOption str ["full" "taskmaster" "scout"];
+        profileCycle = listOfOption str ["scout" "taskmaster" "review-orchestrator" "full"];
+        promptRoutes = attrsOfOption str {};
         defaultTools = listOfOption str [];
         profiles = attrsOfOption profileType {};
         facetOwners = attrsOfOption str {};
@@ -33,6 +34,11 @@ in
 
     myconfig.always.programs.pi-coding-agent.profile = {
       defaultTools = ["read" "grep" "find" "ls" "bash"];
+      promptRoutes = {
+        impl = "taskmaster";
+        execute = "taskmaster";
+        review = "review-orchestrator";
+      };
       profiles = {
         full = {
           model = "openai-codex/gpt-5.6-sol";
@@ -44,10 +50,13 @@ in
         };
         taskmaster = {
           model = "openai-codex/gpt-5.6-sol";
-          description = "Use for work that needs broad coding capability; include the deliverable, constraints, and verification conditions in the delegated prompt.";
+          description = "Use for implementation against an approved design with delegated validation.";
           thinkingLevel = "medium";
           allowAllTools = false;
           tools = ["write" "edit"];
+          instructions = ''
+            You are the source-changing taskmaster. Follow the entrypoint-selected implementation Skill and its approved design contract. Delegate every post-change validation question to tester using the targeted-validation handoff contract. You may repair and revalidate only a concrete implementation regression when the evidence-backed fix remains within the approved design and scale contract. Stop on unknown cause, repeated material failure without progress, test or infrastructure ownership, or scope expansion. Do not start review unless the current entrypoint explicitly composes it.
+          '';
           extensions = {};
         };
         scout = {
@@ -58,12 +67,48 @@ in
           tools = [];
           extensions = {};
         };
+        tester = {
+          model = "openai-codex/gpt-5.6-luna";
+          description = "Use for bounded validation of an implementation without changing repository source.";
+          thinkingLevel = "medium";
+          allowAllTools = false;
+          tools = [];
+          instructions = ''
+            You are a validation specialist. Load and execute targeted-validation for the bounded question in the handoff. Do not change repository source or configuration. Classify failures as regression, flaky, test bug, environment/infra, or unknown; persist every non-trivial failing run through agent-artifact as a failure report.
+          '';
+          extensions = {};
+        };
+        review-orchestrator = {
+          model = "openai-codex/gpt-5.6-sol";
+          description = "Use for risk-tiered read-only review with focused and dissent passes.";
+          thinkingLevel = "medium";
+          allowAllTools = false;
+          tools = [];
+          instructions = ''
+            You are the read-only review orchestrator. Load and execute orchestrated-review using the explicit implementation report, its governing approved design, validation evidence, and review target. Delegate the selected focused lenses and exactly one dissent pass, then persist exactly one canonical review report. Do not change repository source or configuration and do not remediate findings.
+          '';
+          extensions = {};
+        };
         focused-reviewer = {
           model = "openai-codex/gpt-5.6-terra";
           description = "Use for a read-only review limited to a caller-specified lens; include the lens, review target, and higher-level design or implementation report in the delegated prompt.";
           thinkingLevel = "medium";
           allowAllTools = false;
           tools = [];
+          instructions = ''
+            Review only the caller-specified lens and target without changing source or configuration. Return severity-ordered findings with precise evidence, then residual risks, skipped areas, and verification gaps. Do not broaden into orchestration or persist a review report.
+          '';
+          extensions = {};
+        };
+        dissent-reviewer = {
+          model = "openai-codex/gpt-5.6-terra";
+          description = "Use once to challenge tentative review findings, severity, evidence, and uncovered perspectives from a bounded dossier.";
+          thinkingLevel = "medium";
+          allowAllTools = false;
+          tools = [];
+          instructions = ''
+            Independently challenge the supplied bounded review dossier without changing source or configuration. For each disputed item, state supported, weakened, rejected, or severity-adjusted with evidence; identify material missed perspectives and remaining uncertainty. Do not repeat the full review or persist a report.
+          '';
           extensions = {};
         };
       };
@@ -105,6 +150,9 @@ in
       ];
       nonBlank = value: builtins.replaceStrings runtimeWhitespace (map (_: "") runtimeWhitespace) value != "";
       referencesExist = names: builtins.all (name: builtins.elem name profileNames) names;
+      routeCommands = builtins.attrNames cfg.promptRoutes;
+      routeProfiles = builtins.attrValues cfg.promptRoutes;
+      routeCommandValid = command: nonBlank command && builtins.match "[^/[:space:]]+" command != null;
       knownFacets = builtins.attrNames cfg.facetOwners;
       profileFacetsKnown = profile:
         builtins.all (facet: builtins.elem facet knownFacets) (builtins.attrNames profile.extensions);
@@ -125,7 +173,7 @@ in
         );
       runtimeConfig = {
         schemaVersion = 2;
-        inherit (cfg) defaultProfile profileCycle;
+        inherit (cfg) defaultProfile profileCycle promptRoutes;
         profiles = lib.mapAttrs (_: serializeProfile) cfg.profiles;
       };
     in {
@@ -141,6 +189,10 @@ in
         {
           assertion = builtins.all nonBlank profileNames;
           message = "Pi agent profile names must be non-blank.";
+        }
+        {
+          assertion = builtins.all routeCommandValid routeCommands && referencesExist routeProfiles;
+          message = "Pi promptRoutes must map non-blank command tokens to existing profiles.";
         }
         {
           assertion = builtins.all modelValid profiles;

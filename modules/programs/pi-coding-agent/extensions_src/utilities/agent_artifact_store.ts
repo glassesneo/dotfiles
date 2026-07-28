@@ -4,7 +4,15 @@ import { join } from "node:path";
 import { Type } from "typebox";
 import { withPendingArtifactLock } from "./agent_artifact_lock.ts";
 
-export const artifactKinds = ["design", "decision-record"] as const;
+export const artifactKinds = [
+    "design",
+    "decision-record",
+    "research",
+    "implementation-report",
+    "review-report",
+    "bug-report",
+    "failure-report",
+] as const;
 
 export type ArtifactKind = (typeof artifactKinds)[number];
 export type ArtifactState = "pending" | "approved" | "revision_requested" | "rejected";
@@ -12,13 +20,18 @@ export type ArtifactState = "pending" | "approved" | "revision_requested" | "rej
 const kindToDirectory: Record<ArtifactKind, string> = {
     design: "designs",
     "decision-record": "decision-records",
+    research: "research",
+    "implementation-report": "implementation-reports",
+    "review-report": "review-reports",
+    "bug-report": "bug-reports",
+    "failure-report": "failure-reports",
 };
 
 const slugPattern = "^[a-z0-9]+(-[a-z0-9]+)*$";
 const slugRegex = new RegExp(slugPattern);
 
-// A design is the implementation contract, so it needs the user's approval. A
-// decision-record only explains how an approved design was reached.
+// A design is the implementation contract, so it needs the user's approval.
+// Companion records and post-approval evidence are persisted directly.
 export const approvalRequiredKinds = new Set<ArtifactKind>(["design"]);
 
 export function requiresApproval(kind: ArtifactKind): boolean {

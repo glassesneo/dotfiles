@@ -45,16 +45,15 @@ export interface AgentArtifactResultDetails {
 }
 
 export const agentArtifactDescription =
-    "Create a design artifact or its companion decision record. A design is shown to the user for approval and promoted to the project artifact directory only after approval; a decision record is saved directly because the design approval already covers it.";
+    "Persist a canonical project-local agent artifact. Designs require user approval; decision records, research, implementation reports, review reports, bug reports, and failure reports are saved directly.";
 
 export const agentArtifactPromptGuidelines = [
-    "Use save_agent_artifact for a completed design document or decision record; do not print the full artifact in normal assistant text first.",
-    "Pass the completed Markdown content to save_agent_artifact once so the pending file, review screen, and saved artifact use the same content.",
-    "Use kind=design for the implementation contract and kind=decision-record for the companion record of direction changes and rejected alternatives.",
-    "Save the design first, then save its decision record only when the dialogue produced direction changes worth recording.",
-    "Provide a non-empty lowercase kebab-case slug that describes the artifact.",
-    "If save_agent_artifact returns revision_requested, read the pendingPath, edit that same artifact content, and call save_agent_artifact again with the same pendingId instead of creating a new artifact.",
-    "After save_agent_artifact returns approved, mention the finalPath if useful but do not repeat the artifact body.",
+    "Use save_agent_artifact for completed durable agent artifacts; do not print the full artifact in normal assistant text first.",
+    "Pass the completed Markdown content once so pending review and final storage use identical content.",
+    "Select the canonical kind defined by the agent-artifact Skill and provide a non-empty lowercase kebab-case slug.",
+    "Only kind=design enters user approval; all other kinds save directly.",
+    "If a design returns revision_requested, read pendingPath, revise the same content, and call save_agent_artifact with the same pendingId.",
+    "After an artifact is saved, mention finalPath if useful but do not repeat the artifact body.",
 ];
 
 function detailsFrom(
@@ -215,7 +214,7 @@ export function createAgentArtifactToolDefinition(): ToolDefinition<typeof artif
         name: "save_agent_artifact",
         label: "Save agent artifact",
         description: agentArtifactDescription,
-        promptSnippet: "Create, review, and approve a project-local spec or plan artifact without repeating its body",
+        promptSnippet: "Persist a canonical project-local agent artifact without repeating its body",
         promptGuidelines: agentArtifactPromptGuidelines,
         parameters: artifactParameters,
         executionMode: "sequential",

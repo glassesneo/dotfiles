@@ -9,6 +9,7 @@
   moduleName = "programs.pi-coding-agent.subagent";
   profileExtension = "${./../../extensions_src}/profile.ts";
   subagentExtension = "${./../../extensions_src}/subagent.ts";
+  agentArtifactExtension = "${./../../extensions_src}/agent_artifact.ts";
 in
   delib.module {
     name = moduleName;
@@ -23,24 +24,39 @@ in
 
     myconfig.ifEnabled.programs.pi-coding-agent.profile.profiles = {
       full.extensions.subagent = {
-        allowedTargets = ["scout" "taskmaster" "focused-reviewer"];
+        allowedTargets = ["scout" "taskmaster" "focused-reviewer" "tester" "review-orchestrator"];
         harness = "pi";
       };
       taskmaster = {
         tools = ["subagent_start" "subagent_get" "subagent_wait" "subagent_stop"];
         extensions.subagent = {
-          allowedTargets = ["focused-reviewer"];
+          allowedTargets = ["tester" "review-orchestrator" "focused-reviewer"];
+          harness = "pi";
+        };
+      };
+      tester.extensions.subagent = {
+        allowedTargets = [];
+        harness = "pi";
+      };
+      review-orchestrator = {
+        tools = ["subagent_start" "subagent_get" "subagent_wait" "subagent_stop"];
+        extensions.subagent = {
+          allowedTargets = ["focused-reviewer" "dissent-reviewer"];
           harness = "pi";
         };
       };
       scout = {
         tools = ["subagent_start" "subagent_get" "subagent_wait" "subagent_stop"];
         extensions.subagent = {
-          allowedTargets = ["focused-reviewer"];
+          allowedTargets = ["review-orchestrator" "focused-reviewer"];
           harness = "pi";
         };
       };
       focused-reviewer.extensions.subagent = {
+        allowedTargets = [];
+        harness = "pi";
+      };
+      dissent-reviewer.extensions.subagent = {
         allowedTargets = [];
         harness = "pi";
       };
@@ -134,7 +150,7 @@ in
           supervisor = "${./../../extensions_src}/subagent_supervisor.ts";
           viewer = "${./../../extensions_src}/subagent_viewer.ts";
           less = lib.getExe pkgs.less;
-          extensions = [profileExtension subagentExtension];
+          extensions = [profileExtension subagentExtension agentArtifactExtension];
         };
         harnesses.pi.command = lib.getExe llm-agents.pi;
         inherit (cfg) maxDepth;
