@@ -28,6 +28,10 @@ in
         tools = ["subagent_start" "subagent_get" "subagent_wait" "subagent_stop"];
         extensions.subagent.allowedTargets = ["focused-reviewer"];
       };
+      scout = {
+        tools = ["subagent_start" "subagent_get" "subagent_wait" "subagent_stop"];
+        extensions.subagent.allowedTargets = ["focused-reviewer"];
+      };
     };
 
     home.always = {myconfig, ...}: let

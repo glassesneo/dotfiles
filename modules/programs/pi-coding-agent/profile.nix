@@ -32,7 +32,7 @@ in
       });
 
     myconfig.always.programs.pi-coding-agent.profile = {
-      defaultTools = ["read" "grep" "find" "ls"];
+      defaultTools = ["read" "grep" "find" "ls" "bash"];
       profiles = {
         full = {
           model = "openai-codex/gpt-5.6-sol";
