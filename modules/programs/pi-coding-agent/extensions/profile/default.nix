@@ -23,7 +23,7 @@ in
     options = with delib;
       moduleOptions ({parent, ...}: {
         enable = readOnly (boolOption (parent.enable && builtins.elem "profile" parent.defaultExtensions));
-        extensionPaths = readOnly (listOfOption str ["${./extensions_src}/profile.ts"]);
+        extensionPaths = readOnly (listOfOption str ["${./../../extensions_src}/profile.ts"]);
         defaultProfile = strOption "full";
         profileCycle = listOfOption str ["full" "taskmaster" "scout"];
         defaultTools = listOfOption str [];

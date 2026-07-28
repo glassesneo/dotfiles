@@ -9,9 +9,9 @@
 - `extensions_src/` owns deterministic tool behavior, artifact persistence, and
   which artifact kinds need their own approval; a Skill must not duplicate its
   storage algorithm.
-- `profile.nix` and `extensions_src/profile.ts` own profile configuration and
-  runtime control. Profile-specific extension policy belongs under an
-  owner-registered `profiles.<name>.extensions.<facet>` object.
+- `extensions/profile/default.nix` and `extensions_src/profile.ts` own profile
+  configuration and runtime control. Profile-specific extension policy belongs
+  under an owner-registered `profiles.<name>.extensions.<facet>` object.
 - `extensions/<name>/` owns Denix enablement, facet registration and validation,
   and Home Manager wiring for each optional extension. Facet owners register
   even while disabled so shared profile definitions remain valid but inert.
