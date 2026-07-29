@@ -14,7 +14,7 @@ delib.module {
 
     home.packages = with pkgs; [
       udev-gothic-nf
-      maple-mono.Normal-NF-CN
+      plemoljp-nf
 
       # japanese
       noto-fonts-cjk-serif

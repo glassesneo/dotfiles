@@ -1,7 +1,6 @@
 {
   delib,
   host,
-  pkgs,
   ...
 }:
 delib.module {
@@ -21,8 +20,8 @@ delib.module {
       "cmd+q" = "quit";
     };
     font = {
-      name = "Maple Mono Normal NF CN";
-      size = 14;
+      name = "PlemolJP Console NF";
+      size = 15;
     };
     quickAccessTerminalConfig = {
       hide_on_focus_loss = true;
