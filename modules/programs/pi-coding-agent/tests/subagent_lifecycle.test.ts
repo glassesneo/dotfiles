@@ -38,8 +38,88 @@ void test("origin hubs reuse one session, isolate origins, and stopping one wind
     assert.notEqual(first.windowId, sibling.windowId);
     assert.notEqual(first.paneId, sibling.paneId);
     assert.notEqual(first.sessionId, other.sessionId);
+    const nestedContext: TmuxContext = { socket: first.socket, serverPid: first.serverPid, sessionId: first.sessionId, sessionName: first.sessionName, paneId: first.paneId };
+    const depth2 = await launchAgentSession(exec, "/tmux", nestedContext, { agentId: "550e8400-e29b-41d4-a716-446655440003", profile: "focused-reviewer", originSessionId: "origin-a", cwd: "/work", launch });
+    const depth3 = await launchAgentSession(exec, "/tmux", { ...nestedContext, sessionId: depth2.sessionId, sessionName: depth2.sessionName, paneId: depth2.paneId }, { agentId: "550e8400-e29b-41d4-a716-446655440004", profile: "dissent-reviewer", originSessionId: "origin-a", cwd: "/work", launch });
+    assert.equal(depth2.sessionId, first.sessionId);
+    assert.equal(depth3.sessionId, first.sessionId);
+    assert.notEqual(depth2.windowId, first.windowId);
+    assert.notEqual(depth3.windowId, depth2.windowId);
+    assert.notEqual(depth2.paneId, first.paneId);
+    assert.notEqual(depth3.paneId, depth2.paneId);
     await stopAgentSession(exec, "/tmux", first);
     assert.ok(panes.has(sibling.windowId));
+    assert.ok(panes.has(depth2.windowId));
+    assert.ok(panes.has(depth3.windowId));
+});
+
+void test("child bridge becomes ready only after the expected profile activates", async () => {
+    const root = await mkdtemp(join(tmpdir(), "subagent-profile-ready-"));
+    const prepared = await prepareAgent(root, { profile: "tester", purpose: "work", harness: "pi", cwd: "/work", profileSnapshot: profile, lineage: { callerProfile: "taskmaster", targetProfile: "tester", depth: 1, originSessionId: "origin" }, capabilities });
+    const tmux = { socket: "/tmp/tmux", serverPid: "10", sessionId: "$hub", sessionName: "hub", windowId: "@1", paneId: "%1", windowName: "sa" };
+    await publishAgent(prepared.paths, { agentId: prepared.agentId, profile: "tester", purpose: "work", harness: "pi", cwd: "/work", profileSnapshot: profile, tmux, tmuxOwnership: "origin-hub", capabilities, callerProfile: "taskmaster", targetProfile: "tester", depth: 1, originSessionId: "origin" });
+    const handlers = new Map<string, (...args: any[]) => any>();
+    const eventHandlers: Array<(value: unknown) => void> = [];
+    const api = {
+        on(name: string, handler: (...args: any[]) => any) { handlers.set(name, handler); },
+        events: {
+            on(_name: string, handler: (value: unknown) => void) { eventHandlers.push(handler); return () => {}; },
+        },
+        sendUserMessage() {},
+    } as unknown as ExtensionAPI;
+    const resolved = { name: "tester", profile };
+    registerSubagentChildBridge(api, {
+        PI_SUBAGENT_AGENT_ID: prepared.agentId,
+        PI_SUBAGENT_AGENT_DIR: prepared.paths.directory,
+        PI_AGENT_RESOLVED_PROFILE: JSON.stringify(resolved),
+    });
+    for (const handler of eventHandlers) {
+        handler({ schemaVersion: 1, name: "tester", reason: "startup", profile });
+    }
+    await handlers.get("session_start")?.({ reason: "startup" }, { sessionManager: { getSessionId: () => "child-id", getSessionFile: () => join(root, "child.jsonl") } });
+    const status = (await readAgentSnapshot(root, prepared.agentId)).status;
+    assert.equal(status.bridgeReady, true);
+    assert.equal(status.state, "idle");
+    await handlers.get("session_shutdown")?.({ reason: "reload" });
+});
+
+void test("child bridge stays unready and fails when the expected profile never activates", async () => {
+    const root = await mkdtemp(join(tmpdir(), "subagent-profile-gate-"));
+    const prepared = await prepareAgent(root, { profile: "review-orchestrator", purpose: "work", harness: "pi", cwd: "/work", profileSnapshot: profile, lineage: { callerProfile: "full", targetProfile: "review-orchestrator", depth: 1, originSessionId: "origin" }, capabilities });
+    const tmux = { socket: "/tmp/tmux", serverPid: "10", sessionId: "$hub", sessionName: "hub", windowId: "@1", paneId: "%1", windowName: "sa" };
+    await publishAgent(prepared.paths, { agentId: prepared.agentId, profile: "review-orchestrator", purpose: "work", harness: "pi", cwd: "/work", profileSnapshot: profile, tmux, tmuxOwnership: "origin-hub", capabilities, callerProfile: "full", targetProfile: "review-orchestrator", depth: 1, originSessionId: "origin" });
+    const handlers = new Map<string, (...args: any[]) => any>();
+    let shutdowns = 0;
+    const api = {
+        on(name: string, handler: (...args: any[]) => any) { handlers.set(name, handler); },
+        events: { on() { return () => {}; } },
+        sendUserMessage() {},
+    } as unknown as ExtensionAPI;
+    const resolved = {
+        name: "review-orchestrator",
+        profile: {
+            model: "provider/model",
+            description: "Review orchestration.",
+            thinkingLevel: "medium",
+            allowAllTools: false,
+            tools: ["read"],
+            extensions: { subagent: { allowedTargets: [] } },
+        },
+    };
+    registerSubagentChildBridge(api, {
+        PI_SUBAGENT_AGENT_ID: prepared.agentId,
+        PI_SUBAGENT_AGENT_DIR: prepared.paths.directory,
+        PI_AGENT_RESOLVED_PROFILE: JSON.stringify(resolved),
+    });
+    await handlers.get("session_start")?.({ reason: "startup" }, {
+        sessionManager: { getSessionId: () => "child-id", getSessionFile: () => join(root, "child.jsonl") },
+        shutdown() { shutdowns += 1; },
+    });
+    const status = (await readAgentSnapshot(root, prepared.agentId)).status;
+    assert.equal(status.bridgeReady, false);
+    assert.equal(status.state, "failed");
+    assert.match(status.exitReason ?? "", /did not become active|invalid/u);
+    assert.equal(shutdowns, 1);
 });
 
 void test("parent cleanup terminalizes every origin agent with the lifecycle reason before killing the hub", async () => {
@@ -92,7 +172,7 @@ void test("child bridge persists canonical child session identity before readine
     const tmux = { socket: "/tmp/tmux", serverPid: "10", sessionId: "$hub", sessionName: "hub", windowId: "@1", paneId: "%1", windowName: "sa" };
     await publishAgent(prepared.paths, { agentId: prepared.agentId, profile: "tester", purpose: "work", harness: "pi", cwd: "/work", profileSnapshot: profile, tmux, tmuxOwnership: "origin-hub", capabilities, callerProfile: "taskmaster", targetProfile: "tester", depth: 1, originSessionId: "origin" });
     const handlers = new Map<string, (...args: any[]) => any>();
-    const api = { on(name: string, handler: (...args: any[]) => any) { handlers.set(name, handler); }, sendUserMessage() {} } as unknown as ExtensionAPI;
+    const api = { on(name: string, handler: (...args: any[]) => any) { handlers.set(name, handler); }, events: { on() { return () => {}; } }, sendUserMessage() {} } as unknown as ExtensionAPI;
     registerSubagentChildBridge(api, { PI_SUBAGENT_AGENT_ID: prepared.agentId, PI_SUBAGENT_AGENT_DIR: prepared.paths.directory });
     const childFile = join(root, "child.jsonl");
     await handlers.get("session_start")?.({ reason: "startup" }, { sessionManager: { getSessionId: () => "child-id", getSessionFile: () => childFile } });

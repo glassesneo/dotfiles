@@ -1,5 +1,7 @@
 import type { StopReason, Usage } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { onActiveProfile } from "./utilities/profile_events.ts";
+import { validateResolvedProfile } from "./utilities/profile_types.ts";
 import { addUsage, emptyUsage, type TerminalTaskState } from "./utilities/subagent_types.ts";
 import { claimPendingTask, failAgent, finishTask, markBridgeReady, agentPaths, readAgentStatus, recordChildSessionIdentity, recordIdleUsage, recordIntervention } from "./utilities/subagent_store.ts";
 
@@ -22,11 +24,28 @@ export interface SubagentChildBridgeDependencies {
     now?: () => number;
 }
 
+function expectedResolvedProfileName(env: NodeJS.ProcessEnv): string | undefined {
+    const raw = env.PI_AGENT_RESOLVED_PROFILE;
+    if (!raw) return undefined;
+    return validateResolvedProfile(JSON.parse(raw)).name;
+}
+
 export function registerSubagentChildBridge(pi: ExtensionAPI, env: NodeJS.ProcessEnv = process.env, dependencies: SubagentChildBridgeDependencies = {}): boolean {
     const agentId = env.PI_SUBAGENT_AGENT_ID;
     const directory = env.PI_SUBAGENT_AGENT_DIR;
     if (!agentId || !directory) return false;
     const stateRoot = directory.replace(/\/agents\/[^/]+$/u, "");
+    const hasResolvedProfile = Boolean(env.PI_AGENT_RESOLVED_PROFILE);
+    let expectedProfile: string | undefined;
+    let resolvedProfileInvalid = false;
+    if (hasResolvedProfile) {
+        try { expectedProfile = expectedResolvedProfileName(env); }
+        catch { resolvedProfileInvalid = true; }
+    }
+    let activatedExpected = false;
+    onActiveProfile(pi, event => {
+        if (expectedProfile !== undefined && event.name === expectedProfile) activatedExpected = true;
+    });
     let activeTaskId: string | undefined;
     let taskUsage = emptyUsage();
     let turns = 0;
@@ -87,6 +106,14 @@ export function registerSubagentChildBridge(pi: ExtensionAPI, env: NodeJS.Proces
         const childSessionId = ctx?.sessionManager.getSessionId() ?? env.PI_SESSION_ID;
         const childSessionFile = ctx?.sessionManager.getSessionFile() ?? env.PI_SESSION_FILE;
         if (childSessionId) await recordChildSessionIdentity(paths, childSessionId, childSessionFile);
+        if (hasResolvedProfile && (resolvedProfileInvalid || !activatedExpected)) {
+            const reason = resolvedProfileInvalid || !expectedProfile
+                ? "Child resolved profile is invalid"
+                : `Child profile ${expectedProfile} did not become active`;
+            await failAgent(stateRoot, agentId, reason);
+            ctx?.shutdown();
+            return;
+        }
         await markBridgeReady(paths);
         timer = setInterval(() => { void tick().catch(() => {}); }, dependencies.retryIntervalMs ?? 100);
         await tick();

@@ -145,6 +145,7 @@ export function registerProfileController(
         const flag = pi.getFlag("profile");
         const requested = typeof flag === "string" && flag.trim() ? flag.trim() : latestProfile(ctx) ?? config.defaultProfile;
         if (!await apply(requested, ctx, true, "startup") && requested !== config.defaultProfile) {
+            if (env.PI_AGENT_RESOLVED_PROFILE) return;
             await apply(config.defaultProfile, ctx, true, "startup");
         }
     });

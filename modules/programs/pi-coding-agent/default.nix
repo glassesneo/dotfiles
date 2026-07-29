@@ -17,6 +17,7 @@ in
         defaultExtensions = readOnly (listOfOption str [
           "profile"
           "command_palette"
+          "subagent"
         ]);
       };
 

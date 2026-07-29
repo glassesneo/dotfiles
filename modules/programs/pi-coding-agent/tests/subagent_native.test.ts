@@ -5,7 +5,7 @@ import { join } from "node:path";
 import test from "node:test";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { registerSubagentChildBridge } from "../extensions_src/subagent_child_bridge.ts";
-import { createSubagentGetTool, createSubagentWaitTool } from "../extensions_src/subagent.ts";
+import { createSubagentGetTool, createSubagentSendTool, createSubagentStopTool, createSubagentWaitTool } from "../extensions_src/subagent.ts";
 import { defaultPaletteKeymap } from "../extensions_src/utilities/command_palette_keymap.ts";
 import { piLaunchDescriptor } from "../extensions_src/utilities/subagent_pi.ts";
 import { SubagentPaletteComponent } from "../extensions_src/utilities/subagent_palette.ts";
@@ -14,7 +14,7 @@ import { failStartedSubagentAgent, readReconciledAgentSnapshot, stopSubagentAgen
 import { inspectAgentTmux, launchAgentSession, openAgentWindow, probeTmux, stopAgentSession, unlinkAgentWindow, type CommandResult } from "../extensions_src/utilities/subagent_tmux.ts";
 import type { SubagentRuntimeConfig, TmuxAgentReference } from "../extensions_src/utilities/subagent_types.ts";
 const profile = { model: "provider/model", description: "Tester", allowAllTools: false, tools: ["read"], extensions: { subagent: { allowedTargets: [] } } };
-const config = (root: string): SubagentRuntimeConfig => ({ schemaVersion: 4, stateRoot: root, tmux: "/tmux", historyViewerExtension: "/history-viewer.ts", childExtensions: ["/profile.ts", "/bridge.ts"], harnesses: { pi: { command: "/pi" } }, maxDepth: 3 });
+const config = (root: string): SubagentRuntimeConfig => ({ schemaVersion: 5, stateRoot: root, tmux: "/tmux", historyViewerExtension: "/history-viewer.ts", childExtensions: ["/profile.ts", "/bridge.ts"], harnesses: { pi: { command: "/pi" } }, maxDepth: 3, childExcludedTools: ["question"] });
 const tmux: TmuxAgentReference = { socket: "/tmp/tmux", serverPid: "10", sessionId: "$2", sessionName: "pi-sa-test", windowId: "@2", paneId: "%2", windowName: "sa-test" };
 void test("agent store separates persistent agent and sequential task identities", async () => { const root = await mkdtemp(join(tmpdir(), "native-agent-")); const prepared = await prepareAgent(root, { profile: "tester", purpose: "first", harness: "pi", cwd: "/work", profileSnapshot: profile, lineage: { callerProfile: "taskmaster", targetProfile: "tester", depth: 1, originSessionId: "origin" }, capabilities: { nativeScreen: true, taskDelivery: true, taskCompletion: true, usage: true, interactiveInterventions: true } }); await publishAgent(prepared.paths, { agentId: prepared.agentId, profile: "tester", purpose: "first", harness: "pi", cwd: "/work", profileSnapshot: profile, tmux, capabilities: { nativeScreen: true, taskDelivery: true, taskCompletion: true, usage: true, interactiveInterventions: true }, callerProfile: "taskmaster", targetProfile: "tester", depth: 1, originSessionId: "origin" }); await (await import("../extensions_src/utilities/subagent_store.ts")).patchAgentStatus(prepared.paths, { state: "idle", bridgeReady: true }); const first = await createTask(root, prepared.agentId, "first", "inspect"); assert.notEqual(first.request.taskId, prepared.agentId); await claimPendingTask(root, prepared.agentId); await recordIntervention(root, prepared.agentId, { taskId: first.request.taskId, text: "also check tests", deliveryMode: "steer", images: [] }); assert.equal((await readAgentSnapshot(root, prepared.agentId, first.request.taskId)).task?.interventions[0]?.text, "also check tests"); await finishTask(root, prepared.agentId, first.request.taskId, { outcome: "succeeded", output: "done", turns: 1 }); assert.equal((await readAgentSnapshot(root, prepared.agentId)).status.state, "idle"); const second = await createTask(root, prepared.agentId, "again", "retest"); assert.notEqual(second.request.taskId, first.request.taskId); const terminal = await readAgentSnapshot(root, prepared.agentId, first.request.taskId); assert.equal(terminal.task?.result?.interventions[0]?.text, "also check tests"); });
 void test("diagnostic event failures do not orphan committed task transitions", async () => {
@@ -94,7 +94,7 @@ void test("child bridge defers parent task delivery until an idle human turn set
     await publishAgent(prepared.paths, { agentId: prepared.agentId, profile: "tester", purpose: "first", harness: "pi", cwd: "/work", profileSnapshot: profile, tmux, capabilities: { nativeScreen: true, taskDelivery: true, taskCompletion: true, usage: true, interactiveInterventions: true }, callerProfile: "taskmaster", targetProfile: "tester", depth: 1, originSessionId: "origin" });
     const handlers = new Map<string, (event?: Record<string, unknown>) => unknown>();
     const delivered: string[] = [];
-    const api = { on(name: string, handler: (event?: Record<string, unknown>) => unknown) { handlers.set(name, handler); }, sendUserMessage(prompt: string) { delivered.push(prompt); } } as unknown as ExtensionAPI;
+    const api = { on(name: string, handler: (event?: Record<string, unknown>) => unknown) { handlers.set(name, handler); }, events: { on() { return () => {}; } }, sendUserMessage(prompt: string) { delivered.push(prompt); } } as unknown as ExtensionAPI;
     assert.equal(registerSubagentChildBridge(api, { PI_SUBAGENT_AGENT_ID: prepared.agentId, PI_SUBAGENT_AGENT_DIR: prepared.paths.directory }), true);
     await handlers.get("session_start")?.({});
     await handlers.get("input")?.({ source: "interactive", text: "human turn", images: [] });
@@ -124,7 +124,7 @@ void test("child bridge retries task-delivery failure persistence after session-
     await publishAgent(prepared.paths, { agentId: prepared.agentId, profile: "tester", purpose: "first", harness: "pi", cwd: "/work", profileSnapshot: profile, tmux, capabilities: { nativeScreen: true, taskDelivery: true, taskCompletion: true, usage: true, interactiveInterventions: true }, callerProfile: "taskmaster", targetProfile: "tester", depth: 1, originSessionId: "origin" });
     const task = await createTask(root, prepared.agentId, "first", "inspect");
     const handlers = new Map<string, (event?: Record<string, unknown>) => unknown>();
-    const api = { on(name: string, handler: (event?: Record<string, unknown>) => unknown) { handlers.set(name, handler); }, sendUserMessage() { throw new Error("delivery rejected"); } } as unknown as ExtensionAPI;
+    const api = { on(name: string, handler: (event?: Record<string, unknown>) => unknown) { handlers.set(name, handler); }, events: { on() { return () => {}; } }, sendUserMessage() { throw new Error("delivery rejected"); } } as unknown as ExtensionAPI;
     let attempts = 0;
     const injectedFinish: typeof finishTask = async (...args) => { attempts += 1; if (attempts === 1) throw new Error("persistence rejected"); return finishTask(...args); };
     registerSubagentChildBridge(api, { PI_SUBAGENT_AGENT_ID: prepared.agentId, PI_SUBAGENT_AGENT_DIR: prepared.paths.directory }, { finishTask: injectedFinish, retryIntervalMs: 5 });
@@ -145,7 +145,7 @@ void test("child bridge terminalizes an asynchronously rejected delivery that em
     await publishAgent(prepared.paths, { agentId: prepared.agentId, profile: "tester", purpose: "first", harness: "pi", cwd: "/work", profileSnapshot: profile, tmux, capabilities: { nativeScreen: true, taskDelivery: true, taskCompletion: true, usage: true, interactiveInterventions: true }, callerProfile: "taskmaster", targetProfile: "tester", depth: 1, originSessionId: "origin" });
     const task = await createTask(root, prepared.agentId, "first", "inspect");
     const handlers = new Map<string, (event?: Record<string, unknown>) => unknown>();
-    const api = { on(name: string, handler: (event?: Record<string, unknown>) => unknown) { handlers.set(name, handler); }, sendUserMessage() {} } as unknown as ExtensionAPI;
+    const api = { on(name: string, handler: (event?: Record<string, unknown>) => unknown) { handlers.set(name, handler); }, events: { on() { return () => {}; } }, sendUserMessage() {} } as unknown as ExtensionAPI;
     registerSubagentChildBridge(api, { PI_SUBAGENT_AGENT_ID: prepared.agentId, PI_SUBAGENT_AGENT_DIR: prepared.paths.directory }, { retryIntervalMs: 5, deliveryAckTimeoutMs: 20 });
     try {
         await handlers.get("session_start")?.({ reason: "startup" });
@@ -165,7 +165,7 @@ void test("child bridge reload fails only the active task and replacement bridge
     const first = await createTask(root, prepared.agentId, "first", "inspect");
     const handlers = new Map<string, (event?: Record<string, unknown>) => unknown>();
     const delivered: string[] = [];
-    const api = { on(name: string, handler: (event?: Record<string, unknown>) => unknown) { handlers.set(name, handler); }, sendUserMessage(prompt: string) { delivered.push(prompt); } } as unknown as ExtensionAPI;
+    const api = { on(name: string, handler: (event?: Record<string, unknown>) => unknown) { handlers.set(name, handler); }, events: { on() { return () => {}; } }, sendUserMessage(prompt: string) { delivered.push(prompt); } } as unknown as ExtensionAPI;
     registerSubagentChildBridge(api, { PI_SUBAGENT_AGENT_ID: prepared.agentId, PI_SUBAGENT_AGENT_DIR: prepared.paths.directory });
     await handlers.get("session_start")?.({ reason: "startup" });
     await handlers.get("input")?.({ source: "extension", text: "inspect" });
@@ -433,7 +433,7 @@ void test("child bridge autonomously retries every interrupted completion phase"
         await publishAgent(prepared.paths, { agentId: prepared.agentId, profile: "tester", purpose: "first", harness: "pi", cwd: "/work", profileSnapshot: profile, tmux, capabilities: { nativeScreen: true, taskDelivery: true, taskCompletion: true, usage: true, interactiveInterventions: true }, callerProfile: "taskmaster", targetProfile: "tester", depth: 1, originSessionId: "origin" });
         const task = await createTask(root, prepared.agentId, "first", "inspect");
         const handlers = new Map<string, (event?: Record<string, unknown>) => unknown>();
-        const api = { on(name: string, handler: (event?: Record<string, unknown>) => unknown) { handlers.set(name, handler); }, sendUserMessage() {} } as unknown as ExtensionAPI;
+        const api = { on(name: string, handler: (event?: Record<string, unknown>) => unknown) { handlers.set(name, handler); }, events: { on() { return () => {}; } }, sendUserMessage() {} } as unknown as ExtensionAPI;
         let attempts = 0;
         const injectedFinish: typeof finishTask = async (stateRoot, agentId, taskId, input) => {
             attempts += 1;
@@ -499,4 +499,27 @@ void test("detailed wait hides a provisional result until task status is termina
     const response = await createSubagentWaitTool({ configPath, env: {}, exec, now: () => { clock += 1000; return clock; } }).execute("wait-call", { taskIds: [task.request.taskId], condition: "all", timeoutSeconds: 1, detail: true }, undefined, undefined, { sessionManager: { getSessionId: () => "origin", getSessionFile: () => undefined } } as unknown as import("@earendil-works/pi-coding-agent").ExtensionContext) as { content: Array<{ text: string }>; details: { agents: Array<{ task: { result: unknown } }> } };
     assert.equal(JSON.parse(response.content[0]!.text).agents[0].task.result, null);
     assert.equal(response.details.agents[0]!.task.result, null);
+});
+void test("management tools reject the calling agent before reconciliation or mutation", async () => {
+    const root = await mkdtemp(join(tmpdir(), "native-self-target-"));
+    const configPath = join(root, "subagent.json");
+    await writeFile(configPath, JSON.stringify(config(root)));
+    const prepared = await prepareAgent(root, { profile: "tester", purpose: "first", harness: "pi", cwd: "/work", profileSnapshot: profile, lineage: { callerProfile: "taskmaster", targetProfile: "tester", depth: 1, originSessionId: "origin" }, capabilities: { nativeScreen: true, taskDelivery: true, taskCompletion: true, usage: true, interactiveInterventions: true } });
+    await publishAgent(prepared.paths, { agentId: prepared.agentId, profile: "tester", purpose: "first", harness: "pi", cwd: "/work", profileSnapshot: profile, tmux, capabilities: { nativeScreen: true, taskDelivery: true, taskCompletion: true, usage: true, interactiveInterventions: true }, callerProfile: "taskmaster", targetProfile: "tester", depth: 1, originSessionId: "origin" });
+    await patchAgentStatus(prepared.paths, { state: "idle", bridgeReady: true });
+    const task = await createTask(root, prepared.agentId, "first", "inspect");
+    let execCalls = 0;
+    let sleepCalls = 0;
+    const exec = async (): Promise<CommandResult> => { execCalls += 1; return { stdout: "", stderr: "", code: 0 }; };
+    const sleep = async () => { sleepCalls += 1; };
+    const env = { PI_SUBAGENT_AGENT_ID: prepared.agentId, PI_SUBAGENT_ORIGIN_SESSION_ID: "origin" };
+    const ctx = { sessionManager: { getSessionId: () => "origin", getSessionFile: () => undefined } } as unknown as import("@earendil-works/pi-coding-agent").ExtensionContext;
+    const deps = { configPath, env, exec, sleep };
+    await assert.rejects(createSubagentSendTool(deps).execute("send", { agentId: prepared.agentId, purpose: "again", prompt: "nope" }, undefined, undefined, ctx), /cannot target the calling agent itself/);
+    await assert.rejects(createSubagentGetTool(deps).execute("get", { agentId: prepared.agentId }, undefined, undefined, ctx), /cannot target the calling agent itself/);
+    await assert.rejects(createSubagentStopTool(deps).execute("stop", { agentId: prepared.agentId }, undefined, undefined, ctx), /cannot target the calling agent itself/);
+    await assert.rejects(createSubagentWaitTool(deps).execute("wait", { taskIds: [task.request.taskId], condition: "all", timeoutSeconds: 1 }, undefined, undefined, ctx), /cannot wait on the calling agent's own task/);
+    assert.equal(execCalls, 0);
+    assert.equal(sleepCalls, 0);
+    assert.equal((await readAgentSnapshot(root, prepared.agentId)).status.state, "busy");
 });

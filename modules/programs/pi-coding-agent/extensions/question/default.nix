@@ -5,6 +5,7 @@ delib.module {
   options = delib.singleCascadeEnableOption;
 
   myconfig.ifEnabled.programs.pi-coding-agent.profile.defaultTools = ["question"];
+  myconfig.ifEnabled.programs.pi-coding-agent.subagent.childExcludedTools = ["question"];
 
   home.ifEnabled = {myconfig, ...}: {
     programs.pi-coding-agent.settings.extensions = [

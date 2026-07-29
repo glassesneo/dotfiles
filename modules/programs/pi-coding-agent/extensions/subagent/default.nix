@@ -17,9 +17,11 @@ in
     name = moduleName;
 
     options = with delib;
-      moduleOptions ({myconfig, ...}: {
-        enable = boolOption myconfig.programs.pi-coding-agent.enable;
+      moduleOptions ({parent, ...}: {
+        enable = readOnly (boolOption (parent.enable && builtins.elem "subagent" parent.defaultExtensions));
+        extensionPaths = readOnly (listOfOption str [subagentExtension]);
         maxDepth = intOption 3;
+        childExcludedTools = listOfOption str [];
       });
 
     myconfig.always.programs.pi-coding-agent.profile.facetOwners.subagent = moduleName;
@@ -120,11 +122,26 @@ in
           && lib.length targets == lib.length (lib.unique targets)
           && builtins.all (target: builtins.elem target profileNames) targets
         );
+      targetsAreRestrictive = profile: let
+        facet = profile.extensions.subagent or null;
+        targets =
+          if builtins.isAttrs facet && facet ? allowedTargets
+          then facet.allowedTargets
+          else [];
+      in
+        builtins.all (
+          target: !(profiles.${target}.allowAllTools)
+        )
+        targets;
     in {
       assertions = [
         {
           assertion = builtins.all validFacet (builtins.attrValues profiles);
           message = "Pi subagent profile facets must contain only unique existing allowedTargets and an available non-blank harness.";
+        }
+        {
+          assertion = builtins.all targetsAreRestrictive (builtins.attrValues profiles);
+          message = "Pi subagent allowedTargets must reference restrictive profiles with explicit tool allowlists; allowAllTools targets are forbidden.";
         }
       ];
     };
@@ -133,24 +150,57 @@ in
       cfg,
       myconfig,
       ...
-    }: {
+    }: let
+      runtimeWhitespace = map builtins.fromJSON [
+        ''"\u0009"''
+        ''"\u000a"''
+        ''"\u000b"''
+        ''"\u000c"''
+        ''"\u000d"''
+        ''"\u0020"''
+        ''"\u00a0"''
+        ''"\u1680"''
+        ''"\u2000"''
+        ''"\u2001"''
+        ''"\u2002"''
+        ''"\u2003"''
+        ''"\u2004"''
+        ''"\u2005"''
+        ''"\u2006"''
+        ''"\u2007"''
+        ''"\u2008"''
+        ''"\u2009"''
+        ''"\u200a"''
+        ''"\u2028"''
+        ''"\u2029"''
+        ''"\u202f"''
+        ''"\u205f"''
+        ''"\u3000"''
+        ''"\ufeff"''
+      ];
+      nonBlank = value: builtins.replaceStrings runtimeWhitespace (map (_: "") runtimeWhitespace) value != "";
+      childExcludedTools = lib.unique cfg.childExcludedTools;
+    in {
       assertions = [
         {
           assertion = cfg.maxDepth >= 0;
           message = "Pi subagent maxDepth must be non-negative.";
         }
+        {
+          assertion = builtins.all nonBlank cfg.childExcludedTools && lib.length cfg.childExcludedTools == lib.length childExcludedTools;
+          message = "Pi subagent childExcludedTools must be unique non-blank tool names.";
+        }
       ];
 
-      programs.pi-coding-agent.settings.extensions = [subagentExtension];
-
       home.file."${myconfig.programs.pi-coding-agent.configDir}/subagent.json".text = builtins.toJSON {
-        schemaVersion = 4;
+        schemaVersion = 5;
         stateRoot = "${homeConfig.xdg.stateHome}/pi/subagents";
         tmux = lib.getExe pkgs.tmux;
         inherit historyViewerExtension;
         childExtensions = [profileExtension subagentExtension agentArtifactExtension childBridgeExtension];
         harnesses.pi.command = lib.getExe llm-agents.pi;
         inherit (cfg) maxDepth;
+        inherit childExcludedTools;
       };
     };
   }

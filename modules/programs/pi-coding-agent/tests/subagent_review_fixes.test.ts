@@ -168,7 +168,7 @@ void test("palette Enter is disabled for terminal legacy history without probing
 void test("registered parent lifecycle cleans replacement reasons while reload and child depth preserve the hub", async () => {
     const root = await mkdtemp(join(tmpdir(), "subagent-lifecycle-wiring-"));
     const configPath = join(root, "subagent.json");
-    await writeFile(configPath, JSON.stringify({ schemaVersion: 4, stateRoot: join(root, "state"), tmux: "/tmux", historyViewerExtension: "/history.ts", childExtensions: ["/bridge.ts"], harnesses: { pi: { command: "/pi" } }, maxDepth: 3 }));
+    await writeFile(configPath, JSON.stringify({ schemaVersion: 5, stateRoot: join(root, "state"), tmux: "/tmux", historyViewerExtension: "/history.ts", childExtensions: ["/bridge.ts"], harnesses: { pi: { command: "/pi" } }, maxDepth: 3, childExcludedTools: ["question"] }));
     const run = async (reason: "quit" | "reload" | "new" | "resume" | "fork", depth = "0") => {
         const handlers = new Map<string, Array<(...args: any[]) => any>>();
         const eventHandlers = new Map<string, Array<(value: unknown) => void>>();

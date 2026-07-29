@@ -34,13 +34,14 @@ async function fixture() {
     const root = await mkdtemp(join(tmpdir(), "agent-profile-"));
     const profileConfig = profiles();
     const subagentConfig: SubagentRuntimeConfig = {
-        schemaVersion: 4,
+        schemaVersion: 5,
         stateRoot: join(root, "state"),
         tmux: "/tmux",
         historyViewerExtension: "/history-viewer.ts",
         childExtensions: ["/profile.ts", "/subagent.ts", "/bridge.ts"],
         harnesses: { pi: { command: "/pi" } },
         maxDepth: 3,
+        childExcludedTools: ["question"],
     };
     const profilePath = join(root, "agent-profiles.json");
     const subagentPath = join(root, "subagent.json");
@@ -197,12 +198,17 @@ function toolContext(root: string): ExtensionContext {
     return { cwd: root, sessionManager: { getSessionId: () => "session", getSessionFile: () => join(root, "session.jsonl") } } as ExtensionContext;
 }
 
-void test("subagent routing catalog exposes only active allowed targets in the model-facing prompt", async () => {
+void test("subagent_start schema enum follows active allowed targets without a prompt catalog", async () => {
     const value = await fixture();
-    const handlers: Record<string, Array<(event: any, ctx: any) => any>> = {};
+    const tools: Array<{ name: string; parameters: { properties?: { profile?: { enum?: string[]; description?: string } } } }> = [];
     const eventHandlers: Record<string, Array<(value: unknown) => void>> = {};
+    const handlers: Record<string, Array<(event: any, ctx: any) => any>> = {};
     const pi = {
-        registerTool() {}, registerCommand() {},
+        registerTool(tool: { name: string; parameters: { properties?: { profile?: { enum?: string[]; description?: string } } } }) {
+            const index = tools.findIndex(item => item.name === tool.name);
+            if (index >= 0) tools[index] = tool; else tools.push(tool);
+        },
+        registerCommand() {},
         on(name: string, handler: any) { (handlers[name] ??= []).push(handler); },
         events: {
             on(name: string, handler: (value: unknown) => void) { (eventHandlers[name] ??= []).push(handler); return () => {}; },
@@ -212,11 +218,24 @@ void test("subagent routing catalog exposes only active allowed targets in the m
         async exec() { return { stdout: "123\t$0\tmain\t%1\n", stderr: "", code: 0, killed: false }; },
     } as unknown as ExtensionAPI;
     assert.equal(await registerSubagent(pi, { configPath: value.subagentPath, profileConfigPath: value.profilePath, env: { TMUX: "yes" } }), true);
-    eventHandlers[ACTIVE_PROFILE_EVENT]![0]!({ schemaVersion: 1, name: "scout", reason: "startup", profile: value.profileConfig.profiles.scout });
-    const patch = await handlers.before_agent_start![0]!({ systemPrompt: "base" }, {});
-    assert.match(patch.systemPrompt, /Available subagent routing profiles:/);
-    assert.match(patch.systemPrompt, /scout: Read-only exploration\./);
-    assert.doesNotMatch(patch.systemPrompt, /full: Broad coding work/);
+    assert.deepEqual(tools.find(tool => tool.name === "subagent_start")?.parameters.properties?.profile?.enum, []);
+    eventHandlers[ACTIVE_PROFILE_EVENT]![0]!({
+        schemaVersion: 1,
+        name: "review-orchestrator",
+        reason: "startup",
+        profile: {
+            model: "provider/model",
+            description: "Review orchestration.",
+            thinkingLevel: "medium",
+            allowAllTools: false,
+            tools: ["subagent_start"],
+            extensions: { subagent: { allowedTargets: ["focused-reviewer", "dissent-reviewer"] } },
+        },
+    });
+    const start = tools.find(tool => tool.name === "subagent_start");
+    assert.deepEqual(start?.parameters.properties?.profile?.enum, ["focused-reviewer", "dissent-reviewer"]);
+    assert.match(start?.parameters.properties?.profile?.description ?? "", /focused-reviewer, dissent-reviewer/);
+    assert.equal(handlers.before_agent_start, undefined);
 });
 
 void test("delegation fails closed and rejects policy or depth before resource allocation", async () => {
@@ -229,6 +248,65 @@ void test("delegation fails closed and rejects policy or depth before resource a
     await assert.rejects(createSubagentStartTool({ ...base, activeProfile: () => ({ name: "scout", error: "malformed facet" }) }).execute("call", { profile: "scout", purpose: "Policy task", prompt: "task" }, undefined, undefined, toolContext(fixtureValue.root)), /malformed facet/);
     await assert.rejects(createSubagentStartTool({ ...base, activeProfile: () => ({ name: "scout", facet: { allowedTargets: ["scout"] } }) }).execute("call", { profile: "full", purpose: "Policy task", prompt: "task" }, undefined, undefined, toolContext(fixtureValue.root)), /not allowed/);
     await assert.rejects(createSubagentStartTool({ ...base, env: { TMUX: "yes", PI_SUBAGENT_DEPTH: "3" }, activeProfile: () => ({ name: "full", facet: { allowedTargets: ["scout"] } }) }).execute("call", { profile: "scout", purpose: "Policy task", prompt: "task" }, undefined, undefined, toolContext(fixtureValue.root)), /exceeds maxDepth/);
+    await assert.rejects(createSubagentStartTool({ ...base, activeProfile: () => ({ name: "full", facet: { allowedTargets: ["full"] } }) }).execute("call", { profile: "full", purpose: "Policy task", prompt: "task" }, undefined, undefined, toolContext(fixtureValue.root)), /allowAllTools/);
     await assert.rejects(access(fixtureValue.subagentConfig.stateRoot));
     assert.equal(execCalls, 0);
+});
+
+void test("child effective profile drops excluded tools from snapshot and launch descriptor", async () => {
+    const { projectChildEffectiveProfile } = await import("../extensions_src/utilities/subagent_types.ts");
+    const { piLaunchDescriptor } = await import("../extensions_src/utilities/subagent_pi.ts");
+    const profile = {
+        model: "provider/model",
+        description: "Review orchestration.",
+        thinkingLevel: "medium" as const,
+        allowAllTools: false,
+        tools: ["read", "question", "subagent_start", "subagent_get"],
+        instructions: "orchestrate",
+        extensions: { subagent: { allowedTargets: ["focused-reviewer"] } },
+    };
+    const effective = projectChildEffectiveProfile(profile, ["question"]);
+    assert.deepEqual(effective.tools, ["read", "subagent_start", "subagent_get"]);
+    assert.ok(!effective.tools.includes("question"));
+    const launch = piLaunchDescriptor({
+        schemaVersion: 5,
+        stateRoot: "/state",
+        tmux: "/tmux",
+        historyViewerExtension: "/history.ts",
+        childExtensions: ["/profile.ts"],
+        harnesses: { pi: { command: "/pi" } },
+        maxDepth: 3,
+        childExcludedTools: ["question"],
+    }, {
+        agentId: "a",
+        agentDirectory: "/state/agents/a",
+        profile: "review-orchestrator",
+        profileSnapshot: effective,
+        depth: 1,
+        originSessionId: "origin",
+    });
+    const toolsArg = launch.args[launch.args.indexOf("--tools") + 1];
+    assert.equal(toolsArg, "read,subagent_start,subagent_get");
+    assert.doesNotMatch(toolsArg ?? "", /question/);
+    const resolved = JSON.parse(launch.env.PI_AGENT_RESOLVED_PROFILE!);
+    assert.deepEqual(resolved.profile.tools, ["read", "subagent_start", "subagent_get"]);
+});
+
+void test("resolved child profile does not fall back to the default profile on apply failure", async () => {
+    const restrictive = await fixture();
+    const profileConfig = restrictive.profileConfig;
+    profileConfig.profiles.scout = {
+        ...profileConfig.profiles.scout!,
+        tools: ["read", "question", "subagent_start"],
+    };
+    await writeFile(restrictive.profilePath, JSON.stringify(profileConfig));
+    const childFake = fakeControllerPi("scout");
+    const available = ["read", "bash", "edit", "write", "subagent_start", "subagent_get", "subagent_wait", "project_tool"];
+    (childFake.pi as any).getAllTools = () => available.filter(name => name !== "question").map((name: string) => ({ name }));
+    registerProfileController(childFake.pi, restrictive.profilePath, {
+        PI_AGENT_RESOLVED_PROFILE: JSON.stringify({ name: "scout", profile: profileConfig.profiles.scout }),
+    });
+    await childFake.handlers.session_start![0]!({ reason: "startup" }, childFake.ctx);
+    assert.equal(childFake.events.length, 0);
+    assert.deepEqual(childFake.entries.filter((entry: { customType?: string }) => entry.customType === "agent-profile-state"), []);
 });
