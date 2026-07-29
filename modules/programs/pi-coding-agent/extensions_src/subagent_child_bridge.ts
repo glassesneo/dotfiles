@@ -1,7 +1,7 @@
 import type { StopReason, Usage } from "@earendil-works/pi-ai";
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { addUsage, emptyUsage, type TerminalTaskState } from "./utilities/subagent_types.ts";
-import { claimPendingTask, failAgent, finishTask, markBridgeReady, agentPaths, readAgentStatus, recordIdleUsage, recordIntervention } from "./utilities/subagent_store.ts";
+import { claimPendingTask, failAgent, finishTask, markBridgeReady, agentPaths, readAgentStatus, recordChildSessionIdentity, recordIdleUsage, recordIntervention } from "./utilities/subagent_store.ts";
 
 function record(value: unknown): Record<string, unknown> { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {}; }
 function usage(value: unknown): Partial<Usage> | undefined { const item = record(value); return typeof item.input === "number" || typeof item.output === "number" ? item as unknown as Partial<Usage> : undefined; }
@@ -82,8 +82,11 @@ export function registerSubagentChildBridge(pi: ExtensionAPI, env: NodeJS.Proces
         if (pendingCompletion) await persistCompletion();
         if (!pendingCompletion) await pump();
     };
-    pi.on("session_start", async () => {
+    pi.on("session_start", async (_event, ctx?: ExtensionContext) => {
         const paths = agentPaths(stateRoot, agentId);
+        const childSessionId = ctx?.sessionManager.getSessionId() ?? env.PI_SESSION_ID;
+        const childSessionFile = ctx?.sessionManager.getSessionFile() ?? env.PI_SESSION_FILE;
+        if (childSessionId) await recordChildSessionIdentity(paths, childSessionId, childSessionFile);
         await markBridgeReady(paths);
         timer = setInterval(() => { void tick().catch(() => {}); }, dependencies.retryIntervalMs ?? 100);
         await tick();

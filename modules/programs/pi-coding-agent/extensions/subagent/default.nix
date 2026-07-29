@@ -11,6 +11,7 @@
   subagentExtension = "${./../../extensions_src}/subagent.ts";
   agentArtifactExtension = "${./../../extensions_src}/agent_artifact.ts";
   childBridgeExtension = "${./../../extensions_src}/subagent_child_bridge.ts";
+  historyViewerExtension = "${./../../extensions_src}/subagent_history_viewer.ts";
 in
   delib.module {
     name = moduleName;
@@ -143,9 +144,10 @@ in
       programs.pi-coding-agent.settings.extensions = [subagentExtension];
 
       home.file."${myconfig.programs.pi-coding-agent.configDir}/subagent.json".text = builtins.toJSON {
-        schemaVersion = 3;
+        schemaVersion = 4;
         stateRoot = "${homeConfig.xdg.stateHome}/pi/subagents";
         tmux = lib.getExe pkgs.tmux;
+        inherit historyViewerExtension;
         childExtensions = [profileExtension subagentExtension agentArtifactExtension childBridgeExtension];
         harnesses.pi.command = lib.getExe llm-agents.pi;
         inherit (cfg) maxDepth;

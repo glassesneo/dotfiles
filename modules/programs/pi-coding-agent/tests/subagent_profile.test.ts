@@ -34,9 +34,10 @@ async function fixture() {
     const root = await mkdtemp(join(tmpdir(), "agent-profile-"));
     const profileConfig = profiles();
     const subagentConfig: SubagentRuntimeConfig = {
-        schemaVersion: 3,
+        schemaVersion: 4,
         stateRoot: join(root, "state"),
         tmux: "/tmux",
+        historyViewerExtension: "/history-viewer.ts",
         childExtensions: ["/profile.ts", "/subagent.ts", "/bridge.ts"],
         harnesses: { pi: { command: "/pi" } },
         maxDepth: 3,

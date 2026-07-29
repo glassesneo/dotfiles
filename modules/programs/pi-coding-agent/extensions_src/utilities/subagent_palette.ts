@@ -1,15 +1,18 @@
 import { type ExtensionContext, type ExtensionUIContext, type Theme } from "@earendil-works/pi-coding-agent";
 import { Input, truncateToWidth, type Component, type Focusable, type TUI } from "@earendil-works/pi-tui";
 import { paletteKeyAction, type ResolvedPaletteKeymap } from "./command_palette_keymap.ts";
+import { historyAvailability, openSubagentHistory } from "./subagent_history.ts";
 import { OriginAgentDiscovery, stopSubagentAgent } from "./subagent_management.ts";
 import { openAgentWindow, probeTmux, unlinkAgentWindow, type CommandExecutor } from "./subagent_tmux.ts";
-import type { AgentSnapshot } from "./subagent_types.ts";
+import { isTerminalAgent, type AgentSnapshot } from "./subagent_types.ts";
 
 export interface SubagentPaletteDependencies {
     stateRoot: string;
     originSessionId: string;
     exec: CommandExecutor;
     tmux: string;
+    historyViewerExtension: string;
+    piCommand: string;
     env?: NodeJS.ProcessEnv;
     setTimeout?: typeof setTimeout;
     clearTimeout?: typeof clearTimeout;
@@ -94,13 +97,18 @@ export class SubagentPaletteComponent implements Component, Focusable {
         this.#acting = true;
         try {
             if (kind === "stop") {
-                const confirmed = await this.#ui.confirm(`Stop ${selected.agent.purpose}?`, "This kills the dedicated tmux session and every linked view. Use Unlink to close only this view.");
+                const confirmed = await this.#ui.confirm(`Stop ${selected.agent.purpose}?`, "This kills the agent window and every linked view. Use Unlink to close only this view.");
                 if (confirmed) await stopSubagentAgent({ ...this.#deps, agentId: selected.agent.agentId });
             } else {
+                if (kind === "open" && isTerminalAgent(selected.status.state)) {
+                    const availability = historyAvailability(selected);
+                    if (!availability.available) { this.#status = availability.reason ?? "history unavailable"; this.#tui.requestRender(); return; }
+                }
                 const context = await probeTmux(this.#deps.exec, this.#deps.tmux, this.#deps.env);
                 if (!context) throw new Error("Current Pi is not attached to a usable tmux client");
                 if (kind === "open") {
-                    await openAgentWindow(this.#deps.exec, this.#deps.tmux, context, selected.agent.tmux);
+                    if (isTerminalAgent(selected.status.state)) await openSubagentHistory(this.#deps.exec, this.#deps, context, selected);
+                    else await openAgentWindow(this.#deps.exec, this.#deps.tmux, context, selected.agent.tmux);
                     this.close();
                     return;
                 }
@@ -131,7 +139,7 @@ export class SubagentPaletteComponent implements Component, Focusable {
     render(width: number): string[] {
         const lines = [
             this.#theme.fg("accent", this.#theme.bold("Subagent sessions")),
-            this.#theme.fg("muted", "Enter Open · u Unlink view · Stop ends agent and all links · tmux kill-window also ends the agent"),
+            this.#theme.fg("muted", "Enter Open/history · u Unlink view · Stop ends a live agent window"),
             "",
         ];
         if (!this.#agents.length) lines.push("No agents for this origin session.");
@@ -139,7 +147,9 @@ export class SubagentPaletteComponent implements Component, Focusable {
             const task = snapshot.task;
             const marker = index === this.#index ? ">" : " ";
             const intervention = (task?.interventions.length ?? 0) > 0 ? " · intervention" : "";
-            lines.push(`${marker} ${snapshot.agent.profile} — ${snapshot.agent.purpose} — ${snapshot.status.state}/${task?.status.state ?? "no-task"} — ${snapshot.agent.agentId.slice(0, 8)}${intervention}`);
+            const child = snapshot.status.childSessionId?.slice(0, 8) ?? (snapshot.status.bridgeReady ? "unavailable" : "pending");
+            const unavailable = isTerminalAgent(snapshot.status.state) && !historyAvailability(snapshot).available ? " · history unavailable" : "";
+            lines.push(`${marker} ${snapshot.agent.profile} — ${snapshot.agent.purpose} — ${snapshot.status.state}/${task?.status.state ?? "no-task"} — ${snapshot.agent.agentId.slice(0, 8)} · child ${child}${intervention}${unavailable}`);
         });
         lines.push("", this.#theme.fg("dim", this.#status));
         return lines.map(line => truncateToWidth(line, Math.max(1, width), ""));

@@ -14,7 +14,7 @@ import { failStartedSubagentAgent, readReconciledAgentSnapshot, stopSubagentAgen
 import { inspectAgentTmux, launchAgentSession, openAgentWindow, probeTmux, stopAgentSession, unlinkAgentWindow, type CommandResult } from "../extensions_src/utilities/subagent_tmux.ts";
 import type { SubagentRuntimeConfig, TmuxAgentReference } from "../extensions_src/utilities/subagent_types.ts";
 const profile = { model: "provider/model", description: "Tester", allowAllTools: false, tools: ["read"], extensions: { subagent: { allowedTargets: [] } } };
-const config = (root: string): SubagentRuntimeConfig => ({ schemaVersion: 3, stateRoot: root, tmux: "/tmux", childExtensions: ["/profile.ts", "/bridge.ts"], harnesses: { pi: { command: "/pi" } }, maxDepth: 3 });
+const config = (root: string): SubagentRuntimeConfig => ({ schemaVersion: 4, stateRoot: root, tmux: "/tmux", historyViewerExtension: "/history-viewer.ts", childExtensions: ["/profile.ts", "/bridge.ts"], harnesses: { pi: { command: "/pi" } }, maxDepth: 3 });
 const tmux: TmuxAgentReference = { socket: "/tmp/tmux", serverPid: "10", sessionId: "$2", sessionName: "pi-sa-test", windowId: "@2", paneId: "%2", windowName: "sa-test" };
 void test("agent store separates persistent agent and sequential task identities", async () => { const root = await mkdtemp(join(tmpdir(), "native-agent-")); const prepared = await prepareAgent(root, { profile: "tester", purpose: "first", harness: "pi", cwd: "/work", profileSnapshot: profile, lineage: { callerProfile: "taskmaster", targetProfile: "tester", depth: 1, originSessionId: "origin" }, capabilities: { nativeScreen: true, taskDelivery: true, taskCompletion: true, usage: true, interactiveInterventions: true } }); await publishAgent(prepared.paths, { agentId: prepared.agentId, profile: "tester", purpose: "first", harness: "pi", cwd: "/work", profileSnapshot: profile, tmux, capabilities: { nativeScreen: true, taskDelivery: true, taskCompletion: true, usage: true, interactiveInterventions: true }, callerProfile: "taskmaster", targetProfile: "tester", depth: 1, originSessionId: "origin" }); await (await import("../extensions_src/utilities/subagent_store.ts")).patchAgentStatus(prepared.paths, { state: "idle", bridgeReady: true }); const first = await createTask(root, prepared.agentId, "first", "inspect"); assert.notEqual(first.request.taskId, prepared.agentId); await claimPendingTask(root, prepared.agentId); await recordIntervention(root, prepared.agentId, { taskId: first.request.taskId, text: "also check tests", deliveryMode: "steer", images: [] }); assert.equal((await readAgentSnapshot(root, prepared.agentId, first.request.taskId)).task?.interventions[0]?.text, "also check tests"); await finishTask(root, prepared.agentId, first.request.taskId, { outcome: "succeeded", output: "done", turns: 1 }); assert.equal((await readAgentSnapshot(root, prepared.agentId)).status.state, "idle"); const second = await createTask(root, prepared.agentId, "again", "retest"); assert.notEqual(second.request.taskId, first.request.taskId); const terminal = await readAgentSnapshot(root, prepared.agentId, first.request.taskId); assert.equal(terminal.task?.result?.interventions[0]?.text, "also check tests"); });
 void test("diagnostic event failures do not orphan committed task transitions", async () => {
@@ -39,6 +39,7 @@ void test("tmux launch owns a dedicated session while open links and unlink only
         const command = args[0] === "-S" ? args[2] : args[0];
         if (command === "display-message" && args.at(-1) === "#{pid}") return { stdout: "10\n", stderr: "", code: 0 };
         if (command === "display-message" && !args.includes("-t")) return { stdout: "10\t$1\tmain\t%1\n", stderr: "", code: 0 };
+        if (command === "has-session") return { stdout: "", stderr: "missing", code: 1 };
         if (command === "new-session") return { stdout: "$2\t@2\t%2\n", stderr: "", code: 0 };
         if (command === "display-message") return { stdout: "0\n", stderr: "", code: 0 };
         if (command === "list-panes") return { stdout: "%2\t0\n", stderr: "", code: 0 };
@@ -50,7 +51,7 @@ void test("tmux launch owns a dedicated session while open links and unlink only
     const context = await probeTmux(exec, "/tmux", { TMUX: "/tmp/tmux,1,0" });
     assert.ok(context);
     const launched = await launchAgentSession(exec, "/tmux", context!, {
-        agentId: "550e8400-e29b-41d4-a716-446655440000", profile: "tester", cwd: "/work",
+        agentId: "550e8400-e29b-41d4-a716-446655440000", profile: "tester", originSessionId: "origin", cwd: "/work",
         launch: { command: "/pi", args: [], env: {} },
     });
     await openAgentWindow(exec, "/tmux", context!, launched);
@@ -72,7 +73,7 @@ void test("palette refresh owns one timer and close cancels polling", async () =
         ui: { confirm: async () => false },
         keymap: defaultPaletteKeymap,
         deps: {
-            stateRoot: root, originSessionId: "origin", tmux: "/tmux", exec: async () => ({ stdout: "", stderr: "", code: 1 }),
+            stateRoot: root, originSessionId: "origin", tmux: "/tmux", historyViewerExtension: "/history-viewer.ts", piCommand: "/pi", exec: async () => ({ stdout: "", stderr: "", code: 1 }),
             setTimeout: ((callback: () => void) => { nextTimer += 1; timers.set(nextTimer, callback); return nextTimer; }) as unknown as typeof setTimeout,
             clearTimeout: ((timer: number) => { timers.delete(timer); }) as unknown as typeof clearTimeout,
         },
@@ -208,15 +209,23 @@ void test("usage claims recover when the parent tool result was not persisted", 
 });
 void test("tmux cleanup and stop use the recorded socket and refuse a reused server identity", async () => {
     const calls: string[][] = [];
+    let allocatedName = "";
+    let allocatedAlive = true;
     const malformed = async (_command: string, args: string[]): Promise<CommandResult> => {
         calls.push(args);
         if (args.at(-1) === "#{pid}") return { stdout: "10\n", stderr: "", code: 0 };
-        if (args.includes("new-session")) return { stdout: "malformed\n", stderr: "", code: 0 };
+        if (args.includes("new-session")) { allocatedName = args[args.indexOf("-n") + 1]!; return { stdout: "malformed\n", stderr: "", code: 0 }; }
+        if (args.includes("list-windows")) return { stdout: `$2\t@sibling\t%sibling\tsa-other-valid-agent\n$2\t@2\t%2\t${allocatedName}\n`, stderr: "", code: 0 };
+        if (args.includes("kill-window")) { allocatedAlive = false; return { stdout: "", stderr: "", code: 0 }; }
+        if (args.includes("list-panes")) return { stdout: allocatedAlive ? "%2\t0\n" : "", stderr: "", code: 0 };
+        if (args.includes("has-session")) return { stdout: "", stderr: "missing", code: 1 };
         return { stdout: "", stderr: "", code: 0 };
     };
     const context = { socket: "/tmp/tmux", serverPid: "10", sessionId: "$1", sessionName: "main", paneId: "%1" };
-    await assert.rejects(launchAgentSession(malformed, "/tmux", context, { agentId: "550e8400-e29b-41d4-a716-446655440000", profile: "tester", cwd: "/work", launch: { command: "/pi", args: [], env: {} } }), /canonical IDs/u);
-    assert.ok(calls.some(args => args.includes("kill-session") && args.includes("pi-sa-tester-550e8400")));
+    await assert.rejects(launchAgentSession(malformed, "/tmux", context, { agentId: "550e8400-e29b-41d4-a716-446655440000", profile: "tester", originSessionId: "origin", cwd: "/work", launch: { command: "/pi", args: [], env: {} } }), /canonical IDs/u);
+    assert.ok(calls.some(args => args.includes("kill-window") && args.includes("@2")));
+    assert.ok(!calls.some(args => args.includes("kill-session")));
+    assert.ok(!calls.some(args => args.includes("kill-window") && args.includes("@sibling")));
     const wrongServerCalls: string[][] = [];
     const wrongServer = async (_command: string, args: string[]): Promise<CommandResult> => { wrongServerCalls.push(args); return { stdout: "99\n", stderr: "", code: 0 }; };
     assert.equal(await stopAgentSession(wrongServer, "/tmux", tmux), false);
