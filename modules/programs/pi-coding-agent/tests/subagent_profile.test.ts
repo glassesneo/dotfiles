@@ -34,9 +34,10 @@ async function fixture() {
     const root = await mkdtemp(join(tmpdir(), "agent-profile-"));
     const profileConfig = profiles();
     const subagentConfig: SubagentRuntimeConfig = {
-        schemaVersion: 1,
-        stateRoot: join(root, "runs"),
-        runner: { node: process.execPath, script: "/runner.ts", extensions: ["/profile.ts", "/subagent.ts"] },
+        schemaVersion: 3,
+        stateRoot: join(root, "state"),
+        tmux: "/tmux",
+        childExtensions: ["/profile.ts", "/subagent.ts", "/bridge.ts"],
         harnesses: { pi: { command: "/pi" } },
         maxDepth: 3,
     };
@@ -91,7 +92,7 @@ function fakeControllerPi(flag = "scout") {
 void test("profile extension applies CLI, guards tools, restores branches, and emits only successful applies", async () => {
     const { profilePath } = await fixture();
     const fake = fakeControllerPi("scout");
-    registerProfileController(fake.pi, profilePath);
+    registerProfileController(fake.pi, profilePath, {});
     await fake.handlers.session_start![0]!({ reason: "startup" }, fake.ctx);
 
     assert.deepEqual(fake.activeTools(), ["read", "subagent_start", "subagent_get", "subagent_wait"]);
@@ -122,7 +123,7 @@ void test("profile extension applies CLI, guards tools, restores branches, and e
 void test("exact raw prompt commands route transactionally before expansion", async () => {
     const { profilePath, profileConfig } = await fixture();
     const fake = fakeControllerPi("scout");
-    registerProfileController(fake.pi, profilePath);
+    registerProfileController(fake.pi, profilePath, {});
     await fake.handlers.session_start![0]!({ reason: "startup" }, fake.ctx);
 
     for (const text of ["/impl", "/impl approved.md", "/impl\ncontext"]) {
@@ -207,7 +208,7 @@ void test("subagent routing catalog exposes only active allowed targets in the m
             emit(name: string, value: unknown) { for (const handler of eventHandlers[name] ?? []) handler(value); },
         },
         getActiveTools: () => ["subagent_start"],
-        async exec() { return { stdout: "$0\tmain\t%1\n", stderr: "", code: 0, killed: false }; },
+        async exec() { return { stdout: "123\t$0\tmain\t%1\n", stderr: "", code: 0, killed: false }; },
     } as unknown as ExtensionAPI;
     assert.equal(await registerSubagent(pi, { configPath: value.subagentPath, profileConfigPath: value.profilePath, env: { TMUX: "yes" } }), true);
     eventHandlers[ACTIVE_PROFILE_EVENT]![0]!({ schemaVersion: 1, name: "scout", reason: "startup", profile: value.profileConfig.profiles.scout });

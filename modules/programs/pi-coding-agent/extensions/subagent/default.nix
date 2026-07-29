@@ -10,6 +10,7 @@
   profileExtension = "${./../../extensions_src}/profile.ts";
   subagentExtension = "${./../../extensions_src}/subagent.ts";
   agentArtifactExtension = "${./../../extensions_src}/agent_artifact.ts";
+  childBridgeExtension = "${./../../extensions_src}/subagent_child_bridge.ts";
 in
   delib.module {
     name = moduleName;
@@ -28,7 +29,7 @@ in
         harness = "pi";
       };
       taskmaster = {
-        tools = ["subagent_start" "subagent_get" "subagent_wait" "subagent_stop"];
+        tools = ["subagent_start" "subagent_send" "subagent_get" "subagent_wait" "subagent_stop"];
         extensions.subagent = {
           allowedTargets = ["tester" "review-orchestrator" "focused-reviewer"];
           harness = "pi";
@@ -39,14 +40,14 @@ in
         harness = "pi";
       };
       review-orchestrator = {
-        tools = ["subagent_start" "subagent_get" "subagent_wait" "subagent_stop"];
+        tools = ["subagent_start" "subagent_send" "subagent_get" "subagent_wait" "subagent_stop"];
         extensions.subagent = {
           allowedTargets = ["focused-reviewer" "dissent-reviewer"];
           harness = "pi";
         };
       };
       scout = {
-        tools = ["subagent_start" "subagent_get" "subagent_wait" "subagent_stop"];
+        tools = ["subagent_start" "subagent_send" "subagent_get" "subagent_wait" "subagent_stop"];
         extensions.subagent = {
           allowedTargets = ["review-orchestrator" "focused-reviewer"];
           harness = "pi";
@@ -142,16 +143,10 @@ in
       programs.pi-coding-agent.settings.extensions = [subagentExtension];
 
       home.file."${myconfig.programs.pi-coding-agent.configDir}/subagent.json".text = builtins.toJSON {
-        schemaVersion = 2;
-        stateRoot = "${homeConfig.xdg.stateHome}/pi/subagents/runs";
-        runner = {
-          node = lib.getExe pkgs.nodejs;
-          script = "${./../../extensions_src}/subagent_runner.ts";
-          supervisor = "${./../../extensions_src}/subagent_supervisor.ts";
-          viewer = "${./../../extensions_src}/subagent_viewer.ts";
-          less = lib.getExe pkgs.less;
-          extensions = [profileExtension subagentExtension agentArtifactExtension];
-        };
+        schemaVersion = 3;
+        stateRoot = "${homeConfig.xdg.stateHome}/pi/subagents";
+        tmux = lib.getExe pkgs.tmux;
+        childExtensions = [profileExtension subagentExtension agentArtifactExtension childBridgeExtension];
         harnesses.pi.command = lib.getExe llm-agents.pi;
         inherit (cfg) maxDepth;
       };
