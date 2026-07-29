@@ -1,5 +1,5 @@
 import type { ThemeColor } from "@earendil-works/pi-coding-agent";
-import { isTerminalAgent, type AgentSnapshot, type AgentState } from "./subagent_types.ts";
+import { isTerminalAgent, type AgentSnapshot, type AgentState, type TaskState } from "./subagent_types.ts";
 
 /** Nature-word dictionary for deterministic display handles. Avoid role-like or hostile words. */
 export const NATURE_HANDLE_WORDS = [
@@ -38,6 +38,20 @@ export const AGENT_STATE_BADGES: Record<AgentState, AgentStateBadge> = {
     stopped: { symbol: "■", label: "STOPPED", role: "muted" },
     failed: { symbol: "!", label: "FAILED", role: "error" },
 };
+
+export const TASK_STATE_BADGES: Record<TaskState, AgentStateBadge> = {
+    created: { symbol: "◌", label: "CREATED", role: "muted" },
+    running: { symbol: "●", label: "RUNNING", role: "accent" },
+    succeeded: { symbol: "✓", label: "SUCCEEDED", role: "success" },
+    failed: { symbol: "!", label: "FAILED", role: "error" },
+    stopped: { symbol: "■", label: "STOPPED", role: "muted" },
+};
+
+export const WAIT_OUTCOME_BADGES = {
+    waiting: { symbol: "…", label: "WAITING", role: "warning" as ThemeColor },
+    completed: { symbol: "✓", label: "COMPLETED", role: "success" as ThemeColor },
+    timeout: { symbol: "◷", label: "TIMEOUT", role: "warning" as ThemeColor },
+} as const;
 
 export interface SubagentDisplayNode {
     agentId: string;
@@ -105,6 +119,16 @@ export function profileColorRole(profile: string): ThemeColor {
 
 export function formatStateBadge(state: AgentState): string {
     const badge = AGENT_STATE_BADGES[state];
+    return `${badge.symbol} ${badge.label}`;
+}
+
+export function formatTaskStateBadge(state: TaskState): string {
+    const badge = TASK_STATE_BADGES[state];
+    return `${badge.symbol} ${badge.label}`;
+}
+
+export function formatWaitOutcomeBadge(kind: keyof typeof WAIT_OUTCOME_BADGES): string {
+    const badge = WAIT_OUTCOME_BADGES[kind];
     return `${badge.symbol} ${badge.label}`;
 }
 

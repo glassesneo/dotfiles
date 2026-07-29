@@ -12,7 +12,7 @@ import { SubagentPaletteComponent } from "../extensions_src/utilities/subagent_p
 import { claimPendingTask, claimTaskUsage, createTask, failAgent, finishTask, markAgentStopping, markBridgeReady, patchAgentStatus, prepareAgent, publishAgent, readAgentSnapshot, reconcileOriginUsageClaims, recordIdleUsage, recordIntervention, taskPaths } from "../extensions_src/utilities/subagent_store.ts";
 import { failStartedSubagentAgent, readReconciledAgentSnapshot, stopSubagentAgent } from "../extensions_src/utilities/subagent_management.ts";
 import { inspectAgentTmux, launchAgentSession, openAgentWindow, probeTmux, stopAgentSession, unlinkAgentWindow, type CommandResult } from "../extensions_src/utilities/subagent_tmux.ts";
-import type { SubagentRuntimeConfig, TmuxAgentReference } from "../extensions_src/utilities/subagent_types.ts";
+import type { AgentSnapshot, SubagentRuntimeConfig, TmuxAgentReference } from "../extensions_src/utilities/subagent_types.ts";
 const profile = { model: "provider/model", description: "Tester", allowAllTools: false, tools: ["read"], extensions: { subagent: { allowedTargets: [] } } };
 const config = (root: string): SubagentRuntimeConfig => ({ schemaVersion: 5, stateRoot: root, tmux: "/tmux", historyViewerExtension: "/history-viewer.ts", childExtensions: ["/profile.ts", "/bridge.ts"], harnesses: { pi: { command: "/pi" } }, maxDepth: 3, childExcludedTools: ["question"] });
 const tmux: TmuxAgentReference = { socket: "/tmp/tmux", serverPid: "10", sessionId: "$2", sessionName: "pi-sa-test", windowId: "@2", paneId: "%2", windowName: "sa-test" };
@@ -483,7 +483,7 @@ void test("get rejects another origin before tmux reconciliation can mutate it",
     assert.equal(execCalls, 0);
     assert.equal((await readAgentSnapshot(root, prepared.agentId)).status.state, "busy");
 });
-void test("detailed wait hides a provisional result until task status is terminal", async () => {
+void test("wait hides a provisional result until task status is terminal", async () => {
     const root = await mkdtemp(join(tmpdir(), "native-wait-detail-"));
     const configPath = join(root, "subagent.json");
     await writeFile(configPath, JSON.stringify(config(root)));
@@ -496,9 +496,67 @@ void test("detailed wait hides a provisional result until task status is termina
     await writeFile(files.result, `${JSON.stringify({ schemaVersion: 1, agentId: prepared.agentId, taskId: task.request.taskId, outcome: "succeeded", output: "provisional", usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, totalTokens: 2, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } }, turns: 1, interventions: [], startedAt: running!.status.startedAt, finishedAt: new Date().toISOString() })}\n`);
     let clock = 0;
     const exec = async (_command: string, args: string[]): Promise<CommandResult> => { if (args.at(-1) === "#{pid}") return { stdout: "10\n", stderr: "", code: 0 }; if (args.includes("has-session")) return { stdout: "", stderr: "", code: 0 }; if (args.includes("#{pane_id}\t#{pane_dead}")) return { stdout: "%2\t0\n", stderr: "", code: 0 }; return { stdout: "", stderr: "", code: 0 }; };
-    const response = await createSubagentWaitTool({ configPath, env: {}, exec, now: () => { clock += 1000; return clock; } }).execute("wait-call", { taskIds: [task.request.taskId], condition: "all", timeoutSeconds: 1, detail: true }, undefined, undefined, { sessionManager: { getSessionId: () => "origin", getSessionFile: () => undefined } } as unknown as import("@earendil-works/pi-coding-agent").ExtensionContext) as { content: Array<{ text: string }>; details: { agents: Array<{ task: { result: unknown } }> } };
-    assert.equal(JSON.parse(response.content[0]!.text).agents[0].task.result, null);
+    const response = await createSubagentWaitTool({ configPath, env: {}, exec, now: () => { clock += 1000; return clock; } }).execute("wait-call", { taskIds: [task.request.taskId], condition: "all", timeoutSeconds: 1 }, undefined, undefined, { sessionManager: { getSessionId: () => "origin", getSessionFile: () => undefined } } as unknown as import("@earendil-works/pi-coding-agent").ExtensionContext) as { content: Array<{ text: string }>; details: { outcome: string; agents: Array<{ task: { result: unknown } }> } };
+    const content = JSON.parse(response.content[0]!.text) as { outcome: string; tasks: Array<{ output?: string }> };
+    assert.equal(content.outcome, "timeout");
+    assert.equal(content.tasks[0]!.output, undefined);
     assert.equal(response.details.agents[0]!.task.result, null);
+});
+void test("wait partial updates skip usage claims and final results use outcome", async () => {
+    const root = await mkdtemp(join(tmpdir(), "native-wait-outcome-"));
+    const configPath = join(root, "subagent.json");
+    await writeFile(configPath, JSON.stringify(config(root)));
+    const firstAgent = await prepareAgent(root, { profile: "tester", purpose: "first", harness: "pi", cwd: "/work", profileSnapshot: profile, lineage: { callerProfile: "taskmaster", targetProfile: "tester", depth: 1, originSessionId: "origin" }, capabilities: { nativeScreen: true, taskDelivery: true, taskCompletion: true, usage: true, interactiveInterventions: true } });
+    await publishAgent(firstAgent.paths, { agentId: firstAgent.agentId, profile: "tester", purpose: "first", harness: "pi", cwd: "/work", profileSnapshot: profile, tmux, capabilities: { nativeScreen: true, taskDelivery: true, taskCompletion: true, usage: true, interactiveInterventions: true }, callerProfile: "taskmaster", targetProfile: "tester", depth: 1, originSessionId: "origin" });
+    await patchAgentStatus(firstAgent.paths, { state: "idle" });
+    const first = await createTask(root, firstAgent.agentId, "first", "inspect");
+    await claimPendingTask(root, firstAgent.agentId);
+    const secondAgent = await prepareAgent(root, { profile: "tester", purpose: "second", harness: "pi", cwd: "/work", profileSnapshot: profile, lineage: { callerProfile: "taskmaster", targetProfile: "tester", depth: 1, originSessionId: "origin" }, capabilities: { nativeScreen: true, taskDelivery: true, taskCompletion: true, usage: true, interactiveInterventions: true } });
+    await publishAgent(secondAgent.paths, { agentId: secondAgent.agentId, profile: "tester", purpose: "second", harness: "pi", cwd: "/work", profileSnapshot: profile, tmux: { ...tmux, sessionId: "$3", windowId: "@3", paneId: "%3", windowName: "sa-second" }, capabilities: { nativeScreen: true, taskDelivery: true, taskCompletion: true, usage: true, interactiveInterventions: true }, callerProfile: "taskmaster", targetProfile: "tester", depth: 1, originSessionId: "origin" });
+    await patchAgentStatus(secondAgent.paths, { state: "idle" });
+    const second = await createTask(root, secondAgent.agentId, "second", "still running");
+    await claimPendingTask(root, secondAgent.agentId);
+    let polls = 0;
+    let clock = 0;
+    const updates: Array<{ claimed: string[]; outcome?: string }> = [];
+    const exec = async (_command: string, args: string[]): Promise<CommandResult> => {
+        if (args.at(-1) === "#{pid}") return { stdout: "10\n", stderr: "", code: 0 };
+        if (args.includes("has-session")) return { stdout: "", stderr: "", code: 0 };
+        if (args.includes("#{pane_id}\t#{pane_dead}")) return { stdout: "%2\t0\n%3\t0\n", stderr: "", code: 0 };
+        return { stdout: "", stderr: "", code: 0 };
+    };
+    const response = await createSubagentWaitTool({
+        configPath, env: {}, exec,
+        now: () => clock,
+        sleep: async () => {
+            polls += 1;
+            if (polls === 1) {
+                await finishTask(root, firstAgent.agentId, first.request.taskId, { outcome: "succeeded", output: "done", usage: { input: 2, output: 3, cacheRead: 0, cacheWrite: 0, totalTokens: 5, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } } });
+            }
+            clock += 500;
+        },
+    }).execute(
+        "wait-any",
+        { taskIds: [second.request.taskId, first.request.taskId], condition: "any", timeoutSeconds: 5 },
+        undefined,
+        value => {
+            const details = value.details as { outcome?: string; accounting: { claimedTaskIds: string[] } };
+            updates.push({ claimed: [...details.accounting.claimedTaskIds], outcome: details.outcome });
+        },
+        { sessionManager: { getSessionId: () => "origin", getSessionFile: () => undefined } } as unknown as import("@earendil-works/pi-coding-agent").ExtensionContext,
+    ) as { content: Array<{ text: string }>; details: { outcome: string; accounting: { claimedTaskIds: string[] }; agents: AgentSnapshot[] }; usage?: { input: number } };
+    const content = JSON.parse(response.content[0]!.text) as { outcome: string; tasks: Array<{ taskId?: string; output?: string }>; reason?: string; agents?: unknown };
+    assert.equal(content.outcome, "completed");
+    assert.equal(content.reason, undefined);
+    assert.equal(content.agents, undefined);
+    assert.deepEqual(content.tasks.map(task => task.taskId), [second.request.taskId, first.request.taskId]);
+    assert.equal(content.tasks[0]!.output, undefined);
+    assert.equal(content.tasks[1]!.output, "done");
+    assert.equal(response.details.outcome, "completed");
+    assert.deepEqual(response.details.accounting.claimedTaskIds, [first.request.taskId]);
+    assert.equal(response.usage?.input, 2);
+    assert.ok(updates.length >= 1);
+    assert.ok(updates.every(update => update.claimed.length === 0 && update.outcome === undefined));
 });
 void test("management tools reject the calling agent before reconciliation or mutation", async () => {
     const root = await mkdtemp(join(tmpdir(), "native-self-target-"));

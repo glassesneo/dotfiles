@@ -5,8 +5,26 @@ import { defineTool, getAgentDir, type ExtensionAPI, type ExtensionContext, type
 import { Type, type Static } from "typebox";
 import { loadAgentProfileConfig } from "./profile.ts";
 import { onActiveProfile } from "./utilities/profile_events.ts";
+import {
+    renderAgentToolResult,
+    renderGetCall,
+    renderSendCall,
+    renderStartCall,
+    renderStopCall,
+    renderWaitCall,
+    renderWaitResult,
+} from "./utilities/subagent_cards.ts";
 import { resolveHarnessAdapter } from "./utilities/subagent_harness.ts";
 import { cleanupOriginAgents, failStartedSubagentAgent, readReconciledAgentSnapshot, stopSubagentAgent } from "./utilities/subagent_management.ts";
+import {
+    projectDebugSnapshot,
+    projectMinimalAgentTask,
+    projectMinimalWaitResult,
+    sanitizeSnapshot,
+    serializeModelVisibleJson,
+    type AgentToolDetails,
+    type WaitDetails,
+} from "./utilities/subagent_projection.ts";
 import { claimTaskUsage, createTask, findTaskAgent, prepareAgent, publishAgent, readAgentSnapshot, reconcileOriginUsageClaims, removePreparedAgent } from "./utilities/subagent_store.ts";
 import { inspectAgentTmux, launchAgentSession, probeTmux, stopAgentSession, type CommandExecutor } from "./utilities/subagent_tmux.ts";
 import { PURPOSE_MAX_LENGTH, addUsage, emptyUsage, fallbackRunPurpose, isTerminalAgent, isTerminalTask, parseSubagentFacet, projectChildEffectiveProfile, validateSubagentRuntimeConfig, type AgentSnapshot, type SubagentFacet, type SubagentRuntimeConfig } from "./utilities/subagent_types.ts";
@@ -15,21 +33,70 @@ import { loadPaletteKeymap } from "./utilities/command_palette_keymap.ts";
 import { provideCommandPaletteContribution } from "./utilities/command_palette_contributions.ts";
 
 const CONFIG = join(getAgentDir(), "subagent.json"); const PROFILES = join(getAgentDir(), "agent-profiles.json");
-const detail = Type.Optional(Type.Boolean({ default: false }));
-const sendParameters = Type.Object({ agentId: Type.String(), purpose: Type.String({ minLength: 1, maxLength: PURPOSE_MAX_LENGTH }), prompt: Type.String({ minLength: 1 }), detail });
-const getParameters = Type.Object({ agentId: Type.String(), taskId: Type.Optional(Type.String()), detail });
-const waitParameters = Type.Object({ taskIds: Type.Array(Type.String(), { minItems: 1, maxItems: 128, uniqueItems: true }), condition: StringEnum(["any", "all"] as const), timeoutSeconds: Type.Integer({ minimum: 1, maximum: 3600 }), detail });
-const stopParameters = Type.Object({ agentId: Type.String(), detail });
+const sendParameters = Type.Object({
+    agentId: Type.String(),
+    purpose: Type.String({ minLength: 1, maxLength: PURPOSE_MAX_LENGTH }),
+    prompt: Type.String({ minLength: 1 }),
+});
+const getParameters = Type.Object({
+    agentId: Type.String(),
+    taskId: Type.Optional(Type.String()),
+    debug: Type.Optional(Type.Boolean({
+        default: false,
+        description: "Abnormal-state diagnosis only. When true, returns full sanitized persisted snapshot metadata. Not needed for normal operation.",
+    })),
+});
+const waitParameters = Type.Object({
+    taskIds: Type.Array(Type.String(), { minItems: 1, maxItems: 128, uniqueItems: true }),
+    condition: StringEnum(["any", "all"] as const),
+    timeoutSeconds: Type.Integer({ minimum: 1, maximum: 3600 }),
+});
+const stopParameters = Type.Object({ agentId: Type.String() });
 export interface ActiveSubagentProfile { name: string; facet?: SubagentFacet; error?: string }
 export interface SubagentDependencies { configPath: string; profileConfigPath?: string; env: NodeJS.ProcessEnv; exec: CommandExecutor; activeProfile?: () => ActiveSubagentProfile | undefined; sleep?: (ms: number, signal?: AbortSignal) => Promise<void>; now?: () => number }
 export async function loadSubagentConfig(path: string): Promise<SubagentRuntimeConfig> { try { return validateSubagentRuntimeConfig(JSON.parse(await readFile(path, "utf8"))); } catch (error) { throw new Error(`Cannot read subagent config ${path}: ${error instanceof Error ? error.message : String(error)}`); } }
 function origin(ctx: ExtensionContext, env: NodeJS.ProcessEnv) { const raw = Number.parseInt(env.PI_SUBAGENT_DEPTH ?? "0", 10); return { depth: Number.isInteger(raw) && raw >= 0 ? raw : 0, parentAgentId: env.PI_SUBAGENT_AGENT_ID, originSessionId: env.PI_SUBAGENT_ORIGIN_SESSION_ID ?? ctx.sessionManager.getSessionId(), originSessionFile: ctx.sessionManager.getSessionFile() ?? env.PI_SUBAGENT_ORIGIN_SESSION_FILE }; }
 function sleep(ms: number, signal?: AbortSignal): Promise<void> { return new Promise((resolve, reject) => { if (signal?.aborted) { reject(signal.reason); return; } const timer = setTimeout(resolve, ms); signal?.addEventListener("abort", () => { clearTimeout(timer); reject(signal.reason); }, { once: true }); }); }
 function errorText(value: unknown): string { if (value instanceof Error) return value.message; if (typeof value === "string") return value; return JSON.stringify(value) ?? "Unknown error"; }
-function sanitized(snapshot: AgentSnapshot): AgentSnapshot { const task = snapshot.task && !isTerminalTask(snapshot.task.status.state) && snapshot.task.result ? { ...snapshot.task, result: null } : snapshot.task; return { ...snapshot, task }; }
-function summary(rawSnapshot: AgentSnapshot, detailed: boolean): Record<string, unknown> { const snapshot = sanitized(rawSnapshot); const task = snapshot.task; const interventions = task?.interventions ?? []; const base = { agentId: snapshot.agent.agentId, taskId: task?.request.taskId, profile: snapshot.agent.profile, purpose: task?.request.purpose ?? snapshot.agent.purpose, agentState: snapshot.status.state, taskState: task?.status.state, activeTaskId: snapshot.status.activeTaskId, latestTaskId: snapshot.status.latestTaskId, agentUsage: snapshot.status.agentUsage, interventions, ...(task?.result ? { result: { outcome: task.result.outcome, output: task.result.output, error: task.result.error, usage: task.result.usage, turns: task.result.turns } } : {}) }; return detailed ? { ...base, agent: snapshot.agent, status: snapshot.status, task } : base; }
-async function claim(config: SubagentRuntimeConfig, snapshot: AgentSnapshot, ctx: ExtensionContext, env: NodeJS.ProcessEnv, toolCallId: string, toolName: "subagent_start" | "subagent_get" | "subagent_wait" | "subagent_stop"): Promise<{ usage?: Usage; claimedTaskIds: string[] }> { const task = snapshot.task; if (!task?.result || !isTerminalTask(task.status.state)) return { claimedTaskIds: [] }; const lineage = origin(ctx, env); const value = await claimTaskUsage(config.stateRoot, snapshot.agent.agentId, task.request.taskId, lineage.originSessionId, lineage.originSessionFile, toolCallId, toolName); return value.created ? { usage: value.result.usage, claimedTaskIds: [task.request.taskId] } : { claimedTaskIds: [] }; }
-function result(rawSnapshot: AgentSnapshot, accounting: { usage?: Usage; claimedTaskIds: string[] }, detailed: boolean) { const snapshot = sanitized(rawSnapshot); return { content: [{ type: "text" as const, text: JSON.stringify(summary(snapshot, detailed)) }], details: { ...snapshot, accounting }, usage: accounting.usage }; }
+
+function asRecord(args: unknown): Record<string, unknown> {
+    if (!args || typeof args !== "object" || Array.isArray(args)) return {};
+    return { ...(args as Record<string, unknown>) };
+}
+
+/** Strip legacy `detail` before schema validation. */
+function stripLegacyDetail(args: unknown): Record<string, unknown> {
+    const value = asRecord(args);
+    delete value.detail;
+    return value;
+}
+
+function prepareGetArguments(args: unknown): Static<typeof getParameters> {
+    const value = asRecord(args);
+    if (value.debug === undefined && value.detail === true) value.debug = true;
+    delete value.detail;
+    return value as Static<typeof getParameters>;
+}
+
+async function claim(config: SubagentRuntimeConfig, snapshot: AgentSnapshot, ctx: ExtensionContext, env: NodeJS.ProcessEnv, toolCallId: string, toolName: "subagent_start" | "subagent_get" | "subagent_wait" | "subagent_stop"): Promise<{ usage?: Usage; claimedTaskIds: string[] }> {
+    const task = snapshot.task;
+    if (!task?.result || !isTerminalTask(task.status.state)) return { claimedTaskIds: [] };
+    const lineage = origin(ctx, env);
+    const value = await claimTaskUsage(config.stateRoot, snapshot.agent.agentId, task.request.taskId, lineage.originSessionId, lineage.originSessionFile, toolCallId, toolName);
+    return value.created ? { usage: value.result.usage, claimedTaskIds: [task.request.taskId] } : { claimedTaskIds: [] };
+}
+
+function agentResult(rawSnapshot: AgentSnapshot, accounting: { usage?: Usage; claimedTaskIds: string[] }, debug = false) {
+    const snapshot = sanitizeSnapshot(rawSnapshot);
+    const payload = debug ? projectDebugSnapshot(snapshot) : projectMinimalAgentTask(snapshot);
+    const details: AgentToolDetails = { ...snapshot, accounting };
+    return {
+        content: [{ type: "text" as const, text: serializeModelVisibleJson(payload) }],
+        details,
+        usage: accounting.usage,
+    };
+}
+
 function active(deps: SubagentDependencies) { const value = deps.activeProfile?.(); if (!value) throw new Error("Subagent configuration unavailable: no active-profile event has been received"); if (value.error) throw new Error(`Subagent configuration unavailable: ${value.error}`); return value; }
 function rejectSelfTarget(env: NodeJS.ProcessEnv, agentId: string, operation: "send" | "get" | "stop" | "wait"): void {
     const self = env.PI_SUBAGENT_AGENT_ID;
@@ -45,7 +112,6 @@ function startParametersFor(allowedTargets: readonly string[]) {
         }),
         purpose: Type.String({ minLength: 1, maxLength: PURPOSE_MAX_LENGTH }),
         prompt: Type.String({ minLength: 1 }),
-        detail,
     });
 }
 export function createSubagentStartTool(deps: SubagentDependencies, allowedTargets: readonly string[] = []): ToolDefinition {
@@ -53,12 +119,12 @@ export function createSubagentStartTool(deps: SubagentDependencies, allowedTarge
     return defineTool({
         name: "subagent_start",
         label: "Start agent session",
-        description: "Start a persistent native tmux agent session and its first task. Returns distinct agentId and taskId values.",
+        description: "Start a persistent native tmux agent session and its first task. Returns distinct agentId and taskId values. For abnormal-state diagnosis of an existing agent, use subagent_get with debug=true.",
         promptSnippet: "Start a persistent profiled agent session",
         parameters: startParameters,
         executionMode: "sequential",
         prepareArguments(args) {
-            const value = args as Static<typeof startParameters>;
+            const value = stripLegacyDetail(args) as Static<typeof startParameters> & { purpose?: string; prompt: string };
             return value.purpose === undefined ? { ...value, purpose: fallbackRunPurpose(value.prompt) } : value;
         },
         async execute(toolCallId, params, signal, _update, ctx) {
@@ -126,7 +192,7 @@ export function createSubagentStartTool(deps: SubagentDependencies, allowedTarge
                     if (snapshot.status.bridgeReady) {
                         const live = await readReconciledAgentSnapshot(deps.exec, config.tmux, config.stateRoot, prepared.agentId);
                         if (isTerminalAgent(live.status.state)) throw new Error(live.status.exitReason ?? `Child agent became ${live.status.state} during startup`);
-                        return result(live, await claim(config, live, ctx, deps.env, toolCallId, "subagent_start"), params.detail === true);
+                        return agentResult(live, await claim(config, live, ctx, deps.env, toolCallId, "subagent_start"));
                     }
                     await (deps.sleep ?? sleep)(50, signal);
                 }
@@ -159,16 +225,21 @@ export function createSubagentStartTool(deps: SubagentDependencies, allowedTarge
                 throw error;
             }
         },
+        renderCall(args, theme, context) { return renderStartCall(args, theme, context); },
+        renderResult(result, options, theme, context) {
+            return renderAgentToolResult(result, options, theme, context, context.args?.prompt);
+        },
     });
 }
 export function createSubagentSendTool(deps: SubagentDependencies): ToolDefinition<typeof sendParameters, unknown> {
     return defineTool({
         name: "subagent_send",
         label: "Send agent task",
-        description: "Send a new task to an idle persistent agent session. Busy agents reject the task without queueing it.",
+        description: "Send a new task to an idle persistent agent session. Busy agents reject the task without queueing it. For abnormal-state diagnosis, use subagent_get with debug=true.",
         promptSnippet: "Send another task to an existing idle agent session",
         parameters: sendParameters,
         executionMode: "sequential",
+        prepareArguments(args) { return stripLegacyDetail(args) as Static<typeof sendParameters>; },
         async execute(_id, params, _signal, _update, ctx) {
             rejectSelfTarget(deps.env, params.agentId, "send");
             const config = await loadSubagentConfig(deps.configPath);
@@ -176,7 +247,11 @@ export function createSubagentSendTool(deps: SubagentDependencies): ToolDefiniti
             if (snapshot.agent.originSessionId !== origin(ctx, deps.env).originSessionId) throw new Error(`Agent ${params.agentId} belongs to a different origin session`);
             await readReconciledAgentSnapshot(deps.exec, config.tmux, config.stateRoot, params.agentId);
             await createTask(config.stateRoot, params.agentId, params.purpose, params.prompt);
-            return result(await readAgentSnapshot(config.stateRoot, params.agentId), { claimedTaskIds: [] }, params.detail === true);
+            return agentResult(await readAgentSnapshot(config.stateRoot, params.agentId), { claimedTaskIds: [] });
+        },
+        renderCall(args, theme, context) { return renderSendCall(args, theme, context); },
+        renderResult(result, options, theme, context) {
+            return renderAgentToolResult(result, options, theme, context, context.args?.prompt);
         },
     });
 }
@@ -184,10 +259,11 @@ export function createSubagentGetTool(deps: SubagentDependencies): ToolDefinitio
     return defineTool({
         name: "subagent_get",
         label: "Get agent task",
-        description: "Read a persistent agent and a specified, active, or latest task once without waiting.",
+        description: "Read a persistent agent and a specified, active, or latest task once without waiting. Optional debug returns full sanitized persisted snapshot metadata for abnormal-state diagnosis only; it is not needed for normal operation.",
         promptSnippet: "Read an agent session and task state",
         parameters: getParameters,
         executionMode: "sequential",
+        prepareArguments: prepareGetArguments,
         async execute(id, params, _signal, _update, ctx) {
             rejectSelfTarget(deps.env, params.agentId, "get");
             const config = await loadSubagentConfig(deps.configPath);
@@ -195,7 +271,11 @@ export function createSubagentGetTool(deps: SubagentDependencies): ToolDefinitio
             const stored = await readAgentSnapshot(config.stateRoot, params.agentId, params.taskId);
             if (stored.agent.originSessionId !== expectedOrigin) throw new Error(`Agent ${params.agentId} belongs to a different origin session`);
             const snapshot = await readReconciledAgentSnapshot(deps.exec, config.tmux, config.stateRoot, params.agentId, params.taskId);
-            return result(snapshot, await claim(config, snapshot, ctx, deps.env, id, "subagent_get"), params.detail === true);
+            return agentResult(snapshot, await claim(config, snapshot, ctx, deps.env, id, "subagent_get"), params.debug === true);
+        },
+        renderCall(args, theme, context) { return renderGetCall(args, theme, context); },
+        renderResult(result, options, theme, context) {
+            return renderAgentToolResult(result, options, theme, context, undefined, context.args?.debug === true);
         },
     });
 }
@@ -203,10 +283,11 @@ export function createSubagentWaitTool(deps: SubagentDependencies): ToolDefiniti
     return defineTool({
         name: "subagent_wait",
         label: "Wait for tasks",
-        description: "Wait for specified task IDs to become terminal; timeout is a normal result and agent processes remain alive.",
+        description: "Wait for specified task IDs to become terminal; timeout is a normal result and agent processes remain alive. For abnormal-state diagnosis of one agent, use subagent_get with debug=true.",
         promptSnippet: "Wait for one or more tasks",
         parameters: waitParameters,
         executionMode: "sequential",
+        prepareArguments(args) { return stripLegacyDetail(args) as Static<typeof waitParameters>; },
         async execute(id, params, signal, update, ctx) {
             const config = await loadSubagentConfig(deps.configPath);
             const session = origin(ctx, deps.env).originSessionId;
@@ -224,9 +305,10 @@ export function createSubagentWaitTool(deps: SubagentDependencies): ToolDefiniti
                 const done = snapshots.filter(value => value.task && isTerminalTask(value.task.status.state));
                 const met = params.condition === "any" ? done.length > 0 : done.length === snapshots.length;
                 const timedOut = (deps.now ?? (() => performance.now()))() >= deadline;
-                const reason = met ? "condition_met" : timedOut ? "timeout" : "polling";
+                const finished = met || timedOut;
+                const outcome = met ? "completed" as const : timedOut ? "timeout" as const : undefined;
                 const accounting = { claimedTaskIds: [] as string[], usage: undefined as Usage | undefined };
-                if (met || timedOut) for (const snapshot of snapshots) {
+                if (finished) for (const snapshot of snapshots) {
                     const item = await claim(config, snapshot, ctx, deps.env, id, "subagent_wait");
                     accounting.claimedTaskIds.push(...item.claimedTaskIds);
                     if (item.usage) {
@@ -234,34 +316,48 @@ export function createSubagentWaitTool(deps: SubagentDependencies): ToolDefiniti
                         addUsage(accounting.usage, item.usage);
                     }
                 }
-                const payload = {
-                    reason,
-                    completedTaskIds: done.map(value => value.task!.request.taskId),
-                    pendingTaskIds: snapshots.filter(value => !value.task || !isTerminalTask(value.task.status.state)).map(value => value.task?.request.taskId),
-                    agents: snapshots.map(value => summary(value, params.detail === true)),
+                const agents = snapshots.map(sanitizeSnapshot);
+                const details: WaitDetails = {
+                    condition: params.condition,
+                    timeoutSeconds: params.timeoutSeconds,
+                    ...(outcome ? { outcome } : {}),
+                    agents,
+                    accounting,
                 };
-                const response = { content: [{ type: "text" as const, text: JSON.stringify(payload) }], details: { ...payload, accounting }, usage: accounting.usage };
-                if (reason !== "polling") return response;
+                const contentPayload = finished && outcome
+                    ? projectMinimalWaitResult(agents, outcome)
+                    : { tasks: agents.map(projectMinimalAgentTask) };
+                const response = {
+                    content: [{ type: "text" as const, text: serializeModelVisibleJson(contentPayload) }],
+                    details,
+                    usage: accounting.usage,
+                };
+                if (finished) return response;
                 update?.(response);
                 await (deps.sleep ?? sleep)(Math.min(1000, deadline - (deps.now ?? (() => performance.now()))()), signal);
             }
         },
+        renderCall(args, theme, context) { return renderWaitCall(args, theme, context); },
+        renderResult(result, options, theme, context) { return renderWaitResult(result, options, theme, context); },
     });
 }
 export function createSubagentStopTool(deps: SubagentDependencies): ToolDefinition<typeof stopParameters, unknown> {
     return defineTool({
         name: "subagent_stop",
         label: "Stop agent session",
-        description: "Stop an agent's dedicated tmux session and terminalize its active task.",
+        description: "Stop an agent's dedicated tmux session and terminalize its active task. For abnormal-state diagnosis, use subagent_get with debug=true.",
         promptSnippet: "Stop one persistent agent session",
         parameters: stopParameters,
         executionMode: "sequential",
+        prepareArguments(args) { return stripLegacyDetail(args) as Static<typeof stopParameters>; },
         async execute(id, params, _signal, _update, ctx) {
             rejectSelfTarget(deps.env, params.agentId, "stop");
             const config = await loadSubagentConfig(deps.configPath);
             const snapshot = await stopSubagentAgent({ stateRoot: config.stateRoot, agentId: params.agentId, originSessionId: origin(ctx, deps.env).originSessionId, exec: deps.exec, tmux: config.tmux });
-            return result(snapshot, await claim(config, snapshot, ctx, deps.env, id, "subagent_stop"), params.detail === true);
+            return agentResult(snapshot, await claim(config, snapshot, ctx, deps.env, id, "subagent_stop"));
         },
+        renderCall(args, theme, context) { return renderStopCall(args, theme, context); },
+        renderResult(result, options, theme, context) { return renderAgentToolResult(result, options, theme, context); },
     });
 }
 export async function registerSubagent(pi: ExtensionAPI, options: Partial<Pick<SubagentDependencies, "configPath" | "profileConfigPath" | "env">> = {}): Promise<boolean> {
