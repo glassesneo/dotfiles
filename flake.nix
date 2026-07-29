@@ -173,16 +173,6 @@
               })
               homeConfigs;
 
-            nixvimChecks =
-              pkgs.lib.mapAttrs' (name: config: {
-                name = "nixvim-" + builtins.replaceStrings ["@"] ["_at_"] name;
-                value = config.config.programs.nixvim.build.test;
-              }) (pkgs.lib.filterAttrs (
-                  name: _:
-                    name == "neo@seiran" || name == "neo@seiran-catppuccin"
-                )
-                homeConfigs);
-
             nvfChecks = {
               nvf-neo_at_seiran =
                 homeConfigs."neo@seiran".config.programs.nvf.settings.vim.build.finalPackage;
@@ -213,7 +203,6 @@
             };
           in
             hmChecks
-            // nixvimChecks
             // nvfChecks
             // sketchybarWorkspaceAdapterTests
             // sketchybarMediaHoverTests)
@@ -271,9 +260,6 @@
         home-manager.follows = "home-manager";
         nix-darwin.follows = "nix-darwin";
       };
-    };
-    nixvim = {
-      url = "github:nix-community/nixvim/main";
     };
     nvf = {
       url = "github:notashelf/nvf";

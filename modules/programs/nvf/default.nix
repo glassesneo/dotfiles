@@ -11,22 +11,11 @@ delib.module {
 
   home.always.imports = [
     inputs.nvf.homeManagerModules.default
-    ({
-      config,
-      pkgs,
-      ...
-    }: {
-      home.packages = [
-        (pkgs.writeShellScriptBin "nvf" ''
-          exec ${config.programs.nvf.settings.vim.build.finalPackage}/bin/nvim "$@"
-        '')
-      ];
-    })
   ];
 
   home.ifEnabled = {
     programs.nvf = {
-      enable = false;
+      enable = true;
       enableManpages = true;
       settings = {
         vim = {

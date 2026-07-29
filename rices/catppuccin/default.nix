@@ -42,12 +42,6 @@ in
         shader-profile = "sakura_ink_ripple";
         quick-terminal.background = colors.base01;
       };
-      programs.nixvim.appearance = {
-        theme = "catppuccin";
-        catppuccin-flavor = flavor;
-        transparent = true;
-        rounded-borders = true;
-      };
       programs.nvf.theme = {
         enable = true;
         name = "catppuccin";

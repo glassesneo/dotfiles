@@ -18,7 +18,7 @@ delib.module {
       inherit type;
     };
     largeJISYO = mkDict "SKK-JISYO.L" pkgs.skkDictionaries.l 0;
-    skkeletonUserDictPath = myconfig.programs.nixvim.plugins.skkeleton.skkeletonUserDictPath;
+    skkeletonUserDictPath = myconfig.programs.nvf.skkeleton.skkeletonUserDictPath;
     skkeletonJISYO = {
       source = skkeletonUserDictPath;
       type = 5;

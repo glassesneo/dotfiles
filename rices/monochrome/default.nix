@@ -47,12 +47,6 @@ in
       };
       quick-terminal.background = colors.base00;
     };
-    myconfig.programs.nixvim.appearance = {
-      theme = "base16";
-      transparent = true;
-      transparent-floats = true;
-      comment-color = colors.base04;
-    };
 
     myconfig.services = {
       sketchybar = {
