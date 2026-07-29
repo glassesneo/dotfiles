@@ -24,7 +24,7 @@ in
       moduleOptions ({parent, ...}: {
         enable = readOnly (boolOption (parent.enable && builtins.elem "profile" parent.defaultExtensions));
         extensionPaths = readOnly (listOfOption str ["${./../../extensions_src}/profile.ts"]);
-        defaultProfile = strOption "full";
+        defaultProfile = strOption "scout";
         profileCycle = listOfOption str ["scout" "taskmaster" "review-orchestrator"];
         promptRoutes = attrsOfOption str {};
         defaultTools = listOfOption str [];
@@ -35,6 +35,8 @@ in
     myconfig.always.programs.pi-coding-agent.profile = {
       defaultTools = ["read" "grep" "find" "ls" "bash"];
       promptRoutes = {
+        spec-design = "scout";
+        idea-design = "scout";
         impl = "taskmaster";
         execute = "taskmaster";
         review = "review-orchestrator";
