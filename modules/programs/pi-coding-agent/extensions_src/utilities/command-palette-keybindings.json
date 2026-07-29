@@ -1,7 +1,9 @@
 {
   "open": ["ctrl+shift+p"],
-  "moveUp": ["ctrl+p"],
-  "moveDown": ["ctrl+n"],
+  "moveUp": ["ctrl+p", "k"],
+  "moveDown": ["ctrl+n", "j"],
+  "collapse": ["left", "h"],
+  "expand": ["right", "l"],
   "confirm": ["enter"],
   "cancel": ["escape", "ctrl+c"],
   "refresh": ["ctrl+r"],

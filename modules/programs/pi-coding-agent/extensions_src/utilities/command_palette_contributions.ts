@@ -3,6 +3,9 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 export const COMMAND_PALETTE_REGISTER_EVENT = "command-palette:register";
 export const COMMAND_PALETTE_DISCOVER_EVENT = "command-palette:discover";
 
+/** Small completion result for palette contributions. Do not grow into a router. */
+export type CommandPaletteDisposition = "return" | "close";
+
 export interface CommandPaletteContribution {
     owner: string;
     id: string;
@@ -11,7 +14,7 @@ export interface CommandPaletteContribution {
     keywords?: readonly string[];
     currentValue?: (ctx: ExtensionContext) => string | undefined;
     disabledReason?: (ctx: ExtensionContext) => string | undefined;
-    run: (ctx: ExtensionContext) => void | Promise<void>;
+    run: (ctx: ExtensionContext) => void | CommandPaletteDisposition | Promise<void | CommandPaletteDisposition>;
 }
 
 export type CommandPaletteEventBus = Pick<ExtensionAPI["events"], "emit" | "on">;

@@ -3,10 +3,14 @@ import test from "node:test";
 import type { Theme } from "@earendil-works/pi-coding-agent";
 import { visibleWidth, type TUI } from "@earendil-works/pi-tui";
 import { resolvePaletteKeymap } from "../extensions_src/utilities/command_palette_keymap.ts";
-import { paletteTargetRows, PaletteListComponent, runPaletteList } from "../extensions_src/utilities/command_palette_tui.ts";
+import { formatPaletteBreadcrumb, paletteTargetRows, PaletteListComponent, renderFramedLines, runPaletteList } from "../extensions_src/utilities/command_palette_tui.ts";
 
-const theme = { fg(_color: string, text: string) { return text; }, bg(_color: string, text: string) { return text; }, bold(text: string) { return text; } } as Theme;
-const keys = { up: "\u0010", down: "\u000e", enter: "\r", escape: "\u001b", ctrlC: "\u0003" };
+const theme = {
+    fg(_color: string, text: string) { return text; },
+    bg(_color: string, text: string) { return text; },
+    bold(text: string) { return text; },
+} as Theme;
+const keys = { up: "\u0010", down: "\u000e", enter: "\r", escape: "\u001b", ctrlC: "\u0003", left: "\u001b[D", right: "\u001b[C" };
 function harness() {
     const results: Array<string | null> = []; let renders = 0;
     const component = new PaletteListComponent({ tui: { terminal: { rows: 24, columns: 80 }, requestRender() { renders += 1; } } as TUI, theme, title: "Palette", keymap: resolvePaletteKeymap(), items: [{ value: "a", label: "Alpha" }, { value: "b", label: "Beta" }, { value: "c", label: "Gamma" }], done: value => results.push(value) });
@@ -26,23 +30,30 @@ void test("confirm and both cancellation keys are consumed by the palette", () =
     const cancelled = harness(); cancelled.component.handleInput(keys.ctrlC); assert.deepEqual(cancelled.results, [null]);
 });
 
-void test("search focus, textual marker, help, disabled state, and narrow rendering are visible", () => {
-    const h = harness(); assert.equal(h.component.focused, true); const rendered = h.component.render(80).join("\n");
-    assert.match(rendered, /> Alpha/); assert.match(rendered, /ctrl\+p up.*ctrl\+n down/);
-    for (const width of [20, 8, 1]) for (const line of h.component.render(width)) assert.ok(visibleWidth(line) <= width);
+void test("framed palette keeps four borders, textual marker, help, and never overflows width", () => {
+    const h = harness(); assert.equal(h.component.focused, true);
+    for (const width of [80, 60, 20, 8, 1]) {
+        const lines = h.component.render(width);
+        assert.ok(lines[0]?.includes("┌") || width < 3 || lines.every(line => visibleWidth(line) <= width));
+        for (const line of lines) assert.ok(visibleWidth(line) <= width, `width ${width}: ${line}`);
+    }
+    const rendered = h.component.render(80).join("\n");
+    assert.match(rendered, /┌/);
+    assert.match(rendered, /└/);
+    assert.match(rendered, /│/);
+    assert.match(rendered, /> Alpha/);
+    assert.match(rendered, /ctrl\+p up.*ctrl\+n down/);
 });
 
 void test("filtering and status changes preserve overlay height and input position", () => {
     const h = harness();
     const initial = h.component.render(80);
     assert.equal(initial.length, paletteTargetRows(24, true));
-    assert.match(initial[2] ?? "", /Search/);
-    assert.notEqual(initial[3], undefined);
+    assert.match(initial.join("\n"), /Search/);
     h.component.handleInput("zz");
     const empty = h.component.render(80);
     assert.equal(empty.length, initial.length);
-    assert.match(empty[2] ?? "", /Search/);
-    assert.notEqual(empty[3], undefined);
+    assert.match(empty.join("\n"), /Search/);
     assert.match(empty.join("\n"), /No matches/);
     h.component.setStatus("warning", "Keep the viewport stable");
     assert.equal(h.component.render(80).length, initial.length);
@@ -67,4 +78,38 @@ void test("palette lists open as centered overlays", async () => {
     assert.equal(customOptions?.overlay, true);
     assert.equal(customOptions?.overlayOptions?.anchor, "center");
     assert.equal(customOptions?.overlayOptions?.maxHeight, "70%");
+});
+
+void test("busy state suppresses duplicate confirm and shows WORKING status", () => {
+    let confirms = 0;
+    const component = new PaletteListComponent({
+        tui: { terminal: { rows: 24, columns: 80 }, requestRender() {} } as TUI,
+        theme,
+        title: "Palette",
+        keymap: resolvePaletteKeymap(),
+        items: [{ value: "a", label: "Alpha" }],
+        done() {},
+        onConfirm: async () => { confirms += 1; },
+    });
+    component.setBusy(true);
+    component.handleInput(keys.enter);
+    assert.equal(confirms, 0);
+    assert.match(component.render(80).join("\n"), /WORKING/);
+    component.setBusy(false);
+    component.handleInput(keys.enter);
+    assert.equal(confirms, 1);
+});
+
+void test("theme invalidate regenerates framed colors from the current theme", () => {
+    const roles: string[] = [];
+    const spyTheme = {
+        fg(color: string, text: string) { roles.push(`fg:${color}`); return text; },
+        bg(color: string, text: string) { roles.push(`bg:${color}`); return text; },
+        bold(text: string) { return text; },
+    } as Theme;
+    const framed = renderFramedLines({ theme: spyTheme, width: 40, title: "Command Palette", body: [" body"] });
+    assert.ok(framed.some(line => line.includes("┌")));
+    assert.ok(roles.includes("fg:border"));
+    assert.ok(roles.includes("fg:accent"));
+    assert.equal(formatPaletteBreadcrumb(["Command Palette", "Subagent Sessions"]), "Command Palette › Subagent Sessions");
 });

@@ -69,7 +69,7 @@ void test("palette refresh owns one timer and close cancels polling", async () =
     let done = 0;
     const component = new SubagentPaletteComponent({
         tui: { requestRender() {} } as never,
-        theme: { fg: (_role: string, text: string) => text, bold: (text: string) => text } as never,
+        theme: { fg: (_role: string, text: string) => text, bg: (_role: string, text: string) => text, bold: (text: string) => text } as never,
         ui: { confirm: async () => false },
         keymap: defaultPaletteKeymap,
         deps: {

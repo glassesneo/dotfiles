@@ -4,13 +4,14 @@ import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { matchesKey, type KeyId } from "@earendil-works/pi-tui";
 import { canonicalKeyId, isValidKeyId } from "./private_key_id.ts";
 
-export const paletteActions = ["open", "moveUp", "moveDown", "confirm", "cancel", "refresh", "stop", "copyRunId"] as const;
+export const paletteActions = ["open", "moveUp", "moveDown", "collapse", "expand", "confirm", "cancel", "refresh", "stop", "copyRunId"] as const;
 export type PaletteKeyAction = (typeof paletteActions)[number];
 export type PaletteKeymapConfig = Partial<Record<PaletteKeyAction, string[]>>;
 export type ResolvedPaletteKeymap = Record<PaletteKeyAction, KeyId[]>;
 
 export const defaultPaletteKeymap: ResolvedPaletteKeymap = {
     open: ["ctrl+shift+p"], moveUp: ["ctrl+p"], moveDown: ["ctrl+n"],
+    collapse: ["left"], expand: ["right"],
     confirm: ["enter"], cancel: ["escape", "ctrl+c"], refresh: ["ctrl+r"],
     stop: ["ctrl+s"], copyRunId: ["ctrl+y"],
 };
@@ -56,8 +57,8 @@ export function paletteKeyAction(data: string, keymap: ResolvedPaletteKeymap): P
 }
 
 const labels: Record<PaletteKeyAction, string> = {
-    open: "open", moveUp: "up", moveDown: "down", confirm: "select", cancel: "cancel",
-    refresh: "refresh", stop: "stop", copyRunId: "copy ID",
+    open: "open", moveUp: "up", moveDown: "down", collapse: "collapse", expand: "expand",
+    confirm: "select", cancel: "cancel", refresh: "refresh", stop: "stop", copyRunId: "copy ID",
 };
 export function paletteHelp(keymap: ResolvedPaletteKeymap, actions: readonly PaletteKeyAction[] = ["moveUp", "moveDown", "confirm", "cancel"]): string {
     return actions.map(action => `${keymap[action][0]} ${labels[action]}`).join(" • ");

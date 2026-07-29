@@ -297,7 +297,7 @@ export async function registerSubagent(pi: ExtensionAPI, options: Partial<Pick<S
     });
     const open = async (ctx: ExtensionContext) => {
         const config = await loadSubagentConfig(configPath);
-        await openSubagentPalette(ctx, loadPaletteKeymap().keymap, {
+        return openSubagentPalette(ctx, loadPaletteKeymap().keymap, {
             stateRoot: config.stateRoot,
             originSessionId: origin(ctx, env).originSessionId,
             exec,
@@ -315,7 +315,7 @@ export async function registerSubagent(pi: ExtensionAPI, options: Partial<Pick<S
         keywords: ["agents", "tmux"],
         run: open,
     });
-    pi.registerCommand("subagent", { description: "Manage persistent agent sessions", handler: async (_args, ctx) => open(ctx) });
+    pi.registerCommand("subagent", { description: "Manage persistent agent sessions", handler: async (_args, ctx) => { await open(ctx); } });
     pi.on("session_shutdown", async (event, ctx) => {
         unregister();
         const lineage = origin(ctx, env);

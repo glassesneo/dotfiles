@@ -150,7 +150,7 @@ void test("palette Enter is disabled for terminal legacy history without probing
     let execCalls = 0;
     const component = new SubagentPaletteComponent({
         tui: { requestRender() {} } as never,
-        theme: { fg: (_role: string, text: string) => text, bold: (text: string) => text } as never,
+        theme: { fg: (_role: string, text: string) => text, bg: (_role: string, text: string) => text, bold: (text: string) => text } as never,
         ui: { confirm: async () => false }, keymap: defaultPaletteKeymap,
         deps: {
             stateRoot: root, originSessionId: "origin", tmux: "/tmux", historyViewerExtension: "/history.ts", piCommand: "/pi",
