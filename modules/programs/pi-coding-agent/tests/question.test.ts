@@ -35,11 +35,17 @@ void test("extension registers sequential question metadata and model guidance",
 
   assert.equal(registered?.name, "question");
   assert.equal(registered?.executionMode, "sequential");
+  assert.match(registered?.description ?? "", /user-owned decisions/);
+  assert.match(registered?.description ?? "", /affects the current task/);
   assert.match(registered?.description ?? "", /response note/);
+  assert.match(registered?.promptSnippet ?? "", /user-owned decisions/);
+  assert.match(registered?.promptSnippet ?? "", /affects the current task/);
+  assert.doesNotMatch(registered?.promptSnippet ?? "", /required to continue|blocker/i);
+  assert.ok(questionPromptGuidelines.every(line => /`question` tool/.test(line)));
   assert.ok(questionPromptGuidelines.some(line => /repository/.test(line)));
   assert.ok(questionPromptGuidelines.some(line => /unanswered note/.test(line)));
   assert.ok(questionPromptGuidelines.some(line => /Treat each note/.test(line)));
-  assert.ok(questionPromptGuidelines.some(line => /yes\/no/.test(line)));
+  assert.ok(questionPromptGuidelines.some(line => /yes\/no.*kind='single'.*Yes and No/.test(line)));
 });
 
 void test("non-interactive and print modes return unavailable without UI", async () => {

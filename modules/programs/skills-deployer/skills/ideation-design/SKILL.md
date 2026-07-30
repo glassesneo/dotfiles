@@ -1,111 +1,131 @@
 ---
 name: ideation-design
 description: >-
-  Use when a request starts from an idea rather than a specification, technical
-  constraints are weak, and the user wants to select the elements themselves.
-  Trigger for personal tooling, configuration and environment design, workflow
-  and prompt design, greenfield structure, and any work where taste or intent
-  decides more than necessity. Do not use when the user already holds the
-  intended behavior and only needs it drawn out; use `specification-design` for
-  that. Do not use for implementation, reports, or artifact storage mechanics.
+  Use when a request starts from an idea and the user wants to choose its
+  direction rather than supply an already-held specification. Trigger for
+  personal tooling, configuration and environment design, workflow and prompt
+  design, greenfield structure, and other work where taste or intent decides
+  more than necessity. Do not use when the user already holds the intended
+  behavior and only needs it drawn out; use `specification-design` for that.
+  Do not use for implementation, reports, or artifact storage mechanics.
 ---
 
 # Ideation Design
 
-Run a selection dialogue and produce one `design` artifact, plus a
-`decision-record` when the dialogue produced recordable history.
+## Purpose
+
+Run a selection dialogue and produce one implementation-ready `design`
+artifact, plus a `decision-record` when the dialogue produced recordable
+history.
 
 Here the decisive input is the user's will, not necessity. Few options are
-forced by constraints, so your job is to make the real choices visible and let
-the user select, rather than to converge on the direction you would pick.
+forced by constraints, so make the real choices visible and let the user select
+rather than converge on the direction you would pick.
 
-## Dialogue Contract
+## Phase Contract
 
-This skill declares a governing phase contract that overrides the default
-question-cost handling in `liminal-lens` for the duration of the design
-dialogue:
+This is the governing phase contract for the design dialogue. It overrides
+`liminal-lens` both for decision-cost classification and for the initial order
+of elicitation and investigation:
 
 - Any point where more than one direction is defensible is user-owned. Cheap
-  reversibility does not license deciding it for them.
-- Any point that is a verifiable repository or external fact is yours to
-  resolve. Investigate it; do not ask.
-- Any detail with no visible consequence for the user stays low cost. State the
-  assumption in one line and continue.
+  reversibility does not license deciding it for the user.
+- Any verifiable repository or external fact is agent-owned. Investigate it; do
+  not ask the user to do the research.
+- Any internal detail with no user-visible consequence is assumable. State the
+  assumption in one line and continue without stopping the dialogue.
+- Receive the user's unprocessed intent first, then investigate repository
+  facts. Obtain evidence before framing options or making recommendations.
 
-Use `liminal-lens` for the mechanics of bounded choices and question count.
+Use `liminal-lens` for bounded-choice mechanics, prompt count, and
+settled-decision handling. This skill retains ownership of which decisions are
+user-owned.
+
+## Conversation Protocol
 
 Conduct the dialogue as a conversation, not an interview:
 
-1. Open with free text, not options. Ask what the user is drawn to, what they
-   dislike about the current situation, and what they picture. Do not present
-   an option set before this.
-2. Build the option space from that answer. Options you enumerate before
-   hearing the user anchor the whole dialogue on your framing.
-3. Reflect back what you understood in your own words before the next step. Do
-   not proceed on an unconfirmed reading of a substantial answer.
-4. Offer the axis alongside the options, and say explicitly that the user may
-   reject the axis itself, not just pick from it.
-5. Let answers change the agenda. When a choice makes later questions moot or
-   reframes them, drop them and re-open with free text.
+1. Open with free-form exploration, not options. Ask what the user is drawn to,
+   what they dislike about the current situation, and what they picture.
+2. Build the option space from that answer. Options offered earlier would
+   anchor the dialogue on the model's framing.
+3. Reflect every substantial answer in your own words and get confirmation of
+   that interpretation before using it for later decisions.
+4. Present the decision axis with the options and explicitly allow the user to
+   reject the axis itself, not merely select an option.
+5. Let answers change the agenda. Drop invalidated prompts and return to
+   free-form exploration when the framing changes.
 
-When a `question` capability is available, use it whenever you ask the user for
-an answer. Use `text` for free-text exploration and `single`, `multi`, or
-`confirm` for selection and commitment. Keep ordinary chat for investigation
-results, reflection, and explanation; do not request an answer there. If the
-capability is unavailable, ask the same necessary question in ordinary chat.
-Continue to group related questions and ask only the minimum needed.
+Do not reopen a settled direction, and do not present a genuine choice as
+settled.
 
-## Selection Quality
+## Runtime Interaction
 
-- Present concrete directions with their practical consequence, not abstract
-  labels. Two to four is usually enough.
-- Recommend one when evidence supports it, and separate that recommendation
-  from the enumeration so it reads as input rather than a default.
-- Never present a decided direction as a question, and never present a genuine
-  choice as settled.
-- Record a preference as a preference. Do not manufacture technical
-  justification for a choice the user made on taste.
+When the runtime provides a structured user-input capability, use it whenever
+you directly request an answer. Use a free-form response for exploration and a
+bounded selection only to close a point already framed together. Keep
+investigation results, reflections, recommendations, and option explanations
+separate from the answer request.
+
+An incomplete structured interaction does not settle a user-owned decision. If
+that capability cannot be used or cannot complete, ask the same necessary
+prompt through an available conversation channel. If cancellation or deferral
+leaves a required decision unavailable, return blocked rather than infer an
+answer. Group related prompts where useful and ask only the minimum needed.
+
+## Mode-Specific Quality Rules
+
+- Present concrete directions and their practical consequences, not abstract
+  labels. Two to four directions are usually enough.
+- When evidence supports a recommendation, state it separately from the option
+  enumeration so it remains input rather than a default.
+- Record a user choice based on taste as a preference. Do not manufacture
+  technical necessity to justify it afterward.
+- Start with the largest framing decision so upstream choices can eliminate
+  irrelevant downstream detail.
 
 ## Workflow
 
-1. **Draw out intent.** Explore in free text what the user wants and why the
-   current situation dissatisfies them. Use a `text` question when the
-   capability is available; free text describes the answer format, not the
-   conversation channel.
-2. **Investigate.** Establish what the repository actually constrains, so the
-   option space is real. Weak constraints still bound some choices.
-3. **Frame and select.** Work through the decisions that shape the result,
-   largest framing decision first, using bounded choices built from the user's
-   own words.
-4. **Estimate scale.** Before assembling, propose the expected footprint, the
-   new interfaces the work does need, and an explicit do-not-build list.
-   Confirm it with the user through `confirm` when the capability is available.
-   An open-ended brief is where over-building starts; this contract is what
-   constrains the implementer.
-5. **Recap and assemble.** Restate the settled decisions compactly, then build
-   the design from them. The user should recognize the document as the choices
-   they already made, not meet it for the first time at approval.
-6. **Persist.** Save the design, then the decision record when one is
-   warranted. A dialogue that changed direction usually warrants one.
+1. **Draw out intent.** Explore in free form what the user wants, what is wrong
+   with the current situation, and what outcome they imagine. Reflect and
+   confirm substantial answers before proceeding.
+2. **Investigate.** Establish the actual repository and external constraints
+   before constructing the option space.
+3. **Frame and select.** Starting with the largest framing decision, build
+   concrete choices from the user's words, expose their consequences, and let
+   the user reject an unsuitable axis.
+4. **Commit to scale.** Before artifact assembly, propose the expected
+   footprint, the required new interfaces, and an explicit do-not-build list.
+   Obtain the user's commitment; the proposal alone is not agreement.
+5. **Recap and assemble.** Compactly restate all settled decisions and confirm
+   them before assembly. The artifact must express choices already made, not
+   become the first place where the user encounters the proposed design.
+6. **Persist.** Save the design under the `agent-artifact` contract. Save a
+   warranted companion decision record only after design approval returns its
+   final path. A dialogue that changed direction usually warrants one.
 
-## Content Boundary
+## Artifact Boundary
 
-`agent-artifact` owns the design and decision-record formats, the split rule
-between them, and the storage contract. Read
-`references/design-artifact-examples.md` there before assembling, and follow it
-rather than inventing headings.
+`agent-artifact` owns design and decision-record formats, their split rule, and
+the storage protocol. Before assembly, read
+`agent-artifact/references/design-artifact-examples.md` in the sibling
+`agent-artifact` skill package; do not invent headings or duplicate its storage
+rules.
 
-Acceptance criteria must still be observable even when the goal is a matter of
-taste. State what will be true of the result, not that the user will like it.
+Only an approved design final path permits saving a companion decision record.
+If design persistence instead remains pending for revision, is rejected,
+cancelled, unavailable, or blocked, do not save the record. Follow the
+`agent-artifact` protocol to revise the same pending design until approval.
 
-Keep the design free of dialogue history. A settled minor detail is ordinary
-design text, not a recorded decision.
+Acceptance criteria must be observable even for a taste-led goal. State what
+will be true of the result, not that the user will like it. Keep dialogue
+history out of the design, and keep settled minor details out of the decision
+record.
 
 ## Blocked Work
 
-Return `Status: blocked` instead of guessing when the user defers a framing
-choice that the rest of the design depends on. Name the blocking choice and the
-directions still open.
+Return `Status: blocked` instead of guessing when a required framing decision
+remains unsettled. Name the blocking choice and the directions still open.
 
 ## Completion Output
 
@@ -119,5 +139,6 @@ Return:
 - `Blocking choices: <none | concise list>`
 - `Assumptions/deferrals: <none | concise list>`
 
-Report an artifact path only when persistence completed; otherwise use `none`.
-Never fabricate a path or repeat the artifact body in this output.
+Report an artifact path only after persistence succeeds; otherwise use `none`.
+Include unresolved assumptions, deferrals, and blockers. Never fabricate a path
+or repeat the artifact body.
