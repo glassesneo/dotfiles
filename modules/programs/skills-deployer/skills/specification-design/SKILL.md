@@ -50,8 +50,11 @@ Conduct the dialogue as a conversation, not an interview:
 1. Open with free-form exploration, not options or a model-authored structure.
    Ask the user to describe the intended behavior, what is fixed, and what they
    already know is open.
-2. Reflect every substantial answer in your own words and get confirmation of
-   that interpretation before using it for later decisions.
+2. Reflect a substantial free-form answer in your own words when its
+   interpretation will shape later decisions, and confirm that interpretation
+   before using it. Treat an explicit bounded selection as settled; revisit it
+   only when it conflicts with earlier user intent or evidence, or its response
+   note leaves the choice ambiguous.
 3. Use bounded selection only to close a point already framed together, and
    only after free-form exploration of that topic.
 4. Let answers change the agenda. Drop invalidated prompts and return to
@@ -86,8 +89,7 @@ answer. Group related prompts where useful and ask only the minimum needed.
 ## Workflow
 
 1. **Elicit.** Draw out the intended behavior, fixed parts, and known open
-   parts in free form. Reflect and confirm substantial answers before
-   proceeding.
+   parts in free form.
 2. **Investigate.** Resolve discoverable facts such as existing interfaces,
    ownership boundaries, constraints, and prior art. Bring the evidence back
    into the dialogue.
@@ -100,9 +102,11 @@ answer. Group related prompts where useful and ask only the minimum needed.
 5. **Commit to scale.** Before artifact assembly, propose the expected
    footprint, the required new interfaces, and an explicit do-not-build list.
    Obtain the user's commitment; the proposal alone is not agreement.
-6. **Recap and assemble.** Compactly restate all settled decisions and confirm
-   them before assembly. The artifact must express decisions already made, not
-   become the first place where the user encounters the proposed specification.
+6. **Recap and assemble.** Compactly restate all settled decisions, then
+   assemble the artifact from them. If the recap exposes a concrete
+   inconsistency, resolve only that point first. The artifact must express
+   decisions already made, not become the first place where the user encounters
+   the proposed specification.
 7. **Persist.** Save the design under the `agent-artifact` contract. Save a
    warranted companion decision record only after design approval returns its
    final path.

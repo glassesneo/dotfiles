@@ -49,8 +49,11 @@ Conduct the dialogue as a conversation, not an interview:
    what they dislike about the current situation, and what they picture.
 2. Build the option space from that answer. Options offered earlier would
    anchor the dialogue on the model's framing.
-3. Reflect every substantial answer in your own words and get confirmation of
-   that interpretation before using it for later decisions.
+3. Reflect a substantial free-form answer in your own words when its
+   interpretation will shape later decisions, and confirm that interpretation
+   before using it. Treat an explicit bounded selection as settled; revisit it
+   only when it conflicts with earlier user intent or its response note leaves
+   the choice ambiguous.
 4. Present the decision axis with the options and explicitly allow the user to
    reject the axis itself, not merely select an option.
 5. Let answers change the agenda. Drop invalidated prompts and return to
@@ -87,8 +90,7 @@ answer. Group related prompts where useful and ask only the minimum needed.
 ## Workflow
 
 1. **Draw out intent.** Explore in free form what the user wants, what is wrong
-   with the current situation, and what outcome they imagine. Reflect and
-   confirm substantial answers before proceeding.
+   with the current situation, and what outcome they imagine.
 2. **Investigate.** Establish the actual repository and external constraints
    before constructing the option space.
 3. **Frame and select.** Starting with the largest framing decision, build
@@ -97,9 +99,11 @@ answer. Group related prompts where useful and ask only the minimum needed.
 4. **Commit to scale.** Before artifact assembly, propose the expected
    footprint, the required new interfaces, and an explicit do-not-build list.
    Obtain the user's commitment; the proposal alone is not agreement.
-5. **Recap and assemble.** Compactly restate all settled decisions and confirm
-   them before assembly. The artifact must express choices already made, not
-   become the first place where the user encounters the proposed design.
+5. **Recap and assemble.** Compactly restate all settled decisions, then
+   assemble the artifact from them. If the recap exposes a concrete
+   inconsistency, resolve only that point first. The artifact must express
+   choices already made, not become the first place where the user encounters
+   the proposed design.
 6. **Persist.** Save the design under the `agent-artifact` contract. Save a
    warranted companion decision record only after design approval returns its
    final path. A dialogue that changed direction usually warrants one.
