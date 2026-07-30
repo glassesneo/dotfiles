@@ -69,6 +69,7 @@ function component(done: (value: "return" | "close") => void = () => {}) {
             tmux: "/tmux",
             historyViewerExtension: "/history.ts",
             piCommand: "/pi",
+            natureHandleWords: ["Maple", "Cedar"],
             exec: async () => ({ stdout: "", stderr: "no", code: 1 }),
             setTimeout: ((callback: () => void) => { nextTimer += 1; timers.set(nextTimer, callback); return nextTimer; }) as unknown as typeof setTimeout,
             clearTimeout: ((timer: number) => { timers.delete(timer); }) as unknown as typeof clearTimeout,
@@ -146,7 +147,7 @@ void test("live open closes the palette stack with close disposition", async () 
         ui: { confirm: async () => true },
         keymap: defaultPaletteKeymap,
         deps: {
-            stateRoot: "/tmp/unused", originSessionId: "origin", tmux: "/tmux", historyViewerExtension: "/history.ts", piCommand: "/pi",
+            stateRoot: "/tmp/unused", originSessionId: "origin", tmux: "/tmux", historyViewerExtension: "/history.ts", piCommand: "/pi", natureHandleWords: ["Maple", "Cedar"],
             env: { TMUX: "/tmp/tmux,1,0" },
             exec: async (_command, args) => {
                 const joined = args.join(" ");
@@ -181,7 +182,7 @@ void test("terminal history open returns to root instead of closing the stack", 
         ui: { confirm: async () => true },
         keymap: defaultPaletteKeymap,
         deps: {
-            stateRoot: "/tmp/unused", originSessionId: "origin", tmux: "/tmux", historyViewerExtension: "/history.ts", piCommand: "/pi",
+            stateRoot: "/tmp/unused", originSessionId: "origin", tmux: "/tmux", historyViewerExtension: "/history.ts", piCommand: "/pi", natureHandleWords: ["Maple", "Cedar"],
             env: { TMUX: "/tmp/tmux,1,0" },
             exec: async (_command, args) => {
                 const joined = args.join(" ");
@@ -217,7 +218,7 @@ void test("delayed live open still closes with close after cancel during WORKING
         ui: { confirm: async () => true },
         keymap: defaultPaletteKeymap,
         deps: {
-            stateRoot: "/tmp/unused", originSessionId: "origin", tmux: "/tmux", historyViewerExtension: "/history.ts", piCommand: "/pi",
+            stateRoot: "/tmp/unused", originSessionId: "origin", tmux: "/tmux", historyViewerExtension: "/history.ts", piCommand: "/pi", natureHandleWords: ["Maple", "Cedar"],
             env: { TMUX: "/tmp/tmux,1,0" },
             exec: async (_command, args) => {
                 const joined = args.join(" ");
@@ -256,7 +257,7 @@ void test("overlapping refresh keeps Stop blocked until the post-stop snapshot i
         ui: { confirm: async () => true },
         keymap: defaultPaletteKeymap,
         deps: {
-            stateRoot: "/tmp/unused", originSessionId: "origin", tmux: "/tmux", historyViewerExtension: "/history.ts", piCommand: "/pi",
+            stateRoot: "/tmp/unused", originSessionId: "origin", tmux: "/tmux", historyViewerExtension: "/history.ts", piCommand: "/pi", natureHandleWords: ["Maple", "Cedar"],
             exec: async () => ({ stdout: "", stderr: "", code: 0 }),
             stopAgent: async () => {
                 agents = [snapshot({ agentId: a, purpose: "live", state: "stopped", createdAt: "2026-01-01T00:00:00.000Z" })];
@@ -298,7 +299,7 @@ void test("successful Stop stays non-actionable when post-stop discovery fails",
         ui: { confirm: async () => true },
         keymap: defaultPaletteKeymap,
         deps: {
-            stateRoot: "/tmp/unused", originSessionId: "origin", tmux: "/tmux", historyViewerExtension: "/history.ts", piCommand: "/pi",
+            stateRoot: "/tmp/unused", originSessionId: "origin", tmux: "/tmux", historyViewerExtension: "/history.ts", piCommand: "/pi", natureHandleWords: ["Maple", "Cedar"],
             exec: async () => ({ stdout: "", stderr: "", code: 0 }),
             stopAgent: async () => stopped,
             discover: async () => { throw new Error("discovery unavailable"); },
@@ -362,7 +363,7 @@ void test("narrow state text is retained before profile and odd viewports stay e
         ui: { confirm: async () => true },
         keymap: defaultPaletteKeymap,
         deps: {
-            stateRoot: "/tmp/unused", originSessionId: "origin", tmux: "/tmux", historyViewerExtension: "/history.ts", piCommand: "/pi",
+            stateRoot: "/tmp/unused", originSessionId: "origin", tmux: "/tmux", historyViewerExtension: "/history.ts", piCommand: "/pi", natureHandleWords: ["Maple", "Cedar"],
             exec: async () => ({ stdout: "", stderr: "no", code: 1 }),
             setTimeout: ((_callback: () => void) => 1 as unknown as NodeJS.Timeout) as unknown as typeof setTimeout,
             clearTimeout: (() => {}) as typeof clearTimeout,
@@ -378,7 +379,7 @@ void test("narrow state text is retained before profile and odd viewports stay e
     assert.match(at80, /BUSY/);
     assert.equal(evenViewportRows(Math.max(2, Math.floor(16 * 0.7) - 6)), 4);
     const at20 = odd.render(20).join("\n");
-    assert.match(at20, /Pearl-aaaa|Hazel-bbbb/);
+    assert.match(at20, /Cedar-aaaa|Cedar-bbbb/);
     assert.match(at20, /○|●/);
     for (const width of [20, 8, 1]) {
         for (const row of odd.render(width)) assert.ok(visibleWidth(row) <= width);

@@ -22,6 +22,25 @@ in
         extensionPaths = readOnly (listOfOption str [subagentExtension]);
         maxDepth = intOption 3;
         childExcludedTools = listOfOption str [];
+        # Keep in sync with NATURE_HANDLE_WORDS in extensions_src/utilities/subagent_display_tree.ts
+        natureHandleWords = listOfOption str [
+          "Coulson"
+          "May"
+          "Daisy"
+          "Fitz"
+          "Simmons"
+          "Mack"
+          "Elena"
+          "Hunter"
+          "Bobbi"
+          "Campbell"
+          "Deke"
+          "Sousa"
+          "Trip"
+          "Enoch"
+          "Robbie"
+          "Mace"
+        ];
       });
 
     myconfig.always.programs.pi-coding-agent.profile.facetOwners.subagent = moduleName;
@@ -180,6 +199,8 @@ in
       ];
       nonBlank = value: builtins.replaceStrings runtimeWhitespace (map (_: "") runtimeWhitespace) value != "";
       childExcludedTools = lib.unique cfg.childExcludedTools;
+      natureHandleWords = lib.unique cfg.natureHandleWords;
+      validNatureHandleWord = value: nonBlank value && !(lib.hasInfix "-" value);
     in {
       assertions = [
         {
@@ -190,10 +211,18 @@ in
           assertion = builtins.all nonBlank cfg.childExcludedTools && lib.length cfg.childExcludedTools == lib.length childExcludedTools;
           message = "Pi subagent childExcludedTools must be unique non-blank tool names.";
         }
+        {
+          assertion =
+            lib.length cfg.natureHandleWords
+            > 0
+            && builtins.all validNatureHandleWord cfg.natureHandleWords
+            && lib.length cfg.natureHandleWords == lib.length natureHandleWords;
+          message = "Pi subagent natureHandleWords must be a non-empty list of unique non-blank words without '-'.";
+        }
       ];
 
       home.file."${myconfig.programs.pi-coding-agent.configDir}/subagent.json".text = builtins.toJSON {
-        schemaVersion = 5;
+        schemaVersion = 6;
         stateRoot = "${homeConfig.xdg.stateHome}/pi/subagents";
         tmux = lib.getExe pkgs.tmux;
         inherit historyViewerExtension;
@@ -201,6 +230,7 @@ in
         harnesses.pi.command = lib.getExe llm-agents.pi;
         inherit (cfg) maxDepth;
         inherit childExcludedTools;
+        inherit (cfg) natureHandleWords;
       };
     };
   }

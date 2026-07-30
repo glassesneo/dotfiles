@@ -71,6 +71,26 @@ void test("handle collisions extend only the colliding suffixes", () => {
     assert.equal(new Set(handles).size, handles.length);
 });
 
+void test("custom nature handle words are used deterministically", () => {
+    const ids = ["11111111-1111-4111-8111-111111111111", "22222222-2222-4222-8222-222222222222"];
+    const words = ["Alpha", "Beta"] as const;
+    const first = assignNatureHandles(ids, words);
+    const second = assignNatureHandles([...ids].reverse(), words);
+    assert.deepEqual(
+        [...first.entries()].sort((left, right) => left[0] < right[0] ? -1 : left[0] > right[0] ? 1 : 0),
+        [...second.entries()].sort((left, right) => left[0] < right[0] ? -1 : left[0] > right[0] ? 1 : 0),
+    );
+    for (const handle of first.values()) assert.match(handle, /^(Alpha|Beta)-[0-9a-f]{4,}$/u);
+    const tree = buildSubagentDisplayTree([
+        snapshot({ agentId: ids[0]!, purpose: "a", state: "idle", createdAt: "2026-01-01T00:00:00.000Z" }),
+    ], words);
+    assert.match(tree.handles.get(ids[0]!)!, /^(Alpha|Beta)-/u);
+});
+
+void test("empty nature handle words throw", () => {
+    assert.throws(() => assignNatureHandles(["11111111-1111-4111-8111-111111111111"], []), /must not be empty/);
+});
+
 void test("display tree keeps terminal middle agents as ghosts and promotes active descendants", () => {
     const a = snapshot({ agentId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", purpose: "root", state: "idle", createdAt: "2026-01-01T00:00:00.000Z" });
     const b = snapshot({ agentId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", purpose: "middle", state: "stopped", parentAgentId: a.agent.agentId, createdAt: "2026-01-01T00:01:00.000Z" });

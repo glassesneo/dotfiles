@@ -11,7 +11,7 @@ export type TmuxOwnership = "origin-hub" | "dedicated";
 export interface TmuxAgentReference { socket: string; serverPid: string; sessionId: string; sessionName: string; windowId: string; paneId: string; windowName: string }
 export interface NativeCapabilities { nativeScreen: boolean; taskDelivery: boolean; taskCompletion: boolean; usage: boolean; interactiveInterventions: boolean }
 export interface HarnessRuntimeConfig { command: string }
-export interface SubagentRuntimeConfig { schemaVersion: 5; stateRoot: string; tmux: string; historyViewerExtension: string; childExtensions: string[]; harnesses: Record<string, HarnessRuntimeConfig> & { pi: HarnessRuntimeConfig }; maxDepth: number; childExcludedTools: string[]; bridgeReadyTimeoutMs?: number }
+export interface SubagentRuntimeConfig { schemaVersion: 6; stateRoot: string; tmux: string; historyViewerExtension: string; childExtensions: string[]; harnesses: Record<string, HarnessRuntimeConfig> & { pi: HarnessRuntimeConfig }; maxDepth: number; childExcludedTools: string[]; natureHandleWords: string[]; bridgeReadyTimeoutMs?: number }
 export interface SubagentFacet { allowedTargets: string[]; harness?: string }
 export interface AgentLineage { callerProfile: string; targetProfile: string; depth: number; parentAgentId?: string; originSessionId: string; originSessionFile?: string }
 export interface AgentRecord extends AgentLineage { schemaVersion: 1; agentId: string; profile: string; purpose: string; harness: string; cwd: string; createdAt: string; profileSnapshot: AgentProfile; tmux: TmuxAgentReference; tmuxOwnership?: TmuxOwnership; capabilities: NativeCapabilities }
@@ -29,7 +29,37 @@ function nonBlank(value: unknown, label: string): string { if (typeof value !== 
 function strings(value: unknown, label: string): string[] { if (!Array.isArray(value) || value.some(item => typeof item !== "string" || !item.trim())) throw new Error(`${label} must be an array of non-empty strings`); return [...value] as string[]; }
 export function validateRunPurpose(value: unknown): string { const purpose = typeof value === "string" ? value.replace(/\s+/gu, " ").trim() : ""; if (!purpose) throw new Error("Subagent purpose must not be empty"); if (Array.from(purpose).length > PURPOSE_MAX_LENGTH) throw new Error(`Subagent purpose must be at most ${PURPOSE_MAX_LENGTH} characters`); return purpose; }
 export function fallbackRunPurpose(prompt: string): string { return Array.from(prompt.split(/\r?\n/u).map(line => line.replace(/\s+/gu, " ").trim()).find(Boolean) ?? "Task").slice(0, 96).join(""); }
-export function validateSubagentRuntimeConfig(value: unknown): SubagentRuntimeConfig { const root = object(value, "subagent config"); if (root.schemaVersion !== 5) throw new Error("Unsupported subagent config schemaVersion"); const harnesses = object(root.harnesses, "harnesses"); const parsed: Record<string, HarnessRuntimeConfig> = {}; for (const [id, raw] of Object.entries(harnesses)) parsed[id] = { command: nonBlank(object(raw, `harnesses.${id}`).command, `harnesses.${id}.command`) }; if (!parsed.pi) throw new Error("harnesses.pi must be configured"); if (!Number.isInteger(root.maxDepth) || (root.maxDepth as number) < 0) throw new Error("maxDepth must be a non-negative integer"); const childExcludedTools = strings(root.childExcludedTools, "childExcludedTools"); if (new Set(childExcludedTools).size !== childExcludedTools.length) throw new Error("childExcludedTools must not contain duplicates"); return { schemaVersion: 5, stateRoot: nonBlank(root.stateRoot, "stateRoot"), tmux: nonBlank(root.tmux, "tmux"), historyViewerExtension: nonBlank(root.historyViewerExtension, "historyViewerExtension"), childExtensions: strings(root.childExtensions, "childExtensions"), harnesses: parsed as SubagentRuntimeConfig["harnesses"], maxDepth: root.maxDepth as number, childExcludedTools, ...(Number.isInteger(root.bridgeReadyTimeoutMs) ? { bridgeReadyTimeoutMs: root.bridgeReadyTimeoutMs as number } : {}) }; }
+export function validateNatureHandleWords(value: unknown): string[] {
+    const words = strings(value, "natureHandleWords");
+    if (words.length === 0) throw new Error("natureHandleWords must not be empty");
+    if (new Set(words).size !== words.length) throw new Error("natureHandleWords must not contain duplicates");
+    if (words.some(word => word.includes("-"))) throw new Error("natureHandleWords must not contain '-'");
+    return words;
+}
+export function validateSubagentRuntimeConfig(value: unknown): SubagentRuntimeConfig {
+    const root = object(value, "subagent config");
+    if (root.schemaVersion !== 6) throw new Error("Unsupported subagent config schemaVersion");
+    const harnesses = object(root.harnesses, "harnesses");
+    const parsed: Record<string, HarnessRuntimeConfig> = {};
+    for (const [id, raw] of Object.entries(harnesses)) parsed[id] = { command: nonBlank(object(raw, `harnesses.${id}`).command, `harnesses.${id}.command`) };
+    if (!parsed.pi) throw new Error("harnesses.pi must be configured");
+    if (!Number.isInteger(root.maxDepth) || (root.maxDepth as number) < 0) throw new Error("maxDepth must be a non-negative integer");
+    const childExcludedTools = strings(root.childExcludedTools, "childExcludedTools");
+    if (new Set(childExcludedTools).size !== childExcludedTools.length) throw new Error("childExcludedTools must not contain duplicates");
+    const natureHandleWords = validateNatureHandleWords(root.natureHandleWords);
+    return {
+        schemaVersion: 6,
+        stateRoot: nonBlank(root.stateRoot, "stateRoot"),
+        tmux: nonBlank(root.tmux, "tmux"),
+        historyViewerExtension: nonBlank(root.historyViewerExtension, "historyViewerExtension"),
+        childExtensions: strings(root.childExtensions, "childExtensions"),
+        harnesses: parsed as SubagentRuntimeConfig["harnesses"],
+        maxDepth: root.maxDepth as number,
+        childExcludedTools,
+        natureHandleWords,
+        ...(Number.isInteger(root.bridgeReadyTimeoutMs) ? { bridgeReadyTimeoutMs: root.bridgeReadyTimeoutMs as number } : {}),
+    };
+}
 export function projectChildEffectiveProfile(profile: AgentProfile, excludedTools: readonly string[]): AgentProfile {
     if (profile.allowAllTools) throw new Error("Child subagent targets must use an explicit tool allowlist; allowAllTools profiles are not allowed");
     const excluded = new Set(excludedTools);

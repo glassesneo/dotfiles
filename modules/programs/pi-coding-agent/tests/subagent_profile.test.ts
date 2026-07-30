@@ -34,7 +34,7 @@ async function fixture() {
     const root = await mkdtemp(join(tmpdir(), "agent-profile-"));
     const profileConfig = profiles();
     const subagentConfig: SubagentRuntimeConfig = {
-        schemaVersion: 5,
+        schemaVersion: 6,
         stateRoot: join(root, "state"),
         tmux: "/tmux",
         historyViewerExtension: "/history-viewer.ts",
@@ -42,6 +42,7 @@ async function fixture() {
         harnesses: { pi: { command: "/pi" } },
         maxDepth: 3,
         childExcludedTools: ["question"],
+        natureHandleWords: ["Maple", "Cedar"],
     };
     const profilePath = join(root, "agent-profiles.json");
     const subagentPath = join(root, "subagent.json");
@@ -269,7 +270,7 @@ void test("child effective profile drops excluded tools from snapshot and launch
     assert.deepEqual(effective.tools, ["read", "subagent_start", "subagent_get"]);
     assert.ok(!effective.tools.includes("question"));
     const launch = piLaunchDescriptor({
-        schemaVersion: 5,
+        schemaVersion: 6,
         stateRoot: "/state",
         tmux: "/tmux",
         historyViewerExtension: "/history.ts",
@@ -277,6 +278,7 @@ void test("child effective profile drops excluded tools from snapshot and launch
         harnesses: { pi: { command: "/pi" } },
         maxDepth: 3,
         childExcludedTools: ["question"],
+        natureHandleWords: ["Maple", "Cedar"],
     }, {
         agentId: "a",
         agentDirectory: "/state/agents/a",

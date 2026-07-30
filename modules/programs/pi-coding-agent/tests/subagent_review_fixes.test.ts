@@ -153,7 +153,7 @@ void test("palette Enter is disabled for terminal legacy history without probing
         theme: { fg: (_role: string, text: string) => text, bg: (_role: string, text: string) => text, bold: (text: string) => text } as never,
         ui: { confirm: async () => false }, keymap: defaultPaletteKeymap,
         deps: {
-            stateRoot: root, originSessionId: "origin", tmux: "/tmux", historyViewerExtension: "/history.ts", piCommand: "/pi",
+            stateRoot: root, originSessionId: "origin", tmux: "/tmux", historyViewerExtension: "/history.ts", piCommand: "/pi", natureHandleWords: ["Maple", "Cedar"],
             exec: async () => { execCalls += 1; return { stdout: "", stderr: "no server running", code: 1 }; },
             setTimeout: (() => 1 as unknown as NodeJS.Timeout) as unknown as typeof setTimeout, clearTimeout: (() => {}) as typeof clearTimeout,
         }, done: () => {},
@@ -168,7 +168,7 @@ void test("palette Enter is disabled for terminal legacy history without probing
 void test("registered parent lifecycle cleans replacement reasons while reload and child depth preserve the hub", async () => {
     const root = await mkdtemp(join(tmpdir(), "subagent-lifecycle-wiring-"));
     const configPath = join(root, "subagent.json");
-    await writeFile(configPath, JSON.stringify({ schemaVersion: 5, stateRoot: join(root, "state"), tmux: "/tmux", historyViewerExtension: "/history.ts", childExtensions: ["/bridge.ts"], harnesses: { pi: { command: "/pi" } }, maxDepth: 3, childExcludedTools: ["question"] }));
+    await writeFile(configPath, JSON.stringify({ schemaVersion: 6, stateRoot: join(root, "state"), tmux: "/tmux", historyViewerExtension: "/history.ts", childExtensions: ["/bridge.ts"], harnesses: { pi: { command: "/pi" } }, maxDepth: 3, childExcludedTools: ["question"], natureHandleWords: ["Maple", "Cedar"] }));
     const run = async (reason: "quit" | "reload" | "new" | "resume" | "fork", depth = "0") => {
         const handlers = new Map<string, Array<(...args: any[]) => any>>();
         const eventHandlers = new Map<string, Array<(value: unknown) => void>>();

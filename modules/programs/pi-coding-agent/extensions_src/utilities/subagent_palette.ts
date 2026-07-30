@@ -26,6 +26,7 @@ export interface SubagentPaletteDependencies {
     tmux: string;
     historyViewerExtension: string;
     piCommand: string;
+    natureHandleWords: readonly string[];
     env?: NodeJS.ProcessEnv;
     setTimeout?: typeof setTimeout;
     clearTimeout?: typeof clearTimeout;
@@ -170,7 +171,7 @@ export class SubagentPaletteComponent implements Component, Focusable {
 
     #applySnapshots(agents: readonly AgentSnapshot[], malformedCount: number): void {
         const previousVisible = this.visibleNodes().map(node => node.agentId);
-        this.#tree = buildSubagentDisplayTree(agents);
+        this.#tree = buildSubagentDisplayTree(agents, this.#deps.natureHandleWords);
         const known = new Set(this.#tree.byId.keys());
         this.#collapsed = new Set([...this.#collapsed].filter(id => known.has(id) && (this.#tree.byId.get(id)?.children.length ?? 0) > 0));
         const visible = this.visibleNodes();

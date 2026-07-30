@@ -17,7 +17,9 @@ void test("Nix wiring resolves subagent as a default extension with childExclude
     assert.match(module, /parent\.enable && builtins\.elem "subagent" parent\.defaultExtensions/u);
     assert.match(module, /extensionPaths = readOnly/u);
     assert.match(module, /childExcludedTools = listOfOption str \[\]/u);
-    assert.match(module, /schemaVersion = 5/u);
+    assert.match(module, /natureHandleWords = listOfOption str \[/u);
+    assert.match(module, /schemaVersion = 6/u);
+    assert.match(module, /inherit \(cfg\) natureHandleWords/u);
     assert.match(module, /allowAllTools targets are forbidden/u);
     assert.doesNotMatch(module, /settings\.extensions/u);
     const question = await readFile(new URL("../extensions/question/default.nix", import.meta.url), "utf8");

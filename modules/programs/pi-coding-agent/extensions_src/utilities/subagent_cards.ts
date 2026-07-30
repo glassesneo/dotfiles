@@ -52,8 +52,8 @@ function textFromComponent(last: Component | undefined, text: string): Text {
     return new Text(text, 0, 0);
 }
 
-function handleFor(agentId: string, handles?: Map<string, string>): string {
-    return handles?.get(agentId) ?? assignNatureHandles([agentId]).get(agentId) ?? shortId(agentId);
+function handleFor(agentId: string, handles?: Map<string, string>, words?: readonly string[]): string {
+    return handles?.get(agentId) ?? assignNatureHandles([agentId], words).get(agentId) ?? shortId(agentId);
 }
 
 function styleBadge(theme: Theme, role: ThemeColor, text: string): string {
@@ -301,6 +301,7 @@ function renderSingleResult(
     context: CardRenderContext,
     argsPrompt?: string,
     debug?: boolean,
+    words?: readonly string[],
 ): Component {
     try {
         const details = result.details;
@@ -312,7 +313,7 @@ function renderSingleResult(
             return textFromComponent(context.lastComponent, text);
         }
         const snapshot = details;
-        const handles = assignNatureHandles([snapshot.agent.agentId]);
+        const handles = assignNatureHandles([snapshot.agent.agentId], words);
         if (options.expanded) {
             const text = debug === true ? debugExpanded(theme, snapshot, handles) : expandedAgentCard(theme, snapshot, argsPrompt, handles);
             return textFromComponent(context.lastComponent, text);
@@ -332,8 +333,9 @@ export function renderAgentToolResult(
     context: CardRenderContext,
     argsPrompt?: string,
     debug?: boolean,
+    words?: readonly string[],
 ): Component {
-    return renderSingleResult(result, options, theme, context, argsPrompt, debug);
+    return renderSingleResult(result, options, theme, context, argsPrompt, debug, words);
 }
 
 export function renderWaitResult(
@@ -341,6 +343,7 @@ export function renderWaitResult(
     options: ToolRenderResultOptions,
     theme: Theme,
     context: CardRenderContext,
+    words?: readonly string[],
 ): Component {
     try {
         const details = result.details;
@@ -361,7 +364,7 @@ export function renderWaitResult(
                 : "completed";
         const heading = `${waitOutcomeText(theme, kind)} · ${done}/${total} complete · ${details.condition} · ${details.timeoutSeconds}s`;
         const agentIds = details.agents.flatMap(agent => isRenderableAgentSnapshot(agent) ? [agent.agent.agentId] : []);
-        const handles = assignNatureHandles(agentIds);
+        const handles = assignNatureHandles(agentIds, words);
         const cards = details.agents.map(snapshot => {
             if (!isRenderableAgentSnapshot(snapshot)) return memberFallback(theme, options.expanded, snapshot);
             try {

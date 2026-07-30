@@ -28,6 +28,7 @@ import {
 import { claimTaskUsage, createTask, findTaskAgent, prepareAgent, publishAgent, readAgentSnapshot, reconcileOriginUsageClaims, removePreparedAgent } from "./utilities/subagent_store.ts";
 import { inspectAgentTmux, launchAgentSession, probeTmux, stopAgentSession, type CommandExecutor } from "./utilities/subagent_tmux.ts";
 import { PURPOSE_MAX_LENGTH, addUsage, emptyUsage, fallbackRunPurpose, isTerminalAgent, isTerminalTask, parseSubagentFacet, projectChildEffectiveProfile, validateSubagentRuntimeConfig, type AgentSnapshot, type SubagentFacet, type SubagentRuntimeConfig } from "./utilities/subagent_types.ts";
+import { NATURE_HANDLE_WORDS } from "./utilities/subagent_display_tree.ts";
 import { openSubagentPalette } from "./utilities/subagent_palette.ts";
 import { loadPaletteKeymap } from "./utilities/command_palette_keymap.ts";
 import { provideCommandPaletteContribution } from "./utilities/command_palette_contributions.ts";
@@ -53,7 +54,7 @@ const waitParameters = Type.Object({
 });
 const stopParameters = Type.Object({ agentId: Type.String() });
 export interface ActiveSubagentProfile { name: string; facet?: SubagentFacet; error?: string }
-export interface SubagentDependencies { configPath: string; profileConfigPath?: string; env: NodeJS.ProcessEnv; exec: CommandExecutor; activeProfile?: () => ActiveSubagentProfile | undefined; sleep?: (ms: number, signal?: AbortSignal) => Promise<void>; now?: () => number }
+export interface SubagentDependencies { configPath: string; profileConfigPath?: string; env: NodeJS.ProcessEnv; exec: CommandExecutor; activeProfile?: () => ActiveSubagentProfile | undefined; natureHandleWords?: () => readonly string[]; sleep?: (ms: number, signal?: AbortSignal) => Promise<void>; now?: () => number }
 export async function loadSubagentConfig(path: string): Promise<SubagentRuntimeConfig> { try { return validateSubagentRuntimeConfig(JSON.parse(await readFile(path, "utf8"))); } catch (error) { throw new Error(`Cannot read subagent config ${path}: ${error instanceof Error ? error.message : String(error)}`); } }
 function origin(ctx: ExtensionContext, env: NodeJS.ProcessEnv) { const raw = Number.parseInt(env.PI_SUBAGENT_DEPTH ?? "0", 10); return { depth: Number.isInteger(raw) && raw >= 0 ? raw : 0, parentAgentId: env.PI_SUBAGENT_AGENT_ID, originSessionId: env.PI_SUBAGENT_ORIGIN_SESSION_ID ?? ctx.sessionManager.getSessionId(), originSessionFile: ctx.sessionManager.getSessionFile() ?? env.PI_SUBAGENT_ORIGIN_SESSION_FILE }; }
 function sleep(ms: number, signal?: AbortSignal): Promise<void> { return new Promise((resolve, reject) => { if (signal?.aborted) { reject(signal.reason); return; } const timer = setTimeout(resolve, ms); signal?.addEventListener("abort", () => { clearTimeout(timer); reject(signal.reason); }, { once: true }); }); }
@@ -227,7 +228,7 @@ export function createSubagentStartTool(deps: SubagentDependencies, allowedTarge
         },
         renderCall(args, theme, context) { return renderStartCall(args, theme, context); },
         renderResult(result, options, theme, context) {
-            return renderAgentToolResult(result, options, theme, context, context.args?.prompt);
+            return renderAgentToolResult(result, options, theme, context, context.args?.prompt, undefined, deps.natureHandleWords?.());
         },
     });
 }
@@ -251,7 +252,7 @@ export function createSubagentSendTool(deps: SubagentDependencies): ToolDefiniti
         },
         renderCall(args, theme, context) { return renderSendCall(args, theme, context); },
         renderResult(result, options, theme, context) {
-            return renderAgentToolResult(result, options, theme, context, context.args?.prompt);
+            return renderAgentToolResult(result, options, theme, context, context.args?.prompt, undefined, deps.natureHandleWords?.());
         },
     });
 }
@@ -275,7 +276,7 @@ export function createSubagentGetTool(deps: SubagentDependencies): ToolDefinitio
         },
         renderCall(args, theme, context) { return renderGetCall(args, theme, context); },
         renderResult(result, options, theme, context) {
-            return renderAgentToolResult(result, options, theme, context, undefined, context.args?.debug === true);
+            return renderAgentToolResult(result, options, theme, context, undefined, context.args?.debug === true, deps.natureHandleWords?.());
         },
     });
 }
@@ -338,7 +339,7 @@ export function createSubagentWaitTool(deps: SubagentDependencies): ToolDefiniti
             }
         },
         renderCall(args, theme, context) { return renderWaitCall(args, theme, context); },
-        renderResult(result, options, theme, context) { return renderWaitResult(result, options, theme, context); },
+        renderResult(result, options, theme, context) { return renderWaitResult(result, options, theme, context, deps.natureHandleWords?.()); },
     });
 }
 export function createSubagentStopTool(deps: SubagentDependencies): ToolDefinition<typeof stopParameters, unknown> {
@@ -357,7 +358,7 @@ export function createSubagentStopTool(deps: SubagentDependencies): ToolDefiniti
             return agentResult(snapshot, await claim(config, snapshot, ctx, deps.env, id, "subagent_stop"));
         },
         renderCall(args, theme, context) { return renderStopCall(args, theme, context); },
-        renderResult(result, options, theme, context) { return renderAgentToolResult(result, options, theme, context); },
+        renderResult(result, options, theme, context) { return renderAgentToolResult(result, options, theme, context, undefined, undefined, deps.natureHandleWords?.()); },
     });
 }
 export async function registerSubagent(pi: ExtensionAPI, options: Partial<Pick<SubagentDependencies, "configPath" | "profileConfigPath" | "env">> = {}): Promise<boolean> {
@@ -365,11 +366,19 @@ export async function registerSubagent(pi: ExtensionAPI, options: Partial<Pick<S
     const profileConfigPath = options.profileConfigPath ?? PROFILES;
     const env = options.env ?? process.env;
     let current: ActiveSubagentProfile | undefined;
+    let natureHandleWords: readonly string[] = NATURE_HANDLE_WORDS;
     const exec: CommandExecutor = async (command, args) => {
         const value = await pi.exec(command, args);
         return { stdout: value.stdout, stderr: value.stderr, code: value.code };
     };
-    const deps: SubagentDependencies = { configPath, profileConfigPath, env, exec, activeProfile: () => current };
+    const deps: SubagentDependencies = {
+        configPath,
+        profileConfigPath,
+        env,
+        exec,
+        activeProfile: () => current,
+        natureHandleWords: () => natureHandleWords,
+    };
     const registerStart = (targets: readonly string[]) => {
         pi.registerTool(createSubagentStartTool(deps, targets));
     };
@@ -388,11 +397,13 @@ export async function registerSubagent(pi: ExtensionAPI, options: Partial<Pick<S
     });
     pi.on("session_start", async (_event, ctx) => {
         const config = await loadSubagentConfig(configPath);
+        natureHandleWords = config.natureHandleWords;
         const lineage = origin(ctx, env);
         await reconcileOriginUsageClaims(config.stateRoot, lineage.originSessionId, lineage.originSessionFile);
     });
     const open = async (ctx: ExtensionContext) => {
         const config = await loadSubagentConfig(configPath);
+        natureHandleWords = config.natureHandleWords;
         return openSubagentPalette(ctx, loadPaletteKeymap().keymap, {
             stateRoot: config.stateRoot,
             originSessionId: origin(ctx, env).originSessionId,
@@ -401,6 +412,7 @@ export async function registerSubagent(pi: ExtensionAPI, options: Partial<Pick<S
             tmux: config.tmux,
             historyViewerExtension: config.historyViewerExtension,
             piCommand: config.harnesses.pi.command,
+            natureHandleWords: config.natureHandleWords,
         });
     };
     const unregister = provideCommandPaletteContribution(pi.events, {

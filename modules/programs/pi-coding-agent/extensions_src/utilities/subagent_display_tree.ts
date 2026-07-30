@@ -86,12 +86,16 @@ function hexSource(agentId: string): string {
 }
 
 /** Deterministic unique Nature-xxxx handles for one origin record set. */
-export function assignNatureHandles(agentIds: readonly string[]): Map<string, string> {
+export function assignNatureHandles(
+    agentIds: readonly string[],
+    words: readonly string[] = NATURE_HANDLE_WORDS,
+): Map<string, string> {
+    if (words.length === 0) throw new Error("nature handle words must not be empty");
     const sorted = [...new Set(agentIds)].sort((left, right) => left < right ? -1 : left > right ? 1 : 0);
     const used = new Set<string>();
     const result = new Map<string, string>();
     for (const agentId of sorted) {
-        const word = NATURE_HANDLE_WORDS[hashString(agentId) % NATURE_HANDLE_WORDS.length]!;
+        const word = words[hashString(agentId) % words.length]!;
         const hex = hexSource(agentId);
         let length = 4;
         while (true) {
@@ -191,9 +195,12 @@ export function breakDisplayParentCycles(
  * Terminal middle agents remain as inline ghosts; active descendants promote to the
  * nearest active ancestor and record viaHandle for the immediate ghost parent.
  */
-export function buildSubagentDisplayTree(snapshots: readonly AgentSnapshot[]): SubagentDisplayTree {
+export function buildSubagentDisplayTree(
+    snapshots: readonly AgentSnapshot[],
+    words: readonly string[] = NATURE_HANDLE_WORDS,
+): SubagentDisplayTree {
     const bySnapshot = new Map(snapshots.map(snapshot => [snapshot.agent.agentId, snapshot]));
-    const handles = assignNatureHandles([...bySnapshot.keys()]);
+    const handles = assignNatureHandles([...bySnapshot.keys()], words);
     const nodes = new Map<string, SubagentDisplayNode>();
     const displayParentIds = new Map<string, string | undefined>();
 

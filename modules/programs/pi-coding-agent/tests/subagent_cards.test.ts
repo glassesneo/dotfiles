@@ -300,6 +300,25 @@ void test("wait cards resolve colliding Nature handles within one render set", a
     assert.match(text, new RegExp(expected.get(rightId)!.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")));
 });
 
+void test("injected nature handle words appear on agent cards", async () => {
+    const { assignNatureHandles } = await import("../extensions_src/utilities/subagent_display_tree.ts");
+    const { renderAgentToolResult } = await import("../extensions_src/utilities/subagent_cards.ts");
+    const words = ["Quark", "Photon"] as const;
+    const agent = snapshot();
+    const expected = assignNatureHandles([agent.agent.agentId], words).get(agent.agent.agentId)!;
+    const text = renderText(renderAgentToolResult(
+        { content: [{ type: "text", text: "{}" }], details: agent } as never,
+        { expanded: false, isPartial: false },
+        theme,
+        { args: {}, lastComponent: undefined } as never,
+        undefined,
+        undefined,
+        words,
+    ));
+    assert.match(text, new RegExp(expected.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")));
+    assert.match(text, /Quark|Photon/);
+});
+
 void test("malformed wait members keep expanded raw fallback", () => {
     const wait = createSubagentWaitTool({ configPath: "/x", env: {}, exec: async () => ({ stdout: "", stderr: "", code: 0 }) });
     const text = renderText(wait.renderResult?.(
