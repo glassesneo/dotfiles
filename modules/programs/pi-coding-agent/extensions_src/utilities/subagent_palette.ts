@@ -16,6 +16,7 @@ import {
     type SubagentDisplayTree,
 } from "./subagent_display_tree.ts";
 import { OriginAgentDiscovery, stopSubagentAgent } from "./subagent_management.ts";
+import { openLivePreview, type LivePreviewDisposition } from "./subagent_preview.ts";
 import { openAgentWindow, probeTmux, unlinkAgentWindow, type CommandExecutor } from "./subagent_tmux.ts";
 import { isTerminalAgent, type AgentSnapshot } from "./subagent_types.ts";
 
@@ -33,6 +34,7 @@ export interface SubagentPaletteDependencies {
     /** Optional test/harness overrides for open paths. */
     openHistory?: typeof openSubagentHistory;
     openLiveWindow?: typeof openAgentWindow;
+    previewLive?: (exec: CommandExecutor, tmux: string, context: NonNullable<Awaited<ReturnType<typeof probeTmux>>>, target: AgentSnapshot["agent"]["tmux"], title: string) => Promise<LivePreviewDisposition>;
     stopAgent?: typeof stopSubagentAgent;
     discover?: () => Promise<{ agents: AgentSnapshot[]; malformedCount: number }>;
 }
@@ -289,12 +291,16 @@ export class SubagentPaletteComponent implements Component, Focusable {
         }
     }
 
-    async action(kind: "open" | "unlink" | "stop") {
+    async action(kind: "open" | "preview" | "unlink" | "stop") {
         const selected = this.selected();
         const node = this.#selectedAgentId ? this.#tree.byId.get(this.#selectedAgentId) : undefined;
         if (!selected || !node || this.#acting || this.#disposed) return;
         if ((kind === "stop" || kind === "unlink") && node.ghost) {
             this.#setStatus("warning", kind === "stop" ? "Stop is available only for live agents." : "Unlink is available only for live agents.");
+            return;
+        }
+        if (kind === "preview" && isTerminalAgent(selected.status.state)) {
+            this.#setStatus("warning", "Live preview is available only for live agents. Press Enter for history.");
             return;
         }
         this.#acting = true;
@@ -341,6 +347,29 @@ export class SubagentPaletteComponent implements Component, Focusable {
                 this.close("close");
                 return;
             }
+            if (kind === "preview") {
+                const disposition = await (this.#deps.previewLive ?? openLivePreview)(
+                    this.#deps.exec,
+                    this.#deps.tmux,
+                    context,
+                    selected.agent.tmux,
+                    `${node.handle} · Esc/C-c/q back · Enter open full`,
+                );
+                if (disposition === "open-full") {
+                    const currentContext = await probeTmux(this.#deps.exec, this.#deps.tmux, this.#deps.env);
+                    if (!currentContext) throw new Error("Current Pi is not attached to a usable tmux client");
+                    await (this.#deps.openLiveWindow ?? openAgentWindow)(this.#deps.exec, this.#deps.tmux, currentContext, selected.agent.tmux);
+                    this.#closeDisposition = "close";
+                    this.close("close");
+                    return;
+                }
+                const refreshed = await this.#reloadAfterMutation();
+                if (this.#disposed) return;
+                if (this.#tree.byId.has(selected.agent.agentId)) this.#selectedAgentId = selected.agent.agentId;
+                if (refreshed) this.#setStatus("dim", `Preview closed for ${node.handle}`);
+                if (this.#cancelRequested) this.close("return");
+                return;
+            }
             await unlinkAgentWindow(this.#deps.exec, this.#deps.tmux, context, selected.agent.tmux);
             await this.#reloadAfterMutation();
             if (this.#disposed) return;
@@ -375,6 +404,7 @@ export class SubagentPaletteComponent implements Component, Focusable {
         else if (action === "confirm") void this.action("open");
         else if (action === "stop") void this.action("stop");
         else if (action === "refresh") void this.refresh();
+        else if (data === "v") void this.action("preview");
         else if (data === "u") void this.action("unlink");
         else return;
         this.invalidate();
@@ -449,12 +479,16 @@ export class SubagentPaletteComponent implements Component, Focusable {
         const visible = this.visibleNodes();
         const connectors = treeConnectors(visible, this.#tree.byId);
         const help = paletteHelp(this.#keymap, ["moveUp", "moveDown", "collapse", "expand", "confirm", "stop", "refresh", "cancel"]);
+        const terminalPreviewMessage = "Live preview is available only for live agents. Press Enter for history.";
+        const statusLines = !this.#acting && this.#status === terminalPreviewMessage
+            ? ["Live preview is available only for live agents.", "Press Enter for history."]
+            : [this.#acting ? "WORKING" : this.#status];
         const body: string[] = [
-            truncateToWidth(` ${this.#theme.fg("muted", "Enter open/history · u unlink · Stop ends a live agent")}`, inner, ""),
+            truncateToWidth(` ${this.#theme.fg("muted", "Enter open/history · v preview · u unlink · Stop ends a live agent")}`, inner, ""),
             "",
-            ...this.#viewport(visible, connectors, inner, Math.max(2, rows - 6)),
-            truncateToWidth(` ${this.#theme.fg(this.#statusKind, this.#acting ? "WORKING" : this.#status)}`, inner, ""),
-            truncateToWidth(` ${this.#theme.fg("dim", `${help} · u unlink`)}`, inner, ""),
+            ...this.#viewport(visible, connectors, inner, Math.max(2, rows - 5 - statusLines.length)),
+            ...statusLines.map(line => truncateToWidth(` ${this.#theme.fg(this.#statusKind, line)}`, inner, "")),
+            truncateToWidth(` ${this.#theme.fg("dim", `${help} · v preview · u unlink`)}`, inner, ""),
         ];
         const lines = renderFramedLines({
             theme: this.#theme,

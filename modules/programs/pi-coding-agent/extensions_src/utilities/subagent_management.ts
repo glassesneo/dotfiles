@@ -1,3 +1,4 @@
+import { mapConcurrent } from "./subagent_concurrency.ts";
 import { agentPaths, failAgent, listOriginAgents, markAgentCleanupPending, markAgentStopping, readAgentSnapshot, restoreAgentAfterStopFailure } from "./subagent_store.ts";
 import { isTerminalAgent, tmuxOwnership, type AgentSnapshot } from "./subagent_types.ts";
 import { inspectAgentTmux, originHubName, stopAgentSession, stopOriginHub, type CommandExecutor, type TmuxContext } from "./subagent_tmux.ts";
@@ -22,7 +23,27 @@ export async function readReconciledAgentSnapshot(exec: CommandExecutor, tmux: s
     }
     return snapshot;
 }
-export class OriginAgentDiscovery { readonly options: { stateRoot: string; originSessionId: string; exec: CommandExecutor; tmux: string }; constructor(options: { stateRoot: string; originSessionId: string; exec: CommandExecutor; tmux: string }) { this.options = options; } async refresh(): Promise<{ agents: AgentSnapshot[]; malformedCount: number }> { const found = await listOriginAgents(this.options.stateRoot, this.options.originSessionId); const agents: AgentSnapshot[] = []; let malformedCount = 0; for (const item of found) { try { agents.push(await readReconciledAgentSnapshot(this.options.exec, this.options.tmux, this.options.stateRoot, item.agent.agentId)); } catch { malformedCount += 1; } } return { agents, malformedCount }; } }
+export class OriginAgentDiscovery {
+    readonly options: { stateRoot: string; originSessionId: string; exec: CommandExecutor; tmux: string };
+    constructor(options: { stateRoot: string; originSessionId: string; exec: CommandExecutor; tmux: string }) { this.options = options; }
+    async refresh(): Promise<{ agents: AgentSnapshot[]; malformedCount: number }> {
+        const found = await listOriginAgents(this.options.stateRoot, this.options.originSessionId);
+        const settled = await mapConcurrent(found, 8, async item => {
+            try {
+                return { status: "fulfilled" as const, value: await readReconciledAgentSnapshot(
+                    this.options.exec,
+                    this.options.tmux,
+                    this.options.stateRoot,
+                    item.agent.agentId,
+                ) };
+            } catch (reason) { return { status: "rejected" as const, reason }; }
+        });
+        return {
+            agents: settled.flatMap(result => result.status === "fulfilled" ? [result.value] : []),
+            malformedCount: settled.filter(result => result.status === "rejected").length,
+        };
+    }
+}
 interface TerminateAgentOptions { stateRoot: string; agentId: string; originSessionId: string; exec: CommandExecutor; tmux: string }
 async function terminateSubagentAgent(options: TerminateAgentOptions, reason: string, stopped: boolean, ensureTerminalProcess = false): Promise<AgentSnapshot> {
     const snapshot = await readAgentSnapshot(options.stateRoot, options.agentId);

@@ -4,8 +4,8 @@ import type { TmuxAgentReference } from "./subagent_types.ts";
 
 export interface CommandResult { stdout: string; stderr: string; code: number }
 export type CommandExecutor = (command: string, args: string[]) => Promise<CommandResult>;
-export interface TmuxContext { socket: string; serverPid: string; sessionId: string; sessionName: string; paneId: string }
-const FORMAT = "#{pid}\t#{session_id}\t#{session_name}\t#{pane_id}";
+export interface TmuxContext { socket: string; serverPid: string; sessionId: string; sessionName: string; paneId: string; clientName?: string }
+const FORMAT = "#{pid}\t#{session_id}\t#{session_name}\t#{pane_id}\t#{client_name}";
 const at = (socket: string, args: string[]): string[] => ["-S", socket, ...args];
 
 export async function probeTmux(exec: CommandExecutor, tmux: string, env: NodeJS.ProcessEnv = process.env): Promise<TmuxContext | null> {
@@ -13,10 +13,18 @@ export async function probeTmux(exec: CommandExecutor, tmux: string, env: NodeJS
     if (!socket) return null;
     const result = await exec(tmux, at(socket, ["display-message", "-p", FORMAT]));
     if (result.code !== 0) return null;
-    const [serverPid, sessionId, sessionName, paneId] = result.stdout.trim().split("\t");
-    return serverPid && sessionId && sessionName && paneId ? { socket, serverPid, sessionId, sessionName, paneId } : null;
+    const [serverPid, sessionId, sessionName, paneId, clientName] = result.stdout.trim().split("\t");
+    return serverPid && sessionId && sessionName && paneId && clientName ? { socket, serverPid, sessionId, sessionName, paneId, clientName } : null;
 }
 function quote(value: string): string { return `'${value.replaceAll("'", `'"'"'`)}'`; }
+const SERVER_IDENTITY_CHANGED = "__pi_tmux_server_identity_changed__";
+async function execOnSameServer(exec: CommandExecutor, tmux: string, context: Pick<TmuxContext, "socket" | "serverPid">, args: string[]): Promise<CommandResult> {
+    const command = args.map(quote).join(" ");
+    const mismatch = `display-message -p ${quote(SERVER_IDENTITY_CHANGED)}`;
+    const result = await exec(tmux, at(context.socket, ["if-shell", "-F", `#{==:#{pid},${context.serverPid}}`, command, mismatch]));
+    if (result.stdout.trim() === SERVER_IDENTITY_CHANGED) throw new Error("Current tmux server identity changed before preview mutation");
+    return result;
+}
 export type TmuxServerState = "match" | "mismatch" | "absent" | "unavailable";
 const ABSENT_SERVER_ERROR = /(?:no server running|no such file or directory|connection refused)/iu;
 async function serverState(exec: CommandExecutor, tmux: string, target: Pick<TmuxAgentReference, "socket" | "serverPid">): Promise<TmuxServerState> { const result = await exec(tmux, at(target.socket, ["display-message", "-p", "#{pid}"])); if (result.code !== 0) return ABSENT_SERVER_ERROR.test(`${result.stderr}\n${result.stdout}`) ? "absent" : "unavailable"; return result.stdout.trim() === target.serverPid ? "match" : "mismatch"; }
@@ -86,6 +94,56 @@ async function currentWindows(exec: CommandExecutor, tmux: string, context: Tmux
 function assertSameServer(context: TmuxContext, target: TmuxAgentReference): void {
     if (context.socket !== target.socket || context.serverPid !== target.serverPid) throw new Error("Agent belongs to a different tmux server");
 }
+
+export interface TmuxPreviewView { sessionId: string; windowId: string }
+const ABSENT_SESSION_ERROR = /can't find session|no such session/iu;
+
+async function cleanupAllocatedPreviewSession(exec: CommandExecutor, tmux: string, context: TmuxContext, target: string): Promise<void> {
+    const state = await serverState(exec, tmux, context);
+    if (state === "absent") return;
+    if (state !== "match") throw new Error("Current tmux server identity changed before preview cleanup");
+    const result = await execOnSameServer(exec, tmux, context, ["kill-session", "-t", target]);
+    if (result.code !== 0 && !ABSENT_SESSION_ERROR.test(`${result.stderr}\n${result.stdout}`)) {
+        throw new Error(result.stderr.trim() || `Could not remove preview session ${target}`);
+    }
+}
+
+export async function allocatePreviewView(exec: CommandExecutor, tmux: string, context: TmuxContext, target: TmuxAgentReference, sessionName: string): Promise<TmuxPreviewView> {
+    assertSameServer(context, target);
+    if (!await isAgentPaneAlive(exec, tmux, target)) throw new Error("Agent tmux pane is no longer live");
+    const created = await execOnSameServer(exec, tmux, context, ["new-session", "-d", "-P", "-F", "#{session_id}\t#{window_id}", "-s", sessionName]);
+    if (created.code !== 0) throw new Error(created.stderr.trim() || "Could not create preview session");
+    let [sessionId, scratchWindowId] = created.stdout.trim().split("\t");
+    if (!sessionId || !scratchWindowId) {
+        const listed = await exec(tmux, at(context.socket, ["list-sessions", "-F", "#{session_id}\t#{session_name}"]));
+        const matches = listed.code === 0
+            ? listed.stdout.split("\n").map(line => line.split("\t")).filter(([, name]) => name === sessionName)
+            : [];
+        const recoveredSessionId = matches.length === 1 ? matches[0]?.[0] : undefined;
+        try { await cleanupAllocatedPreviewSession(exec, tmux, context, recoveredSessionId ?? sessionName); }
+        catch (cleanupError) { throw new AggregateError([new Error("Preview session creation did not return canonical IDs"), cleanupError], "Preview allocation and cleanup failed"); }
+        throw new Error("Preview session creation did not return canonical IDs");
+    }
+    const canonicalSessionId = sessionId;
+    try {
+        const linked = await execOnSameServer(exec, tmux, context, ["link-window", "-d", "-s", target.windowId, "-t", `${canonicalSessionId}:`]);
+        if (linked.code !== 0) throw new Error(linked.stderr.trim() || "Could not link agent into preview session");
+        const selected = await execOnSameServer(exec, tmux, context, ["select-window", "-t", `${canonicalSessionId}:${target.windowId}`]);
+        if (selected.code !== 0) throw new Error(selected.stderr.trim() || "Could not select agent preview window");
+        const removedScratch = await execOnSameServer(exec, tmux, context, ["kill-window", "-t", `${canonicalSessionId}:${scratchWindowId}`]);
+        if (removedScratch.code !== 0) throw new Error(removedScratch.stderr.trim() || "Could not remove preview scratch window");
+        return { sessionId: canonicalSessionId, windowId: target.windowId };
+    } catch (error) {
+        try { await cleanupAllocatedPreviewSession(exec, tmux, context, canonicalSessionId); }
+        catch (cleanupError) { throw new AggregateError([error, cleanupError], "Preview allocation and cleanup failed"); }
+        throw error;
+    }
+}
+
+export async function cleanupPreviewView(exec: CommandExecutor, tmux: string, context: TmuxContext, view: TmuxPreviewView): Promise<void> {
+    await cleanupAllocatedPreviewSession(exec, tmux, context, view.sessionId);
+}
+
 export async function openAgentWindow(exec: CommandExecutor, tmux: string, context: TmuxContext, target: TmuxAgentReference): Promise<void> {
     assertSameServer(context, target);
     if (!await isAgentPaneAlive(exec, tmux, target)) throw new Error("Agent tmux pane is no longer live");

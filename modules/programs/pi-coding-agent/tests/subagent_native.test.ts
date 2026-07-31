@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { chmod, mkdtemp, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -7,8 +7,11 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { registerSubagentChildBridge } from "../extensions_src/subagent_child_bridge.ts";
 import { createSubagentGetTool, createSubagentSendTool, createSubagentStopTool, createSubagentWaitTool } from "../extensions_src/subagent.ts";
 import { defaultPaletteKeymap } from "../extensions_src/utilities/command_palette_keymap.ts";
+import { mapConcurrent } from "../extensions_src/utilities/subagent_concurrency.ts";
 import { piLaunchDescriptor } from "../extensions_src/utilities/subagent_pi.ts";
+import { withRunLock } from "../extensions_src/utilities/subagent_lock.ts";
 import { SubagentPaletteComponent } from "../extensions_src/utilities/subagent_palette.ts";
+import { openLivePreview } from "../extensions_src/utilities/subagent_preview.ts";
 import { claimPendingTask, claimTaskUsage, createTask, failAgent, finishTask, markAgentStopping, markBridgeReady, patchAgentStatus, prepareAgent, publishAgent, readAgentSnapshot, reconcileOriginUsageClaims, recordIdleUsage, recordIntervention, taskPaths } from "../extensions_src/utilities/subagent_store.ts";
 import { failStartedSubagentAgent, readReconciledAgentSnapshot, stopSubagentAgent } from "../extensions_src/utilities/subagent_management.ts";
 import { inspectAgentTmux, launchAgentSession, openAgentWindow, probeTmux, stopAgentSession, unlinkAgentWindow, type CommandResult } from "../extensions_src/utilities/subagent_tmux.ts";
@@ -16,6 +19,29 @@ import type { AgentSnapshot, SubagentRuntimeConfig, TmuxAgentReference } from ".
 const profile = { model: "provider/model", description: "Tester", allowAllTools: false, tools: ["read"], extensions: { subagent: { allowedTargets: [] } } };
 const config = (root: string): SubagentRuntimeConfig => ({ schemaVersion: 6, stateRoot: root, tmux: "/tmux", historyViewerExtension: "/history-viewer.ts", childExtensions: ["/profile.ts", "/bridge.ts"], harnesses: { pi: { command: "/pi" } }, maxDepth: 3, childExcludedTools: ["question"], natureHandleWords: ["Maple", "Cedar"] });
 const tmux: TmuxAgentReference = { socket: "/tmp/tmux", serverPid: "10", sessionId: "$2", sessionName: "pi-sa-test", windowId: "@2", paneId: "%2", windowName: "sa-test" };
+void test("bounded concurrency preserves order without exceeding its worker limit", async () => {
+    let active = 0;
+    let maximum = 0;
+    const values = await mapConcurrent(Array.from({ length: 40 }, (_, index) => index), 4, async value => {
+        active += 1;
+        maximum = Math.max(maximum, active);
+        await new Promise(resolve => setImmediate(resolve));
+        active -= 1;
+        return value * 2;
+    });
+    assert.equal(maximum, 4);
+    assert.deepEqual(values, Array.from({ length: 40 }, (_, index) => index * 2));
+});
+void test("run lock reclaims an aged ownerless directory without waiting for the retry ceiling", async () => {
+    const root = await mkdtemp(join(tmpdir(), "native-ownerless-lock-"));
+    const lock = join(root, ".lock");
+    await mkdir(lock, { mode: 0o700 });
+    const old = new Date(Date.now() - 5000);
+    await utimes(lock, old, old);
+    const started = performance.now();
+    assert.equal(await withRunLock(root, async () => "claimed"), "claimed");
+    assert.ok(performance.now() - started < 1000);
+});
 void test("agent store separates persistent agent and sequential task identities", async () => { const root = await mkdtemp(join(tmpdir(), "native-agent-")); const prepared = await prepareAgent(root, { profile: "tester", purpose: "first", harness: "pi", cwd: "/work", profileSnapshot: profile, lineage: { callerProfile: "taskmaster", targetProfile: "tester", depth: 1, originSessionId: "origin" }, capabilities: { nativeScreen: true, taskDelivery: true, taskCompletion: true, usage: true, interactiveInterventions: true } }); await publishAgent(prepared.paths, { agentId: prepared.agentId, profile: "tester", purpose: "first", harness: "pi", cwd: "/work", profileSnapshot: profile, tmux, capabilities: { nativeScreen: true, taskDelivery: true, taskCompletion: true, usage: true, interactiveInterventions: true }, callerProfile: "taskmaster", targetProfile: "tester", depth: 1, originSessionId: "origin" }); await (await import("../extensions_src/utilities/subagent_store.ts")).patchAgentStatus(prepared.paths, { state: "idle", bridgeReady: true }); const first = await createTask(root, prepared.agentId, "first", "inspect"); assert.notEqual(first.request.taskId, prepared.agentId); await claimPendingTask(root, prepared.agentId); await recordIntervention(root, prepared.agentId, { taskId: first.request.taskId, text: "also check tests", deliveryMode: "steer", images: [] }); assert.equal((await readAgentSnapshot(root, prepared.agentId, first.request.taskId)).task?.interventions[0]?.text, "also check tests"); await finishTask(root, prepared.agentId, first.request.taskId, { outcome: "succeeded", output: "done", turns: 1 }); assert.equal((await readAgentSnapshot(root, prepared.agentId)).status.state, "idle"); const second = await createTask(root, prepared.agentId, "again", "retest"); assert.notEqual(second.request.taskId, first.request.taskId); const terminal = await readAgentSnapshot(root, prepared.agentId, first.request.taskId); assert.equal(terminal.task?.result?.interventions[0]?.text, "also check tests"); });
 void test("diagnostic event failures do not orphan committed task transitions", async () => {
     const root = await mkdtemp(join(tmpdir(), "native-event-failure-"));
@@ -38,7 +64,7 @@ void test("tmux launch owns a dedicated session while open links and unlink only
         calls.push(args);
         const command = args[0] === "-S" ? args[2] : args[0];
         if (command === "display-message" && args.at(-1) === "#{pid}") return { stdout: "10\n", stderr: "", code: 0 };
-        if (command === "display-message" && !args.includes("-t")) return { stdout: "10\t$1\tmain\t%1\n", stderr: "", code: 0 };
+        if (command === "display-message" && !args.includes("-t")) return { stdout: "10\t$1\tmain\t%1\t/dev/ttys001\n", stderr: "", code: 0 };
         if (command === "has-session") return { stdout: "", stderr: "missing", code: 1 };
         if (command === "new-session") return { stdout: "$2\t@2\t%2\n", stderr: "", code: 0 };
         if (command === "display-message") return { stdout: "0\n", stderr: "", code: 0 };
@@ -50,6 +76,7 @@ void test("tmux launch owns a dedicated session while open links and unlink only
     };
     const context = await probeTmux(exec, "/tmux", { TMUX: "/tmp/tmux,1,0" });
     assert.ok(context);
+    assert.equal(context.clientName, "/dev/ttys001");
     const launched = await launchAgentSession(exec, "/tmux", context!, {
         agentId: "550e8400-e29b-41d4-a716-446655440000", profile: "tester", originSessionId: "origin", cwd: "/work",
         launch: { command: "/pi", args: [], env: {} },
@@ -62,6 +89,146 @@ void test("tmux launch owns a dedicated session while open links and unlink only
     assert.equal(calls.filter(args => args.includes("unlink-window") && !args.includes("-k")).length, 1);
     assert.ok(!calls.some(args => args.includes("kill-window")));
 });
+void test("live preview isolates one target, uses a read-only 80% popup, and cleans every temporary layer", async () => {
+    const calls: string[][] = [];
+    const removed: string[] = [];
+    const exec = async (_command: string, args: string[]): Promise<CommandResult> => {
+        calls.push(args);
+        if (args.at(-1) === "#{pid}") return { stdout: "10\n", stderr: "", code: 0 };
+        if (args.includes("list-panes")) return { stdout: "%2\t0\n", stderr: "", code: 0 };
+        if (args.includes("new-session") && args.includes("-f")) return { stdout: "$wrapper\n", stderr: "", code: 0 };
+        if (args.some(arg => arg.includes("'new-session'"))) return { stdout: "$view\t@scratch\n", stderr: "", code: 0 };
+        if (args.includes("display-popup")) return { stdout: "", stderr: "", code: 129 };
+        return { stdout: "", stderr: "", code: 0 };
+    };
+    const context = { socket: "/tmp/tmux", serverPid: "10", sessionId: "$parent", sessionName: "main", paneId: "%parent", clientName: "/dev/ttys001" };
+    const disposition = await openLivePreview(exec, "/tmux", context, tmux, "Maple · Esc back · Enter open full", {
+        makeTempDirectory: async () => "/tmp/pi-preview-test",
+        removeTempDirectory: async path => { removed.push(path); },
+        markerExists: async () => false,
+        uniqueId: () => "fixed",
+    });
+    assert.equal(disposition, "dismissed");
+    const popup = calls.find(args => args.includes("display-popup"));
+    assert.ok(popup);
+    assert.ok(popup.includes("80%"));
+    assert.ok(popup.includes("Maple · Esc back · Enter open full"));
+    assert.ok(popup.includes("/dev/ttys001"));
+    assert.ok(!popup.includes("%parent"));
+    assert.ok(calls.some(args => args.some(arg => arg.includes("list-clients") && arg.includes("resize-window -A") && arg.includes("#{client_width} #{client_height}") && arg.includes("resize-window -x \"$1\" -y \"$2\"") && arg.includes("$view") && arg.includes("@2") && arg.includes("env -u TMUX -u TMUX_PANE") && arg.includes("attach-session -r"))));
+    assert.ok(calls.some(args => args.includes("bind-key") && args.includes("Enter") && args.includes("\\;") && args.includes("detach-client")));
+    for (const key of ["Escape", "C-c", "q"]) {
+        assert.ok(calls.some(args => args.includes("bind-key") && args.includes(key) && args.includes("detach-client")));
+    }
+    assert.ok(calls.some(args => args.some(arg => arg.includes("'link-window'") && arg.includes(tmux.windowId))));
+    assert.ok(calls.some(args => args.some(arg => arg.includes("'kill-window'") && arg.includes("$view:@scratch"))));
+    assert.ok(calls.some(args => args.some(arg => arg.includes("'kill-session'") && arg.includes("$view"))));
+    assert.ok(calls.some(args => args.includes("kill-server")));
+    assert.ok(!calls.some(args => args.some(arg => arg.includes("'kill-window'") && arg.includes(tmux.windowId))));
+    assert.deepEqual(removed, ["/tmp/pi-preview-test"]);
+});
+
+void test("live preview returns open-full only after marker-present cleanup completes", async () => {
+    const calls: string[][] = [];
+    const removed: string[] = [];
+    const exec = async (_command: string, args: string[]): Promise<CommandResult> => {
+        calls.push(args);
+        if (args.at(-1) === "#{pid}") return { stdout: "10\n", stderr: "", code: 0 };
+        if (args.includes("list-panes")) return { stdout: "%2\t0\n", stderr: "", code: 0 };
+        if (args.includes("new-session") && args.includes("-f")) return { stdout: "$wrapper\n", stderr: "", code: 0 };
+        if (args.some(arg => arg.includes("'new-session'"))) return { stdout: "$view\t@scratch\n", stderr: "", code: 0 };
+        return { stdout: "", stderr: "", code: 0 };
+    };
+    const disposition = await openLivePreview(exec, "/tmux", {
+        socket: "/tmp/tmux", serverPid: "10", sessionId: "$parent", sessionName: "main", paneId: "%parent", clientName: "/dev/ttys001",
+    }, tmux, "preview", {
+        makeTempDirectory: async () => "/tmp/pi-preview-promote",
+        removeTempDirectory: async path => { removed.push(path); },
+        markerExists: async () => true,
+    });
+    assert.equal(disposition, "open-full");
+    assert.ok(calls.some(args => args.includes("kill-server")));
+    assert.ok(calls.some(args => args.some(arg => arg.includes("'kill-session'") && arg.includes("$view"))));
+    assert.deepEqual(removed, ["/tmp/pi-preview-promote"]);
+});
+
+void test("target death detaches the popup wrapper and completes preview cleanup", async () => {
+    const calls: string[][] = [];
+    let finishPopup!: (result: CommandResult) => void;
+    const popup = new Promise<CommandResult>(resolve => { finishPopup = resolve; });
+    const exec = async (_command: string, args: string[]): Promise<CommandResult> => {
+        calls.push(args);
+        if (args.at(-1) === "#{pid}") return { stdout: "10\n", stderr: "", code: 0 };
+        if (args.includes("list-panes")) return { stdout: "%2\t0\n", stderr: "", code: 0 };
+        if (args.includes("new-session") && args.includes("-f")) return { stdout: "$wrapper\n", stderr: "", code: 0 };
+        if (args.some(arg => arg.includes("'new-session'"))) return { stdout: "$view\t@scratch\n", stderr: "", code: 0 };
+        if (args.includes("display-popup")) return popup;
+        if (args.includes("kill-server")) finishPopup({ stdout: "", stderr: "", code: 0 });
+        return { stdout: "", stderr: "", code: 0 };
+    };
+    const disposition = await openLivePreview(exec, "/tmux", {
+        socket: "/tmp/tmux", serverPid: "10", sessionId: "$parent", sessionName: "main", paneId: "%parent", clientName: "/dev/ttys001",
+    }, tmux, "preview", {
+        makeTempDirectory: async () => "/tmp/pi-preview-target-exit",
+        removeTempDirectory: async () => {},
+        markerExists: async () => false,
+        sleep: async () => {},
+        inspectTarget: async () => ({ server: "match", paneAlive: false, paneState: "dead", sessionAlive: true }),
+    });
+    assert.equal(disposition, "dismissed");
+    assert.ok(calls.some(args => args.includes("kill-server")));
+    assert.ok(calls.some(args => args.some(arg => arg.includes("'kill-session'") && arg.includes("$view"))));
+    assert.ok(!calls.some(args => args.some(arg => arg.includes("'kill-window'") && arg.includes(tmux.windowId))));
+});
+
+void test("live preview rejects a mismatched server before allocating resources", async () => {
+    const calls: string[][] = [];
+    const exec = async (_command: string, args: string[]): Promise<CommandResult> => { calls.push(args); return { stdout: "", stderr: "", code: 0 }; };
+    await assert.rejects(openLivePreview(exec, "/tmux", { socket: "/tmp/other", serverPid: "99", sessionId: "$1", sessionName: "main", paneId: "%1", clientName: "/dev/ttys001" }, tmux, "preview", {
+        makeTempDirectory: async () => "/tmp/pi-preview-mismatch",
+        removeTempDirectory: async () => {},
+    }), /different tmux server/u);
+    assert.ok(!calls.some(args => args.includes("new-session")));
+    assert.ok(!calls.some(args => args.includes("kill-window")));
+});
+
+void test("preview allocation refuses mutations after tmux server identity replacement", async () => {
+    const calls: string[][] = [];
+    const exec = async (_command: string, args: string[]): Promise<CommandResult> => {
+        calls.push(args);
+        if (args.at(-1) === "#{pid}") return { stdout: "10\n", stderr: "", code: 0 };
+        if (args.includes("list-panes")) return { stdout: "%2\t0\n", stderr: "", code: 0 };
+        if (args.includes("has-session")) return { stdout: "", stderr: "", code: 0 };
+        if (args.includes("if-shell")) return { stdout: "__pi_tmux_server_identity_changed__\n", stderr: "", code: 0 };
+        return { stdout: "", stderr: "", code: 0 };
+    };
+    await assert.rejects(openLivePreview(exec, "/tmux", {
+        socket: "/tmp/tmux", serverPid: "10", sessionId: "$parent", sessionName: "main", paneId: "%parent", clientName: "/dev/ttys001",
+    }, tmux, "preview", {
+        makeTempDirectory: async () => "/tmp/pi-preview-replaced-server",
+        removeTempDirectory: async () => {},
+    }), /server identity changed before preview mutation/u);
+    assert.ok(!calls.some(args => args.some(arg => arg.includes("'link-window'"))));
+});
+
+void test("partial preview allocation removes its canonical view without killing the agent window", async () => {
+    const calls: string[][] = [];
+    const exec = async (_command: string, args: string[]): Promise<CommandResult> => {
+        calls.push(args);
+        if (args.at(-1) === "#{pid}") return { stdout: "10\n", stderr: "", code: 0 };
+        if (args.includes("list-panes")) return { stdout: "%2\t0\n", stderr: "", code: 0 };
+        if (args.some(arg => arg.includes("'new-session'"))) return { stdout: "$view\t@scratch\n", stderr: "", code: 0 };
+        if (args.some(arg => arg.includes("'link-window'"))) return { stdout: "", stderr: "link failed", code: 1 };
+        return { stdout: "", stderr: "", code: 0 };
+    };
+    await assert.rejects(openLivePreview(exec, "/tmux", { socket: "/tmp/tmux", serverPid: "10", sessionId: "$1", sessionName: "main", paneId: "%1", clientName: "/dev/ttys001" }, tmux, "preview", {
+        makeTempDirectory: async () => "/tmp/pi-preview-partial",
+        removeTempDirectory: async () => {},
+    }), /link failed/u);
+    assert.ok(calls.some(args => args.some(arg => arg.includes("'kill-session'") && arg.includes("$view"))));
+    assert.ok(!calls.some(args => args.some(arg => arg.includes("'kill-window'"))));
+});
+
 void test("palette refresh owns one timer and close cancels polling", async () => {
     const root = await mkdtemp(join(tmpdir(), "native-palette-timer-"));
     let nextTimer = 0;

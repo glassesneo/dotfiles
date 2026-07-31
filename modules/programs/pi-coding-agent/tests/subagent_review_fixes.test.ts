@@ -178,7 +178,7 @@ void test("registered parent lifecycle cleans replacement reasons while reload a
             events: { on(name: string, handler: (value: unknown) => void) { const values = eventHandlers.get(name) ?? []; values.push(handler); eventHandlers.set(name, values); return () => {}; }, emit() {} },
             registerCommand() {}, registerTool() {}, getActiveTools: () => [],
             async exec(_command: string, args: string[]) {
-                if (args[2] === "display-message" && args.at(-1) === "#{pid}\t#{session_id}\t#{session_name}\t#{pane_id}") return { stdout: "10\t$parent\tmain\t%parent\n", stderr: "", code: 0, killed: false };
+                if (args[2] === "display-message" && args.at(-1) === "#{pid}\t#{session_id}\t#{session_name}\t#{pane_id}\t#{client_name}") return { stdout: "10\t$parent\tmain\t%parent\t/dev/ttys001\n", stderr: "", code: 0, killed: false };
                 if (args[2] === "display-message") return { stdout: "10\n", stderr: "", code: 0, killed: false };
                 if (args[2] === "kill-session") { killed += 1; return { stdout: "", stderr: "", code: 0, killed: false }; }
                 return { stdout: "", stderr: "", code: 0, killed: false };

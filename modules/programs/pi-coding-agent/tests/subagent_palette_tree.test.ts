@@ -3,7 +3,7 @@ import test from "node:test";
 import type { Theme } from "@earendil-works/pi-coding-agent";
 import { visibleWidth } from "@earendil-works/pi-tui";
 import { defaultPaletteKeymap } from "../extensions_src/utilities/command_palette_keymap.ts";
-import { composeIdentityLine, evenViewportRows, SubagentPaletteComponent } from "../extensions_src/utilities/subagent_palette.ts";
+import { composeIdentityLine, evenViewportRows, SubagentPaletteComponent, type SubagentPaletteDependencies } from "../extensions_src/utilities/subagent_palette.ts";
 import { emptyUsage, type AgentRecord, type AgentSnapshot, type AgentState } from "../extensions_src/utilities/subagent_types.ts";
 
 const theme = {
@@ -55,7 +55,7 @@ function snapshot(options: {
     };
 }
 
-function component(done: (value: "return" | "close") => void = () => {}) {
+function component(done: (value: "return" | "close") => void = () => {}, overrides: Partial<SubagentPaletteDependencies> = {}) {
     let nextTimer = 0;
     const timers = new Map<number, () => void>();
     return new SubagentPaletteComponent({
@@ -73,6 +73,7 @@ function component(done: (value: "return" | "close") => void = () => {}) {
             exec: async () => ({ stdout: "", stderr: "no", code: 1 }),
             setTimeout: ((callback: () => void) => { nextTimer += 1; timers.set(nextTimer, callback); return nextTimer; }) as unknown as typeof setTimeout,
             clearTimeout: ((timer: number) => { timers.delete(timer); }) as unknown as typeof clearTimeout,
+            ...overrides,
         },
         done,
     });
@@ -136,6 +137,86 @@ void test("stop remains selected as ghost and disabled actions report status rea
     palette.close();
 });
 
+void test("v rejects terminal agents without launching a preview", async () => {
+    const a = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    let previews = 0;
+    const palette = component(() => {}, { previewLive: async () => { previews += 1; return "dismissed"; } });
+    palette.replaceAgents([snapshot({
+        agentId: a, purpose: "done", state: "stopped", createdAt: "2026-01-01T00:00:00.000Z",
+        childSessionId: "child-session", childSessionFile: "/tmp/history.jsonl",
+    })]);
+    palette.handleInput("v");
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(previews, 0);
+    const rendered = palette.render(80).join("\n");
+    assert.match(rendered, /Live preview is available only for live agents\./);
+    assert.match(rendered, /Press Enter for history\./);
+    palette.close();
+});
+
+void test("v dismissal refreshes and retains the selected live agent", async () => {
+    const a = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    const live = snapshot({ agentId: a, purpose: "live", state: "idle", createdAt: "2026-01-01T00:00:00.000Z" });
+    let previews = 0;
+    const palette = component(() => {}, {
+        env: { TMUX: "/tmp/tmux,1,0" },
+        exec: async (_command, args) => args.join(" ").includes("#{pid}\t#{session_id}")
+            ? { stdout: "10\t$parent\tmain\t%parent\t/dev/ttys001\n", stderr: "", code: 0 }
+            : { stdout: "", stderr: "", code: 0 },
+        previewLive: async () => { previews += 1; return "dismissed"; },
+        discover: async () => ({ agents: [live], malformedCount: 0 }),
+    });
+    palette.replaceAgents([live]);
+    palette.handleInput("v");
+    while (palette.acting) await new Promise(resolve => setImmediate(resolve));
+    assert.equal(previews, 1);
+    assert.equal(palette.selectedAgentId, a);
+    assert.match(palette.render(80).join("\n"), /Preview closed for/);
+    palette.close();
+});
+
+void test("preview Enter promotion uses the existing full-window open path", async () => {
+    const a = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    let disposition: "return" | "close" | undefined;
+    let opens = 0;
+    let probes = 0;
+    const palette = component(value => { disposition = value; }, {
+        env: { TMUX: "/tmp/tmux,1,0" },
+        exec: async (_command, args) => {
+            if (args.join(" ").includes("#{pid}\t#{session_id}")) {
+                probes += 1;
+                return { stdout: "10\t$parent\tmain\t%parent\t/dev/ttys001\n", stderr: "", code: 0 };
+            }
+            return { stdout: "", stderr: "", code: 0 };
+        },
+        previewLive: async () => "open-full",
+        openLiveWindow: async () => { opens += 1; },
+    });
+    palette.replaceAgents([snapshot({ agentId: a, purpose: "live", state: "busy", createdAt: "2026-01-01T00:00:00.000Z" })]);
+    await palette.action("preview");
+    assert.equal(opens, 1);
+    assert.equal(probes, 2);
+    assert.equal(disposition, "close");
+});
+
+void test("preview promotion failure retains the palette with an error", async () => {
+    const a = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    let disposition: "return" | "close" | undefined;
+    const palette = component(value => { disposition = value; }, {
+        env: { TMUX: "/tmp/tmux,1,0" },
+        exec: async (_command, args) => args.join(" ").includes("#{pid}\t#{session_id}")
+            ? { stdout: "10\t$parent\tmain\t%parent\t/dev/ttys001\n", stderr: "", code: 0 }
+            : { stdout: "", stderr: "", code: 0 },
+        previewLive: async () => "open-full",
+        openLiveWindow: async () => { throw new Error("promotion rejected"); },
+    });
+    palette.replaceAgents([snapshot({ agentId: a, purpose: "live", state: "idle", createdAt: "2026-01-01T00:00:00.000Z" })]);
+    await palette.action("preview");
+    assert.equal(disposition, undefined);
+    assert.match(palette.render(80).join("\n"), /preview failed: promotion rejected/);
+    palette.close();
+});
+
 void test("live open closes the palette stack with close disposition", async () => {
     const a = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
     let disposition: "return" | "close" | undefined;
@@ -151,8 +232,8 @@ void test("live open closes the palette stack with close disposition", async () 
             env: { TMUX: "/tmp/tmux,1,0" },
             exec: async (_command, args) => {
                 const joined = args.join(" ");
-                if (joined.includes("#{pid}\t#{session_id}\t#{session_name}\t#{pane_id}")) {
-                    return { stdout: "10\t$parent\tmain\t%parent\n", stderr: "", code: 0 };
+                if (joined.includes("#{pid}\t#{session_id}\t#{session_name}\t#{pane_id}\t#{client_name}")) {
+                    return { stdout: "10\t$parent\tmain\t%parent\t/dev/ttys001\n", stderr: "", code: 0 };
                 }
                 if (joined.includes("#{pid}")) return { stdout: "10\n", stderr: "", code: 0 };
                 if (joined.includes("list-panes")) return { stdout: "%aaaa\t0\n", stderr: "", code: 0 };
@@ -186,8 +267,8 @@ void test("terminal history open returns to root instead of closing the stack", 
             env: { TMUX: "/tmp/tmux,1,0" },
             exec: async (_command, args) => {
                 const joined = args.join(" ");
-                if (joined.includes("#{pid}\t#{session_id}\t#{session_name}\t#{pane_id}")) {
-                    return { stdout: "10\t$parent\tmain\t%parent\n", stderr: "", code: 0 };
+                if (joined.includes("#{pid}\t#{session_id}\t#{session_name}\t#{pane_id}\t#{client_name}")) {
+                    return { stdout: "10\t$parent\tmain\t%parent\t/dev/ttys001\n", stderr: "", code: 0 };
                 }
                 return { stdout: "", stderr: "", code: 0 };
             },
@@ -222,8 +303,8 @@ void test("delayed live open still closes with close after cancel during WORKING
             env: { TMUX: "/tmp/tmux,1,0" },
             exec: async (_command, args) => {
                 const joined = args.join(" ");
-                if (joined.includes("#{pid}\t#{session_id}\t#{session_name}\t#{pane_id}")) {
-                    return { stdout: "10\t$parent\tmain\t%parent\n", stderr: "", code: 0 };
+                if (joined.includes("#{pid}\t#{session_id}\t#{session_name}\t#{pane_id}\t#{client_name}")) {
+                    return { stdout: "10\t$parent\tmain\t%parent\t/dev/ttys001\n", stderr: "", code: 0 };
                 }
                 return { stdout: "", stderr: "", code: 0 };
             },

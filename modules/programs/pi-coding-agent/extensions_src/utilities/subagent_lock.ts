@@ -36,6 +36,8 @@ async function removeQuarantine(quarantine: string): Promise<void> {
 }
 
 async function tryReclaim(lockDirectory: string): Promise<boolean> {
+    // Capture age before creating the reclaim marker, which updates the directory mtime.
+    const directoryIdentity = await stat(lockDirectory).catch(() => undefined);
     const claimPath = join(lockDirectory, "reclaim");
     const temporary = `${lockDirectory}.reclaim.${process.pid}.${randomUUID()}.tmp`;
     await writeFile(temporary, `${process.pid}\n`, { encoding: "utf8", mode: 0o600, flag: "wx" }).catch(error => {
@@ -62,7 +64,9 @@ async function tryReclaim(lockDirectory: string): Promise<boolean> {
         throw error;
     } finally { await unlink(temporary).catch(() => {}); }
 
-    const directoryIdentity = await stat(lockDirectory).catch(() => undefined);
+    const claimedIdentity = await stat(lockDirectory).catch(() => undefined);
+    if (!directoryIdentity || claimedIdentity?.dev !== directoryIdentity.dev || claimedIdentity.ino !== directoryIdentity.ino) return false;
+
     let removed = false;
     try {
         const current = await readOwner(lockDirectory);
