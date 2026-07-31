@@ -91,7 +91,7 @@ in
           model = "openai-codex/gpt-5.6-sol";
           availability = ["top-level" "subagent"];
           description = "Use to decompose work, delegate local objectives, verify evidence, and own the parent outcome.";
-          thinkingLevel = "medium";
+          thinkingLevel = "high";
           allowAllTools = false;
           tools = [];
           instructions = ''
@@ -100,7 +100,7 @@ in
           extensions = {};
         };
         cursor-implementer = {
-          model = "cursor/cursor-grok-4.5-high";
+          model = "cursor/cursor-grok-4.5-high-fast";
           availability = ["subagent"];
           description = "Use for bounded source implementation and remediation through Cursor Agent.";
           thinkingLevel = null;
@@ -160,10 +160,10 @@ in
           extensions = {};
         };
         dissent-reviewer = {
-          model = "openai-codex/gpt-5.6-terra";
+          model = "openai-codex/gpt-5.6-luna";
           availability = ["subagent"];
           description = "Use once to challenge tentative review findings, severity, evidence, and uncovered perspectives from a bounded dossier.";
-          thinkingLevel = "medium";
+          thinkingLevel = "high";
           allowAllTools = false;
           tools = [];
           instructions = ''
