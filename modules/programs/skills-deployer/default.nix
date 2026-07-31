@@ -64,8 +64,8 @@ delib.module {
         source = ./skills/codebase-exploration;
         targetDirs = piAuthoringTargets;
       };
-      contract-implementation = {
-        source = ./skills/contract-implementation;
+      source-implementation = {
+        source = ./skills/source-implementation;
         targetDirs = piAuthoringTargets;
       };
       implementation-validation = {
@@ -76,8 +76,8 @@ delib.module {
         source = ./skills/orchestrated-review;
         targetDirs = piAuthoringTargets;
       };
-      implementation-workflow = {
-        source = ./skills/implementation-workflow;
+      implementation-lifecycle = {
+        source = ./skills/implementation-lifecycle;
         targetDirs = piAuthoringTargets;
       };
       staged-agent-workflow = {
@@ -153,14 +153,14 @@ delib.module {
       }
       {
         assertion =
-          builtins.pathExists ./skills/contract-implementation/SKILL.md
+          builtins.pathExists ./skills/source-implementation/SKILL.md
           && builtins.pathExists ./skills/implementation-validation/SKILL.md
           && builtins.pathExists ./skills/orchestrated-review/SKILL.md
-          && builtins.pathExists ./skills/implementation-workflow/SKILL.md
-          && skills.contract-implementation.targetDirs == piAuthoringTargets
+          && builtins.pathExists ./skills/implementation-lifecycle/SKILL.md
+          && skills.source-implementation.targetDirs == piAuthoringTargets
           && skills.implementation-validation.targetDirs == piAuthoringTargets
           && skills.orchestrated-review.targetDirs == piAuthoringTargets
-          && skills.implementation-workflow.targetDirs == piAuthoringTargets;
+          && skills.implementation-lifecycle.targetDirs == piAuthoringTargets;
         message = "Pi implementation-assurance skills must be packaged and deployed to the shared agents skill directory.";
       }
     ];

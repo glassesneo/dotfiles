@@ -10,139 +10,110 @@ async function text(path: string): Promise<string> {
     return readFile(path, "utf8");
 }
 
-void test("Pi implementation entrypoints are direct thin templates with explicit artifacts", async () => {
-    const [impl, review, execute] = await Promise.all([
-        text(join(piRoot, "prompts", "impl.md")),
-        text(join(piRoot, "prompts", "review.md")),
-        text(join(piRoot, "prompts", "execute.md")),
-    ]);
+void test("implementation entrypoints are thin explicit mode templates", async () => {
+    const [impl, execute, operate, review] = await Promise.all(
+        ["impl", "execute", "operate", "review"].map(name => text(join(piRoot, "prompts", `${name}.md`))),
+    );
 
-    assert.match(impl, /contract-implementation/);
-    assert.match(impl, /<approved-design-path>/);
-    assert.match(impl, /Do not infer a latest design/);
-    assert.doesNotMatch(impl, /orchestrated-review/);
+    for (const prompt of [impl, execute, operate]) {
+        assert.match(prompt, /implementation-lifecycle/);
+        assert.match(prompt, /<approved-design-path>/);
+        assert.match(prompt, /Do not infer a latest design/);
+    }
+    assert.match(impl, /local-no-review/);
+    assert.match(execute, /local-reviewed/);
+    assert.match(operate, /delegated-reviewed/);
     assert.match(review, /orchestrated-review/);
     assert.match(review, /<implementation-report-path>/);
-    assert.match(execute, /implementation-workflow/);
-    assert.match(execute, /<approved-design-path>/);
+    for (const prompt of [impl, execute, operate, review]) assert.doesNotMatch(prompt, /focused-reviewer|dissent-reviewer|subagent_start/);
 });
 
-void test("implementation validation is one full-suite tester task with consistent deployment references", async () => {
-    const [contract, validation, registry, profile] = await Promise.all([
-        text(join(skillsRoot, "skills", "contract-implementation", "SKILL.md")),
-        text(join(skillsRoot, "skills", "implementation-validation", "SKILL.md")),
+void test("canonical assurance skills have aligned names, registry, and receiver boundaries", async () => {
+    const names = ["source-implementation", "implementation-validation", "orchestrated-review", "implementation-lifecycle"];
+    const [registry, guidance, ...skills] = await Promise.all([
         text(join(skillsRoot, "default.nix")),
-        text(join(piRoot, "extensions", "profile", "default.nix")),
+        text(join(skillsRoot, "AGENTS.md")),
+        ...names.map(name => text(join(skillsRoot, "skills", name, "SKILL.md"))),
     ]);
 
-    assert.match(validation, /name: implementation-validation/);
-    assert.match(validation, /typecheck, lint, and full test-suite/);
-    assert.match(validation, /aggregate command stops before later stages/);
-    assert.match(validation, /standard independent command is[\s\S]*safe to run/);
-    assert.doesNotMatch(validation, /smallest relevant check/);
-
-    assert.match(contract, /one post-change full automated validation objective/);
-    assert.match(contract, /in one task/);
-    assert.match(contract, /one fresh[\s\S]*tester task/);
-    assert.match(contract, /implementation-validation/);
-    assert.doesNotMatch(contract, /bounded validation question|targeted-validation/);
-
-    assert.match(registry, /implementation-validation = \{/);
-    assert.match(registry, /\.\/skills\/implementation-validation\/SKILL\.md/);
-    assert.doesNotMatch(registry, /targeted-validation/);
-    assert.match(profile, /one post-change full automated validation objective/);
-    assert.match(profile, /Load and execute implementation-validation/);
-    assert.doesNotMatch(profile, /targeted-validation/);
-    await assert.rejects(access(join(skillsRoot, "skills", "targeted-validation", "SKILL.md")));
+    for (const [index, name] of names.entries()) {
+        await access(join(skillsRoot, "skills", name, "SKILL.md"));
+        assert.match(skills[index]!, new RegExp(`name: ${name}`));
+        assert.match(registry, new RegExp(`${name} = \\{`));
+        assert.match(registry, new RegExp(`\\./skills/${name}`));
+        assert.match(guidance, new RegExp(name));
+    }
+    const [implementation, validation, review, lifecycle] = skills;
+    assert.match(implementation!, /source or configuration/);
+    assert.match(implementation!, /concrete diff reference/);
+    assert.match(implementation!, /Do not persist an implementation report/);
+    assert.match(implementation!, /Validation verdicts, implementation reports, review verdicts/);
+    assert.match(validation!, /focused.*broad.*full/s);
+    assert.match(review!, /exactly once/);
+    assert.match(lifecycle!, /local-no-review.*local-reviewed.*delegated-reviewed/s);
 });
 
-void test("explorer profile, delegation topology, and skill contract stay aligned", async () => {
-    const skillPath = join(skillsRoot, "skills", "codebase-exploration", "SKILL.md");
-    const [profile, subagent, question, registry, skill] = await Promise.all([
-        text(join(piRoot, "extensions", "profile", "default.nix")),
-        text(join(piRoot, "extensions", "subagent", "default.nix")),
-        text(join(piRoot, "extensions", "question", "default.nix")),
-        text(join(skillsRoot, "default.nix")),
-        text(skillPath),
-    ]);
-
-    const explorerProfile = profile.slice(profile.indexOf("        explorer = {"), profile.indexOf("        tester = {"));
-    assert.match(explorerProfile, /allowAllTools = false/);
-    assert.match(explorerProfile, /tools = \[\]/);
-    assert.match(explorerProfile, /Load and execute codebase-exploration/);
-    assert.doesNotMatch(explorerProfile, /"edit"|"write"|subagent_start|save_agent_artifact/);
-    assert.match(profile, /defaultTools = \["read" "grep" "find" "ls" "bash"\]/);
-    assert.match(question, /profile\.defaultTools = \["question"\]/);
-    assert.match(question, /subagent\.childExcludedTools = \["question"\]/);
-
-    assert.match(profile, /explorerDelegationInstructions/);
-    assert.equal(profile.match(/instructions = explorerDelegationInstructions;/g)?.length, 2);
+void test("validation contract implements adaptive levels, escalation, and failure ownership", async () => {
+    const validation = (await text(join(skillsRoot, "skills", "implementation-validation", "SKILL.md"))).replace(/\s+/g, " ");
     for (const phrase of [
-        "before or during design",
-        "before planning",
-        "during other work",
-        "during review",
-        "Explore directly when",
-        "Prefer explorer when",
-        "use a hybrid",
-        "Run multiple explorers in parallel only for distinct independent questions",
-        "one local question",
-        "included scope and explicit exclusions",
-        "stopping condition",
-        "Verify, compress, and integrate the result yourself",
-    ]) {
-        assert.match(profile, new RegExp(phrase));
-    }
-
-    assert.match(subagent, /allowedTargets = \["scout" "taskmaster" "focused-reviewer" "tester" "review-orchestrator" "explorer"\]/);
-    assert.match(subagent, /allowedTargets = \["review-orchestrator" "focused-reviewer" "explorer"\]/);
-    assert.equal(subagent.match(/allowedTargets = \[[^\]]*"explorer"[^\]]*\]/g)?.length, 2);
-    assert.match(subagent, /explorer\.extensions\.subagent = \{\s*allowedTargets = \[\];\s*harness = "pi";/);
-
-    assert.match(registry, /codebase-exploration = \{/);
-    assert.match(registry, /source = \.\/skills\/codebase-exploration/);
-    await access(skillPath);
-    assert.match(skill, /name: codebase-exploration/);
-    assert.match(skill, /disable-model-invocation: true/);
-    for (const requiredHandoff of [
-        "one local question",
-        "context that made the question relevant",
-        "included scope and explicit exclusions",
-        "allowed operations, including the read-only boundary",
-        "expected report content",
-        "a stopping condition",
-    ]) {
-        assert.match(skill, new RegExp(requiredHandoff));
-    }
-    assert.match(skill, /Do not change source or configuration/);
-    assert.match(skill, /## Stop Conditions/);
-    assert.match(skill, /evidence-backed answer/);
-    assert.match(skill, /specified scope has been fully examined/);
-    assert.match(skill, /required information cannot be reached/);
-    assert.match(skill, /further exploration no longer adds material information/);
-    assert.match(
-        skill,
-        /## Question[\s\S]*## Scope[\s\S]*## Findings[\s\S]*## Evidence[\s\S]*## Constraints[\s\S]*## Unknowns[\s\S]*## Implications[\s\S]*## Confidence/,
-    );
+        "requested level", "rationale for that level", "focused", "broad", "full",
+        "design applies at every level", "Do not silently lower", "actual levels",
+        "aggregate command", "standard independent commands", "regression", "flaky", "test bug",
+        "environment/infra", "unknown", "failure-report", "Do not create a success-only validation artifact",
+    ]) assert.match(validation, new RegExp(phrase));
+    assert.match(validation, /Escalate to `broad` or `full`/);
 });
 
-void test("Nix profile topology exposes routed specialist capabilities and child artifacts", async () => {
+void test("lifecycle bounds remediation and creates terminal immutable report chains", async () => {
+    const lifecycle = (await text(join(skillsRoot, "skills", "implementation-lifecycle", "SKILL.md"))).replace(/\s+/g, " ");
+
+    assert.match(lifecycle, /Initial implementation does not consume a remediation round/);
+    assert.match(lifecycle, /up to three/);
+    assert.match(lifecycle, /initial review and the re-review after round 1, at most twice/);
+    assert.match(lifecycle, /rounds 2 and 3.*one or two/s);
+    assert.match(lifecycle, /omit dissent/);
+    assert.match(lifecycle, /unknown cause/);
+    assert.match(lifecycle, /without progress/);
+    assert.match(lifecycle, /scope or scale expansion/);
+    assert.match(lifecycle, /test or infrastructure ownership/);
+    assert.match(lifecycle, /successful full validation for the current source state/);
+    assert.match(lifecycle, /latest review pass with no blocking finding/);
+    assert.match(lifecycle, /return `blocked`, not success/);
+    assert.match(lifecycle, /save one immutable `implementation-report`/);
+    assert.match(lifecycle, /previous implementation and review/);
+    assert.match(lifecycle, /Never overwrite an artifact/);
+});
+
+void test("profiles expose command-independent implementation, validation, review, and operator capabilities", async () => {
     const [profile, subagent, artifact] = await Promise.all([
         text(join(piRoot, "extensions", "profile", "default.nix")),
         text(join(piRoot, "extensions", "subagent", "default.nix")),
         text(join(piRoot, "extensions", "agent_artifact", "default.nix")),
     ]);
 
-    for (const profileName of ["taskmaster", "tester", "review-orchestrator", "focused-reviewer", "dissent-reviewer"]) {
-        assert.match(profile, new RegExp(`${profileName} = \\{`));
+    for (const profileName of ["scout", "taskmaster", "operator", "tester", "review-orchestrator"]) {
+        const marker = `        ${profileName} = {`;
+        const start = profile.indexOf(marker);
+        assert.notEqual(start, -1);
+        const block = profile.slice(start, profile.indexOf("        };", start) + 10);
+        assert.match(block, /description = "[^"\n]+"/);
+        assert.match(block, /instructions =/);
+        assert.doesNotMatch(block, /entrypoint-selected|\/execute|\/operate|\/impl|slash command/);
     }
-    assert.match(profile, /impl = "taskmaster"/);
-    assert.match(profile, /execute = "taskmaster"/);
-    assert.match(profile, /review = "review-orchestrator"/);
-    assert.match(subagent, /allowedTargets = \["tester" "review-orchestrator" "focused-reviewer"\]/);
-    assert.match(subagent, /allowedTargets = \["focused-reviewer" "dissent-reviewer"\]/);
-    assert.match(subagent, /agentArtifactExtension/);
-    for (const profileName of ["taskmaster", "tester", "review-orchestrator"]) {
-        assert.match(artifact, new RegExp(`${profileName}\\.tools = \\["save_agent_artifact"\\]`));
-    }
+    assert.match(profile, /Use ideation-design when direction is open/);
+    assert.match(profile, /specification-design when the user already holds/);
+    assert.match(profile, /ordinary read-only investigation/);
+    assert.match(profile, /focused, broad, or full/);
+    assert.match(profile, /operate = "operator"/);
+    assert.match(profile, /profileCycle = listOfOption str \["scout" "taskmaster" "operator" "review-orchestrator"\]/);
+
+    const operatorStart = profile.indexOf("        operator = {");
+    const operatorBlock = profile.slice(operatorStart, profile.indexOf("        explorer = {", operatorStart));
+    assert.match(operatorBlock, /model = "openai-codex\/gpt-5\.6-sol"/);
+    assert.match(operatorBlock, /thinkingLevel = "medium"/);
+    assert.match(operatorBlock, /allowAllTools = false/);
+    assert.match(operatorBlock, /tools = \[\]/);
+    assert.doesNotMatch(operatorBlock, /"edit"|"write"/);
+    assert.match(subagent, /allowedTargets = \["explorer" "taskmaster" "tester" "review-orchestrator" "focused-reviewer"\]/);
+    assert.match(artifact, /operator\.tools = \["save_agent_artifact"\]/);
 });

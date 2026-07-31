@@ -2,77 +2,63 @@
 name: orchestrated-review
 disable-model-invocation: true
 description: >-
-  Use when a review-orchestrator must review an explicit implementation report
-  through risk-tiered focused reviewers and one dissent pass, then persist one
-  review report. Trigger for post-implementation assurance. Do not use for
-  source changes, implementation, validation-only work, or automatic finding
-  remediation.
+  Use when a review-orchestrator receives an explicit implementation report and
+  must perform one full risk-tiered review with focused reviewers and one
+  dissent pass, then persist one review report. Do not use for source changes,
+  validation-only work, focused re-review, or remediation.
 ---
 
 # Orchestrated Review
 
-Orchestrate an evidence-first, non-source-changing review using explicit
+Perform one evidence-first, non-source-changing full review using explicit
 artifact handoffs and a bounded one-to-four reviewer tier.
 
 ## Required Input and Priority
 
-Require an explicit implementation-report path and an explicit review target
-or target context. Read the implementation report's governing design path and
-require that finalized approved design; never search for a latest artifact.
-Use priority `design > implementation report > diff > other context`.
-Validation evidence recorded in the implementation report is review input.
-Design deviations are attention points, not permission to violate the design.
+Require an explicit implementation-report path and review target or context.
+Read its governing approved design and require that finalized design; never
+infer a latest artifact. Use priority
+`design > implementation report > diff > other context`. Treat deviations as
+attention points rather than permission to override the design.
 
 ## Procedure
 
-1. Make a small read-only sizing pass over the target and identify behavior,
-   boundaries, sensitive risks, validation gaps, and uncertainty.
-2. Choose the highest applicable fixed tier:
-   - **1 — broad default:** start exactly one focused reviewer for narrow
-     low-risk work in one subsystem. Define one combined perspective covering
-     every material correctness, safety, ownership, and validation risk.
-   - **2 — moderate:** start exactly two focused reviewers for meaningful
-     behavior across several files, moderate uncertainty, or two distinct
-     concerns in one subsystem.
-   - **3 — high:** start exactly three focused reviewers for multiple
-     subsystems, public interfaces, permissions or secrets, migrations,
-     compatibility, generated artifacts, or model-facing prompt/interface
-     contracts.
-   - **4 — critical:** start exactly four focused reviewers for broad
-     architecture change, critical security/privacy/data-loss exposure,
-     destructive behavior, or unusually high uncertainty.
-3. Select exactly the tier's reviewer count with distinct risk-driven
-   perspectives. Record every selected, replaced, skipped, or scaled-down
-   perspective and its rationale for the dissent dossier and final report.
-   Start one `focused-reviewer` per selected perspective. Give each only its
-   lens and rationale, review target, governing design and implementation-report
-   paths, relevant cited excerpts, and local output contract. Correctness is
-   mandatory for behavior, interface, data-shape, migration, generated-output,
-   or compatibility changes. Security is mandatory for credentials,
-   permissions, authentication, sandboxing, destructive operations, network
-   boundaries, or user-data exposure.
-4. Triage focused results: merge duplicates, reject unsupported claims,
-   preserve uncertainty, and record severity disputes, uncovered perspectives,
-   skipped areas, and verification gaps.
-5. Start `dissent-reviewer` exactly once with a compact dossier. For every
-   tentative finding include its claim, cited evidence, triage decision,
-   severity dispute, uncovered perspective, and known uncertainty. Pass paths
-   and excerpts rather than concatenating complete reports or logs. Permit the
-   dissenter to inspect referenced source when a dispute requires it.
-6. Reconcile dissent into final findings and severity. Mark claims
-   inconclusive when required evidence remains unavailable.
-7. Load `agent-artifact`, read its review-report format, and save exactly one
-   canonical `review-report`.
+1. Make a small read-only sizing pass over behavior, boundaries, sensitive
+   risks, validation gaps, and uncertainty.
+2. Select the highest applicable tier:
+   - **1 — broad default:** one combined reviewer for narrow, low-risk work;
+   - **2 — moderate:** two distinct reviewers for meaningful multi-file work,
+     moderate uncertainty, or two concerns in one subsystem;
+   - **3 — high:** three reviewers for multiple subsystems, public interfaces,
+     permissions, migrations, compatibility, generated artifacts, or
+     model-facing contracts;
+   - **4 — critical:** four reviewers for broad architecture, critical
+     security/privacy/data-loss exposure, destructive behavior, or unusually
+     high uncertainty.
+3. Give each `focused-reviewer` only its distinct risk-driven lens and rationale,
+   target, design and implementation-report paths, cited excerpts, and local
+   output contract. Include correctness for behavioral and interface risks;
+   include security for credentials, permissions, authentication, sandboxing,
+   destructive operations, network boundaries, or user-data exposure.
+4. Triage results: merge duplicates, reject unsupported claims, preserve
+   uncertainty, and record severity disputes, skipped perspectives, and gaps.
+5. Start `dissent-reviewer` exactly once with a compact dossier of tentative
+   findings, evidence, triage decisions, disputes, uncovered perspectives, and
+   uncertainty. Reference paths and excerpts instead of copying full logs.
+6. Reconcile dissent. Mark claims inconclusive when evidence remains unavailable.
+7. Load `agent-artifact` and save exactly one canonical `review-report` that
+   references the target implementation report and previous review report when
+   supplied.
 
-Do not change source or configuration, repair findings, start a second dissent
-pass, or create multi-round report versions. If a required delegate or material
-context is unavailable, preserve the limitation in an inconclusive report.
+One invocation never changes source or configuration, repairs findings, or
+starts a second dissent pass. This boundary does not prohibit a caller from
+starting a later remediation or review invocation.
 
 ## Output
 
 Return only:
 
-- `Review report: <path>`
-- `Verdict: blocking-findings | non-blocking-findings | no-findings | inconclusive`
-- `Highest severity: critical | high | medium | low | none`
-- `Residual risks or blockers: <none | concise list>`
+- `Review report: <path>`;
+- `Verdict: blocking-findings | non-blocking-findings | no-findings | inconclusive`;
+- `Highest severity: critical | high | medium | low | none`;
+- `Residual risks or blockers: <none | concise list>`.

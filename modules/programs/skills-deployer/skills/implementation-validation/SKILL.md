@@ -2,17 +2,16 @@
 name: implementation-validation
 disable-model-invocation: true
 description: >-
-  Use when a tester receives one full automated validation objective for an
-  implementation and must execute, triage, and aggregate evidence without
-  changing repository source. Trigger for delegated post-change validation
-  against an approved design. Do not use for implementation, test planning,
-  review orchestration, or successful validation report authoring.
+  Use when a tester receives one explicit focused, broad, or full automated
+  validation objective for an implementation and must return aggregated
+  evidence without changing repository source. Do not use for implementation,
+  review orchestration, test authoring, or success-only artifact persistence.
 ---
 
 # Implementation Validation
 
-Answer one post-change full automated validation objective with applicable
-checks and one aggregated triage result.
+Answer one post-change automated validation objective at the requested assurance
+level and return evidence tied to the concrete source state.
 
 ## Required Handoff
 
@@ -20,59 +19,64 @@ Require:
 
 - the explicit approved design path;
 - changed scope or a concrete diff reference;
-- exactly one objective asking whether the implementation satisfies applicable
-  full automated validation;
+- requested level: `focused`, `broad`, or `full`;
+- rationale for that level;
+- exactly one concrete validation objective;
 - known risks, including `none known` when applicable.
 
-If an input is unavailable, return the blocker rather than broadening the task.
-Use context priority `design > implementation report > diff > source`. A
-recorded deviation never overrides the design.
+Return a blocker when required input is unavailable. Use context priority
+`design > implementation report > diff > source`; a recorded deviation never
+overrides the design. Do not silently lower the requested level.
+
+## Levels
+
+- **focused:** checks directly related to the changed locations, including the
+  relevant test, typecheck, lint, or format check. This is the default for a
+  narrow remediation or short inner loop.
+- **broad:** canonical typecheck, lint, and test suite for the affected package
+  or subsystem, plus applicable cross-boundary checks. Prefer this for initial
+  multi-file, interface, or structure-changing work.
+- **full:** every applicable automated validation required by the design and
+  repository for terminal assurance.
+
+Every automated check explicitly required by the design applies at every level.
+Escalate to `broad` or `full` when failures, expanding impact, boundary
+uncertainty, or insufficient narrower evidence require it. Record both requested
+and actual levels and why escalation occurred.
 
 ## Procedure
 
-1. Read the governing design's verification requirements, relevant repository
-   guidance, changed scope, and manifests or standard scripts needed to identify
-   canonical commands.
-2. Include every additional automated check required by the design. At minimum,
-   include each repository-provided typecheck, lint, and full test-suite command
-   that applies to the changed scope.
-3. Prefer the repository's canonical aggregate command. If it succeeds, use it
-   as evidence for every stage it covers.
-4. If the aggregate command stops before later stages, continue with each
-   unexecuted applicable stage only when its standard independent command is
-   identifiable, safe to run, and does not require an earlier stage's generated
-   output. Do not guess commands or accept unsafe side effects to simulate full
-   coverage; report an unexecutable stage as a blocker or residual risk.
-5. Do not edit repository source or configuration. Run commands that may write
-   generated files or caches in a temporary workspace when feasible; otherwise
-   state the mutation risk or blocker.
-6. Capture commands, exit status, failing identifiers, relevant diagnostics,
-   environment limits, successful stages, blockers, and skipped checks in one
-   result.
-7. Re-run a failure when useful to distinguish deterministic behavior from
-   flakiness; use three to five repeats when feasible and proportionate.
-8. Classify failures as `regression`, `flaky`, `test bug`,
+1. Read the design, repository guidance, diff, and standard manifests or scripts.
+2. Select canonical commands matching the requested level and objective. Do not
+   guess commands.
+3. Prefer the canonical aggregate command when the level calls for it. If it
+   stops before later stages, run only unexecuted stages whose standard
+   independent commands are identifiable, safe, and independent of failed
+   generated output.
+4. Do not edit source or configuration. Use a temporary workspace for generated
+   output or caches when feasible; otherwise report mutation risk.
+5. Capture commands, exit status, failing identifiers, diagnostics, successful
+   stages, blockers, skipped checks, and the concrete diff reference.
+6. Re-run a failure when proportionate to distinguish deterministic behavior
+   from flakiness, usually three to five repeats when feasible.
+7. Classify each failure as `regression`, `flaky`, `test bug`,
    `environment/infra`, or `unknown`, and identify the likely owner.
 
-## Persistence Branch
+## Persistence
 
-Return passing evidence inline. Keep a trivial invocation or expectation
-mistake inline when the cause and one-line correction are certain and no
-behavioral uncertainty remains.
-
-For every non-trivial failing run—including regressions, flaky behavior,
-environment failures, and unknown causes—load `agent-artifact`, read its
-failure-report format, and save one canonical `failure-report`. When uncertain
-whether a failure is trivial, treat it as non-trivial. Do not invent a report
-format or create a success-only validation artifact.
+Return passing evidence inline. Keep only a certain trivial invocation or
+expectation mistake inline. For every non-trivial failing run, load
+`agent-artifact` and save one canonical `failure-report`. Do not create a
+success-only validation artifact.
 
 ## Output
 
 Return:
 
-- the validation objective and scope actually checked;
+- objective and concrete diff reference;
+- requested level, actual level, rationale, and any escalation reason;
 - result: `pass | trivial-failure | non-trivial-failure | blocked`;
-- commands and concrete evidence for each applicable stage;
-- classification and likely owner for every non-passing stage;
+- commands and evidence for each applicable stage;
+- failure classifications and likely owners;
 - `Failure report: <path | none>`;
 - blockers, skipped checks, and residual risk.

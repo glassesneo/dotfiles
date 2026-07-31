@@ -14,12 +14,17 @@ function profiles(): AgentProfileConfig {
     return {
         schemaVersion: 2,
         defaultProfile: "full",
-        profileCycle: ["scout", "full"],
-        promptRoutes: { impl: "full", review: "scout" },
+        profileCycle: ["scout", "operator", "full"],
+        promptRoutes: { impl: "full", operate: "operator", review: "scout" },
         profiles: {
             scout: {
                 model: "provider/model", description: "Read-only exploration.", thinkingLevel: "low", allowAllTools: false,
                 tools: ["read", "subagent_start", "subagent_get", "subagent_wait"], instructions: "Scout only.",
+                extensions: { subagent: { allowedTargets: ["scout"] } },
+            },
+            operator: {
+                model: "provider/model", description: "Delegated assurance.", thinkingLevel: "medium", allowAllTools: false,
+                tools: ["read", "subagent_start", "subagent_get", "subagent_wait"], instructions: "Operate.",
                 extensions: { subagent: { allowedTargets: ["scout"] } },
             },
             full: {
@@ -63,7 +68,7 @@ function fakeControllerPi(flag = "scout") {
     let modelSucceeds = true;
     let toolApplicationFails = false;
     let activeToolApplications = 0;
-    let allTools = ["read", "bash", "edit", "write", "subagent_start", "subagent_get", "subagent_wait", "project_tool"];
+    let allTools = ["read", "bash", "edit", "write", "subagent_start", "subagent_send", "subagent_get", "subagent_wait", "subagent_stop", "project_tool"];
     const pi = {
         registerFlag() {}, getFlag: () => flag,
         registerCommand(name: string, value: any) { commands[name] = value; },
@@ -173,7 +178,10 @@ void test("exact raw prompt commands route transactionally before expansion", as
     for (const text of ["/impl", "/impl approved.md", "/impl\ncontext"]) {
         assert.equal(routedProfileForInput(profileConfig, text), "full");
     }
-    for (const text of ["/implementation", "/impl-extra", "/impl/path", "/skill:impl", "run /impl", "/unknown", "ordinary text"]) {
+    for (const text of ["/operate", "/operate approved.md", "/operate\ncontext"]) {
+        assert.equal(routedProfileForInput(profileConfig, text), "operator");
+    }
+    for (const text of ["/implementation", "/impl-extra", "/impl/path", "/operate-extra", "/skill:impl", "run /impl", "/unknown", "ordinary text"]) {
         assert.equal(routedProfileForInput(profileConfig, text), undefined);
         assert.deepEqual(await fake.handlers.input![0]!({ text, source: "interactive" }, fake.ctx), { action: "continue" });
     }

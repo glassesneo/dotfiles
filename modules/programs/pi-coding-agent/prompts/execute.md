@@ -1,9 +1,9 @@
 ---
-description: Implement and review an explicit approved design
+description: Implement, validate, review, and remediate an explicit approved design
 argument-hint: "<approved-design-path> [context]"
 ---
-Load and execute the `implementation-workflow` Skill with this explicit approved
-design path and optional context:
+Load and execute the `implementation-lifecycle` Skill in `local-reviewed` mode
+with this explicit approved design path and optional context:
 
 $ARGUMENTS
 
