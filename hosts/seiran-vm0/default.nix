@@ -6,7 +6,6 @@ delib.host {
   tier = "standard";
   myconfig.programs.proton-pass-cli.enable = false;
   myconfig.programs.reload.enable = false;
-  myconfig.programs.mcp-servers.enable = false;
   myconfig.programs.zsh.zeno.enable = false;
 
   nixos = {

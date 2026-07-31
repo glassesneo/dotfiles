@@ -18,11 +18,6 @@ delib.module {
     piAuthoringTargets = [
       ".agents/skills"
     ];
-    stagedWorkflowTargets = [
-      ".agents/skills"
-      # ".claude/skills"
-      ".cursor/skills"
-    ];
     skills = {
       japanese-tech-writing = {
         source = "${inputs.japanese-tech-writing-skill}";
@@ -80,10 +75,6 @@ delib.module {
         source = ./skills/implementation-lifecycle;
         targetDirs = piAuthoringTargets;
       };
-      staged-agent-workflow = {
-        source = ./skills/staged-agent-workflow;
-        targetDirs = stagedWorkflowTargets;
-      };
       specification-design = {
         source = ./skills/specification-design;
         targetDirs = piAuthoringTargets;
@@ -131,12 +122,6 @@ delib.module {
     };
   in {
     assertions = [
-      {
-        assertion =
-          builtins.pathExists ./skills/staged-agent-workflow/SKILL.md
-          && skills.staged-agent-workflow.targetDirs == stagedWorkflowTargets;
-        message = "staged-agent-workflow must be packaged and deployed to the agents and Cursor skill directories.";
-      }
       {
         assertion =
           builtins.pathExists ./skills/specification-design/SKILL.md

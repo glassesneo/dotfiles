@@ -13,11 +13,6 @@ export default defineConfig(() => ({
       snippet: "nvim",
     },
     {
-      name: "opencode",
-      keyword: "oc",
-      snippet: "opencode",
-    },
-    {
       name: "git status",
       keyword: "gs",
       snippet: "git status --short --branch",

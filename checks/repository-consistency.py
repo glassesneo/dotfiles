@@ -16,7 +16,6 @@ NIX_PATH = re.compile(
 )
 NIX_INTERPOLATED_PATH = re.compile(r"\$\{((?:\.\.?/)[^}\s]+)\}([A-Za-z0-9_+./-]*)")
 SKILL_SOURCE = re.compile(r"\bsource\s*=\s*(\.\.?/skills/[A-Za-z0-9_+./-]+)")
-PROMPT_CALL = re.compile(r'\b(readAgentPrompt|renderAgentPrompt|readCommandPrompt|readSharedPrompt)\s+"([^"]+)"')
 EXCLUDED_PARTS = {".agents", ".direnv", ".git", "node_modules"}
 
 
@@ -69,27 +68,9 @@ def check_nix_sources(root: Path) -> list[str]:
     return errors
 
 
-def check_prompt_registries(root: Path) -> list[str]:
-    errors: list[str] = []
-    opencode = root / "modules/programs/opencode"
-    readers = {
-        "readAgentPrompt": opencode / "prompts",
-        "renderAgentPrompt": opencode / "prompts",
-        "readCommandPrompt": opencode / "prompts/commands",
-        "readSharedPrompt": opencode / "prompts/shared",
-    }
-    for nix_file in sorted(opencode.glob("*.nix")):
-        text = active_nix_lines(nix_file)
-        for reader, name in PROMPT_CALL.findall(text):
-            target = readers[reader] / f"{name}.md"
-            if not target.is_file():
-                errors.append(f"{nix_file.relative_to(root)}: {reader} references missing prompt {name!r}")
-    return errors
-
-
 def check_repository(root: Path) -> list[str]:
     root = root.resolve()
-    return sorted(check_document_links(root) + check_nix_sources(root) + check_prompt_registries(root))
+    return sorted(check_document_links(root) + check_nix_sources(root))
 
 
 def self_test() -> None:

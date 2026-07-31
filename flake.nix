@@ -175,14 +175,9 @@
                 touch $out
               '';
           };
-
-          braveSearchMcpServer = {
-            brave-search-mcp-server = pkgs.callPackage ./packages/brave-search-mcp-server {};
-          };
         in
           piCustomizations
           // repositoryConsistency
-          // braveSearchMcpServer
           // lib.optionalAttrs (system == "aarch64-darwin") (let
             homeConfigs = inputs.self.homeConfigurations;
             darwinConfigs = inputs.self.darwinConfigurations;

@@ -13,7 +13,6 @@ delib.module {
     enableLFS = boolOption true;
     ignore_names = readOnly (listOfOption str [
       ".agents"
-      ".opencode"
       ".DS_Store"
       ".direnv"
       ".envrc"
