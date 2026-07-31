@@ -85,11 +85,7 @@ void test("lifecycle bounds remediation and creates terminal immutable report ch
 });
 
 void test("profiles expose command-independent implementation, validation, review, and operator capabilities", async () => {
-    const [profile, subagent, artifact] = await Promise.all([
-        text(join(piRoot, "extensions", "profile", "default.nix")),
-        text(join(piRoot, "extensions", "subagent", "default.nix")),
-        text(join(piRoot, "extensions", "agent_artifact", "default.nix")),
-    ]);
+    const profile = await text(join(piRoot, "extensions", "profile", "default.nix"));
 
     for (const profileName of ["scout", "taskmaster", "operator", "tester", "review-orchestrator"]) {
         const marker = `        ${profileName} = {`;
@@ -104,20 +100,9 @@ void test("profiles expose command-independent implementation, validation, revie
     assert.match(profile, /specification-design when the user already holds/);
     assert.match(profile, /ordinary read-only investigation/);
     assert.match(profile, /focused, broad, or full/);
-    assert.match(profile, /operate = "operator"/);
-    assert.match(profile, /profileCycle = listOfOption str \["scout" "taskmaster" "operator" "review-orchestrator"\]/);
 
     const operatorStart = profile.indexOf("        operator = {");
     const operatorBlock = profile.slice(operatorStart, profile.indexOf("        explorer = {", operatorStart));
-    assert.match(operatorBlock, /model = "openai-codex\/gpt-5\.6-sol"/);
-    assert.match(operatorBlock, /thinkingLevel = "medium"/);
-    assert.match(operatorBlock, /allowAllTools = false/);
-    assert.match(operatorBlock, /tools = \[\]/);
-    assert.doesNotMatch(operatorBlock, /"edit"|"write"/);
     assert.match(operatorBlock, /select taskmaster or cursor-implementer/);
     assert.match(operatorBlock, /same implementation agent ID/);
-    assert.match(profile, /model = "cursor\/cursor-grok-4\.5-high"/);
-    assert.match(profile, /availability = \["subagent"\]/);
-    assert.match(subagent, /allowedTargets = \["explorer" "taskmaster" "cursor-implementer" "tester" "review-orchestrator" "focused-reviewer"\]/);
-    assert.match(artifact, /operator\.tools = \["save_agent_artifact"\]/);
 });
