@@ -60,6 +60,10 @@ delib.module {
           ".agents/skills"
         ];
       };
+      codebase-exploration = {
+        source = ./skills/codebase-exploration;
+        targetDirs = piAuthoringTargets;
+      };
       contract-implementation = {
         source = ./skills/contract-implementation;
         targetDirs = piAuthoringTargets;
@@ -140,6 +144,12 @@ delib.module {
           && skills.specification-design.targetDirs == piAuthoringTargets
           && skills.ideation-design.targetDirs == piAuthoringTargets;
         message = "Pi design skills must be packaged and deployed to the shared agents skill directory.";
+      }
+      {
+        assertion =
+          builtins.pathExists ./skills/codebase-exploration/SKILL.md
+          && skills.codebase-exploration.targetDirs == piAuthoringTargets;
+        message = "Pi codebase exploration must be packaged and deployed to the shared agents skill directory.";
       }
       {
         assertion =

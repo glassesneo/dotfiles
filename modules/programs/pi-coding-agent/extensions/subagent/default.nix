@@ -47,7 +47,7 @@ in
 
     myconfig.ifEnabled.programs.pi-coding-agent.profile.profiles = {
       full.extensions.subagent = {
-        allowedTargets = ["scout" "taskmaster" "focused-reviewer" "tester" "review-orchestrator"];
+        allowedTargets = ["scout" "taskmaster" "focused-reviewer" "tester" "review-orchestrator" "explorer"];
         harness = "pi";
       };
       taskmaster = {
@@ -71,7 +71,7 @@ in
       scout = {
         tools = ["subagent_start" "subagent_send" "subagent_get" "subagent_wait" "subagent_stop"];
         extensions.subagent = {
-          allowedTargets = ["review-orchestrator" "focused-reviewer"];
+          allowedTargets = ["review-orchestrator" "focused-reviewer" "explorer"];
           harness = "pi";
         };
       };
@@ -80,6 +80,10 @@ in
         harness = "pi";
       };
       dissent-reviewer.extensions.subagent = {
+        allowedTargets = [];
+        harness = "pi";
+      };
+      explorer.extensions.subagent = {
         allowedTargets = [];
         harness = "pi";
       };

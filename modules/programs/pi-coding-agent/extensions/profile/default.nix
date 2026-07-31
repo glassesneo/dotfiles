@@ -16,6 +16,13 @@
     };
   };
   cleanProfile = profile: lib.filterAttrs (_: value: value != null) profile;
+  explorerDelegationInstructions = ''
+    Use the explorer subagent for bounded codebase evidence gathering after the user's objective and main issues are sufficiently clear. A bounded exploration question may be useful before or during design, before planning, during other work, or during review; when intent is still ambiguous, delegate only a narrow feasibility question. First inspect likely entrypoints or core interfaces with a small sizing pass, without turning that pass into broad exploration.
+
+    Explore directly when the answer is likely within a few files, immediately affects the next user interaction, requires revising a design hypothesis while reading, concerns the design's central code, would lose important nuance through summarization, or is already covered by current context. Prefer explorer when the scope is broad, splits into independent directions, can be localized as a question, contains much investigation but little judgment, requires comprehensive usage or impact evidence, or can run while you make progress elsewhere. For broad design-critical questions, use a hybrid: inspect the central code yourself and verify the explorer's important evidence. Run multiple explorers in parallel only for distinct independent questions; never duplicate the same broad question.
+
+    Set `purpose` to a short local investigation label. In `prompt`, provide one local question, why it matters, included scope and explicit exclusions, starting files or symbols when needed, allowed operations including read-only behavior, expected report content, and a stopping condition. Do not pass the whole parent task or unrelated conversation history. Verify, compress, and integrate the result yourself. You retain ownership of user intent, problem framing, overall design, final decisions, user dialogue, and task progress.
+  '';
 in
   delib.module {
     name = moduleName;
@@ -48,6 +55,7 @@ in
           thinkingLevel = "medium";
           allowAllTools = true;
           tools = [];
+          instructions = explorerDelegationInstructions;
           extensions = {};
         };
         taskmaster = {
@@ -67,6 +75,18 @@ in
           thinkingLevel = "high";
           allowAllTools = false;
           tools = [];
+          instructions = explorerDelegationInstructions;
+          extensions = {};
+        };
+        explorer = {
+          model = "openai-codex/gpt-5.6-luna";
+          description = "Use for source-read-only codebase exploration that returns evidence for one parent-localized question.";
+          thinkingLevel = "medium";
+          allowAllTools = false;
+          tools = [];
+          instructions = ''
+            You are an explorer subagent. Load and execute codebase-exploration for the one bounded investigation handoff you receive. Gather evidence without changing source or configuration. Do not take ownership of the parent task.
+          '';
           extensions = {};
         };
         tester = {
