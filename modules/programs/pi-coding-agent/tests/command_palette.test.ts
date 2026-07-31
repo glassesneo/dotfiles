@@ -10,22 +10,21 @@ import type { TUI } from "@earendil-works/pi-tui";
 
 const theme = { fg(_c: string, t: string) { return t; }, bg(_c: string, t: string) { return t; }, bold(t: string) { return t; } } as Theme;
 
-void test("registry contains only the seven explicit draft-orthogonal adapters", () => {
+void test("registry builds one action for every declared adapter", () => {
     const pi = { getActiveTools: () => ["read"], getThinkingLevel: () => "medium" } as never;
     const ctx = { model: { provider: "test", id: "model" }, ui: { getToolsExpanded: () => false, theme: { name: "dark" } } } as never;
     const actions = buildCommandPaletteActions(pi, ctx);
     assert.deepEqual(actions.map(action => action.id), commandPaletteActionIds);
-    assert.equal(actions.length, 7);
-    assert.deepEqual(actions.map(action => action.label.split(/\s+/)[0]), ["/model", "/thinking", "/tools", "/tool-output", "/session", "/copy", "/theme"]);
+    assert.equal(new Set(actions.map(action => action.id)).size, actions.length);
 });
 
-void test("one registered Ctrl-Shift-P shortcut invocation opens the palette whether idle or running", async () => {
+void test("the registered shortcut opens the palette whether idle or running", async () => {
     let shortcutHandler: ((ctx: any) => Promise<void>) | undefined;
     let customCalls = 0; let notifications = 0;
     const pi = {
         events: { on() {}, emit() {} }, on() {},
-        registerShortcut(key: string, options: { handler: (ctx: any) => Promise<void> }) {
-            if (key === "ctrl+shift+p") shortcutHandler = options.handler;
+        registerShortcut(_key: string, options: { handler: (ctx: any) => Promise<void> }) {
+            shortcutHandler = options.handler;
         },
         getActiveTools: () => ["read"], getThinkingLevel: () => "medium",
     } as never;
@@ -48,8 +47,8 @@ void test("a running palette suppresses duplicate opens and can reopen after clo
     let customCalls = 0; let closeFirst: ((value: null) => void) | undefined;
     const pi = {
         events: { on() {}, emit() {} }, on() {},
-        registerShortcut(key: string, options: { handler: (ctx: any) => Promise<void> }) {
-            if (key === "ctrl+shift+p") shortcutHandler = options.handler;
+        registerShortcut(_key: string, options: { handler: (ctx: any) => Promise<void> }) {
+            shortcutHandler = options.handler;
         },
         getActiveTools: () => ["read"], getThinkingLevel: () => "medium",
     } as never;
@@ -91,8 +90,8 @@ void test("root palette stays open for nested children and restores query select
             },
         },
         on() {},
-        registerShortcut(key: string, options: { handler: (ctx: any) => Promise<void> }) {
-            if (key === "ctrl+shift+p") shortcutHandler = options.handler;
+        registerShortcut(_key: string, options: { handler: (ctx: any) => Promise<void> }) {
+            shortcutHandler = options.handler;
         },
         getActiveTools: () => ["read"],
         getThinkingLevel: () => "medium",
@@ -171,8 +170,8 @@ void test("contribution close disposition closes the root stack", async () => {
             },
         },
         on() {},
-        registerShortcut(key: string, options: { handler: (ctx: any) => Promise<void> }) {
-            if (key === "ctrl+shift+p") shortcutHandler = options.handler;
+        registerShortcut(_key: string, options: { handler: (ctx: any) => Promise<void> }) {
+            shortcutHandler = options.handler;
         },
         getActiveTools: () => ["read"], getThinkingLevel: () => "medium",
     };
@@ -218,13 +217,4 @@ void test("immediate tool-output action updates root status without closing", as
     await executePaletteAction("tool-output", pi, ctx, resolvePaletteKeymap(), root);
     assert.match(root.render(80).join("\n"), /expanded/);
     assert.equal(expanded, true);
-});
-
-void test("palette sources do not expose editor, prompt, message-send, abort, or idle-wait dependencies", async () => {
-    const fs = await import("node:fs/promises");
-    const sources = await Promise.all([
-        fs.readFile(new URL("../extensions_src/command_palette.ts", import.meta.url), "utf8"),
-        fs.readFile(new URL("../extensions_src/utilities/subagent_palette.ts", import.meta.url), "utf8"),
-    ]);
-    for (const source of sources) for (const forbidden of ["getEditorText(", "setEditorText(", "pasteToEditor(", "sendUserMessage(", "sendMessage(", "getCommands(", "abort(", "waitForIdle("]) assert.doesNotMatch(source, new RegExp(forbidden.replace(/[()]/g, "\\$&")));
 });

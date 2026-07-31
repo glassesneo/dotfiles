@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
-import { detailedQuestionHelp, resolveQuestionKeymap, resolveUiAction, validateQuestionKeymapConfig } from "../extensions_src/utilities/decision_keymap.ts";
+import { detailedQuestionHelp, resolveQuestionKeymap, validateQuestionKeymapConfig } from "../extensions_src/utilities/decision_keymap.ts";
 import { invalidKeyIds, validKeyIds } from "./key_grammar_cases.ts";
 
 const manager = { getKeys(action: string) { return ({
@@ -8,19 +9,9 @@ const manager = { getKeys(action: string) { return ({
     "tui.input.submit": ["enter"], "tui.input.newLine": ["shift+enter", "ctrl+j"],
 } as Record<string, string[]>)[action] ?? []; } } as never;
 
-void test("all contexts resolve expected defaults without retired question keys", () => {
-    const map = resolveQuestionKeymap(manager);
-    assert.equal(resolveUiAction("\r", "question.text", map), "accept");
-    assert.equal(resolveUiAction("\n", "question.text", map), "newline");
-    assert.equal(resolveUiAction("\u001b[Z", "question.single", map), "previous-question");
-    assert.equal(resolveUiAction("k", "question.single", map), "move-up");
-    assert.equal(resolveUiAction(" ", "question.single", map), "toggle");
-    assert.equal(resolveUiAction("j", "question.multi", map), "move-down");
-    assert.equal(resolveUiAction("k", "question.review", map), "move-up");
-    assert.equal(resolveUiAction("j", "question.review", map), "move-down");
-    assert.equal(resolveUiAction("\u0010", "question.single", map), undefined);
-    assert.equal(resolveUiAction("\u0004", "question.text", map), undefined);
-    assert.equal(resolveUiAction("\u0003", "question.review", map), "cancel");
+void test("deployed question keymap satisfies the context and action grammar", () => {
+    const config = JSON.parse(readFileSync(new URL("../extensions_src/utilities/question-keybindings.json", import.meta.url), "utf8"));
+    assert.doesNotThrow(() => resolveQuestionKeymap(manager, config));
 });
 
 void test("overrides replace an action and generated help contains every key", () => {

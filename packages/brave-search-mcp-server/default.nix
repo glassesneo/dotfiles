@@ -16,10 +16,19 @@ buildNpmPackage rec {
 
   postPatch = ''
     cp ${./package-lock.json} package-lock.json
+    cp ${./smoke.test.mjs} repository-smoke.test.mjs
   '';
 
   npmDepsHash = "sha256-uZQhSZd86gTpGtLsBA/9wbm7EIbbXYi2kPmrNtOmWjs=";
   npmDepsFetcherVersion = 2;
+
+  doCheck = true;
+  checkPhase = ''
+    runHook preCheck
+    npm run format:check
+    node --test repository-smoke.test.mjs
+    runHook postCheck
+  '';
 
   meta = {
     description = "MCP server for the Brave Search API";

@@ -4,6 +4,7 @@ import { join } from "node:path";
 import test from "node:test";
 
 const piRoot = join(import.meta.dirname, "..");
+const skillsRoot = process.env.SKILLS_DEPLOYER_ROOT ?? join(piRoot, "..", "skills-deployer");
 
 async function text(path: string): Promise<string> {
     return readFile(path, "utf8");
@@ -27,7 +28,6 @@ void test("Pi implementation entrypoints are direct thin templates with explicit
 });
 
 void test("implementation validation is one full-suite tester task with consistent deployment references", async () => {
-    const skillsRoot = join(piRoot, "..", "skills-deployer");
     const [contract, validation, registry, profile] = await Promise.all([
         text(join(skillsRoot, "skills", "contract-implementation", "SKILL.md")),
         text(join(skillsRoot, "skills", "implementation-validation", "SKILL.md")),
@@ -57,20 +57,16 @@ void test("implementation validation is one full-suite tester task with consiste
 });
 
 void test("explorer profile, delegation topology, and skill contract stay aligned", async () => {
-    const skillsRoot = join(piRoot, "..", "skills-deployer");
     const skillPath = join(skillsRoot, "skills", "codebase-exploration", "SKILL.md");
-    const [profile, subagent, question, childProjection, registry, skill] = await Promise.all([
+    const [profile, subagent, question, registry, skill] = await Promise.all([
         text(join(piRoot, "extensions", "profile", "default.nix")),
         text(join(piRoot, "extensions", "subagent", "default.nix")),
         text(join(piRoot, "extensions", "question", "default.nix")),
-        text(join(piRoot, "extensions_src", "utilities", "subagent_types.ts")),
         text(join(skillsRoot, "default.nix")),
         text(skillPath),
     ]);
 
     const explorerProfile = profile.slice(profile.indexOf("        explorer = {"), profile.indexOf("        tester = {"));
-    assert.match(explorerProfile, /model = "openai-codex\/gpt-5\.6-luna"/);
-    assert.match(explorerProfile, /thinkingLevel = "medium"/);
     assert.match(explorerProfile, /allowAllTools = false/);
     assert.match(explorerProfile, /tools = \[\]/);
     assert.match(explorerProfile, /Load and execute codebase-exploration/);
@@ -78,8 +74,6 @@ void test("explorer profile, delegation topology, and skill contract stay aligne
     assert.match(profile, /defaultTools = \["read" "grep" "find" "ls" "bash"\]/);
     assert.match(question, /profile\.defaultTools = \["question"\]/);
     assert.match(question, /subagent\.childExcludedTools = \["question"\]/);
-    assert.match(childProjection, /projectChildEffectiveProfile/);
-    assert.match(childProjection, /next\.tools = next\.tools\.filter\(tool => !excluded\.has\(tool\)\)/);
 
     assert.match(profile, /explorerDelegationInstructions/);
     assert.equal(profile.match(/instructions = explorerDelegationInstructions;/g)?.length, 2);

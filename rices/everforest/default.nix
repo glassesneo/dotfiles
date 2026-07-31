@@ -32,11 +32,11 @@ in
         };
         quick-terminal.background = colors.base00;
       };
-      programs.nixvim.appearance = {
-        theme = "everforest";
-        everforest-background = "medium";
+      programs.nvf.theme = {
+        enable = true;
+        name = "everforest";
+        style = "medium";
         transparent = true;
-        transparent-floats = true;
       };
 
       services = {

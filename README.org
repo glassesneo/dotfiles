@@ -13,22 +13,7 @@ The source may still be useful as a reference or a starting point for a fork.
 Denix discovers =.nix= files under =hosts/=, =modules/=, and =rices/=.
 The repository's ownership rules and change checklist are in =docs/denix-architecture.md=.
 
-* Daily Use
-
-From the repository root, I enter the development shell and use =just= for the maintained workflows:
-
-#+begin_src sh
-nix develop
-just
-just check
-just home
-just switch
-#+end_src
-
-New files used by the flake must be git-tracked before evaluation.
-I use the Nix-native workflows in this repository instead of maintaining ad hoc package state.
-
-** Deploying the =seiran-vm1= Tart VM
+* Deploying the =seiran-vm1= Tart VM
 
 On a Nix-equipped VM without =darwin-rebuild=, bootstrap it with one switch:
 

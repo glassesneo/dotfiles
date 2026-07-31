@@ -17,12 +17,18 @@ const manager = { getKeys(action: string) { return ({
     "tui.input.submit": ["enter"], "tui.input.newLine": ["shift+enter", "ctrl+j"],
 } as Record<string, string[]>)[action] ?? []; } } as never;
 const keys = { down: "\u001b[B", up: "\u001b[A", tab: "\t", shiftTab: "\u001b[Z", enter: "\r", escape: "\u001b", space: " ", ctrlJ: "\n", ctrlC: "\u0003" };
+const testKeymapConfig = {
+    "question.common": { "next-question": ["tab"], "previous-question": ["shift+tab"], back: ["escape"], cancel: ["ctrl+c"] },
+    "question.single": { "move-up": ["up", "k"], "move-down": ["down", "j"], toggle: ["space"], "edit-note": ["e"] },
+    "question.multi": { "move-up": ["up", "k"], "move-down": ["down", "j"], toggle: ["space"], "edit-note": ["e"] },
+    "question.review": { "move-up": ["up", "k"], "move-down": ["down", "j"] },
+};
 const single: QuestionItem = { id: "single", prompt: "Choose one", kind: "single", options: [{ value: "a", label: "Alpha", description: "First option" }, { value: "b", label: "Beta" }] };
 
 function harness(questions: readonly QuestionItem[], signal?: AbortSignal, policy?: DecisionFlowPolicy, renderedTheme: Theme = theme) {
     const results: QuestionResultDetails[] = []; let renders = 0;
     const tui = { terminal: { rows: 24, columns: 80 }, requestRender() { renders += 1; } } as TUI;
-    const component = new DecisionComponent({ tui, theme: renderedTheme, keybindings: manager, questions, policy, signal, done: result => { results.push(result); } });
+    const component = new DecisionComponent({ tui, theme: renderedTheme, keybindings: manager, keymapConfig: testKeymapConfig, questions, policy, signal, done: result => { results.push(result); } });
     component.focused = true;
     return { component, results, get renders() { return renders; } };
 }
@@ -42,7 +48,7 @@ void test("Enter confirms text while Ctrl-J inserts a newline", () => {
     assert.deepEqual(h.results[0]?.responses.text, { kind: "text", value: "a\nb" });
 });
 
-void test("e edits a response note without changing the focused answer", () => {
+void test("the configured edit key changes a response note without changing the focused answer", () => {
     const h = harness([single]);
     h.component.handleInput(keys.down); h.component.handleInput("e"); h.component.handleInput("why"); h.component.handleInput(keys.enter);
     assert.match(h.component.render(80).join("\n"), /Note: why/);
@@ -170,7 +176,7 @@ void test("multi uses Space and stores response-level note", () => {
     assert.deepEqual(h.results[0]?.responses.multi, { kind: "multi", values: ["a", "b"], note: "note A\nmore detail" });
 });
 
-void test("j and k move selection like Down and Up", () => {
+void test("configured alternate navigation keys move selection like Down and Up", () => {
     const down = harness([single]);
     down.component.handleInput("j"); down.component.handleInput(keys.enter); down.component.handleInput(keys.enter);
     assert.deepEqual(down.results[0]?.responses.single, { kind: "single", value: "b" });

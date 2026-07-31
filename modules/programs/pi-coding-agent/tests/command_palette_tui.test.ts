@@ -11,14 +11,19 @@ const theme = {
     bold(text: string) { return text; },
 } as Theme;
 const keys = { up: "\u0010", down: "\u000e", enter: "\r", escape: "\u001b", ctrlC: "\u0003", left: "\u001b[D", right: "\u001b[C" };
+const testKeymapConfig = {
+    open: ["ctrl+shift+p"], moveUp: ["ctrl+p"], moveDown: ["ctrl+n"], collapse: ["left"], expand: ["right"],
+    confirm: ["enter"], cancel: ["escape", "ctrl+c"], refresh: ["ctrl+r"], stop: ["ctrl+s"], copyRunId: ["ctrl+y"],
+};
+const testKeymap = () => resolvePaletteKeymap(testKeymapConfig);
 function harness() {
     const results: Array<string | null> = []; let renders = 0;
-    const component = new PaletteListComponent({ tui: { terminal: { rows: 24, columns: 80 }, requestRender() { renders += 1; } } as TUI, theme, title: "Palette", keymap: resolvePaletteKeymap(), items: [{ value: "a", label: "Alpha" }, { value: "b", label: "Beta" }, { value: "c", label: "Gamma" }], done: value => results.push(value) });
+    const component = new PaletteListComponent({ tui: { terminal: { rows: 24, columns: 80 }, requestRender() { renders += 1; } } as TUI, theme, title: "Palette", keymap: testKeymap(), items: [{ value: "a", label: "Alpha" }, { value: "b", label: "Beta" }, { value: "c", label: "Gamma" }], done: value => results.push(value) });
     component.focused = true;
     return { component, results, get renders() { return renders; } };
 }
 
-void test("Ctrl-N and Ctrl-P wrap selection without changing search", () => {
+void test("configured navigation keys wrap selection without changing search", () => {
     const h = harness(); h.component.handleInput("a"); const query = h.component.query;
     h.component.handleInput(keys.up); assert.equal(h.component.selectedIndex, 2); assert.equal(h.component.query, query);
     h.component.handleInput(keys.down); assert.equal(h.component.selectedIndex, 0); assert.equal(h.component.query, query);
@@ -73,7 +78,7 @@ void test("palette lists open as centered overlays", async () => {
         const component = await factory({ terminal: { rows: 24, columns: 80 }, requestRender() {} } as TUI, theme, {} as never, (next: string | null) => { value = next; });
         component.handleInput?.(keys.ctrlC);
         return value as never;
-    } } as never, { title: "Palette", keymap: resolvePaletteKeymap(), items: [{ value: "a", label: "Alpha" }] });
+    } } as never, { title: "Palette", keymap: testKeymap(), items: [{ value: "a", label: "Alpha" }] });
     assert.equal(result, null);
     assert.equal(customOptions?.overlay, true);
     assert.equal(customOptions?.overlayOptions?.anchor, "center");
@@ -86,7 +91,7 @@ void test("busy state suppresses duplicate confirm and shows WORKING status", ()
         tui: { terminal: { rows: 24, columns: 80 }, requestRender() {} } as TUI,
         theme,
         title: "Palette",
-        keymap: resolvePaletteKeymap(),
+        keymap: testKeymap(),
         items: [{ value: "a", label: "Alpha" }],
         done() {},
         onConfirm: async () => { confirms += 1; },

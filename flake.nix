@@ -134,6 +134,7 @@
         in {
           type = "app";
           program = lib.getExe syncPiExtensionVersions;
+          meta.description = "Synchronize Pi extension package versions with the flake-provided Pi package.";
         };
 
         checks = let
@@ -142,6 +143,7 @@
               pname = "pi-customizations-check";
               version = "0";
               src = ./modules/programs/pi-coding-agent;
+              SKILLS_DEPLOYER_ROOT = ./modules/programs/skills-deployer;
 
               npmDepsHash = "sha256-Qw6kEXFEofwWUVieD4Fhf7XhRESbSodTjHxLI1ZPmCI=";
               npmDepsFetcherVersion = 2;
@@ -161,10 +163,29 @@
               '';
             };
           };
+
+          repositoryConsistency = {
+            repository-consistency =
+              pkgs.runCommand "repository-consistency" {
+                nativeBuildInputs = [pkgs.python3];
+                src = ./.;
+              } ''
+                python ${./checks/repository-consistency.py} --self-test
+                python ${./checks/repository-consistency.py} "$src"
+                touch $out
+              '';
+          };
+
+          braveSearchMcpServer = {
+            brave-search-mcp-server = pkgs.callPackage ./packages/brave-search-mcp-server {};
+          };
         in
           piCustomizations
+          // repositoryConsistency
+          // braveSearchMcpServer
           // lib.optionalAttrs (system == "aarch64-darwin") (let
             homeConfigs = inputs.self.homeConfigurations;
+            darwinConfigs = inputs.self.darwinConfigurations;
 
             hmChecks =
               pkgs.lib.mapAttrs' (name: config: {
@@ -172,6 +193,21 @@
                 value = config.activationPackage;
               })
               homeConfigs;
+
+            darwinEvaluationCheck = {
+              darwin-configurations-evaluate = pkgs.writeText "darwin-configurations-evaluated.json" (builtins.toJSON (
+                lib.mapAttrsToList (name: config: {
+                  inherit name;
+                  drvPath = builtins.unsafeDiscardStringContext config.system.drvPath;
+                })
+                darwinConfigs
+              ));
+            };
+
+            darwinRepresentativeChecks = {
+              darwin-seiran = darwinConfigs.seiran.system;
+              darwin-seiran-vm1 = darwinConfigs.seiran-vm1.system;
+            };
 
             nvfChecks = {
               nvf-neo_at_seiran =
@@ -203,6 +239,8 @@
             };
           in
             hmChecks
+            // darwinEvaluationCheck
+            // darwinRepresentativeChecks
             // nvfChecks
             // sketchybarWorkspaceAdapterTests
             // sketchybarMediaHoverTests)
@@ -265,10 +303,6 @@
       url = "github:notashelf/nvf";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    # neovim-nightly-overlay = {
-    # url = "github:nix-community/neovim-nightly-overlay";
-    # inputs.nixpkgs.follows = "nixpkgs";
-    # };
     brew-nix = {
       url = "github:BatteredBunny/brew-nix";
       inputs = {

@@ -1,16 +1,12 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
-import { paletteHelp, paletteKeyAction, resolvePaletteKeymap, validatePaletteKeymapConfig } from "../extensions_src/utilities/command_palette_keymap.ts";
+import { resolvePaletteKeymap, validatePaletteKeymapConfig } from "../extensions_src/utilities/command_palette_keymap.ts";
 import { invalidKeyIds, validKeyIds } from "./key_grammar_cases.ts";
 
-void test("palette defaults use local Ctrl-P and Ctrl-N navigation with Left/Right tree actions", () => {
-    const map = resolvePaletteKeymap();
-    assert.equal(paletteKeyAction("\u0010", map), "moveUp");
-    assert.equal(paletteKeyAction("\u000e", map), "moveDown");
-    assert.equal(paletteKeyAction("\u001b[D", map), "collapse");
-    assert.equal(paletteKeyAction("\u001b[C", map), "expand");
-    assert.equal(paletteKeyAction("\u001b[A", map), undefined);
-    assert.match(paletteHelp(map), /ctrl\+p up.*ctrl\+n down/);
+void test("deployed palette keymap satisfies the action grammar", () => {
+    const config = JSON.parse(readFileSync(new URL("../extensions_src/utilities/command-palette-keybindings.json", import.meta.url), "utf8"));
+    assert.doesNotThrow(() => resolvePaletteKeymap(config));
 });
 
 void test("palette key validation preserves the shared key ID grammar", () => {
