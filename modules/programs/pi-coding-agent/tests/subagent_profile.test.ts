@@ -62,7 +62,8 @@ function fakeControllerPi(flag = "scout") {
     let thinking = "off";
     let modelSucceeds = true;
     let toolApplicationFails = false;
-    const allTools = ["read", "bash", "edit", "write", "subagent_start", "subagent_get", "subagent_wait", "project_tool"];
+    let activeToolApplications = 0;
+    let allTools = ["read", "bash", "edit", "write", "subagent_start", "subagent_get", "subagent_wait", "project_tool"];
     const pi = {
         registerFlag() {}, getFlag: () => flag,
         registerCommand(name: string, value: any) { commands[name] = value; },
@@ -71,7 +72,12 @@ function fakeControllerPi(flag = "scout") {
         events: { on() {}, emit(name: string, payload: unknown) { events.push({ name, payload }); } },
         getAllTools: () => allTools.map(name => ({ name })), getActiveTools: () => activeTools,
         setActiveTools(names: string[]) {
-            if (toolApplicationFails) { toolApplicationFails = false; throw new Error("injected tool application failure"); }
+            activeToolApplications += 1;
+            if (toolApplicationFails) {
+                toolApplicationFails = false;
+                activeTools = [...names];
+                throw new Error("injected tool application failure");
+            }
             activeTools = [...names];
         },
         async setModel() { return modelSucceeds; }, getThinkingLevel: () => thinking, setThinkingLevel(value: string) { thinking = value; },
@@ -85,8 +91,9 @@ function fakeControllerPi(flag = "scout") {
     } as unknown as ExtensionContext;
     return {
         pi, ctx, handlers, commands, shortcuts, entries, events, notifications,
-        activeTools: () => activeTools, thinking: () => thinking,
+        activeTools: () => activeTools, activeToolApplications: () => activeToolApplications, thinking: () => thinking,
         forceActiveTools: (names: string[]) => { activeTools = [...names]; },
+        forceAllTools: (names: string[]) => { allTools = [...names]; },
         failModel: () => { modelSucceeds = false; }, passModel: () => { modelSucceeds = true; },
         failNextToolApplication: () => { toolApplicationFails = true; },
     };
@@ -121,6 +128,40 @@ void test("profile extension applies CLI, guards tools, restores branches, and e
     fake.entries.push({ type: "custom", customType: "agent-profile-state", data: { name: "scout" } });
     await fake.handlers.session_tree![0]!({}, fake.ctx);
     assert.equal((fake.events.at(-1)!.payload as any).reason, "restore");
+});
+
+void test("active tool synchronization is ordered, idempotent, and recovers drift", async () => {
+    const { profilePath } = await fixture();
+    const fake = fakeControllerPi("scout");
+    registerProfileController(fake.pi, profilePath, {});
+    await fake.handlers.session_start![0]!({ reason: "startup" }, fake.ctx);
+
+    const scoutTools = ["read", "subagent_start", "subagent_get", "subagent_wait"];
+    assert.equal(fake.activeToolApplications(), 1);
+    assert.deepEqual(await fake.handlers.input![0]!({ text: "ordinary text", source: "interactive" }, fake.ctx), { action: "continue" });
+    await fake.handlers.before_agent_start![0]!({ systemPrompt: "base" }, fake.ctx);
+    assert.equal(fake.activeToolApplications(), 1);
+
+    for (const drift of [
+        scoutTools.slice(0, -1),
+        [...scoutTools, "bash"],
+        [scoutTools[1]!, scoutTools[0]!, ...scoutTools.slice(2)],
+    ]) {
+        fake.forceActiveTools(drift);
+        assert.deepEqual(await fake.handlers.input![0]!({ text: "ordinary text", source: "interactive" }, fake.ctx), { action: "continue" });
+        assert.deepEqual(fake.activeTools(), scoutTools);
+    }
+    assert.equal(fake.activeToolApplications(), 4);
+
+    await fake.commands.profile!.handler("full", fake.ctx);
+    assert.equal(fake.activeToolApplications(), 5);
+    const expandedTools = [...fake.activeTools(), "dynamic_tool"];
+    fake.forceAllTools(expandedTools);
+    await fake.handlers.before_agent_start![0]!({ systemPrompt: "base" }, fake.ctx);
+    assert.deepEqual(fake.activeTools(), expandedTools);
+    assert.equal(fake.activeToolApplications(), 6);
+    await fake.handlers.before_agent_start![0]!({ systemPrompt: "base" }, fake.ctx);
+    assert.equal(fake.activeToolApplications(), 6);
 });
 
 void test("exact raw prompt commands route transactionally before expansion", async () => {

@@ -64,8 +64,8 @@ delib.module {
         source = ./skills/contract-implementation;
         targetDirs = piAuthoringTargets;
       };
-      targeted-validation = {
-        source = ./skills/targeted-validation;
+      implementation-validation = {
+        source = ./skills/implementation-validation;
         targetDirs = piAuthoringTargets;
       };
       orchestrated-review = {
@@ -144,11 +144,11 @@ delib.module {
       {
         assertion =
           builtins.pathExists ./skills/contract-implementation/SKILL.md
-          && builtins.pathExists ./skills/targeted-validation/SKILL.md
+          && builtins.pathExists ./skills/implementation-validation/SKILL.md
           && builtins.pathExists ./skills/orchestrated-review/SKILL.md
           && builtins.pathExists ./skills/implementation-workflow/SKILL.md
           && skills.contract-implementation.targetDirs == piAuthoringTargets
-          && skills.targeted-validation.targetDirs == piAuthoringTargets
+          && skills.implementation-validation.targetDirs == piAuthoringTargets
           && skills.orchestrated-review.targetDirs == piAuthoringTargets
           && skills.implementation-workflow.targetDirs == piAuthoringTargets;
         message = "Pi implementation-assurance skills must be packaged and deployed to the shared agents skill directory.";

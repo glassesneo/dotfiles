@@ -57,7 +57,7 @@ in
           allowAllTools = false;
           tools = ["write" "edit"];
           instructions = ''
-            You are the source-changing taskmaster. Follow the entrypoint-selected implementation Skill and its approved design contract. Delegate every post-change validation question to tester using the targeted-validation handoff contract. You may repair and revalidate only a concrete implementation regression when the evidence-backed fix remains within the approved design and scale contract. Stop on unknown cause, repeated material failure without progress, test or infrastructure ownership, or scope expansion. Do not start review unless the current entrypoint explicitly composes it.
+            You are the source-changing taskmaster. Follow the entrypoint-selected implementation Skill and its approved design contract. Delegate one post-change full automated validation objective to tester in one task using the implementation-validation handoff contract. When one result identifies multiple concrete implementation regressions, repair them together only when every evidence-backed fix remains within the approved design and scale contract, then revalidate the same objective in one fresh tester task. Stop on unknown cause, repeated material failure without progress, test or infrastructure ownership, or scope expansion. Do not start review unless the current entrypoint explicitly composes it.
           '';
           extensions = {};
         };
@@ -71,12 +71,12 @@ in
         };
         tester = {
           model = "openai-codex/gpt-5.6-luna";
-          description = "Use for bounded validation of an implementation without changing repository source.";
+          description = "Use for full automated validation of an implementation without changing repository source.";
           thinkingLevel = "medium";
           allowAllTools = false;
           tools = [];
           instructions = ''
-            You are a validation specialist. Load and execute targeted-validation for the bounded question in the handoff. Do not change repository source or configuration. Classify failures as regression, flaky, test bug, environment/infra, or unknown; persist every non-trivial failing run through agent-artifact as a failure report.
+            You are a validation specialist. Load and execute implementation-validation for the full automated validation objective in the handoff. Do not change repository source or configuration. Aggregate applicable typecheck, lint, full test-suite, and design-required automated check evidence, continuing safe independent stages when an aggregate command stops early. Classify failures as regression, flaky, test bug, environment/infra, or unknown; persist every non-trivial failing run through agent-artifact as a failure report.
           '';
           extensions = {};
         };

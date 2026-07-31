@@ -53,12 +53,18 @@ export function registerProfileController(
     let activeName: string | undefined;
     let activeProfile: AgentProfile | undefined;
 
+    const setActiveToolsIfChanged = (expectedTools: string[]): void => {
+        const currentTools = pi.getActiveTools();
+        if (currentTools.length === expectedTools.length && currentTools.every((tool, index) => tool === expectedTools[index])) return;
+        pi.setActiveTools(expectedTools);
+    };
+
     const syncActiveTools = (profile: AgentProfile | undefined = activeProfile, requireComplete = false): boolean => {
         if (!profile) return false;
         const allTools = pi.getAllTools().map(tool => tool.name);
         const missing = profile.allowAllTools ? [] : profile.tools.filter(tool => !allTools.includes(tool));
         if (requireComplete && missing.length > 0) return false;
-        pi.setActiveTools(profile.allowAllTools ? allTools : profile.tools.filter(tool => allTools.includes(tool)));
+        setActiveToolsIfChanged(profile.allowAllTools ? allTools : profile.tools.filter(tool => allTools.includes(tool)));
         return true;
     };
 
@@ -94,7 +100,7 @@ export function registerProfileController(
         } catch (error) {
             if (previousModel !== undefined) await pi.setModel(previousModel);
             pi.setThinkingLevel(previousThinking);
-            pi.setActiveTools(previousTools);
+            setActiveToolsIfChanged(previousTools);
             ctx.ui.notify(`Profile ${name}: ${error instanceof Error ? error.message : String(error)}`, "error");
             return false;
         }
