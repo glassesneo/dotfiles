@@ -86,6 +86,10 @@ void test("tmux launch owns a dedicated session while open links and unlink only
     await unlinkAgentWindow(exec, "/tmux", context!, launched);
     assert.ok(calls.some(args => args.includes("new-session")));
     assert.ok(calls.some(args => args.includes("link-window")));
+    const selectIndex = calls.findIndex(args => args.includes("select-window") && args.includes("@2"));
+    const resizeIndex = calls.findIndex(args => args.includes("resize-window") && args.includes("-A") && args.includes("@2"));
+    assert.ok(selectIndex >= 0, "openAgentWindow selects the target window");
+    assert.ok(resizeIndex > selectIndex, "openAgentWindow issues resize-window -A after select/link");
     assert.equal(calls.filter(args => args.includes("unlink-window") && !args.includes("-k")).length, 1);
     assert.ok(!calls.some(args => args.includes("kill-window")));
 });

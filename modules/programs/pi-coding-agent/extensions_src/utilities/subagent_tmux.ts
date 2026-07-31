@@ -154,6 +154,8 @@ export async function openAgentWindow(exec: CommandExecutor, tmux: string, conte
     }
     const selected = await exec(tmux, at(target.socket, ["select-window", "-t", target.windowId]));
     if (selected.code !== 0) throw new Error(selected.stderr.trim() || "Could not select agent window");
+    const resized = await exec(tmux, at(target.socket, ["resize-window", "-A", "-t", target.windowId]));
+    if (resized.code !== 0) throw new Error(resized.stderr.trim() || "Could not resize agent window to attached client");
 }
 export async function unlinkAgentWindow(exec: CommandExecutor, tmux: string, context: TmuxContext, target: TmuxAgentReference): Promise<void> {
     assertSameServer(context, target);
