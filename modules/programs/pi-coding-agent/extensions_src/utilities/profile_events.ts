@@ -29,13 +29,17 @@ function validateActiveProfileEvent(value: unknown): ActiveProfileEvent {
     if (raw.schemaVersion !== 1) throw new Error("Unsupported active-profile event schemaVersion");
     if (typeof raw.name !== "string" || raw.name.trim() === "") throw new Error("active-profile event name must be a non-empty string");
     if (raw.reason !== "startup" && raw.reason !== "switch" && raw.reason !== "restore" && raw.reason !== "route") throw new Error("active-profile event reason is invalid");
+    const rawProfile = raw.profile && typeof raw.profile === "object" && !Array.isArray(raw.profile) ? raw.profile as Record<string, unknown> : {};
     const config = validateProfileConfig({
-        schemaVersion: 2,
+        schemaVersion: 3,
         defaultProfile: raw.name,
         profileCycle: [raw.name],
         promptRoutes: {},
-        profiles: { [raw.name]: raw.profile },
+        profiles: { [raw.name]: { ...rawProfile, availability: ["top-level", "subagent"] } },
     });
+    const availability = Array.isArray(rawProfile.availability) ? rawProfile.availability : undefined;
+    if (!availability || availability.length === 0 || new Set(availability).size !== availability.length || availability.some(value => value !== "top-level" && value !== "subagent")) throw new Error("active-profile event profile availability is invalid");
+    config.profiles[raw.name]!.availability = [...availability] as AgentProfile["availability"];
     return {
         schemaVersion: 1,
         name: raw.name,

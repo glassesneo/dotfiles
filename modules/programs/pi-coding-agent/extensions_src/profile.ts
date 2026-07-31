@@ -25,7 +25,7 @@ export async function loadAgentProfileConfig(path: string, env: NodeJS.ProcessEn
     let resolved: { name: string; profile: AgentProfile };
     try { resolved = validateResolvedProfile(JSON.parse(env.PI_AGENT_RESOLVED_PROFILE)); }
     catch (error) { throw new Error(`PI_AGENT_RESOLVED_PROFILE is invalid: ${error instanceof Error ? error.message : String(error)}`); }
-    return validateProfileConfig({ ...config, profiles: { ...config.profiles, [resolved.name]: resolved.profile } });
+    return { ...config, profiles: { ...config.profiles, [resolved.name]: resolved.profile } };
 }
 
 function splitModelId(model: string): [string, string] {
@@ -74,7 +74,9 @@ export function registerProfileController(
         if (!ctx.isIdle()) { ctx.ui.notify("Profile can only be changed while the agent is idle", "warning"); return false; }
         config ??= await loadAgentProfileConfig(configPath, env);
         const profile = config.profiles[name];
-        if (!profile) { ctx.ui.notify(`Unknown profile ${name}. Available: ${Object.keys(config.profiles).join(", ")}`, "error"); return false; }
+        const resolvedChildActivation = (reason === "startup" || reason === "restore") && env.PI_AGENT_RESOLVED_PROFILE !== undefined && profile?.availability.includes("subagent");
+        const selectable = Object.entries(config.profiles).filter(([, candidate]) => candidate.availability.includes("top-level")).map(([candidate]) => candidate);
+        if (!profile || (!profile.availability.includes("top-level") && !resolvedChildActivation)) { ctx.ui.notify(`Unknown top-level profile ${name}. Available: ${selectable.join(", ")}`, "error"); return false; }
         let provider: string;
         let modelId: string;
         try { [provider, modelId] = splitModelId(profile.model); }
@@ -115,7 +117,7 @@ export function registerProfileController(
     const choose = async (ctx: ExtensionContext) => {
         config ??= await loadAgentProfileConfig(configPath, env);
         if (!ctx.hasUI) { ctx.ui.notify(`Active profile: ${activeName ?? config.defaultProfile}`, "info"); return; }
-        const selected = await ctx.ui.select("Agent profile", Object.keys(config.profiles));
+        const selected = await ctx.ui.select("Agent profile", Object.entries(config.profiles).filter(([, profile]) => profile.availability.includes("top-level")).map(([name]) => name));
         if (selected) await apply(selected, ctx, true, "switch");
     };
 
@@ -123,7 +125,7 @@ export function registerProfileController(
         description: "Show or switch the active agent profile",
         getArgumentCompletions(prefix) {
             if (!config) return null;
-            const items = Object.keys(config.profiles).filter(name => name.startsWith(prefix)).map(name => ({
+            const items = Object.keys(config.profiles).filter(name => config!.profiles[name]!.availability.includes("top-level") && name.startsWith(prefix)).map(name => ({
                 value: name,
                 label: name,
                 description: config!.profiles[name]!.description,

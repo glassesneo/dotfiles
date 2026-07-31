@@ -9,10 +9,11 @@ export type TaskState = (typeof TASK_STATES)[number];
 export type TerminalTaskState = Extract<TaskState, "succeeded" | "failed" | "stopped">;
 export type TmuxOwnership = "origin-hub" | "dedicated";
 export interface TmuxAgentReference { socket: string; serverPid: string; sessionId: string; sessionName: string; windowId: string; paneId: string; windowName: string }
-export interface NativeCapabilities { nativeScreen: boolean; taskDelivery: boolean; taskCompletion: boolean; usage: boolean; interactiveInterventions: boolean }
-export interface HarnessRuntimeConfig { command: string }
-export interface SubagentRuntimeConfig { schemaVersion: 6; stateRoot: string; tmux: string; historyViewerExtension: string; childExtensions: string[]; harnesses: Record<string, HarnessRuntimeConfig> & { pi: HarnessRuntimeConfig }; maxDepth: number; childExcludedTools: string[]; natureHandleWords: string[]; bridgeReadyTimeoutMs?: number }
-export interface SubagentFacet { allowedTargets: string[]; harness?: string }
+export interface NativeCapabilities { nativeScreen: boolean; taskDelivery: boolean; taskCompletion: boolean; usage: boolean; interactiveInterventions: boolean; terminalHistory?: boolean }
+export type HarnessAdapterKind = "pi-native" | "cursor-acp";
+export interface HarnessRuntimeConfig { adapter: HarnessAdapterKind; command: string; workerCommand?: string; workerEntrypoint?: string }
+export interface SubagentRuntimeConfig { schemaVersion: 7; stateRoot: string; tmux: string; historyViewerExtension: string; childExtensions: string[]; harnesses: Record<string, HarnessRuntimeConfig> & { pi: HarnessRuntimeConfig }; maxDepth: number; childExcludedTools: string[]; natureHandleWords: string[]; bridgeReadyTimeoutMs?: number }
+export interface SubagentFacet { allowedTargets: string[]; harness?: string; harnessOptions?: Record<string, unknown> }
 export interface AgentLineage { callerProfile: string; targetProfile: string; depth: number; parentAgentId?: string; originSessionId: string; originSessionFile?: string }
 export interface AgentRecord extends AgentLineage { schemaVersion: 1; agentId: string; profile: string; purpose: string; harness: string; cwd: string; createdAt: string; profileSnapshot: AgentProfile; tmux: TmuxAgentReference; tmuxOwnership?: TmuxOwnership; capabilities: NativeCapabilities }
 export interface AgentStatus { schemaVersion: 1; agentId: string; state: AgentState; activeTaskId?: string; latestTaskId?: string; bridgeReady: boolean; childSessionId?: string; childSessionFile?: string; agentUsage: Usage; accountedTaskIds: string[]; updatedAt: string; exitReason?: string }
@@ -38,17 +39,27 @@ export function validateNatureHandleWords(value: unknown): string[] {
 }
 export function validateSubagentRuntimeConfig(value: unknown): SubagentRuntimeConfig {
     const root = object(value, "subagent config");
-    if (root.schemaVersion !== 6) throw new Error("Unsupported subagent config schemaVersion");
+    if (root.schemaVersion !== 7) throw new Error("Unsupported subagent config schemaVersion");
     const harnesses = object(root.harnesses, "harnesses");
     const parsed: Record<string, HarnessRuntimeConfig> = {};
-    for (const [id, raw] of Object.entries(harnesses)) parsed[id] = { command: nonBlank(object(raw, `harnesses.${id}`).command, `harnesses.${id}.command`) };
-    if (!parsed.pi) throw new Error("harnesses.pi must be configured");
+    for (const [id, raw] of Object.entries(harnesses)) {
+        const entry = object(raw, `harnesses.${id}`);
+        const unknown = Object.keys(entry).filter(key => !["adapter", "command", "workerCommand", "workerEntrypoint"].includes(key));
+        if (unknown.length) throw new Error(`harnesses.${id} contains unknown keys: ${unknown.join(", ")}`);
+        const adapter = nonBlank(entry.adapter, `harnesses.${id}.adapter`);
+        if (adapter !== "pi-native" && adapter !== "cursor-acp") throw new Error(`harnesses.${id}.adapter is unknown: ${adapter}`);
+        const workerCommand = entry.workerCommand === undefined ? undefined : nonBlank(entry.workerCommand, `harnesses.${id}.workerCommand`);
+        const workerEntrypoint = entry.workerEntrypoint === undefined ? undefined : nonBlank(entry.workerEntrypoint, `harnesses.${id}.workerEntrypoint`);
+        if (adapter === "cursor-acp" && (!workerCommand || !workerEntrypoint)) throw new Error(`harnesses.${id} cursor-acp adapter requires workerCommand and workerEntrypoint`);
+        parsed[id] = { adapter, command: nonBlank(entry.command, `harnesses.${id}.command`), ...(workerCommand ? { workerCommand } : {}), ...(workerEntrypoint ? { workerEntrypoint } : {}) } as HarnessRuntimeConfig;
+    }
+    if (!parsed.pi || parsed.pi.adapter !== "pi-native") throw new Error("harnesses.pi must use the pi-native adapter");
     if (!Number.isInteger(root.maxDepth) || (root.maxDepth as number) < 0) throw new Error("maxDepth must be a non-negative integer");
     const childExcludedTools = strings(root.childExcludedTools, "childExcludedTools");
     if (new Set(childExcludedTools).size !== childExcludedTools.length) throw new Error("childExcludedTools must not contain duplicates");
     const natureHandleWords = validateNatureHandleWords(root.natureHandleWords);
     return {
-        schemaVersion: 6,
+        schemaVersion: 7,
         stateRoot: nonBlank(root.stateRoot, "stateRoot"),
         tmux: nonBlank(root.tmux, "tmux"),
         historyViewerExtension: nonBlank(root.historyViewerExtension, "historyViewerExtension"),
@@ -67,7 +78,7 @@ export function projectChildEffectiveProfile(profile: AgentProfile, excludedTool
     next.tools = next.tools.filter(tool => !excluded.has(tool));
     return next;
 }
-export function parseSubagentFacet(value: unknown): SubagentFacet { const facet = object(value, "extensions.subagent"); const unknown = Object.keys(facet).filter(key => key !== "allowedTargets" && key !== "harness"); if (unknown.length) throw new Error(`extensions.subagent contains unknown keys: ${unknown.join(", ")}`); const allowedTargets = strings(facet.allowedTargets, "extensions.subagent.allowedTargets"); if (new Set(allowedTargets).size !== allowedTargets.length) throw new Error("extensions.subagent.allowedTargets must not contain duplicates"); return { allowedTargets, harness: facet.harness === undefined ? "pi" : nonBlank(facet.harness, "extensions.subagent.harness") }; }
+export function parseSubagentFacet(value: unknown): SubagentFacet { const facet = object(value, "extensions.subagent"); const unknown = Object.keys(facet).filter(key => key !== "allowedTargets" && key !== "harness" && key !== "harnessOptions"); if (unknown.length) throw new Error(`extensions.subagent contains unknown keys: ${unknown.join(", ")}`); const allowedTargets = strings(facet.allowedTargets, "extensions.subagent.allowedTargets"); if (new Set(allowedTargets).size !== allowedTargets.length) throw new Error("extensions.subagent.allowedTargets must not contain duplicates"); return { allowedTargets, harness: facet.harness === undefined ? "pi" : nonBlank(facet.harness, "extensions.subagent.harness"), ...(facet.harnessOptions === undefined ? {} : { harnessOptions: structuredClone(object(facet.harnessOptions, "extensions.subagent.harnessOptions")) }) }; }
 export function emptyUsage(): Usage { return { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } }; }
 export function addUsage(target: Usage, usage: Partial<Usage> | undefined): void { if (!usage) return; for (const key of ["input", "output", "cacheRead", "cacheWrite", "totalTokens"] as const) target[key] += usage[key] ?? 0; if (usage.reasoning !== undefined) target.reasoning = (target.reasoning ?? 0) + usage.reasoning; if (usage.cacheWrite1h !== undefined) target.cacheWrite1h = (target.cacheWrite1h ?? 0) + usage.cacheWrite1h; for (const key of ["input", "output", "cacheRead", "cacheWrite", "total"] as const) target.cost[key] += usage.cost?.[key] ?? 0; }
 export function isTerminalTask(state: TaskState): state is TerminalTaskState { return state === "succeeded" || state === "failed" || state === "stopped"; }

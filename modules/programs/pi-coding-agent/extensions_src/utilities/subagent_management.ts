@@ -45,6 +45,14 @@ export class OriginAgentDiscovery {
     }
 }
 interface TerminateAgentOptions { stateRoot: string; agentId: string; originSessionId: string; exec: CommandExecutor; tmux: string }
+async function waitForExternalStopAcknowledgement(stateRoot: string, agentId: string): Promise<void> {
+    const deadline = Date.now() + 1000;
+    while (Date.now() < deadline) {
+        const status = (await readAgentSnapshot(stateRoot, agentId)).status;
+        if (isTerminalAgent(status.state) || status.state === "stopping" && !status.activeTaskId) return;
+        await new Promise(resolve => setTimeout(resolve, 25));
+    }
+}
 async function terminateSubagentAgent(options: TerminateAgentOptions, reason: string, stopped: boolean, ensureTerminalProcess = false): Promise<AgentSnapshot> {
     const snapshot = await readAgentSnapshot(options.stateRoot, options.agentId);
     if (snapshot.agent.originSessionId !== options.originSessionId) throw new Error(`Agent ${options.agentId} belongs to a different origin session`);
@@ -66,6 +74,7 @@ async function terminateSubagentAgent(options: TerminateAgentOptions, reason: st
     }
     const stopping = await markAgentStopping(agentPaths(options.stateRoot, options.agentId));
     if (isTerminalAgent(stopping.state)) return ensureTerminalProcess ? terminateSubagentAgent(options, reason, stopped, true) : readAgentSnapshot(options.stateRoot, options.agentId);
+    if (snapshot.agent.harness !== "pi") await waitForExternalStopAcknowledgement(options.stateRoot, options.agentId);
     try {
         if (!await stopAgentSession(options.exec, options.tmux, snapshot.agent.tmux)) throw new Error("The recorded tmux server is unavailable or its identity changed");
     } catch (error) {

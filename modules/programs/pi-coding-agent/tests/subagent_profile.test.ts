@@ -7,28 +7,28 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 import { loadAgentProfileConfig, registerProfileController, routedProfileForInput } from "../extensions_src/profile.ts";
 import { createSubagentStartTool, registerSubagent } from "../extensions_src/subagent.ts";
 import { ACTIVE_PROFILE_EVENT, onActiveProfile } from "../extensions_src/utilities/profile_events.ts";
-import type { AgentProfileConfig } from "../extensions_src/utilities/profile_types.ts";
-import type { SubagentRuntimeConfig } from "../extensions_src/utilities/subagent_types.ts";
+import { validateProfileConfig, type AgentProfileConfig } from "../extensions_src/utilities/profile_types.ts";
+import { validateSubagentRuntimeConfig, type SubagentRuntimeConfig } from "../extensions_src/utilities/subagent_types.ts";
 
 function profiles(): AgentProfileConfig {
     return {
-        schemaVersion: 2,
+        schemaVersion: 3,
         defaultProfile: "full",
         profileCycle: ["scout", "operator", "full"],
         promptRoutes: { impl: "full", operate: "operator", review: "scout" },
         profiles: {
             scout: {
-                model: "provider/model", description: "Read-only exploration.", thinkingLevel: "low", allowAllTools: false,
+                model: "provider/model", availability: ["top-level", "subagent"] as ("top-level" | "subagent")[], description: "Read-only exploration.", thinkingLevel: "low", allowAllTools: false,
                 tools: ["read", "subagent_start", "subagent_get", "subagent_wait"], instructions: "Scout only.",
                 extensions: { subagent: { allowedTargets: ["scout"] } },
             },
             operator: {
-                model: "provider/model", description: "Delegated assurance.", thinkingLevel: "medium", allowAllTools: false,
+                model: "provider/model", availability: ["top-level", "subagent"] as ("top-level" | "subagent")[], description: "Delegated assurance.", thinkingLevel: "medium", allowAllTools: false,
                 tools: ["read", "subagent_start", "subagent_get", "subagent_wait"], instructions: "Operate.",
                 extensions: { subagent: { allowedTargets: ["scout"] } },
             },
             full: {
-                model: "provider/model", description: "Broad coding work.", thinkingLevel: "medium", allowAllTools: true, tools: [],
+                model: "provider/model", availability: ["top-level", "subagent"] as ("top-level" | "subagent")[], description: "Broad coding work.", thinkingLevel: "medium", allowAllTools: true, tools: [],
                 extensions: { subagent: { allowedTargets: ["scout", "full"] } },
             },
         },
@@ -39,12 +39,12 @@ async function fixture() {
     const root = await mkdtemp(join(tmpdir(), "agent-profile-"));
     const profileConfig = profiles();
     const subagentConfig: SubagentRuntimeConfig = {
-        schemaVersion: 6,
+        schemaVersion: 7,
         stateRoot: join(root, "state"),
         tmux: "/tmux",
         historyViewerExtension: "/history-viewer.ts",
         childExtensions: ["/profile.ts", "/subagent.ts", "/bridge.ts"],
-        harnesses: { pi: { command: "/pi" } },
+        harnesses: { pi: { adapter: "pi-native", command: "/pi" } },
         maxDepth: 3,
         childExcludedTools: ["question"],
         natureHandleWords: ["Maple", "Cedar"],
@@ -226,15 +226,33 @@ void test("active-profile event wrapper validates the complete payload", () => {
     eventHandler!({ schemaVersion: 1, name: "scout", reason: "startup", profile: profiles().profiles.scout, unexpected: true });
 
     assert.equal(accepted.length, 1);
-    assert.match(errors[0] ?? "", /allowAllTools|unknown keys|extensions/);
+    assert.match(errors[0] ?? "", /availability|allowAllTools|unknown keys|extensions/);
     assert.match(errors[1] ?? "", /schemaVersion/);
     assert.match(errors[2] ?? "", /unknown keys/);
+});
+
+void test("profile availability gates parent selection and old runtime schemas are rejected", async () => {
+    const value = await fixture();
+    const config = value.profileConfig;
+    config.profiles.child = {
+        model: "provider/model", availability: ["subagent"], description: "Child only.", allowAllTools: false, tools: ["read"], extensions: { subagent: { allowedTargets: [] } },
+    };
+    await writeFile(value.profilePath, JSON.stringify(config));
+    const fake = fakeControllerPi("scout");
+    registerProfileController(fake.pi, value.profilePath, {});
+    await fake.handlers.session_start![0]!({ reason: "startup" }, fake.ctx);
+    assert.equal((fake.commands.profile!.getArgumentCompletions?.("ch") as unknown[] | null), null);
+    await fake.commands.profile!.handler("child", fake.ctx);
+    assert.match(fake.notifications.at(-1) ?? "", /Unknown top-level profile/u);
+    assert.throws(() => validateProfileConfig({ ...config, schemaVersion: 2 }), /schemaVersion/u);
+    assert.throws(() => validateProfileConfig({ ...config, defaultProfile: "child" }), /top-level/u);
+    assert.throws(() => validateSubagentRuntimeConfig({ ...value.subagentConfig, schemaVersion: 6 }), /schemaVersion/u);
 });
 
 void test("resolved child profile overlays the generic profile snapshot", async () => {
     const { profilePath } = await fixture();
     const pinned = {
-        model: "provider/pinned", description: "Pinned exploration.", thinkingLevel: "low" as const, allowAllTools: false,
+        model: "provider/pinned", availability: ["subagent"] as ("top-level" | "subagent")[], description: "Pinned exploration.", thinkingLevel: "low" as const, allowAllTools: false,
         tools: ["read"], instructions: "pinned", extensions: { subagent: { allowedTargets: ["scout"] } },
     };
     const loaded = await loadAgentProfileConfig(profilePath, {
@@ -275,6 +293,7 @@ void test("subagent_start schema enum follows active allowed targets without a p
         reason: "startup",
         profile: {
             model: "provider/model",
+            availability: ["subagent"] as ("top-level" | "subagent")[],
             description: "Review orchestration.",
             thinkingLevel: "medium",
             allowAllTools: false,
@@ -308,6 +327,7 @@ void test("child effective profile drops excluded tools from snapshot and launch
     const { piLaunchDescriptor } = await import("../extensions_src/utilities/subagent_pi.ts");
     const profile = {
         model: "provider/model",
+        availability: ["subagent"] as ("top-level" | "subagent")[],
         description: "Review orchestration.",
         thinkingLevel: "medium" as const,
         allowAllTools: false,
@@ -319,12 +339,12 @@ void test("child effective profile drops excluded tools from snapshot and launch
     assert.deepEqual(effective.tools, ["read", "subagent_start", "subagent_get"]);
     assert.ok(!effective.tools.includes("question"));
     const launch = piLaunchDescriptor({
-        schemaVersion: 6,
+        schemaVersion: 7,
         stateRoot: "/state",
         tmux: "/tmux",
         historyViewerExtension: "/history.ts",
         childExtensions: ["/profile.ts"],
-        harnesses: { pi: { command: "/pi" } },
+        harnesses: { pi: { adapter: "pi-native", command: "/pi" } },
         maxDepth: 3,
         childExcludedTools: ["question"],
         natureHandleWords: ["Maple", "Cedar"],

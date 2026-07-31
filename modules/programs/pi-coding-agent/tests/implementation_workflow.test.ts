@@ -114,6 +114,10 @@ void test("profiles expose command-independent implementation, validation, revie
     assert.match(operatorBlock, /allowAllTools = false/);
     assert.match(operatorBlock, /tools = \[\]/);
     assert.doesNotMatch(operatorBlock, /"edit"|"write"/);
-    assert.match(subagent, /allowedTargets = \["explorer" "taskmaster" "tester" "review-orchestrator" "focused-reviewer"\]/);
+    assert.match(operatorBlock, /select taskmaster or cursor-implementer/);
+    assert.match(operatorBlock, /same implementation agent ID/);
+    assert.match(profile, /model = "cursor\/cursor-grok-4\.5-high"/);
+    assert.match(profile, /availability = \["subagent"\]/);
+    assert.match(subagent, /allowedTargets = \["explorer" "taskmaster" "cursor-implementer" "tester" "review-orchestrator" "focused-reviewer"\]/);
     assert.match(artifact, /operator\.tools = \["save_agent_artifact"\]/);
 });

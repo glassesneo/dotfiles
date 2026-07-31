@@ -14,6 +14,7 @@ async function sessionId(path: string): Promise<string | undefined> {
 }
 export function historyAvailability(snapshot: AgentSnapshot): { available: boolean; reason?: string } {
     if (!isTerminalAgent(snapshot.status.state)) return { available: false, reason: "agent is live" };
+    if (snapshot.agent.capabilities.terminalHistory === false) return { available: false, reason: `history unavailable for ${snapshot.agent.harness} harness` };
     if (!snapshot.status.childSessionId || !snapshot.status.childSessionFile) return { available: false, reason: "history unavailable" };
     return { available: true };
 }

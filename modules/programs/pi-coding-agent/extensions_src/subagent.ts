@@ -81,7 +81,7 @@ function prepareGetArguments(args: unknown): Static<typeof getParameters> {
 
 async function claim(config: SubagentRuntimeConfig, snapshot: AgentSnapshot, ctx: ExtensionContext, env: NodeJS.ProcessEnv, toolCallId: string, toolName: "subagent_start" | "subagent_get" | "subagent_wait" | "subagent_stop"): Promise<{ usage?: Usage; claimedTaskIds: string[] }> {
     const task = snapshot.task;
-    if (!task?.result || !isTerminalTask(task.status.state)) return { claimedTaskIds: [] };
+    if (!snapshot.agent.capabilities.usage || !task?.result || !isTerminalTask(task.status.state)) return { claimedTaskIds: [] };
     const lineage = origin(ctx, env);
     const value = await claimTaskUsage(config.stateRoot, snapshot.agent.agentId, task.request.taskId, lineage.originSessionId, lineage.originSessionFile, toolCallId, toolName);
     return value.created ? { usage: value.result.usage, claimedTaskIds: [task.request.taskId] } : { claimedTaskIds: [] };
@@ -136,14 +136,16 @@ export function createSubagentStartTool(deps: SubagentDependencies, allowedTarge
             const profile = profiles.profiles[params.profile];
             if (!profile) throw new Error(`Unknown subagent profile: ${params.profile}`);
             if (profile.allowAllTools) throw new Error(`Subagent target profile ${params.profile} uses allowAllTools and cannot be used as a child target`);
+            if (!profile.availability.includes("subagent")) throw new Error(`Subagent target profile ${params.profile} is not available to subagents`);
             const effective = projectChildEffectiveProfile(profile, config.childExcludedTools);
             const lineage = origin(ctx, deps.env);
             const depth = lineage.depth + 1;
             if (depth > config.maxDepth) throw new Error(`Subagent depth ${depth} exceeds maxDepth ${config.maxDepth}`);
+            const harness = (profile.extensions.subagent as { harness?: string } | undefined)?.harness ?? "pi";
+            const resolvedHarness = resolveHarnessAdapter(config, harness, effective);
+            const { adapter } = resolvedHarness;
             const context = await probeTmux(deps.exec, config.tmux, deps.env);
             if (!context) throw new Error("Subagent start requires a usable current tmux context");
-            const harness = (profile.extensions.subagent as { harness?: string } | undefined)?.harness ?? "pi";
-            const adapter = resolveHarnessAdapter(harness);
             const prepared = await prepareAgent(config.stateRoot, {
                 profile: params.profile,
                 purpose: params.purpose,
@@ -156,7 +158,7 @@ export function createSubagentStartTool(deps: SubagentDependencies, allowedTarge
             let tmux;
             let published = false;
             try {
-                const launch = adapter.launch(config, {
+                const launch = adapter.launch(config, resolvedHarness.harness, {
                     agentId: prepared.agentId,
                     agentDirectory: prepared.paths.directory,
                     profile: params.profile,
@@ -164,6 +166,7 @@ export function createSubagentStartTool(deps: SubagentDependencies, allowedTarge
                     depth,
                     originSessionId: lineage.originSessionId,
                     originSessionFile: lineage.originSessionFile,
+                    cwd: ctx.cwd,
                 });
                 tmux = await launchAgentSession(deps.exec, config.tmux, context, { agentId: prepared.agentId, profile: params.profile, originSessionId: lineage.originSessionId, cwd: ctx.cwd, launch });
                 await publishAgent(prepared.paths, {

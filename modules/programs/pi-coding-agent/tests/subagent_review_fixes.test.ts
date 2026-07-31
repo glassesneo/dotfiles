@@ -14,7 +14,7 @@ import { failAgent, patchAgentStatus, prepareAgent, publishAgent, readAgentSnaps
 import { originHubName, type CommandResult, type TmuxContext } from "../extensions_src/utilities/subagent_tmux.ts";
 import type { AgentSnapshot, TmuxAgentReference } from "../extensions_src/utilities/subagent_types.ts";
 
-const profile = { model: "provider/model", description: "Tester", allowAllTools: false, tools: [], extensions: { subagent: { allowedTargets: [] } } };
+const profile = { model: "provider/model", availability: ["top-level", "subagent"] as ("top-level" | "subagent")[], description: "Tester", allowAllTools: false, tools: [], extensions: { subagent: { allowedTargets: [] } } };
 const capabilities = { nativeScreen: true, taskDelivery: true, taskCompletion: true, usage: true, interactiveInterventions: true };
 const context: TmuxContext = { socket: "/tmp/tmux", serverPid: "10", sessionId: "$parent", sessionName: "parent", paneId: "%parent" };
 async function agent(root: string, windowId: string, paneId: string, ownership: "origin-hub" | "dedicated" = "origin-hub") {
@@ -168,7 +168,7 @@ void test("palette Enter is disabled for terminal legacy history without probing
 void test("registered parent lifecycle cleans replacement reasons while reload and child depth preserve the hub", async () => {
     const root = await mkdtemp(join(tmpdir(), "subagent-lifecycle-wiring-"));
     const configPath = join(root, "subagent.json");
-    await writeFile(configPath, JSON.stringify({ schemaVersion: 6, stateRoot: join(root, "state"), tmux: "/tmux", historyViewerExtension: "/history.ts", childExtensions: ["/bridge.ts"], harnesses: { pi: { command: "/pi" } }, maxDepth: 3, childExcludedTools: ["question"], natureHandleWords: ["Maple", "Cedar"] }));
+    await writeFile(configPath, JSON.stringify({ schemaVersion: 7, stateRoot: join(root, "state"), tmux: "/tmux", historyViewerExtension: "/history.ts", childExtensions: ["/bridge.ts"], harnesses: { pi: { adapter: "pi-native", command: "/pi" } }, maxDepth: 3, childExcludedTools: ["question"], natureHandleWords: ["Maple", "Cedar"] }));
     const run = async (reason: "quit" | "reload" | "new" | "resume" | "fork", depth = "0") => {
         const handlers = new Map<string, Array<(...args: any[]) => any>>();
         const eventHandlers = new Map<string, Array<(value: unknown) => void>>();

@@ -12,6 +12,7 @@
   agentArtifactExtension = "${./../../extensions_src}/agent_artifact.ts";
   childBridgeExtension = "${./../../extensions_src}/subagent_child_bridge.ts";
   historyViewerExtension = "${./../../extensions_src}/subagent_history_viewer.ts";
+  externalWorkerEntrypoint = "${./../../extensions_src}/subagent_external_worker.ts";
 in
   delib.module {
     name = moduleName;
@@ -60,8 +61,19 @@ in
       operator = {
         tools = ["subagent_start" "subagent_send" "subagent_get" "subagent_wait" "subagent_stop"];
         extensions.subagent = {
-          allowedTargets = ["explorer" "taskmaster" "tester" "review-orchestrator" "focused-reviewer"];
+          allowedTargets = ["explorer" "taskmaster" "cursor-implementer" "tester" "review-orchestrator" "focused-reviewer"];
           harness = "pi";
+        };
+      };
+      cursor-implementer.extensions.subagent = {
+        allowedTargets = [];
+        harness = "cursor-agent";
+        harnessOptions = {
+          mode = "agent";
+          permissionPolicy = "allow-always";
+          sandbox = "disabled";
+          trustWorkspace = true;
+          worktree = false;
         };
       };
       tester.extensions.subagent = {
@@ -137,17 +149,39 @@ in
           if builtins.isAttrs facet && facet ? allowedTargets
           then facet.allowedTargets
           else null;
+        options =
+          if builtins.isAttrs facet
+          then facet.harnessOptions or null
+          else null;
+        cursorOptionsValid =
+          builtins.isAttrs options
+          && builtins.attrNames options == ["mode" "permissionPolicy" "sandbox" "trustWorkspace" "worktree"]
+          && options.mode == "agent"
+          && options.permissionPolicy == "allow-always"
+          && options.sandbox == "disabled"
+          && options.trustWorkspace == true
+          && options.worktree == false;
       in
         facet
         == null
         || (
           builtins.isAttrs facet
-          && builtins.all (key: builtins.elem key ["allowedTargets" "harness"]) keys
+          && builtins.all (key: builtins.elem key ["allowedTargets" "harness" "harnessOptions"]) keys
           && builtins.isList targets
           && facet ? harness
           && builtins.isString facet.harness
           && nonBlank facet.harness
-          && builtins.elem facet.harness ["pi"]
+          && builtins.elem facet.harness ["pi" "cursor-agent"]
+          && (
+            if facet.harness == "cursor-agent"
+            then cursorOptionsValid
+            else options == null
+          )
+          && (
+            if facet.harness == "cursor-agent"
+            then lib.hasPrefix "cursor/" profile.model && profile.tools == [] && !profile.allowAllTools && profile.thinkingLevel == null
+            else true
+          )
           && builtins.all (target: builtins.isString target && nonBlank target) targets
           && lib.length targets == lib.length (lib.unique targets)
           && builtins.all (target: builtins.elem target profileNames) targets
@@ -160,7 +194,7 @@ in
           else [];
       in
         builtins.all (
-          target: !(profiles.${target}.allowAllTools)
+          target: !(profiles.${target}.allowAllTools) && builtins.elem "subagent" profiles.${target}.availability
         )
         targets;
     in {
@@ -171,7 +205,7 @@ in
         }
         {
           assertion = builtins.all targetsAreRestrictive (builtins.attrValues profiles);
-          message = "Pi subagent allowedTargets must reference restrictive profiles with explicit tool allowlists; allowAllTools targets are forbidden.";
+          message = "Pi subagent allowedTargets must reference subagent-available restrictive profiles with explicit tool allowlists; allowAllTools targets are forbidden.";
         }
       ];
     };
@@ -233,12 +267,23 @@ in
       ];
 
       home.file."${myconfig.programs.pi-coding-agent.configDir}/subagent.json".text = builtins.toJSON {
-        schemaVersion = 6;
+        schemaVersion = 7;
         stateRoot = "${homeConfig.xdg.stateHome}/pi/subagents";
         tmux = lib.getExe pkgs.tmux;
         inherit historyViewerExtension;
         childExtensions = [profileExtension subagentExtension agentArtifactExtension childBridgeExtension];
-        harnesses.pi.command = lib.getExe llm-agents.pi;
+        harnesses = {
+          pi = {
+            adapter = "pi-native";
+            command = lib.getExe llm-agents.pi;
+          };
+          cursor-agent = {
+            adapter = "cursor-acp";
+            command = lib.getExe llm-agents.cursor-agent;
+            workerCommand = lib.getExe pkgs.nodejs;
+            workerEntrypoint = externalWorkerEntrypoint;
+          };
+        };
         inherit (cfg) maxDepth;
         inherit childExcludedTools;
         inherit (cfg) natureHandleWords;

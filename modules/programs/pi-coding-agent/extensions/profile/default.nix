@@ -7,6 +7,7 @@
   profileType = delib.submodule {
     options = with delib; {
       model = noDefault (strOption null);
+      availability = listOfOption (lib.types.enum ["top-level" "subagent"]) [];
       description = noDefault (strOption null);
       thinkingLevel = allowNull (enumOption ["off" "minimal" "low" "medium" "high" "xhigh" "max"] null);
       allowAllTools = boolOption false;
@@ -52,6 +53,7 @@ in
       profiles = {
         full = {
           model = "openai-codex/gpt-5.6-sol";
+          availability = ["top-level" "subagent"];
           description = "Use for work that needs broad coding capability.";
           thinkingLevel = "medium";
           allowAllTools = true;
@@ -61,6 +63,7 @@ in
         };
         taskmaster = {
           model = "openai-codex/gpt-5.6-sol";
+          availability = ["top-level" "subagent"];
           description = "Use for source-changing implementation, repair, and implementation lifecycle work.";
           thinkingLevel = "medium";
           allowAllTools = false;
@@ -72,6 +75,7 @@ in
         };
         scout = {
           model = "openai-codex/gpt-5.6-sol";
+          availability = ["top-level" "subagent"];
           description = "Use for read-only investigation, evidence gathering, and design dialogue.";
           thinkingLevel = "high";
           allowAllTools = false;
@@ -85,17 +89,31 @@ in
         };
         operator = {
           model = "openai-codex/gpt-5.6-sol";
+          availability = ["top-level" "subagent"];
           description = "Use to decompose work, delegate local objectives, verify evidence, and own the parent outcome.";
           thinkingLevel = "medium";
           allowAllTools = false;
           tools = [];
           instructions = ''
-            You are a delegation and assurance operator. Follow the user's current objective without requiring a command. Decompose suitable work into bounded local tasks, delegate each to the capability that owns it, verify returned evidence, integrate results, and retain responsibility for parent-level decisions and completion. Handle small read-only tasks directly when delegation would not help. For a delegated approved-design lifecycle, use implementation-lifecycle in delegated-reviewed mode: keep one child taskmaster session for source implementation and remediation, independently inspect every diff, obtain tester and reviewer evidence, persist the artifact chain, and decide the terminal outcome. You do not change source or configuration directly.
+            You are a delegation and assurance operator. Follow the user's current objective without requiring a command. Decompose suitable work into bounded local tasks, delegate each to the capability that owns it, verify returned evidence, integrate results, and retain responsibility for parent-level decisions and completion. Handle small read-only tasks directly when delegation would not help. For a delegated approved-design lifecycle, use implementation-lifecycle in delegated-reviewed mode: honor an explicit implementation-role choice, otherwise select taskmaster or cursor-implementer from the task contract, and keep that one implementation child session for source implementation and remediation. Send remediation to the same implementation agent ID, independently inspect every diff, obtain tester and reviewer evidence, persist the artifact chain, and decide the terminal outcome. You do not change source or configuration directly.
+          '';
+          extensions = {};
+        };
+        cursor-implementer = {
+          model = "cursor/cursor-grok-4.5-high";
+          availability = ["subagent"];
+          description = "Use for bounded source implementation and remediation through Cursor Agent.";
+          thinkingLevel = null;
+          allowAllTools = false;
+          tools = [];
+          instructions = ''
+            Implement the delegated bounded source change in the current repository workspace. Follow repository guidance and remain within the supplied objective and constraints. Inspect the resulting diff and run proportionate validation. Return changed files, validation evidence, any deviation from the handoff, and unresolved risks or blockers.
           '';
           extensions = {};
         };
         explorer = {
           model = "openai-codex/gpt-5.6-luna";
+          availability = ["subagent"];
           description = "Use for source-read-only codebase exploration that returns evidence for one parent-localized question.";
           thinkingLevel = "medium";
           allowAllTools = false;
@@ -107,6 +125,7 @@ in
         };
         tester = {
           model = "openai-codex/gpt-5.6-luna";
+          availability = ["top-level" "subagent"];
           description = "Use for focused, broad, or full automated validation without changing repository source.";
           thinkingLevel = "medium";
           allowAllTools = false;
@@ -118,6 +137,7 @@ in
         };
         review-orchestrator = {
           model = "openai-codex/gpt-5.6-sol";
+          availability = ["top-level" "subagent"];
           description = "Use for one risk-tiered read-only review with focused and dissent passes.";
           thinkingLevel = "medium";
           allowAllTools = false;
@@ -129,6 +149,7 @@ in
         };
         focused-reviewer = {
           model = "openai-codex/gpt-5.6-terra";
+          availability = ["subagent"];
           description = "Use for a read-only review limited to a caller-specified lens; include the lens, review target, and higher-level design or implementation report in the delegated prompt.";
           thinkingLevel = "medium";
           allowAllTools = false;
@@ -140,6 +161,7 @@ in
         };
         dissent-reviewer = {
           model = "openai-codex/gpt-5.6-terra";
+          availability = ["subagent"];
           description = "Use once to challenge tentative review findings, severity, evidence, and uncovered perspectives from a bounded dossier.";
           thinkingLevel = "medium";
           allowAllTools = false;
@@ -194,6 +216,8 @@ in
       knownFacets = builtins.attrNames cfg.facetOwners;
       profileFacetsKnown = profile:
         builtins.all (facet: builtins.elem facet knownFacets) (builtins.attrNames profile.extensions);
+      topLevel = profile: builtins.elem "top-level" profile.availability;
+      availabilityValid = profile: profile.availability != [] && lib.length profile.availability == lib.length (lib.unique profile.availability);
       modelValid = profile: builtins.match "[^/[:space:]]+/[^/[:space:]]+" profile.model != null;
       descriptionValid = profile: nonBlank profile.description && builtins.stringLength profile.description <= 512;
       toolsValid = profile:
@@ -205,32 +229,36 @@ in
       instructionsValid = profile: profile.instructions == null || nonBlank profile.instructions;
       serializeProfile = profile:
         cleanProfile (
-          if profile.allowAllTools
+          if profile.allowAllTools || lib.hasPrefix "cursor/" profile.model
           then profile
           else profile // {tools = lib.unique (cfg.defaultTools ++ profile.tools);}
         );
       runtimeConfig = {
-        schemaVersion = 2;
+        schemaVersion = 3;
         inherit (cfg) defaultProfile profileCycle promptRoutes;
         profiles = lib.mapAttrs (_: serializeProfile) cfg.profiles;
       };
     in {
       assertions = [
         {
-          assertion = builtins.elem cfg.defaultProfile profileNames;
-          message = "Pi defaultProfile must reference an existing profile.";
+          assertion = builtins.elem cfg.defaultProfile profileNames && topLevel cfg.profiles.${cfg.defaultProfile};
+          message = "Pi defaultProfile must reference an existing top-level profile.";
         }
         {
-          assertion = cfg.profileCycle != [] && lib.length cfg.profileCycle == lib.length (lib.unique cfg.profileCycle) && referencesExist cfg.profileCycle;
-          message = "Pi profileCycle must contain one or more unique existing profile names.";
+          assertion = cfg.profileCycle != [] && lib.length cfg.profileCycle == lib.length (lib.unique cfg.profileCycle) && referencesExist cfg.profileCycle && builtins.all (name: topLevel cfg.profiles.${name}) cfg.profileCycle;
+          message = "Pi profileCycle must contain one or more unique existing top-level profile names.";
         }
         {
           assertion = builtins.all nonBlank profileNames;
           message = "Pi agent profile names must be non-blank.";
         }
         {
-          assertion = builtins.all routeCommandValid routeCommands && referencesExist routeProfiles;
-          message = "Pi promptRoutes must map non-blank command tokens to existing profiles.";
+          assertion = builtins.all routeCommandValid routeCommands && referencesExist routeProfiles && builtins.all (name: topLevel cfg.profiles.${name}) routeProfiles;
+          message = "Pi promptRoutes must map non-blank command tokens to existing top-level profiles.";
+        }
+        {
+          assertion = builtins.all availabilityValid profiles;
+          message = "Pi profile availability must be a non-empty unique list.";
         }
         {
           assertion = builtins.all modelValid profiles;
