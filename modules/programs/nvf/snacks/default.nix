@@ -50,6 +50,12 @@ delib.module {
                 filter.paths = ignoredPaths;
                 layout.layout = pickerLayout;
               };
+              files = {
+                hidden = true;
+                ignored = true;
+                filter.paths = ignoredPaths;
+                layout.layout = pickerLayout;
+              };
               grep = {
                 hidden = true;
                 ignored = true;
@@ -75,43 +81,52 @@ delib.module {
         };
       };
 
-      keymaps = [
-        {
-          key = "<Space><Space>";
+      keymaps =
+        [
+          {
+            key = "<Space><Space>";
+            mode = ["n"];
+            action = "function() Snacks.picker.smart() end";
+            lua = true;
+            desc = "Find files";
+          }
+          {
+            key = "<Space>g";
+            mode = ["n"];
+            action = "function() Snacks.picker.grep() end";
+            lua = true;
+            desc = "Grep files";
+          }
+          {
+            key = "<Space>f";
+            mode = ["n"];
+            action = "function() Snacks.picker.explorer() end";
+            lua = true;
+            desc = "File explorer";
+          }
+          {
+            key = "<Space><CR>";
+            mode = ["n"];
+            action = "function() Snacks.bufdelete.delete() end";
+            lua = true;
+            desc = "Delete buffer";
+          }
+          {
+            key = "<Space>z";
+            mode = ["n"];
+            action = "function() Snacks.zen() end";
+            lua = true;
+            desc = "Zen mode";
+          }
+        ]
+        ++ (lib.optional myconfig.programs.nvf.orgmode.enable {
+          key = "<Space>o";
           mode = ["n"];
-          action = "function() Snacks.picker.smart() end";
+
+          action = "function() Snacks.picker.files({ cwd = [[${myconfig.programs.nvf.orgmode.org_directory}]]}) end";
           lua = true;
-          desc = "Find files";
-        }
-        {
-          key = "<Space>g";
-          mode = ["n"];
-          action = "function() Snacks.picker.grep() end";
-          lua = true;
-          desc = "Grep files";
-        }
-        {
-          key = "<Space>f";
-          mode = ["n"];
-          action = "function() Snacks.picker.explorer() end";
-          lua = true;
-          desc = "File explorer";
-        }
-        {
-          key = "<Space><CR>";
-          mode = ["n"];
-          action = "function() Snacks.bufdelete.delete() end";
-          lua = true;
-          desc = "Delete buffer";
-        }
-        {
-          key = "<Space>z";
-          mode = ["n"];
-          action = "function() Snacks.zen() end";
-          lua = true;
-          desc = "Zen mode";
-        }
-      ];
+          desc = "Orgmode files";
+        });
     };
   };
 }
