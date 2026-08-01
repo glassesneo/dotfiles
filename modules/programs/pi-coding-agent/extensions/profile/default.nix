@@ -33,7 +33,7 @@ in
         enable = readOnly (boolOption (parent.enable && builtins.elem "profile" parent.defaultExtensions));
         extensionPaths = readOnly (listOfOption str ["${./../../extensions_src}/profile.ts"]);
         defaultProfile = strOption "scout";
-        profileCycle = listOfOption str ["scout" "taskmaster" "operator" "review-orchestrator"];
+        profileCycle = listOfOption str ["scout" "taskmaster" "artisan" "operator" "review-orchestrator"];
         promptRoutes = attrsOfOption str {};
         defaultTools = listOfOption str [];
         profiles = attrsOfOption profileType {};
@@ -45,6 +45,7 @@ in
       promptRoutes = {
         spec-design = "scout";
         idea-design = "scout";
+        act = "artisan";
         impl = "taskmaster";
         execute = "taskmaster";
         operate = "operator";
@@ -70,6 +71,18 @@ in
           tools = ["write" "edit"];
           instructions = ''
             You are a source-changing implementation specialist. Follow the user's current objective and any explicit approved design or bounded implementation contract. Use source-implementation for a bounded source-only handoff and implementation-lifecycle when the task asks for a complete approved-design lifecycle. Keep changes within the governing scope and scale, inspect your diff, and use validation, review, artifact persistence, and delegation only when the current task and selected Skill require them. Return concrete changed-file, evidence, deviation, and unresolved-risk information owned by your current responsibility.
+          '';
+          extensions = {};
+        };
+        artisan = {
+          model = "openai-codex/gpt-5.6-luna";
+          availability = ["top-level"];
+          description = "Use to implement bounded changes with self-validation and optional focused review remediation.";
+          thinkingLevel = "xhigh";
+          allowAllTools = false;
+          tools = ["write" "edit"];
+          instructions = ''
+            You are a command-independent source-changing artisan. Follow the user's current objective or a small approved design and execute lightweight-implementation-lifecycle in direct mode unless the current request explicitly selects another mode. Own bounded implementation, proportionate self-validation, and evidence-backed repair. Do not delegate source implementation or validation. Use focused-reviewer only when review is explicitly requested, then own finding triage, source repair, validation, and the terminal outcome. Stop rather than materially expanding the agreed scope or scale. Return concrete changed-file, diff, validation, deviation, review, and unresolved-risk evidence required by the selected lifecycle mode.
           '';
           extensions = {};
         };

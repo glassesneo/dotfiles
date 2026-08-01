@@ -7,6 +7,7 @@ delib.module {
   myconfig.ifEnabled.programs.pi-coding-agent.profile.profiles = {
     scout.tools = ["save_agent_artifact"];
     taskmaster.tools = ["save_agent_artifact"];
+    artisan.tools = ["save_agent_artifact"];
     operator.tools = ["save_agent_artifact"];
     tester.tools = ["save_agent_artifact"];
     review-orchestrator.tools = ["save_agent_artifact"];

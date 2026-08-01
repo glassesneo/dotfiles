@@ -11,9 +11,14 @@ async function text(path: string): Promise<string> {
 }
 
 void test("implementation entrypoints are thin explicit mode templates", async () => {
-    const [impl, execute, operate, review] = await Promise.all(
-        ["impl", "execute", "operate", "review"].map(name => text(join(piRoot, "prompts", `${name}.md`))),
+    const [act, impl, execute, operate, review] = await Promise.all(
+        ["act", "impl", "execute", "operate", "review"].map(name => text(join(piRoot, "prompts", `${name}.md`))),
     );
+
+    assert.match(act, /lightweight-implementation-lifecycle/);
+    assert.match(act, /aligned-request/);
+    assert.match(act, /explicit\s+confirmation/s);
+    assert.doesNotMatch(act, /specification-design|ideation-design|focused-reviewer|subagent_start/);
 
     for (const prompt of [impl, execute, operate]) {
         assert.match(prompt, /implementation-lifecycle/);
@@ -26,6 +31,33 @@ void test("implementation entrypoints are thin explicit mode templates", async (
     assert.match(review, /orchestrated-review/);
     assert.match(review, /<implementation-report-path>/);
     for (const prompt of [impl, execute, operate, review]) assert.doesNotMatch(prompt, /focused-reviewer|dissent-reviewer|subagent_start/);
+});
+
+void test("lightweight lifecycle is packaged and bounds aligned execution, repair, review, and artifacts", async () => {
+    const [skill, registry, guidance] = await Promise.all([
+        text(join(skillsRoot, "skills", "lightweight-implementation-lifecycle", "SKILL.md")),
+        text(join(skillsRoot, "default.nix")),
+        text(join(skillsRoot, "AGENTS.md")),
+    ]);
+    const compact = skill.replace(/\s+/g, " ");
+
+    assert.match(skill, /name: lightweight-implementation-lifecycle/);
+    assert.doesNotMatch(skill, /disable-model-invocation/);
+    assert.match(registry, /lightweight-implementation-lifecycle = \{/);
+    assert.match(registry, /\.\/skills\/lightweight-implementation-lifecycle/);
+    assert.match(guidance, /`lightweight-implementation-lifecycle` owns bounded self-implementation/);
+    assert.match(compact, /`direct`.*`aligned-request`/);
+    assert.match(compact, /explicit confirmation.*do not mutate source/s);
+    assert.match(compact, /Do not delegate source work or validation/);
+    assert.match(compact, /validation repair is limited to two rounds/);
+    assert.match(compact, /at most two distinct lenses/);
+    assert.match(compact, /at most two reviewer passes total/);
+    assert.match(compact, /without a third pass/);
+    assert.match(compact, /unknown cause/);
+    assert.match(compact, /test or infrastructure ownership/);
+    assert.match(compact, /material scope or scale expansion/);
+    assert.match(compact, /Return results inline by default/);
+    assert.match(compact, /only when the user or governing design explicitly requires one/);
 });
 
 void test("canonical assurance skills have aligned names, registry, and receiver boundaries", async () => {
@@ -87,7 +119,7 @@ void test("lifecycle bounds remediation and creates terminal immutable report ch
 void test("profiles expose command-independent implementation, validation, review, and operator capabilities", async () => {
     const profile = await text(join(piRoot, "extensions", "profile", "default.nix"));
 
-    for (const profileName of ["scout", "taskmaster", "operator", "tester", "review-orchestrator"]) {
+    for (const profileName of ["scout", "taskmaster", "artisan", "operator", "tester", "review-orchestrator"]) {
         const marker = `        ${profileName} = {`;
         const start = profile.indexOf(marker);
         assert.notEqual(start, -1);
@@ -100,6 +132,17 @@ void test("profiles expose command-independent implementation, validation, revie
     assert.match(profile, /specification-design when the user already holds/);
     assert.match(profile, /ordinary read-only investigation/);
     assert.match(profile, /focused, broad, or full/);
+    assert.match(profile, /profileCycle = listOfOption str \["scout" "taskmaster" "artisan"/);
+    assert.match(profile, /act = "artisan"/);
+
+    const artisanStart = profile.indexOf("        artisan = {");
+    const artisanBlock = profile.slice(artisanStart, profile.indexOf("        scout = {", artisanStart));
+    assert.match(artisanBlock, /model = "openai-codex\/gpt-5\.6-luna"/);
+    assert.match(artisanBlock, /availability = \["top-level"\]/);
+    assert.match(artisanBlock, /thinkingLevel = "xhigh"/);
+    assert.match(artisanBlock, /tools = \["write" "edit"\]/);
+    assert.match(artisanBlock, /lightweight-implementation-lifecycle in direct mode unless the current request explicitly selects another mode/);
+    assert.match(artisanBlock, /Do not delegate source implementation or validation/);
 
     const operatorStart = profile.indexOf("        operator = {");
     const operatorBlock = profile.slice(operatorStart, profile.indexOf("        explorer = {", operatorStart));

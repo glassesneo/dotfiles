@@ -58,6 +58,13 @@ in
           harness = "pi";
         };
       };
+      artisan = {
+        tools = ["subagent_start" "subagent_send" "subagent_get" "subagent_wait" "subagent_stop"];
+        extensions.subagent = {
+          allowedTargets = ["focused-reviewer"];
+          harness = "pi";
+        };
+      };
       operator = {
         tools = ["subagent_start" "subagent_send" "subagent_get" "subagent_wait" "subagent_stop"];
         extensions.subagent = {

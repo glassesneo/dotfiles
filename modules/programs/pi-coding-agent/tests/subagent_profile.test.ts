@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { access, mkdtemp, writeFile } from "node:fs/promises";
+import { access, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -14,18 +14,28 @@ function profiles(): AgentProfileConfig {
     return {
         schemaVersion: 3,
         defaultProfile: "full",
-        profileCycle: ["scout", "operator", "full"],
-        promptRoutes: { impl: "full", operate: "operator", review: "scout" },
+        profileCycle: ["scout", "artisan", "operator", "full"],
+        promptRoutes: { act: "artisan", impl: "full", operate: "operator", review: "scout" },
         profiles: {
             scout: {
                 model: "provider/model", availability: ["top-level", "subagent"] as ("top-level" | "subagent")[], description: "Read-only exploration.", thinkingLevel: "low", allowAllTools: false,
                 tools: ["read", "subagent_start", "subagent_get", "subagent_wait"], instructions: "Scout only.",
                 extensions: { subagent: { allowedTargets: ["scout"] } },
             },
+            artisan: {
+                model: "provider/model", availability: ["top-level"] as ("top-level" | "subagent")[], description: "Bounded implementation.", thinkingLevel: "xhigh", allowAllTools: false,
+                tools: ["read", "bash", "edit", "write", "save_agent_artifact", "subagent_start", "subagent_send", "subagent_get", "subagent_wait", "subagent_stop"], instructions: "Implement and validate directly.",
+                extensions: { subagent: { allowedTargets: ["focused-reviewer"] } },
+            },
             operator: {
                 model: "provider/model", availability: ["top-level", "subagent"] as ("top-level" | "subagent")[], description: "Delegated assurance.", thinkingLevel: "medium", allowAllTools: false,
                 tools: ["read", "subagent_start", "subagent_get", "subagent_wait"], instructions: "Operate.",
                 extensions: { subagent: { allowedTargets: ["scout"] } },
+            },
+            "focused-reviewer": {
+                model: "provider/model", availability: ["subagent"] as ("top-level" | "subagent")[], description: "Focused review.", thinkingLevel: "medium", allowAllTools: false,
+                tools: ["read", "grep", "find", "ls", "bash"], instructions: "Review one lens.",
+                extensions: { subagent: { allowedTargets: [] } },
             },
             full: {
                 model: "provider/model", availability: ["top-level", "subagent"] as ("top-level" | "subagent")[], description: "Broad coding work.", thinkingLevel: "medium", allowAllTools: true, tools: [],
@@ -68,7 +78,7 @@ function fakeControllerPi(flag = "scout") {
     let modelSucceeds = true;
     let toolApplicationFails = false;
     let activeToolApplications = 0;
-    let allTools = ["read", "bash", "edit", "write", "subagent_start", "subagent_send", "subagent_get", "subagent_wait", "subagent_stop", "project_tool"];
+    let allTools = ["read", "bash", "edit", "write", "save_agent_artifact", "subagent_start", "subagent_send", "subagent_get", "subagent_wait", "subagent_stop", "project_tool"];
     const pi = {
         registerFlag() {}, getFlag: () => flag,
         registerCommand(name: string, value: any) { commands[name] = value; },
@@ -169,19 +179,44 @@ void test("active tool synchronization is ordered, idempotent, and recovers drif
     assert.equal(fake.activeToolApplications(), 6);
 });
 
+void test("artisan profile wiring is top-level-only and delegates only focused review", async () => {
+    const [profileNix, subagentNix, artifactNix] = await Promise.all([
+        readFile(join(import.meta.dirname, "..", "extensions", "profile", "default.nix"), "utf8"),
+        readFile(join(import.meta.dirname, "..", "extensions", "subagent", "default.nix"), "utf8"),
+        readFile(join(import.meta.dirname, "..", "extensions", "agent_artifact", "default.nix"), "utf8"),
+    ]);
+    const artisanStart = profileNix.indexOf("        artisan = {");
+    const artisan = profileNix.slice(artisanStart, profileNix.indexOf("        scout = {", artisanStart));
+    const subagentStart = subagentNix.indexOf("      artisan = {");
+    const subagent = subagentNix.slice(subagentStart, subagentNix.indexOf("      operator = {", subagentStart));
+
+    assert.match(profileNix, /profileCycle = listOfOption str \["scout" "taskmaster" "artisan"/);
+    assert.match(profileNix, /act = "artisan"/);
+    assert.match(artisan, /model = "openai-codex\/gpt-5\.6-luna"/);
+    assert.match(artisan, /availability = \["top-level"\]/);
+    assert.match(artisan, /thinkingLevel = "xhigh"/);
+    assert.match(artisan, /tools = \["write" "edit"\]/);
+    assert.match(subagent, /allowedTargets = \["focused-reviewer"\]/);
+    assert.doesNotMatch(subagent, /tester|taskmaster|cursor-implementer|review-orchestrator/);
+    assert.match(artifactNix, /artisan\.tools = \["save_agent_artifact"\]/);
+});
+
 void test("exact raw prompt commands route transactionally before expansion", async () => {
     const { profilePath, profileConfig } = await fixture();
     const fake = fakeControllerPi("scout");
     registerProfileController(fake.pi, profilePath, {});
     await fake.handlers.session_start![0]!({ reason: "startup" }, fake.ctx);
 
+    for (const text of ["/act", "/act change this", "/act\ncontext"]) {
+        assert.equal(routedProfileForInput(profileConfig, text), "artisan");
+    }
     for (const text of ["/impl", "/impl approved.md", "/impl\ncontext"]) {
         assert.equal(routedProfileForInput(profileConfig, text), "full");
     }
     for (const text of ["/operate", "/operate approved.md", "/operate\ncontext"]) {
         assert.equal(routedProfileForInput(profileConfig, text), "operator");
     }
-    for (const text of ["/implementation", "/impl-extra", "/impl/path", "/operate-extra", "/skill:impl", "run /impl", "/unknown", "ordinary text"]) {
+    for (const text of ["/action", "/act-extra", "/act/path", "/implementation", "/impl-extra", "/impl/path", "/operate-extra", "/skill:impl", "run /impl", "/unknown", "ordinary text"]) {
         assert.equal(routedProfileForInput(profileConfig, text), undefined);
         assert.deepEqual(await fake.handlers.input![0]!({ text, source: "interactive" }, fake.ctx), { action: "continue" });
     }
