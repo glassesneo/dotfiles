@@ -10,7 +10,7 @@ import {
     formatWaitOutcomeBadge,
     profileColorRole,
 } from "./subagent_display_tree.ts";
-import type { WaitDetails } from "./subagent_projection.ts";
+import type { SubmitDetails, WaitDetails } from "./subagent_projection.ts";
 import type { AgentSnapshot, AgentState, TaskState } from "./subagent_types.ts";
 
 /** Subset of Pi ToolRenderContext used by subagent cards (not re-exported by the package). */
@@ -119,6 +119,15 @@ function isWaitDetails(value: unknown): value is WaitDetails {
     return (record.condition === "any" || record.condition === "all")
         && typeof record.timeoutSeconds === "number"
         && Array.isArray(record.agents);
+}
+
+function isSubmitDetails(value: unknown): value is SubmitDetails {
+    if (!isRenderableAgentSnapshot(value)) return false;
+    const record = value as unknown as Record<string, unknown>;
+    const outcome = record.waitOutcome;
+    return Boolean(record.accounting && typeof record.accounting === "object")
+        && (record.waitSeconds === undefined || typeof record.waitSeconds === "number")
+        && (outcome === undefined || outcome === "completed" || outcome === "timeout");
 }
 
 function snapshotPrompt(snapshot: AgentSnapshot, argsPrompt?: string): string | undefined {
@@ -230,27 +239,18 @@ function callPromptText(theme: Theme, prompt: string, expanded: boolean): string
     return theme.fg("dim", expanded ? prompt : previewText(prompt, COLLAPSED_PROMPT_LINES, COLLAPSED_PROMPT_CHARS));
 }
 
-export function renderStartCall(
-    args: { profile: string; purpose: string; prompt: string },
+export function renderSubmitCall(
+    args: { profile?: string; agentId?: string; purpose: string; prompt: string; waitSeconds?: number },
     theme: Theme,
     context: CardRenderContext,
 ): Component {
-    const title = theme.fg("accent", "subagent_start");
+    const title = theme.fg("accent", "subagent_submit");
+    const target = args.profile !== undefined
+        ? joinParts(["1 new agent", profileText(theme, args.profile)])
+        : joinParts(["1 existing agent", args.agentId ? shortId(args.agentId) : undefined]);
+    const wait = args.waitSeconds === undefined ? theme.fg("muted", "immediate") : theme.fg("muted", `wait ${args.waitSeconds}s`);
     const body = [
-        joinParts(["1 agent", profileText(theme, args.profile), theme.fg("muted", args.purpose)]),
-        callPromptText(theme, args.prompt, context.expanded === true),
-    ].join("\n");
-    return textFromComponent(context.lastComponent, `${title} — ${body}`);
-}
-
-export function renderSendCall(
-    args: { agentId: string; purpose: string; prompt: string },
-    theme: Theme,
-    context: CardRenderContext,
-): Component {
-    const title = theme.fg("accent", "subagent_send");
-    const body = [
-        joinParts(["1 existing agent", shortId(args.agentId), theme.fg("muted", args.purpose)]),
+        joinParts([target, wait, theme.fg("muted", args.purpose)]),
         callPromptText(theme, args.prompt, context.expanded === true),
     ].join("\n");
     return textFromComponent(context.lastComponent, `${title} — ${body}`);
@@ -336,6 +336,40 @@ export function renderAgentToolResult(
     words?: readonly string[],
 ): Component {
     return renderSingleResult(result, options, theme, context, argsPrompt, debug, words);
+}
+
+export function renderSubmitResult(
+    result: AgentToolResult<unknown>,
+    options: ToolRenderResultOptions,
+    theme: Theme,
+    context: CardRenderContext,
+    words?: readonly string[],
+): Component {
+    try {
+        const details = result.details;
+        if (!isSubmitDetails(details)) {
+            const contentText = result.content.map(part => "text" in part ? part.text : "").join("\n");
+            const text = contentText.includes("\"agentId\"")
+                ? legacyNotice(theme, options.expanded, contentText || details)
+                : malformedNotice(theme, options.expanded, details ?? contentText);
+            return textFromComponent(context.lastComponent, text);
+        }
+        const target = context.args?.profile !== undefined ? "NEW PROFILED AGENT" : "EXISTING AGENT";
+        const waitRequested = details.waitSeconds !== undefined || context.args?.waitSeconds !== undefined;
+        const state = !waitRequested
+            ? theme.fg("success", "SUBMITTED")
+            : options.isPartial || details.waitOutcome === undefined
+                ? waitOutcomeText(theme, "waiting")
+                : waitOutcomeText(theme, details.waitOutcome);
+        const handles = assignNatureHandles([details.agent.agentId], words);
+        const argsPrompt = typeof context.args?.prompt === "string" ? context.args.prompt : undefined;
+        const card = options.expanded
+            ? expandedAgentCard(theme, details, argsPrompt, handles)
+            : collapsedAgentCard(theme, details, argsPrompt, handles);
+        return textFromComponent(context.lastComponent, `${state} · ${target}\n${card}`);
+    } catch {
+        return textFromComponent(context.lastComponent, malformedNotice(theme, options.expanded, result.details));
+    }
 }
 
 export function renderWaitResult(

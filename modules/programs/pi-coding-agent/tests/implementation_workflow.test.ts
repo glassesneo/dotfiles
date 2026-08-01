@@ -18,7 +18,7 @@ void test("implementation entrypoints are thin explicit mode templates", async (
     assert.match(act, /lightweight-implementation-lifecycle/);
     assert.match(act, /aligned-request/);
     assert.match(act, /explicit\s+confirmation/s);
-    assert.doesNotMatch(act, /specification-design|ideation-design|focused-reviewer|subagent_start/);
+    assert.doesNotMatch(act, /specification-design|ideation-design|focused-reviewer|subagent_submit/);
 
     for (const prompt of [impl, execute, operate]) {
         assert.match(prompt, /implementation-lifecycle/);
@@ -30,7 +30,7 @@ void test("implementation entrypoints are thin explicit mode templates", async (
     assert.match(operate, /delegated-reviewed/);
     assert.match(review, /orchestrated-review/);
     assert.match(review, /<implementation-report-path>/);
-    for (const prompt of [impl, execute, operate, review]) assert.doesNotMatch(prompt, /focused-reviewer|dissent-reviewer|subagent_start/);
+    for (const prompt of [impl, execute, operate, review]) assert.doesNotMatch(prompt, /focused-reviewer|dissent-reviewer|subagent_submit/);
 });
 
 void test("lightweight lifecycle is packaged and bounds aligned execution, repair, review, and artifacts", async () => {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createSubagentGetTool, createSubagentSendTool, createSubagentStartTool, createSubagentStopTool, createSubagentWaitTool } from "../extensions_src/subagent.ts";
+import { createSubagentGetTool, createSubagentStopTool, createSubagentSubmitTool, createSubagentWaitTool } from "../extensions_src/subagent.ts";
 import {
     exceedsModelVisibleLimit,
     projectDebugSnapshot,
@@ -85,9 +85,8 @@ const baseSnapshot = (overrides: Partial<{ agentState: AgentSnapshot["status"]["
     };
 };
 
-void test("public schemas omit detail and expose debug only on get", () => {
-    const start = createSubagentStartTool({ configPath: "/x", env: {}, exec: async () => ({ stdout: "", stderr: "", code: 0 }) }, ["scout"]);
-    const send = createSubagentSendTool({ configPath: "/x", env: {}, exec: async () => ({ stdout: "", stderr: "", code: 0 }) });
+void test("public schemas omit detail and expose submit targets plus debug only on get", () => {
+    const submit = createSubagentSubmitTool({ configPath: "/x", env: {}, exec: async () => ({ stdout: "", stderr: "", code: 0 }) }, ["scout"]);
     const get = createSubagentGetTool({ configPath: "/x", env: {}, exec: async () => ({ stdout: "", stderr: "", code: 0 }) });
     const wait = createSubagentWaitTool({ configPath: "/x", env: {}, exec: async () => ({ stdout: "", stderr: "", code: 0 }) });
     const stop = createSubagentStopTool({ configPath: "/x", env: {}, exec: async () => ({ stdout: "", stderr: "", code: 0 }) });
@@ -97,17 +96,18 @@ void test("public schemas omit detail and expose debug only on get", () => {
         required: [...(tool.parameters.required ?? [])].sort(),
     });
 
-    assert.deepEqual(props(start), { keys: ["profile", "prompt", "purpose"], required: ["profile", "prompt", "purpose"] });
-    assert.deepEqual(props(send), { keys: ["agentId", "prompt", "purpose"], required: ["agentId", "prompt", "purpose"] });
+    assert.deepEqual(props(submit), { keys: ["agentId", "profile", "prompt", "purpose", "waitSeconds"], required: ["prompt", "purpose"] });
     assert.deepEqual(props(get), { keys: ["agentId", "debug", "taskId"], required: ["agentId"] });
     assert.deepEqual(props(wait), { keys: ["condition", "taskIds", "timeoutSeconds"], required: ["condition", "taskIds", "timeoutSeconds"] });
     assert.deepEqual(props(stop), { keys: ["agentId"], required: ["agentId"] });
+    assert.match(submit.description, /exactly one.*profile.*agentId/iu);
+    assert.match(submit.description, /subagent_wait/iu);
     assert.match(get.description, /debug/i);
     assert.match(get.description, /not needed for normal operation/i);
 });
 
 void test("prepareArguments maps legacy detail and purpose fallback", () => {
-    const start = createSubagentStartTool({ configPath: "/x", env: {}, exec: async () => ({ stdout: "", stderr: "", code: 0 }) }, ["scout"]);
+    const start = createSubagentSubmitTool({ configPath: "/x", env: {}, exec: async () => ({ stdout: "", stderr: "", code: 0 }) }, ["scout"]);
     const get = createSubagentGetTool({ configPath: "/x", env: {}, exec: async () => ({ stdout: "", stderr: "", code: 0 }) });
     const wait = createSubagentWaitTool({ configPath: "/x", env: {}, exec: async () => ({ stdout: "", stderr: "", code: 0 }) });
 

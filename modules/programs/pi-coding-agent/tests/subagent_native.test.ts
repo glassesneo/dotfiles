@@ -5,7 +5,7 @@ import { join } from "node:path";
 import test from "node:test";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { registerSubagentChildBridge } from "../extensions_src/subagent_child_bridge.ts";
-import { createSubagentGetTool, createSubagentSendTool, createSubagentStopTool, createSubagentWaitTool } from "../extensions_src/subagent.ts";
+import { createSubagentGetTool, createSubagentStopTool, createSubagentSubmitTool, createSubagentWaitTool } from "../extensions_src/subagent.ts";
 import { defaultPaletteKeymap } from "../extensions_src/utilities/command_palette_keymap.ts";
 import { mapConcurrent } from "../extensions_src/utilities/subagent_concurrency.ts";
 import { piLaunchDescriptor } from "../extensions_src/utilities/subagent_pi.ts";
@@ -729,6 +729,72 @@ void test("wait partial updates skip usage claims and final results use outcome"
     assert.ok(updates.length >= 1);
     assert.ok(updates.every(update => update.claimed.length === 0 && update.outcome === undefined));
 });
+void test("submit existing-agent path returns one shape and inline completion claims usage once", async () => {
+    const root = await mkdtemp(join(tmpdir(), "native-submit-inline-complete-"));
+    const configPath = join(root, "subagent.json");
+    await writeFile(configPath, JSON.stringify(config(root)));
+    const prepared = await prepareAgent(root, { profile: "tester", purpose: "first", harness: "pi", cwd: "/work", profileSnapshot: profile, lineage: { callerProfile: "taskmaster", targetProfile: "tester", depth: 1, originSessionId: "origin" }, capabilities: { nativeScreen: true, taskDelivery: true, taskCompletion: true, usage: true, interactiveInterventions: true } });
+    await publishAgent(prepared.paths, { agentId: prepared.agentId, profile: "tester", purpose: "first", harness: "pi", cwd: "/work", profileSnapshot: profile, tmux, capabilities: { nativeScreen: true, taskDelivery: true, taskCompletion: true, usage: true, interactiveInterventions: true }, callerProfile: "taskmaster", targetProfile: "tester", depth: 1, originSessionId: "origin" });
+    await patchAgentStatus(prepared.paths, { state: "idle", bridgeReady: true });
+    const exec = async (_command: string, args: string[]): Promise<CommandResult> => {
+        if (args.at(-1) === "#{pid}") return { stdout: "10\n", stderr: "", code: 0 };
+        if (args.includes("has-session")) return { stdout: "", stderr: "", code: 0 };
+        if (args.includes("#{pane_id}\t#{pane_dead}")) return { stdout: "%2\t0\n", stderr: "", code: 0 };
+        return { stdout: "", stderr: "", code: 0 };
+    };
+    let clock = 0;
+    let finished = false;
+    const tool = createSubagentSubmitTool({ configPath, env: {}, exec, now: () => clock, sleep: async () => {
+        clock += 100;
+        if (!finished) {
+            const active = await readAgentSnapshot(root, prepared.agentId);
+            assert.ok(active.status.activeTaskId);
+            await finishTask(root, prepared.agentId, active.status.activeTaskId, { outcome: "succeeded", output: "inline done", usage: { input: 2, output: 3, cacheRead: 0, cacheWrite: 0, totalTokens: 5, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } } });
+            finished = true;
+        }
+    } });
+    const ctx = { sessionManager: { getSessionId: () => "origin", getSessionFile: () => undefined } } as unknown as import("@earendil-works/pi-coding-agent").ExtensionContext;
+    const response = await tool.execute("submit-call", { agentId: prepared.agentId, purpose: "inline", prompt: "finish this", waitSeconds: 1 }, undefined, undefined, ctx) as { content: Array<{ text: string }>; details: { waitOutcome?: string; accounting: { claimedTaskIds: string[] } }; usage?: { totalTokens: number } };
+    const content = JSON.parse(response.content[0]!.text) as Record<string, unknown>;
+    assert.equal(content.agentId, prepared.agentId);
+    assert.equal(typeof content.taskId, "string");
+    assert.equal(content.waitOutcome, "completed");
+    assert.equal(content.output, "inline done");
+    assert.equal(response.details.waitOutcome, "completed");
+    assert.deepEqual(response.details.accounting.claimedTaskIds, [content.taskId]);
+    assert.equal(response.usage?.totalTokens, 5);
+    const later = await createSubagentGetTool({ configPath, env: {}, exec }).execute("get-call", { agentId: prepared.agentId }, undefined, undefined, ctx) as { usage?: unknown; details: { accounting: { claimedTaskIds: string[] } } };
+    assert.equal(later.usage, undefined);
+    assert.deepEqual(later.details.accounting.claimedTaskIds, []);
+});
+
+void test("submit inline timeout preserves the submitted task and agent", async () => {
+    const root = await mkdtemp(join(tmpdir(), "native-submit-inline-timeout-"));
+    const configPath = join(root, "subagent.json");
+    await writeFile(configPath, JSON.stringify(config(root)));
+    const prepared = await prepareAgent(root, { profile: "tester", purpose: "first", harness: "pi", cwd: "/work", profileSnapshot: profile, lineage: { callerProfile: "taskmaster", targetProfile: "tester", depth: 1, originSessionId: "origin" }, capabilities: { nativeScreen: true, taskDelivery: true, taskCompletion: true, usage: true, interactiveInterventions: true } });
+    await publishAgent(prepared.paths, { agentId: prepared.agentId, profile: "tester", purpose: "first", harness: "pi", cwd: "/work", profileSnapshot: profile, tmux, capabilities: { nativeScreen: true, taskDelivery: true, taskCompletion: true, usage: true, interactiveInterventions: true }, callerProfile: "taskmaster", targetProfile: "tester", depth: 1, originSessionId: "origin" });
+    await patchAgentStatus(prepared.paths, { state: "idle", bridgeReady: true });
+    const exec = async (_command: string, args: string[]): Promise<CommandResult> => {
+        if (args.at(-1) === "#{pid}") return { stdout: "10\n", stderr: "", code: 0 };
+        if (args.includes("has-session")) return { stdout: "", stderr: "", code: 0 };
+        if (args.includes("#{pane_id}\t#{pane_dead}")) return { stdout: "%2\t0\n", stderr: "", code: 0 };
+        return { stdout: "", stderr: "", code: 0 };
+    };
+    let clock = 0;
+    const tool = createSubagentSubmitTool({ configPath, env: {}, exec, now: () => clock, sleep: async () => { clock += 1000; } });
+    const ctx = { sessionManager: { getSessionId: () => "origin", getSessionFile: () => undefined } } as unknown as import("@earendil-works/pi-coding-agent").ExtensionContext;
+    const response = await tool.execute("submit-timeout", { agentId: prepared.agentId, purpose: "timeout", prompt: "still work", waitSeconds: 1 }, undefined, undefined, ctx) as { content: Array<{ text: string }>; details: { waitOutcome?: string } };
+    const content = JSON.parse(response.content[0]!.text) as { taskId: string; waitOutcome: string; taskState: string; agentState: string };
+    assert.equal(content.waitOutcome, "timeout");
+    assert.ok(["created", "running"].includes(content.taskState));
+    assert.equal(content.agentState, "busy");
+    const surviving = await readAgentSnapshot(root, prepared.agentId, content.taskId);
+    assert.equal(surviving.status.state, "busy");
+    assert.equal(surviving.task?.status.state, content.taskState);
+    assert.equal(response.details.waitOutcome, "timeout");
+});
+
 void test("management tools reject the calling agent before reconciliation or mutation", async () => {
     const root = await mkdtemp(join(tmpdir(), "native-self-target-"));
     const configPath = join(root, "subagent.json");
@@ -744,7 +810,7 @@ void test("management tools reject the calling agent before reconciliation or mu
     const env = { PI_SUBAGENT_AGENT_ID: prepared.agentId, PI_SUBAGENT_ORIGIN_SESSION_ID: "origin" };
     const ctx = { sessionManager: { getSessionId: () => "origin", getSessionFile: () => undefined } } as unknown as import("@earendil-works/pi-coding-agent").ExtensionContext;
     const deps = { configPath, env, exec, sleep };
-    await assert.rejects(createSubagentSendTool(deps).execute("send", { agentId: prepared.agentId, purpose: "again", prompt: "nope" }, undefined, undefined, ctx), /cannot target the calling agent itself/);
+    await assert.rejects(createSubagentSubmitTool(deps).execute("submit", { agentId: prepared.agentId, purpose: "again", prompt: "nope" }, undefined, undefined, ctx), /cannot target the calling agent itself/);
     await assert.rejects(createSubagentGetTool(deps).execute("get", { agentId: prepared.agentId }, undefined, undefined, ctx), /cannot target the calling agent itself/);
     await assert.rejects(createSubagentStopTool(deps).execute("stop", { agentId: prepared.agentId }, undefined, undefined, ctx), /cannot target the calling agent itself/);
     await assert.rejects(createSubagentWaitTool(deps).execute("wait", { taskIds: [task.request.taskId], condition: "all", timeoutSeconds: 1 }, undefined, undefined, ctx), /cannot wait on the calling agent's own task/);

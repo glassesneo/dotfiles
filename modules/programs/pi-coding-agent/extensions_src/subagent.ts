@@ -8,9 +8,9 @@ import { onActiveProfile } from "./utilities/profile_events.ts";
 import {
     renderAgentToolResult,
     renderGetCall,
-    renderSendCall,
-    renderStartCall,
     renderStopCall,
+    renderSubmitCall,
+    renderSubmitResult,
     renderWaitCall,
     renderWaitResult,
 } from "./utilities/subagent_cards.ts";
@@ -20,25 +20,34 @@ import {
     projectDebugSnapshot,
     projectMinimalAgentTask,
     projectMinimalWaitResult,
+    projectMinimalSubmitResult,
     sanitizeSnapshot,
     serializeModelVisibleJson,
     type AgentToolDetails,
+    type SubmitDetails,
     type WaitDetails,
 } from "./utilities/subagent_projection.ts";
 import { claimTaskUsage, createTask, findTaskAgent, prepareAgent, publishAgent, readAgentSnapshot, reconcileOriginUsageClaims, removePreparedAgent } from "./utilities/subagent_store.ts";
 import { inspectAgentTmux, launchAgentSession, probeTmux, stopAgentSession, type CommandExecutor } from "./utilities/subagent_tmux.ts";
-import { PURPOSE_MAX_LENGTH, addUsage, emptyUsage, fallbackRunPurpose, isTerminalAgent, isTerminalTask, parseSubagentFacet, projectChildEffectiveProfile, validateSubagentRuntimeConfig, type AgentSnapshot, type SubagentFacet, type SubagentRuntimeConfig } from "./utilities/subagent_types.ts";
+import { PURPOSE_MAX_LENGTH, addUsage, emptyUsage, fallbackRunPurpose, isTerminalAgent, isTerminalTask, parseSubagentFacet, projectChildEffectiveProfile, validateSubagentRuntimeConfig, type AgentSnapshot, type SubagentFacet, type SubagentRuntimeConfig, type UsageClaim } from "./utilities/subagent_types.ts";
 import { NATURE_HANDLE_WORDS } from "./utilities/subagent_display_tree.ts";
 import { openSubagentPalette } from "./utilities/subagent_palette.ts";
 import { loadPaletteKeymap } from "./utilities/command_palette_keymap.ts";
 import { provideCommandPaletteContribution } from "./utilities/command_palette_contributions.ts";
 
 const CONFIG = join(getAgentDir(), "subagent.json"); const PROFILES = join(getAgentDir(), "agent-profiles.json");
-const sendParameters = Type.Object({
-    agentId: Type.String(),
+const submitParametersFor = (allowedTargets: readonly string[]) => Type.Object({
+    profile: Type.Optional(StringEnum([...allowedTargets], {
+        description: allowedTargets.length > 0
+            ? `New agent profile target. Allowed: ${allowedTargets.join(", ")}`
+            : "No new-agent profile targets are allowed for the active profile",
+    })),
+    agentId: Type.Optional(Type.String({ description: "Existing idle agent target. Mutually exclusive with profile." })),
     purpose: Type.String({ minLength: 1, maxLength: PURPOSE_MAX_LENGTH }),
     prompt: Type.String({ minLength: 1 }),
+    waitSeconds: Type.Optional(Type.Integer({ minimum: 1, maximum: 3600, description: "Wait only for the task created by this submission." })),
 });
+type SubmitParameters = Static<ReturnType<typeof submitParametersFor>>;
 const getParameters = Type.Object({
     agentId: Type.String(),
     taskId: Type.Optional(Type.String()),
@@ -79,7 +88,7 @@ function prepareGetArguments(args: unknown): Static<typeof getParameters> {
     return value as Static<typeof getParameters>;
 }
 
-async function claim(config: SubagentRuntimeConfig, snapshot: AgentSnapshot, ctx: ExtensionContext, env: NodeJS.ProcessEnv, toolCallId: string, toolName: "subagent_start" | "subagent_get" | "subagent_wait" | "subagent_stop"): Promise<{ usage?: Usage; claimedTaskIds: string[] }> {
+async function claim(config: SubagentRuntimeConfig, snapshot: AgentSnapshot, ctx: ExtensionContext, env: NodeJS.ProcessEnv, toolCallId: string, toolName: UsageClaim["toolName"]): Promise<{ usage?: Usage; claimedTaskIds: string[] }> {
     const task = snapshot.task;
     if (!snapshot.agent.capabilities.usage || !task?.result || !isTerminalTask(task.status.state)) return { claimedTaskIds: [] };
     const lineage = origin(ctx, env);
@@ -98,165 +107,255 @@ function agentResult(rawSnapshot: AgentSnapshot, accounting: { usage?: Usage; cl
     };
 }
 
+function submitResult(
+    rawSnapshot: AgentSnapshot,
+    accounting: { usage?: Usage; claimedTaskIds: string[] },
+    waitOutcome?: "completed" | "timeout",
+    waitSeconds?: number,
+) {
+    const snapshot = sanitizeSnapshot(rawSnapshot);
+    const payload = projectMinimalSubmitResult(snapshot, waitOutcome);
+    const details: SubmitDetails = {
+        ...snapshot,
+        accounting,
+        ...(waitSeconds === undefined ? {} : { waitSeconds }),
+        ...(waitOutcome ? { waitOutcome } : {}),
+    };
+    return {
+        content: [{ type: "text" as const, text: serializeModelVisibleJson(payload) }],
+        details,
+        usage: accounting.usage,
+    };
+}
+
 function active(deps: SubagentDependencies) { const value = deps.activeProfile?.(); if (!value) throw new Error("Subagent configuration unavailable: no active-profile event has been received"); if (value.error) throw new Error(`Subagent configuration unavailable: ${value.error}`); return value; }
-function rejectSelfTarget(env: NodeJS.ProcessEnv, agentId: string, operation: "send" | "get" | "stop" | "wait"): void {
+function rejectSelfTarget(env: NodeJS.ProcessEnv, agentId: string, operation: "submit" | "get" | "stop" | "wait"): void {
     const self = env.PI_SUBAGENT_AGENT_ID;
     if (self && self === agentId) throw new Error(`subagent_${operation} cannot target the calling agent itself (${agentId})`);
 }
-function startParametersFor(allowedTargets: readonly string[]) {
-    const names = [...allowedTargets];
-    return Type.Object({
-        profile: StringEnum(names, {
-            description: names.length > 0
-                ? `Target agent profile. Allowed: ${names.join(", ")}`
-                : "No subagent target profiles are allowed for the active profile",
-        }),
-        purpose: Type.String({ minLength: 1, maxLength: PURPOSE_MAX_LENGTH }),
-        prompt: Type.String({ minLength: 1 }),
-    });
+type WaitAccounting = { usage?: Usage; claimedTaskIds: string[] };
+type PollTasksOptions = {
+    readSnapshots: () => Promise<AgentSnapshot[]>;
+    condition: "any" | "all";
+    timeoutSeconds: number;
+    signal?: AbortSignal;
+    now: () => number;
+    sleep: (ms: number, signal?: AbortSignal) => Promise<void>;
+    claim: (snapshot: AgentSnapshot) => Promise<{ usage?: Usage; claimedTaskIds: string[] }>;
+    onWaiting?: (snapshots: AgentSnapshot[]) => void;
+};
+type PollTasksResult = { snapshots: AgentSnapshot[]; outcome: "completed" | "timeout"; accounting: WaitAccounting };
+
+async function pollTasks(options: PollTasksOptions): Promise<PollTasksResult> {
+    const started = options.now();
+    const deadline = started + options.timeoutSeconds * 1000;
+    while (true) {
+        if (options.signal?.aborted) throw options.signal.reason;
+        const snapshots = await options.readSnapshots();
+        const done = snapshots.filter(value => value.task && isTerminalTask(value.task.status.state));
+        const met = options.condition === "any" ? done.length > 0 : done.length === snapshots.length;
+        const timedOut = options.now() >= deadline;
+        if (met || timedOut) {
+            const accounting: WaitAccounting = { claimedTaskIds: [] };
+            for (const snapshot of snapshots) {
+                const item = await options.claim(snapshot);
+                accounting.claimedTaskIds.push(...item.claimedTaskIds);
+                if (item.usage) {
+                    if (!accounting.usage) accounting.usage = emptyUsage();
+                    addUsage(accounting.usage, item.usage);
+                }
+            }
+            return { snapshots, outcome: met ? "completed" : "timeout", accounting };
+        }
+        options.onWaiting?.(snapshots);
+        await options.sleep(Math.min(1000, deadline - options.now()), options.signal);
+    }
 }
-export function createSubagentStartTool(deps: SubagentDependencies, allowedTargets: readonly string[] = []): ToolDefinition {
-    const startParameters = startParametersFor(allowedTargets);
+
+function waitResult(
+    snapshots: readonly AgentSnapshot[],
+    condition: "any" | "all",
+    timeoutSeconds: number,
+    outcome: "completed" | "timeout" | undefined,
+    accounting: WaitAccounting,
+) {
+    const agents = snapshots.map(sanitizeSnapshot);
+    const details: WaitDetails = { condition, timeoutSeconds, ...(outcome ? { outcome } : {}), agents, accounting };
+    const contentPayload = outcome
+        ? projectMinimalWaitResult(agents, outcome)
+        : { tasks: agents.map(projectMinimalAgentTask) };
+    return {
+        content: [{ type: "text" as const, text: serializeModelVisibleJson(contentPayload) }],
+        details,
+        usage: accounting.usage,
+    };
+}
+
+async function startProfileSubmission(
+    deps: SubagentDependencies,
+    config: SubagentRuntimeConfig,
+    current: ActiveSubagentProfile,
+    params: SubmitParameters & { profile: string },
+    signal: AbortSignal | undefined,
+    ctx: ExtensionContext,
+): Promise<AgentSnapshot> {
+    if (!current.facet?.allowedTargets.includes(params.profile)) throw new Error(`Profile ${current.name} is not allowed to start subagent profile ${params.profile}`);
+    const profiles = await loadAgentProfileConfig(deps.profileConfigPath ?? PROFILES, deps.env);
+    const profile = profiles.profiles[params.profile];
+    if (!profile) throw new Error(`Unknown subagent profile: ${params.profile}`);
+    if (profile.allowAllTools) throw new Error(`Subagent target profile ${params.profile} uses allowAllTools and cannot be used as a child target`);
+    if (!profile.availability.includes("subagent")) throw new Error(`Subagent target profile ${params.profile} is not available to subagents`);
+    const effective = projectChildEffectiveProfile(profile, config.childExcludedTools);
+    const lineage = origin(ctx, deps.env);
+    const depth = lineage.depth + 1;
+    if (depth > config.maxDepth) throw new Error(`Subagent depth ${depth} exceeds maxDepth ${config.maxDepth}`);
+    const harness = (profile.extensions.subagent as { harness?: string } | undefined)?.harness ?? "pi";
+    const resolvedHarness = resolveHarnessAdapter(config, harness, effective);
+    const { adapter } = resolvedHarness;
+    const context = await probeTmux(deps.exec, config.tmux, deps.env);
+    if (!context) throw new Error("Subagent start requires a usable current tmux context");
+    const prepared = await prepareAgent(config.stateRoot, {
+        profile: params.profile,
+        purpose: params.purpose,
+        harness,
+        cwd: ctx.cwd,
+        profileSnapshot: effective,
+        lineage: { callerProfile: current.name, targetProfile: params.profile, depth, parentAgentId: lineage.parentAgentId, originSessionId: lineage.originSessionId, originSessionFile: lineage.originSessionFile },
+        capabilities: adapter.capabilities,
+    });
+    let tmux;
+    let published = false;
+    try {
+        const launch = adapter.launch(config, resolvedHarness.harness, {
+            agentId: prepared.agentId,
+            agentDirectory: prepared.paths.directory,
+            profile: params.profile,
+            profileSnapshot: effective,
+            depth,
+            originSessionId: lineage.originSessionId,
+            originSessionFile: lineage.originSessionFile,
+            cwd: ctx.cwd,
+        });
+        tmux = await launchAgentSession(deps.exec, config.tmux, context, { agentId: prepared.agentId, profile: params.profile, originSessionId: lineage.originSessionId, cwd: ctx.cwd, launch });
+        await publishAgent(prepared.paths, {
+            agentId: prepared.agentId,
+            profile: params.profile,
+            purpose: params.purpose,
+            harness,
+            cwd: ctx.cwd,
+            profileSnapshot: effective,
+            tmux,
+            tmuxOwnership: "origin-hub",
+            capabilities: adapter.capabilities,
+            callerProfile: current.name,
+            targetProfile: params.profile,
+            depth,
+            parentAgentId: lineage.parentAgentId,
+            originSessionId: lineage.originSessionId,
+            originSessionFile: lineage.originSessionFile,
+        });
+        published = true;
+        await createTask(config.stateRoot, prepared.agentId, params.purpose, params.prompt);
+        const deadline = (deps.now ?? (() => performance.now()))() + (config.bridgeReadyTimeoutMs ?? 5000);
+        while ((deps.now ?? (() => performance.now()))() < deadline) {
+            if (signal?.aborted) throw signal.reason;
+            const snapshot = await readAgentSnapshot(config.stateRoot, prepared.agentId);
+            if (isTerminalAgent(snapshot.status.state)) throw new Error(snapshot.status.exitReason ?? `Child agent became ${snapshot.status.state} during startup`);
+            if (snapshot.status.bridgeReady) {
+                const live = await readReconciledAgentSnapshot(deps.exec, config.tmux, config.stateRoot, prepared.agentId);
+                if (isTerminalAgent(live.status.state)) throw new Error(live.status.exitReason ?? `Child agent became ${live.status.state} during startup`);
+                return live;
+            }
+            await (deps.sleep ?? sleep)(50, signal);
+        }
+        throw new Error("Child bridge readiness timed out");
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        let cleanupError: unknown;
+        if (published) {
+            try { await failStartedSubagentAgent({ stateRoot: config.stateRoot, agentId: prepared.agentId, originSessionId: origin(ctx, deps.env).originSessionId, exec: deps.exec, tmux: config.tmux }, message); }
+            catch (failure) { cleanupError = failure; }
+        } else {
+            let cleanupConfirmed = tmux === undefined;
+            if (tmux) {
+                try {
+                    cleanupConfirmed = await stopAgentSession(deps.exec, config.tmux, tmux);
+                    if (!cleanupConfirmed) {
+                        const inspected = await inspectAgentTmux(deps.exec, config.tmux, tmux);
+                        cleanupConfirmed = inspected.server === "absent" || inspected.server === "mismatch" || !inspected.paneAlive;
+                    }
+                } catch (failure) {
+                    const inspected = await inspectAgentTmux(deps.exec, config.tmux, tmux).catch(() => undefined);
+                    cleanupConfirmed = inspected !== undefined && (inspected.server === "absent" || inspected.server === "mismatch" || !inspected.paneAlive);
+                    if (!cleanupConfirmed) cleanupError = failure;
+                }
+            }
+            if (cleanupConfirmed) await removePreparedAgent(prepared.paths);
+            else cleanupError ??= new Error("Could not confirm that the child tmux pane stopped");
+        }
+        if (cleanupError) throw new Error(`${message}; cleanup for agent ${prepared.agentId} remains incomplete: ${errorText(cleanupError)}`);
+        throw error;
+    }
+}
+
+function validateSubmitTarget(params: SubmitParameters): { kind: "profile"; profile: string } | { kind: "agent"; agentId: string } {
+    const hasProfile = params.profile !== undefined;
+    const hasAgent = params.agentId !== undefined;
+    if (hasProfile === hasAgent) throw new Error("subagent_submit requires exactly one of profile or agentId");
+    return hasProfile ? { kind: "profile", profile: params.profile! } : { kind: "agent", agentId: params.agentId! };
+}
+
+export function createSubagentSubmitTool(deps: SubagentDependencies, allowedTargets: readonly string[] = []): ToolDefinition {
+    const parameters = submitParametersFor(allowedTargets);
     return defineTool({
-        name: "subagent_start",
-        label: "Start agent session",
-        description: "Start a persistent native tmux agent session and its first task. Returns distinct agentId and taskId values. For abnormal-state diagnosis of an existing agent, use subagent_get with debug=true.",
-        promptSnippet: "Start a persistent profiled agent session",
-        parameters: startParameters,
+        name: "subagent_submit",
+        label: "Submit agent task",
+        description: "Submit one task to exactly one target: profile for a new profiled agent or agentId for an existing idle agent. Returns one submission result with distinct agentId and taskId. Omit waitSeconds for immediate return; provide it to wait only for this task. Busy existing agents reject without queueing. Use subagent_wait for multi-task coordination; use subagent_get for later inspection.",
+        promptSnippet: "Submit a task to a new or existing persistent agent",
+        parameters,
         executionMode: "sequential",
         prepareArguments(args) {
-            const value = stripLegacyDetail(args) as Static<typeof startParameters> & { purpose?: string; prompt: string };
+            const value = stripLegacyDetail(args) as SubmitParameters & { purpose?: string; prompt: string };
             return value.purpose === undefined ? { ...value, purpose: fallbackRunPurpose(value.prompt) } : value;
         },
-        async execute(toolCallId, params, signal, _update, ctx) {
-            const config = await loadSubagentConfig(deps.configPath);
-            const current = active(deps);
-            if (!current.facet?.allowedTargets.includes(params.profile)) throw new Error(`Profile ${current.name} is not allowed to start subagent profile ${params.profile}`);
-            const profiles = await loadAgentProfileConfig(deps.profileConfigPath ?? PROFILES, deps.env);
-            const profile = profiles.profiles[params.profile];
-            if (!profile) throw new Error(`Unknown subagent profile: ${params.profile}`);
-            if (profile.allowAllTools) throw new Error(`Subagent target profile ${params.profile} uses allowAllTools and cannot be used as a child target`);
-            if (!profile.availability.includes("subagent")) throw new Error(`Subagent target profile ${params.profile} is not available to subagents`);
-            const effective = projectChildEffectiveProfile(profile, config.childExcludedTools);
-            const lineage = origin(ctx, deps.env);
-            const depth = lineage.depth + 1;
-            if (depth > config.maxDepth) throw new Error(`Subagent depth ${depth} exceeds maxDepth ${config.maxDepth}`);
-            const harness = (profile.extensions.subagent as { harness?: string } | undefined)?.harness ?? "pi";
-            const resolvedHarness = resolveHarnessAdapter(config, harness, effective);
-            const { adapter } = resolvedHarness;
-            const context = await probeTmux(deps.exec, config.tmux, deps.env);
-            if (!context) throw new Error("Subagent start requires a usable current tmux context");
-            const prepared = await prepareAgent(config.stateRoot, {
-                profile: params.profile,
-                purpose: params.purpose,
-                harness,
-                cwd: ctx.cwd,
-                profileSnapshot: effective,
-                lineage: { callerProfile: current.name, targetProfile: params.profile, depth, parentAgentId: lineage.parentAgentId, originSessionId: lineage.originSessionId, originSessionFile: lineage.originSessionFile },
-                capabilities: adapter.capabilities,
-            });
-            let tmux;
-            let published = false;
+        async execute(toolCallId, params, signal, update, ctx) {
+            const target = validateSubmitTarget(params);
+            let config: SubagentRuntimeConfig;
+            let snapshot: AgentSnapshot;
+            if (target.kind === "profile") {
+                config = await loadSubagentConfig(deps.configPath);
+                snapshot = await startProfileSubmission(deps, config, active(deps), { ...params, profile: target.profile }, signal, ctx);
+            } else {
+                rejectSelfTarget(deps.env, target.agentId, "submit");
+                config = await loadSubagentConfig(deps.configPath);
+                const stored = await readAgentSnapshot(config.stateRoot, target.agentId);
+                if (stored.agent.originSessionId !== origin(ctx, deps.env).originSessionId) throw new Error(`Agent ${target.agentId} belongs to a different origin session`);
+                await readReconciledAgentSnapshot(deps.exec, config.tmux, config.stateRoot, target.agentId);
+                await createTask(config.stateRoot, target.agentId, params.purpose, params.prompt);
+                snapshot = await readAgentSnapshot(config.stateRoot, target.agentId);
+            }
+
+            if (params.waitSeconds === undefined) return submitResult(snapshot, await claim(config, snapshot, ctx, deps.env, toolCallId, "subagent_submit"));
+            update?.(submitResult(snapshot, { claimedTaskIds: [] }, undefined, params.waitSeconds));
             try {
-                const launch = adapter.launch(config, resolvedHarness.harness, {
-                    agentId: prepared.agentId,
-                    agentDirectory: prepared.paths.directory,
-                    profile: params.profile,
-                    profileSnapshot: effective,
-                    depth,
-                    originSessionId: lineage.originSessionId,
-                    originSessionFile: lineage.originSessionFile,
-                    cwd: ctx.cwd,
+                const waited = await pollTasks({
+                    readSnapshots: async () => [await readReconciledAgentSnapshot(deps.exec, config.tmux, config.stateRoot, snapshot.agent.agentId, snapshot.task!.request.taskId)],
+                    condition: "all",
+                    timeoutSeconds: params.waitSeconds,
+                    signal,
+                    now: deps.now ?? (() => performance.now()),
+                    sleep: deps.sleep ?? sleep,
+                    claim: value => claim(config, value, ctx, deps.env, toolCallId, "subagent_submit"),
+                    onWaiting: values => update?.(submitResult(values[0]!, { claimedTaskIds: [] }, undefined, params.waitSeconds)),
                 });
-                tmux = await launchAgentSession(deps.exec, config.tmux, context, { agentId: prepared.agentId, profile: params.profile, originSessionId: lineage.originSessionId, cwd: ctx.cwd, launch });
-                await publishAgent(prepared.paths, {
-                    agentId: prepared.agentId,
-                    profile: params.profile,
-                    purpose: params.purpose,
-                    harness,
-                    cwd: ctx.cwd,
-                    profileSnapshot: effective,
-                    tmux,
-                    tmuxOwnership: "origin-hub",
-                    capabilities: adapter.capabilities,
-                    callerProfile: current.name,
-                    targetProfile: params.profile,
-                    depth,
-                    parentAgentId: lineage.parentAgentId,
-                    originSessionId: lineage.originSessionId,
-                    originSessionFile: lineage.originSessionFile,
-                });
-                published = true;
-                await createTask(config.stateRoot, prepared.agentId, params.purpose, params.prompt);
-                const deadline = (deps.now ?? (() => performance.now()))() + (config.bridgeReadyTimeoutMs ?? 5000);
-                while ((deps.now ?? (() => performance.now()))() < deadline) {
-                    if (signal?.aborted) throw signal.reason;
-                    const snapshot = await readAgentSnapshot(config.stateRoot, prepared.agentId);
-                    if (isTerminalAgent(snapshot.status.state)) throw new Error(snapshot.status.exitReason ?? `Child agent became ${snapshot.status.state} during startup`);
-                    if (snapshot.status.bridgeReady) {
-                        const live = await readReconciledAgentSnapshot(deps.exec, config.tmux, config.stateRoot, prepared.agentId);
-                        if (isTerminalAgent(live.status.state)) throw new Error(live.status.exitReason ?? `Child agent became ${live.status.state} during startup`);
-                        return agentResult(live, await claim(config, live, ctx, deps.env, toolCallId, "subagent_start"));
-                    }
-                    await (deps.sleep ?? sleep)(50, signal);
-                }
-                throw new Error("Child bridge readiness timed out");
+                return submitResult(waited.snapshots[0]!, waited.accounting, waited.outcome, params.waitSeconds);
             } catch (error) {
-                const message = error instanceof Error ? error.message : String(error);
-                let cleanupError: unknown;
-                if (published) {
-                    try { await failStartedSubagentAgent({ stateRoot: config.stateRoot, agentId: prepared.agentId, originSessionId: lineage.originSessionId, exec: deps.exec, tmux: config.tmux }, message); }
-                    catch (failure) { cleanupError = failure; }
-                } else {
-                    let cleanupConfirmed = tmux === undefined;
-                    if (tmux) {
-                        try {
-                            cleanupConfirmed = await stopAgentSession(deps.exec, config.tmux, tmux);
-                            if (!cleanupConfirmed) {
-                                const inspected = await inspectAgentTmux(deps.exec, config.tmux, tmux);
-                                cleanupConfirmed = inspected.server === "absent" || inspected.server === "mismatch" || !inspected.paneAlive;
-                            }
-                        } catch (failure) {
-                            const inspected = await inspectAgentTmux(deps.exec, config.tmux, tmux).catch(() => undefined);
-                            cleanupConfirmed = inspected !== undefined && (inspected.server === "absent" || inspected.server === "mismatch" || !inspected.paneAlive);
-                            if (!cleanupConfirmed) cleanupError = failure;
-                        }
-                    }
-                    if (cleanupConfirmed) await removePreparedAgent(prepared.paths);
-                    else cleanupError ??= new Error("Could not confirm that the child tmux pane stopped");
-                }
-                if (cleanupError) throw new Error(`${message}; cleanup for agent ${prepared.agentId} remains incomplete: ${errorText(cleanupError)}`);
-                throw error;
+                if (signal?.aborted) throw error;
+                throw new Error(`subagent_submit created agent ${snapshot.agent.agentId}, task ${snapshot.task!.request.taskId}, but inline wait failed: ${errorText(error)}`);
             }
         },
-        renderCall(args, theme, context) { return renderStartCall(args, theme, context); },
-        renderResult(result, options, theme, context) {
-            return renderAgentToolResult(result, options, theme, context, context.args?.prompt, undefined, deps.natureHandleWords?.());
-        },
-    });
-}
-export function createSubagentSendTool(deps: SubagentDependencies): ToolDefinition<typeof sendParameters, unknown> {
-    return defineTool({
-        name: "subagent_send",
-        label: "Send agent task",
-        description: "Send a new task to an idle persistent agent session. Busy agents reject the task without queueing it. For abnormal-state diagnosis, use subagent_get with debug=true.",
-        promptSnippet: "Send another task to an existing idle agent session",
-        parameters: sendParameters,
-        executionMode: "sequential",
-        prepareArguments(args) { return stripLegacyDetail(args) as Static<typeof sendParameters>; },
-        async execute(_id, params, _signal, _update, ctx) {
-            rejectSelfTarget(deps.env, params.agentId, "send");
-            const config = await loadSubagentConfig(deps.configPath);
-            const snapshot = await readAgentSnapshot(config.stateRoot, params.agentId);
-            if (snapshot.agent.originSessionId !== origin(ctx, deps.env).originSessionId) throw new Error(`Agent ${params.agentId} belongs to a different origin session`);
-            await readReconciledAgentSnapshot(deps.exec, config.tmux, config.stateRoot, params.agentId);
-            await createTask(config.stateRoot, params.agentId, params.purpose, params.prompt);
-            return agentResult(await readAgentSnapshot(config.stateRoot, params.agentId), { claimedTaskIds: [] });
-        },
-        renderCall(args, theme, context) { return renderSendCall(args, theme, context); },
-        renderResult(result, options, theme, context) {
-            return renderAgentToolResult(result, options, theme, context, context.args?.prompt, undefined, deps.natureHandleWords?.());
-        },
+        renderCall(args, theme, context) { return renderSubmitCall(args, theme, context); },
+        renderResult(result, options, theme, context) { return renderSubmitResult(result, options, theme, context, deps.natureHandleWords?.()); },
     });
 }
 export function createSubagentGetTool(deps: SubagentDependencies): ToolDefinition<typeof getParameters, unknown> {
@@ -302,44 +401,18 @@ export function createSubagentWaitTool(deps: SubagentDependencies): ToolDefiniti
                     throw new Error(`subagent_wait cannot wait on the calling agent's own task ${taskId}`);
                 }
             }
-            const started = (deps.now ?? (() => performance.now()))();
-            const deadline = started + params.timeoutSeconds * 1000;
-            while (true) {
-                const snapshots = await Promise.all(params.taskIds.map(taskId => readReconciledAgentSnapshot(deps.exec, config.tmux, config.stateRoot, mapping.get(taskId)!, taskId)));
-                const done = snapshots.filter(value => value.task && isTerminalTask(value.task.status.state));
-                const met = params.condition === "any" ? done.length > 0 : done.length === snapshots.length;
-                const timedOut = (deps.now ?? (() => performance.now()))() >= deadline;
-                const finished = met || timedOut;
-                const outcome = met ? "completed" as const : timedOut ? "timeout" as const : undefined;
-                const accounting = { claimedTaskIds: [] as string[], usage: undefined as Usage | undefined };
-                if (finished) for (const snapshot of snapshots) {
-                    const item = await claim(config, snapshot, ctx, deps.env, id, "subagent_wait");
-                    accounting.claimedTaskIds.push(...item.claimedTaskIds);
-                    if (item.usage) {
-                        if (!accounting.usage) accounting.usage = emptyUsage();
-                        addUsage(accounting.usage, item.usage);
-                    }
-                }
-                const agents = snapshots.map(sanitizeSnapshot);
-                const details: WaitDetails = {
-                    condition: params.condition,
-                    timeoutSeconds: params.timeoutSeconds,
-                    ...(outcome ? { outcome } : {}),
-                    agents,
-                    accounting,
-                };
-                const contentPayload = finished && outcome
-                    ? projectMinimalWaitResult(agents, outcome)
-                    : { tasks: agents.map(projectMinimalAgentTask) };
-                const response = {
-                    content: [{ type: "text" as const, text: serializeModelVisibleJson(contentPayload) }],
-                    details,
-                    usage: accounting.usage,
-                };
-                if (finished) return response;
-                update?.(response);
-                await (deps.sleep ?? sleep)(Math.min(1000, deadline - (deps.now ?? (() => performance.now()))()), signal);
-            }
+            const readSnapshots = async () => Promise.all(params.taskIds.map(taskId => readReconciledAgentSnapshot(deps.exec, config.tmux, config.stateRoot, mapping.get(taskId)!, taskId)));
+            const waited = await pollTasks({
+                readSnapshots,
+                condition: params.condition,
+                timeoutSeconds: params.timeoutSeconds,
+                signal,
+                now: deps.now ?? (() => performance.now()),
+                sleep: deps.sleep ?? sleep,
+                claim: snapshot => claim(config, snapshot, ctx, deps.env, id, "subagent_wait"),
+                onWaiting: snapshots => update?.(waitResult(snapshots, params.condition, params.timeoutSeconds, undefined, { claimedTaskIds: [] })),
+            });
+            return waitResult(waited.snapshots, params.condition, params.timeoutSeconds, waited.outcome, waited.accounting);
         },
         renderCall(args, theme, context) { return renderWaitCall(args, theme, context); },
         renderResult(result, options, theme, context) { return renderWaitResult(result, options, theme, context, deps.natureHandleWords?.()); },
@@ -382,21 +455,21 @@ export async function registerSubagent(pi: ExtensionAPI, options: Partial<Pick<S
         activeProfile: () => current,
         natureHandleWords: () => natureHandleWords,
     };
-    const registerStart = (targets: readonly string[]) => {
-        pi.registerTool(createSubagentStartTool(deps, targets));
+    const registerSubmit = (targets: readonly string[]) => {
+        pi.registerTool(createSubagentSubmitTool(deps, targets));
     };
     onActiveProfile(pi, event => {
         try {
             const facet = parseSubagentFacet(event.profile.extensions.subagent ?? { allowedTargets: [] });
             current = { name: event.name, facet };
-            registerStart(facet.allowedTargets);
+            registerSubmit(facet.allowedTargets);
         } catch (error) {
             current = { name: event.name, error: error instanceof Error ? error.message : String(error) };
-            registerStart([]);
+            registerSubmit([]);
         }
     }, error => {
         current = { name: "unknown", error: error.message };
-        registerStart([]);
+        registerSubmit([]);
     });
     pi.on("session_start", async (_event, ctx) => {
         const config = await loadSubagentConfig(configPath);
@@ -435,8 +508,7 @@ export async function registerSubagent(pi: ExtensionAPI, options: Partial<Pick<S
         const hubContext = await probeTmux(exec, config.tmux, env) ?? undefined;
         await cleanupOriginAgents({ stateRoot: config.stateRoot, originSessionId: lineage.originSessionId, exec, tmux: config.tmux, shutdownReason: event.reason, hubContext });
     });
-    registerStart([]);
-    pi.registerTool(createSubagentSendTool(deps));
+    registerSubmit([]);
     pi.registerTool(createSubagentGetTool(deps));
     pi.registerTool(createSubagentWaitTool(deps));
     pi.registerTool(createSubagentStopTool(deps));

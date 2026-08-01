@@ -5,7 +5,7 @@ import { join } from "node:path";
 import test from "node:test";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { loadAgentProfileConfig, registerProfileController, routedProfileForInput } from "../extensions_src/profile.ts";
-import { createSubagentStartTool, registerSubagent } from "../extensions_src/subagent.ts";
+import { createSubagentSubmitTool, registerSubagent } from "../extensions_src/subagent.ts";
 import { ACTIVE_PROFILE_EVENT, onActiveProfile } from "../extensions_src/utilities/profile_events.ts";
 import { validateProfileConfig, type AgentProfileConfig } from "../extensions_src/utilities/profile_types.ts";
 import { validateSubagentRuntimeConfig, type SubagentRuntimeConfig } from "../extensions_src/utilities/subagent_types.ts";
@@ -19,17 +19,17 @@ function profiles(): AgentProfileConfig {
         profiles: {
             scout: {
                 model: "provider/model", availability: ["top-level", "subagent"] as ("top-level" | "subagent")[], description: "Read-only exploration.", thinkingLevel: "low", allowAllTools: false,
-                tools: ["read", "subagent_start", "subagent_get", "subagent_wait"], instructions: "Scout only.",
+                tools: ["read", "subagent_submit", "subagent_get", "subagent_wait"], instructions: "Scout only.",
                 extensions: { subagent: { allowedTargets: ["scout"] } },
             },
             artisan: {
                 model: "provider/model", availability: ["top-level"] as ("top-level" | "subagent")[], description: "Bounded implementation.", thinkingLevel: "xhigh", allowAllTools: false,
-                tools: ["read", "bash", "edit", "write", "save_agent_artifact", "subagent_start", "subagent_send", "subagent_get", "subagent_wait", "subagent_stop"], instructions: "Implement and validate directly.",
+                tools: ["read", "bash", "edit", "write", "save_agent_artifact", "subagent_submit", "subagent_get", "subagent_wait", "subagent_stop"], instructions: "Implement and validate directly.",
                 extensions: { subagent: { allowedTargets: ["focused-reviewer"] } },
             },
             operator: {
                 model: "provider/model", availability: ["top-level", "subagent"] as ("top-level" | "subagent")[], description: "Delegated assurance.", thinkingLevel: "medium", allowAllTools: false,
-                tools: ["read", "subagent_start", "subagent_get", "subagent_wait"], instructions: "Operate.",
+                tools: ["read", "subagent_submit", "subagent_get", "subagent_wait"], instructions: "Operate.",
                 extensions: { subagent: { allowedTargets: ["scout"] } },
             },
             "focused-reviewer": {
@@ -78,7 +78,7 @@ function fakeControllerPi(flag = "scout") {
     let modelSucceeds = true;
     let toolApplicationFails = false;
     let activeToolApplications = 0;
-    let allTools = ["read", "bash", "edit", "write", "save_agent_artifact", "subagent_start", "subagent_send", "subagent_get", "subagent_wait", "subagent_stop", "project_tool"];
+    let allTools = ["read", "bash", "edit", "write", "save_agent_artifact", "subagent_submit", "subagent_get", "subagent_wait", "subagent_stop", "project_tool"];
     const pi = {
         registerFlag() {}, getFlag: () => flag,
         registerCommand(name: string, value: any) { commands[name] = value; },
@@ -120,7 +120,7 @@ void test("profile extension applies CLI, guards tools, restores branches, and e
     registerProfileController(fake.pi, profilePath, {});
     await fake.handlers.session_start![0]!({ reason: "startup" }, fake.ctx);
 
-    assert.deepEqual(fake.activeTools(), ["read", "subagent_start", "subagent_get", "subagent_wait"]);
+    assert.deepEqual(fake.activeTools(), ["read", "subagent_submit", "subagent_get", "subagent_wait"]);
     assert.equal(fake.thinking(), "low");
     assert.equal(fake.events.length, 1);
     assert.deepEqual((fake.events[0]!.payload as any).profile.extensions.subagent.allowedTargets, ["scout"]);
@@ -151,7 +151,7 @@ void test("active tool synchronization is ordered, idempotent, and recovers drif
     registerProfileController(fake.pi, profilePath, {});
     await fake.handlers.session_start![0]!({ reason: "startup" }, fake.ctx);
 
-    const scoutTools = ["read", "subagent_start", "subagent_get", "subagent_wait"];
+    const scoutTools = ["read", "subagent_submit", "subagent_get", "subagent_wait"];
     assert.equal(fake.activeToolApplications(), 1);
     assert.deepEqual(await fake.handlers.input![0]!({ text: "ordinary text", source: "interactive" }, fake.ctx), { action: "continue" });
     await fake.handlers.before_agent_start![0]!({ systemPrompt: "base" }, fake.ctx);
@@ -301,7 +301,7 @@ function toolContext(root: string): ExtensionContext {
     return { cwd: root, sessionManager: { getSessionId: () => "session", getSessionFile: () => join(root, "session.jsonl") } } as ExtensionContext;
 }
 
-void test("subagent_start schema enum follows active allowed targets without a prompt catalog", async () => {
+void test("subagent_submit schema enum follows active allowed targets without a prompt catalog", async () => {
     const value = await fixture();
     const tools: Array<{ name: string; parameters: { properties?: { profile?: { enum?: string[]; description?: string } } } }> = [];
     const eventHandlers: Record<string, Array<(value: unknown) => void>> = {};
@@ -317,11 +317,12 @@ void test("subagent_start schema enum follows active allowed targets without a p
             on(name: string, handler: (value: unknown) => void) { (eventHandlers[name] ??= []).push(handler); return () => {}; },
             emit(name: string, value: unknown) { for (const handler of eventHandlers[name] ?? []) handler(value); },
         },
-        getActiveTools: () => ["subagent_start"],
+        getActiveTools: () => ["subagent_submit"],
         async exec() { return { stdout: "123\t$0\tmain\t%1\n", stderr: "", code: 0, killed: false }; },
     } as unknown as ExtensionAPI;
     assert.equal(await registerSubagent(pi, { configPath: value.subagentPath, profileConfigPath: value.profilePath, env: { TMUX: "yes" } }), true);
-    assert.deepEqual(tools.find(tool => tool.name === "subagent_start")?.parameters.properties?.profile?.enum, []);
+    assert.deepEqual(tools.map(tool => tool.name).sort(), ["subagent_get", "subagent_stop", "subagent_submit", "subagent_wait"]);
+    assert.deepEqual(tools.find(tool => tool.name === "subagent_submit")?.parameters.properties?.profile?.enum, []);
     eventHandlers[ACTIVE_PROFILE_EVENT]![0]!({
         schemaVersion: 1,
         name: "review-orchestrator",
@@ -332,13 +333,13 @@ void test("subagent_start schema enum follows active allowed targets without a p
             description: "Review orchestration.",
             thinkingLevel: "medium",
             allowAllTools: false,
-            tools: ["subagent_start"],
+            tools: ["subagent_submit"],
             extensions: { subagent: { allowedTargets: ["focused-reviewer", "dissent-reviewer"] } },
         },
     });
-    const start = tools.find(tool => tool.name === "subagent_start");
-    assert.deepEqual(start?.parameters.properties?.profile?.enum, ["focused-reviewer", "dissent-reviewer"]);
-    assert.match(start?.parameters.properties?.profile?.description ?? "", /focused-reviewer, dissent-reviewer/);
+    const submit = tools.find(tool => tool.name === "subagent_submit");
+    assert.deepEqual(submit?.parameters.properties?.profile?.enum, ["focused-reviewer", "dissent-reviewer"]);
+    assert.match(submit?.parameters.properties?.profile?.description ?? "", /focused-reviewer, dissent-reviewer/);
     assert.equal(handlers.before_agent_start, undefined);
 });
 
@@ -348,11 +349,13 @@ void test("delegation fails closed and rejects policy or depth before resource a
     const exec = async () => { execCalls += 1; return { stdout: "$0\tmain\t%1\n", stderr: "", code: 0 }; };
     const base = { configPath: fixtureValue.subagentPath, profileConfigPath: fixtureValue.profilePath, env: { TMUX: "yes" }, exec };
 
-    await assert.rejects(createSubagentStartTool(base).execute("call", { profile: "scout", purpose: "Policy task", prompt: "task" }, undefined, undefined, toolContext(fixtureValue.root)), /no active-profile event/);
-    await assert.rejects(createSubagentStartTool({ ...base, activeProfile: () => ({ name: "scout", error: "malformed facet" }) }).execute("call", { profile: "scout", purpose: "Policy task", prompt: "task" }, undefined, undefined, toolContext(fixtureValue.root)), /malformed facet/);
-    await assert.rejects(createSubagentStartTool({ ...base, activeProfile: () => ({ name: "scout", facet: { allowedTargets: ["scout"] } }) }).execute("call", { profile: "full", purpose: "Policy task", prompt: "task" }, undefined, undefined, toolContext(fixtureValue.root)), /not allowed/);
-    await assert.rejects(createSubagentStartTool({ ...base, env: { TMUX: "yes", PI_SUBAGENT_DEPTH: "3" }, activeProfile: () => ({ name: "full", facet: { allowedTargets: ["scout"] } }) }).execute("call", { profile: "scout", purpose: "Policy task", prompt: "task" }, undefined, undefined, toolContext(fixtureValue.root)), /exceeds maxDepth/);
-    await assert.rejects(createSubagentStartTool({ ...base, activeProfile: () => ({ name: "full", facet: { allowedTargets: ["full"] } }) }).execute("call", { profile: "full", purpose: "Policy task", prompt: "task" }, undefined, undefined, toolContext(fixtureValue.root)), /allowAllTools/);
+    await assert.rejects(createSubagentSubmitTool(base).execute("call", { purpose: "Policy task", prompt: "task" }, undefined, undefined, toolContext(fixtureValue.root)), /exactly one of profile or agentId/);
+    await assert.rejects(createSubagentSubmitTool(base).execute("call", { profile: "scout", agentId: "550e8400-e29b-41d4-a716-446655440000", purpose: "Policy task", prompt: "task" }, undefined, undefined, toolContext(fixtureValue.root)), /exactly one of profile or agentId/);
+    await assert.rejects(createSubagentSubmitTool(base).execute("call", { profile: "scout", purpose: "Policy task", prompt: "task" }, undefined, undefined, toolContext(fixtureValue.root)), /no active-profile event/);
+    await assert.rejects(createSubagentSubmitTool({ ...base, activeProfile: () => ({ name: "scout", error: "malformed facet" }) }).execute("call", { profile: "scout", purpose: "Policy task", prompt: "task" }, undefined, undefined, toolContext(fixtureValue.root)), /malformed facet/);
+    await assert.rejects(createSubagentSubmitTool({ ...base, activeProfile: () => ({ name: "scout", facet: { allowedTargets: ["scout"] } }) }).execute("call", { profile: "full", purpose: "Policy task", prompt: "task" }, undefined, undefined, toolContext(fixtureValue.root)), /not allowed/);
+    await assert.rejects(createSubagentSubmitTool({ ...base, env: { TMUX: "yes", PI_SUBAGENT_DEPTH: "3" }, activeProfile: () => ({ name: "full", facet: { allowedTargets: ["scout"] } }) }).execute("call", { profile: "scout", purpose: "Policy task", prompt: "task" }, undefined, undefined, toolContext(fixtureValue.root)), /exceeds maxDepth/);
+    await assert.rejects(createSubagentSubmitTool({ ...base, activeProfile: () => ({ name: "full", facet: { allowedTargets: ["full"] } }) }).execute("call", { profile: "full", purpose: "Policy task", prompt: "task" }, undefined, undefined, toolContext(fixtureValue.root)), /allowAllTools/);
     await assert.rejects(access(fixtureValue.subagentConfig.stateRoot));
     assert.equal(execCalls, 0);
 });
@@ -366,12 +369,12 @@ void test("child effective profile drops excluded tools from snapshot and launch
         description: "Review orchestration.",
         thinkingLevel: "medium" as const,
         allowAllTools: false,
-        tools: ["read", "question", "subagent_start", "subagent_get"],
+        tools: ["read", "question", "subagent_submit", "subagent_get"],
         instructions: "orchestrate",
         extensions: { subagent: { allowedTargets: ["focused-reviewer"] } },
     };
     const effective = projectChildEffectiveProfile(profile, ["question"]);
-    assert.deepEqual(effective.tools, ["read", "subagent_start", "subagent_get"]);
+    assert.deepEqual(effective.tools, ["read", "subagent_submit", "subagent_get"]);
     assert.ok(!effective.tools.includes("question"));
     const launch = piLaunchDescriptor({
         schemaVersion: 7,
@@ -392,10 +395,10 @@ void test("child effective profile drops excluded tools from snapshot and launch
         originSessionId: "origin",
     });
     const toolsArg = launch.args[launch.args.indexOf("--tools") + 1];
-    assert.equal(toolsArg, "read,subagent_start,subagent_get");
+    assert.equal(toolsArg, "read,subagent_submit,subagent_get");
     assert.doesNotMatch(toolsArg ?? "", /question/);
     const resolved = JSON.parse(launch.env.PI_AGENT_RESOLVED_PROFILE!);
-    assert.deepEqual(resolved.profile.tools, ["read", "subagent_start", "subagent_get"]);
+    assert.deepEqual(resolved.profile.tools, ["read", "subagent_submit", "subagent_get"]);
 });
 
 void test("resolved child profile does not fall back to the default profile on apply failure", async () => {
@@ -403,11 +406,11 @@ void test("resolved child profile does not fall back to the default profile on a
     const profileConfig = restrictive.profileConfig;
     profileConfig.profiles.scout = {
         ...profileConfig.profiles.scout!,
-        tools: ["read", "question", "subagent_start"],
+        tools: ["read", "question", "subagent_submit"],
     };
     await writeFile(restrictive.profilePath, JSON.stringify(profileConfig));
     const childFake = fakeControllerPi("scout");
-    const available = ["read", "bash", "edit", "write", "subagent_start", "subagent_get", "subagent_wait", "project_tool"];
+    const available = ["read", "bash", "edit", "write", "subagent_submit", "subagent_get", "subagent_wait", "project_tool"];
     (childFake.pi as any).getAllTools = () => available.filter(name => name !== "question").map((name: string) => ({ name }));
     registerProfileController(childFake.pi, restrictive.profilePath, {
         PI_AGENT_RESOLVED_PROFILE: JSON.stringify({ name: "scout", profile: profileConfig.profiles.scout }),

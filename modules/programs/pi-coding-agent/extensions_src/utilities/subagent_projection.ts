@@ -27,6 +27,19 @@ export type MinimalWaitResult = {
     tasks: MinimalAgentTask[];
 };
 
+export type MinimalSubmitResult = {
+    agentId: string;
+    taskId: string;
+    profile: string;
+    purpose: string;
+    agentState: AgentState;
+    taskState: TaskState;
+    output?: string;
+    error?: string;
+    outputTruncated?: true;
+    waitOutcome?: "completed" | "timeout";
+};
+
 export type WaitDetails = {
     condition: "any" | "all";
     timeoutSeconds: number;
@@ -39,6 +52,10 @@ export type AgentToolDetails = AgentSnapshot & {
     accounting: { usage?: Usage; claimedTaskIds: string[] };
 };
 
+export type SubmitDetails = AgentToolDetails & {
+    waitSeconds?: number;
+    waitOutcome?: "completed" | "timeout";
+};
 /** Hide provisional task results until the task status is terminal. */
 export function sanitizeSnapshot(snapshot: AgentSnapshot): AgentSnapshot {
     const task = snapshot.task && !isTerminalTask(snapshot.task.status.state) && snapshot.task.result
@@ -74,6 +91,26 @@ export function projectMinimalWaitResult(
     return {
         outcome,
         tasks: snapshots.map(projectMinimalAgentTask),
+    };
+}
+
+export function projectMinimalSubmitResult(
+    rawSnapshot: AgentSnapshot,
+    waitOutcome?: "completed" | "timeout",
+): MinimalSubmitResult {
+    const projected = projectMinimalAgentTask(rawSnapshot);
+    if (!projected.taskId || !projected.taskState) throw new Error(`Subagent ${projected.agentId} has no submitted task`);
+    return {
+        agentId: projected.agentId,
+        taskId: projected.taskId,
+        profile: projected.profile,
+        purpose: projected.purpose,
+        agentState: projected.agentState,
+        taskState: projected.taskState,
+        ...(projected.output ? { output: projected.output } : {}),
+        ...(projected.error ? { error: projected.error } : {}),
+        ...(projected.outputTruncated ? { outputTruncated: true } : {}),
+        ...(waitOutcome ? { waitOutcome } : {}),
     };
 }
 

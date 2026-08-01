@@ -21,7 +21,7 @@ export interface TaskRequest { schemaVersion: 1; agentId: string; taskId: string
 export interface Intervention { sequence: number; timestamp: string; taskId?: string; text: string; deliveryMode: "steer" | "followUp" | "idle"; images: string[] }
 export interface TaskStatus { schemaVersion: 1; agentId: string; taskId: string; state: TaskState; createdAt: string; startedAt?: string; finishedAt?: string; error?: string }
 export interface TaskResult { schemaVersion: 1; agentId: string; taskId: string; outcome: TerminalTaskState; output: string; usage: Usage; turns: number; interventions: Intervention[]; startedAt: string; finishedAt: string; error?: string }
-export interface UsageClaim { schemaVersion: 1; originSessionId: string; parentSessionFile?: string; toolCallId: string; toolName: "subagent_start" | "subagent_get" | "subagent_wait" | "subagent_stop"; agentId: string; taskId: string; claimedAt: string }
+export interface UsageClaim { schemaVersion: 1; originSessionId: string; parentSessionFile?: string; toolCallId: string; toolName: "subagent_submit" | "subagent_start" | "subagent_get" | "subagent_wait" | "subagent_stop"; agentId: string; taskId: string; claimedAt: string }
 export interface AgentSnapshot { agent: AgentRecord; status: AgentStatus; task?: TaskSnapshot }
 export interface TaskSnapshot { request: TaskRequest; status: TaskStatus; result: TaskResult | null; interventions: Intervention[]; claimed: boolean; directory: string }
 

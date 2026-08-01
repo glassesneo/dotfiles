@@ -52,21 +52,21 @@ in
         harness = "pi";
       };
       taskmaster = {
-        tools = ["subagent_start" "subagent_send" "subagent_get" "subagent_wait" "subagent_stop"];
+        tools = ["subagent_submit" "subagent_get" "subagent_wait" "subagent_stop"];
         extensions.subagent = {
           allowedTargets = ["tester" "review-orchestrator" "focused-reviewer"];
           harness = "pi";
         };
       };
       artisan = {
-        tools = ["subagent_start" "subagent_send" "subagent_get" "subagent_wait" "subagent_stop"];
+        tools = ["subagent_submit" "subagent_get" "subagent_wait" "subagent_stop"];
         extensions.subagent = {
           allowedTargets = ["focused-reviewer"];
           harness = "pi";
         };
       };
       operator = {
-        tools = ["subagent_start" "subagent_send" "subagent_get" "subagent_wait" "subagent_stop"];
+        tools = ["subagent_submit" "subagent_get" "subagent_wait" "subagent_stop"];
         extensions.subagent = {
           allowedTargets = ["explorer" "taskmaster" "cursor-implementer" "tester" "review-orchestrator" "focused-reviewer"];
           harness = "pi";
@@ -88,14 +88,14 @@ in
         harness = "pi";
       };
       review-orchestrator = {
-        tools = ["subagent_start" "subagent_send" "subagent_get" "subagent_wait" "subagent_stop"];
+        tools = ["subagent_submit" "subagent_get" "subagent_wait" "subagent_stop"];
         extensions.subagent = {
           allowedTargets = ["focused-reviewer" "dissent-reviewer"];
           harness = "pi";
         };
       };
       scout = {
-        tools = ["subagent_start" "subagent_send" "subagent_get" "subagent_wait" "subagent_stop"];
+        tools = ["subagent_submit" "subagent_get" "subagent_wait" "subagent_stop"];
         extensions.subagent = {
           allowedTargets = ["review-orchestrator" "focused-reviewer" "explorer"];
           harness = "pi";

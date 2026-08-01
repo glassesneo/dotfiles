@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createSubagentGetTool, createSubagentSendTool, createSubagentStartTool, createSubagentStopTool, createSubagentWaitTool } from "../extensions_src/subagent.ts";
+import { createSubagentGetTool, createSubagentStopTool, createSubagentSubmitTool, createSubagentWaitTool } from "../extensions_src/subagent.ts";
 import { emptyUsage, type AgentSnapshot } from "../extensions_src/utilities/subagent_types.ts";
 
 const theme = {
@@ -76,22 +76,22 @@ function renderText(component: { render: (width: number) => string[] } | undefin
     return component?.render(width).join("\n") ?? "";
 }
 
-void test("call cards summarize start send get wait stop without raw JSON", () => {
-    const start = createSubagentStartTool({ configPath: "/x", env: {}, exec: async () => ({ stdout: "", stderr: "", code: 0 }) }, ["scout"]);
-    const send = createSubagentSendTool({ configPath: "/x", env: {}, exec: async () => ({ stdout: "", stderr: "", code: 0 }) });
+void test("call cards summarize submit get wait stop without raw JSON", () => {
+    const submit = createSubagentSubmitTool({ configPath: "/x", env: {}, exec: async () => ({ stdout: "", stderr: "", code: 0 }) }, ["scout"]);
+    const existingSubmit = createSubagentSubmitTool({ configPath: "/x", env: {}, exec: async () => ({ stdout: "", stderr: "", code: 0 }) });
     const get = createSubagentGetTool({ configPath: "/x", env: {}, exec: async () => ({ stdout: "", stderr: "", code: 0 }) });
     const wait = createSubagentWaitTool({ configPath: "/x", env: {}, exec: async () => ({ stdout: "", stderr: "", code: 0 }) });
     const stop = createSubagentStopTool({ configPath: "/x", env: {}, exec: async () => ({ stdout: "", stderr: "", code: 0 }) });
     const ctx = { lastComponent: undefined } as never;
 
-    const startText = renderText(start.renderCall?.({ profile: "scout", purpose: "scan tree", prompt: "List modules\nand summarize" }, theme, ctx));
-    assert.match(startText, /1 agent/);
+    const startText = renderText(submit.renderCall?.({ profile: "scout", purpose: "scan tree", prompt: "List modules\nand summarize", waitSeconds: 30 }, theme, ctx));
+    assert.match(startText, /1 new agent/);
     assert.match(startText, /scout/);
     assert.match(startText, /scan tree/);
     assert.match(startText, /List modules/);
     assert.doesNotMatch(startText, /\{"profile"/);
 
-    const sendText = renderText(send.renderCall?.({ agentId: "550e8400-e29b-41d4-a716-446655440000", purpose: "again", prompt: "Retest" }, theme, ctx));
+    const sendText = renderText(existingSubmit.renderCall?.({ agentId: "550e8400-e29b-41d4-a716-446655440000", purpose: "again", prompt: "Retest" }, theme, ctx));
     assert.match(sendText, /1 existing agent/);
     assert.match(sendText, /550e8400/);
     assert.match(sendText, /again/);
@@ -107,6 +107,31 @@ void test("call cards summarize start send get wait stop without raw JSON", () =
     const stopText = renderText(stop.renderCall?.({ agentId: "550e8400-e29b-41d4-a716-446655440000" }, theme, ctx));
     assert.match(stopText, /1 agent/);
     assert.match(stopText, /550e8400/);
+});
+
+void test("submit result cards distinguish target and inline wait states", () => {
+    const submit = createSubagentSubmitTool({ configPath: "/x", env: {}, exec: async () => ({ stdout: "", stderr: "", code: 0 }) }, ["scout"]);
+    const completed = renderText(submit.renderResult?.(
+        { content: [{ type: "text", text: "{}" }], details: { ...snapshot(), accounting: { claimedTaskIds: [] }, waitSeconds: 30, waitOutcome: "completed" } } as never,
+        { expanded: false, isPartial: false },
+        theme,
+        { args: { profile: "scout", purpose: "scan tree", prompt: "List modules", waitSeconds: 30 }, lastComponent: undefined } as never,
+    ));
+    assert.match(completed, /COMPLETED/);
+    assert.match(completed, /NEW PROFILED AGENT/);
+
+    const running = snapshot();
+    running.status.state = "busy";
+    running.task!.status.state = "running";
+    running.task!.result = null;
+    const timeout = renderText(submit.renderResult?.(
+        { content: [{ type: "text", text: "{}" }], details: { ...running, accounting: { claimedTaskIds: [] }, waitSeconds: 1, waitOutcome: "timeout" } } as never,
+        { expanded: false, isPartial: false },
+        theme,
+        { args: { agentId: running.agent.agentId, purpose: "scan tree", prompt: "List modules", waitSeconds: 1 }, lastComponent: undefined } as never,
+    ));
+    assert.match(timeout, /TIMEOUT/);
+    assert.match(timeout, /EXISTING AGENT/);
 });
 
 void test("result cards show profile state purpose prompt and terminal preview", () => {
@@ -229,9 +254,9 @@ void test("failed terminal card shows error text without color-only state", () =
     assert.match(text, /pane exited unexpectedly/);
 });
 
-void test("expanded start and send calls show the full prompt", () => {
-    const start = createSubagentStartTool({ configPath: "/x", env: {}, exec: async () => ({ stdout: "", stderr: "", code: 0 }) }, ["scout"]);
-    const send = createSubagentSendTool({ configPath: "/x", env: {}, exec: async () => ({ stdout: "", stderr: "", code: 0 }) });
+void test("expanded submit calls show the full prompt", () => {
+    const start = createSubagentSubmitTool({ configPath: "/x", env: {}, exec: async () => ({ stdout: "", stderr: "", code: 0 }) }, ["scout"]);
+    const send = createSubagentSubmitTool({ configPath: "/x", env: {}, exec: async () => ({ stdout: "", stderr: "", code: 0 }) });
     const prompt = ["line one", "line two", "line three", "x".repeat(250)].join("\n");
     const collapsed = renderText(start.renderCall?.(
         { profile: "scout", purpose: "scan", prompt },
