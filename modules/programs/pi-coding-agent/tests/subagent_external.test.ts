@@ -13,7 +13,7 @@ import type { SubagentRuntimeConfig, TmuxAgentReference } from "../extensions_sr
 
 const options = { mode: "agent", permissionPolicy: "allow-always", sandbox: "disabled", trustWorkspace: true, worktree: false };
 const cursorProfile: AgentProfile = {
-    model: "cursor/cursor-grok-4.5-high", availability: ["subagent"], description: "Cursor implementation.", allowAllTools: false, tools: [], instructions: "Implement and report evidence.",
+    id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", model: "cursor/cursor-grok-4.5-high", availability: ["subagent"], description: "Cursor implementation.", allowAllTools: false, tools: [], instructions: "Implement and report evidence.",
     extensions: { subagent: { allowedTargets: [], harness: "cursor-agent", harnessOptions: options } },
 };
 const config = (root: string): SubagentRuntimeConfig => ({

@@ -50,31 +50,33 @@ to the user rather than widening the contract.
    evidence, material scope or scale expansion, or exhausted repair budget.
    A remaining validation failure is blocking.
 
-## Optional Focused Review
+## Optional Adaptive Review
 
 Start review only when the user or governing contract explicitly requests it,
 either initially or later in the same active session.
 
-- Select one risk-based `focused-reviewer` lens normally, or at most two
-  distinct lenses for two independent risk surfaces. Do not use generic full
-  review, orchestrated review, or dissent.
-- Reuse started reviewer sessions for rechecking within this lifecycle.
-- A review round consists of the reviewer pass, parent triage, in-scope repair,
-  and self-validation. Repair evidence-backed correctness or contract defects;
-  unsupported concerns, style preferences, and accepted low residual risks are
-  non-blocking.
+- Start one `reviewer` child and execute `adaptive-review` in `solo-only` mode.
+  The invocation saves its canonical review report. Do not delegate focused or
+  dissent passes directly from this lifecycle.
+- Reuse the reviewer session for one recheck within this lifecycle.
+- A review round consists of the adaptive solo pass, parent triage, in-scope
+  repair, and self-validation. Repair evidence-backed correctness or contract
+  defects; unsupported concerns, style preferences, and accepted low residual
+  risks are non-blocking.
 - Stop early when findings converge and allow at most two reviewer passes total.
   If source changes after the second pass, run final self-validation without a
   third pass and report the unre-reviewed repair as residual risk.
+- A reported hard gate is blocking: do not silently expand lightweight review
+  into orchestration. Return `blocked` and recommend a heavy reviewed workflow.
 - Return `blocked` for material unresolved findings, blocking uncertainty, no
   progress, scope expansion, or exhaustion of the two-round review budget.
 
 ## Artifacts
 
-Return results inline by default. Persist an implementation, review, or failure
-report only when the user or governing design explicitly requires one; then
-load `agent-artifact` and follow its existing kind and format contract. Do not
-make artifact creation a success condition.
+Return results inline by default. Persist an implementation or failure report only when the user or governing
+design explicitly requires one. An explicitly requested adaptive review always
+persists its review report. Load `agent-artifact` and follow its existing kind
+and format contract; do not make other artifact creation a success condition.
 
 ## Output
 
@@ -83,8 +85,8 @@ Return:
 - `Outcome: implemented | implemented-and-reviewed | no-op | blocked | failed`;
 - changed files and a concrete diff reference;
 - validation commands and results, plus validation-repair count;
-- when review was requested: lenses, reviewer count, round count, findings, and
-  remediation summary;
+- when review was requested: review-report path, execution mode, round count,
+  findings, and remediation summary;
 - deviations from the agreed contract or approved design;
 - unresolved risks, any final repair not independently re-reviewed, and
   blockers.

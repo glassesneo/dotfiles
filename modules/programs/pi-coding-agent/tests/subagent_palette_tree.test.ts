@@ -483,20 +483,20 @@ void test("narrow state text is retained before profile and one-row viewports us
         connector: "├─",
         expand: "▾ ",
         handle: "Maple-aaaa",
-        profile: "review-orchestrator",
+        profile: "reviewer",
         state: "● BUSY",
     });
     assert.match(line, /BUSY|●/);
     assert.match(line, /Maple-aaaa/);
     assert.ok(visibleWidth(line) <= 18);
-    assert.doesNotMatch(line, /review-orchestrator/);
+    assert.doesNotMatch(line, /reviewer/);
     const tight = composeIdentityLine({
         width: 16,
         marker: "> ",
         connector: "├─",
         expand: "▾ ",
         handle: "Maple-aaaa",
-        profile: "review-orchestrator",
+        profile: "reviewer",
         state: "● BUSY",
     });
     assert.match(tight, /Maple-aaaa/);

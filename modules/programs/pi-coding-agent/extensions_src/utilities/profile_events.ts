@@ -31,7 +31,7 @@ function validateActiveProfileEvent(value: unknown): ActiveProfileEvent {
     if (raw.reason !== "startup" && raw.reason !== "switch" && raw.reason !== "restore" && raw.reason !== "route") throw new Error("active-profile event reason is invalid");
     const rawProfile = raw.profile && typeof raw.profile === "object" && !Array.isArray(raw.profile) ? raw.profile as Record<string, unknown> : {};
     const config = validateProfileConfig({
-        schemaVersion: 3,
+        schemaVersion: 4,
         defaultProfile: raw.name,
         profileCycle: [raw.name],
         promptRoutes: {},

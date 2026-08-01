@@ -48,27 +48,27 @@ in
 
     myconfig.ifEnabled.programs.pi-coding-agent.profile.profiles = {
       full.extensions.subagent = {
-        allowedTargets = ["scout" "taskmaster" "operator" "focused-reviewer" "tester" "review-orchestrator" "explorer"];
+        allowedTargets = ["scout" "taskmaster" "operator" "focused-reviewer" "tester" "reviewer" "explorer"];
         harness = "pi";
       };
       taskmaster = {
         tools = ["subagent_submit" "subagent_get" "subagent_wait" "subagent_stop"];
         extensions.subagent = {
-          allowedTargets = ["tester" "review-orchestrator" "focused-reviewer"];
+          allowedTargets = ["tester" "reviewer" "focused-reviewer"];
           harness = "pi";
         };
       };
       artisan = {
         tools = ["subagent_submit" "subagent_get" "subagent_wait" "subagent_stop"];
         extensions.subagent = {
-          allowedTargets = ["focused-reviewer"];
+          allowedTargets = ["reviewer"];
           harness = "pi";
         };
       };
       operator = {
         tools = ["subagent_submit" "subagent_get" "subagent_wait" "subagent_stop"];
         extensions.subagent = {
-          allowedTargets = ["explorer" "taskmaster" "cursor-implementer" "tester" "review-orchestrator" "focused-reviewer"];
+          allowedTargets = ["explorer" "taskmaster" "cursor-implementer" "tester" "reviewer" "focused-reviewer"];
           harness = "pi";
         };
       };
@@ -87,7 +87,7 @@ in
         allowedTargets = [];
         harness = "pi";
       };
-      review-orchestrator = {
+      reviewer = {
         tools = ["subagent_submit" "subagent_get" "subagent_wait" "subagent_stop"];
         extensions.subagent = {
           allowedTargets = ["focused-reviewer" "dissent-reviewer"];
@@ -97,7 +97,7 @@ in
       scout = {
         tools = ["subagent_submit" "subagent_get" "subagent_wait" "subagent_stop"];
         extensions.subagent = {
-          allowedTargets = ["review-orchestrator" "focused-reviewer" "explorer"];
+          allowedTargets = ["reviewer" "focused-reviewer" "explorer"];
           harness = "pi";
         };
       };

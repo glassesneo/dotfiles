@@ -13,6 +13,9 @@ summary fields so downstream agents can triage severity quickly.
 - **Overall verdict**: blocking-findings | non-blocking-findings | no-findings | inconclusive
 - **Highest severity**: critical | high | medium | low | none
 - **Finding counts**: critical <N>, high <N>, medium <N>, low <N>
+- **Execution mode**: solo | orchestrated | focused-consolidated
+- **Escalation evidence**: <`none` for solo, or concrete hard-gate evidence for orchestration/consolidation>
+- **Sizing rationale**: <why the target was solo-eligible, orchestrated, or focused-consolidated>
 - **Target context used**: <PR body, linked issue, commit message, design, user rationale, or none>
 - **External research used**: yes | no
 

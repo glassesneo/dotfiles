@@ -1,10 +1,11 @@
 import type { Model } from "@earendil-works/pi-ai";
 import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
-import { copyToClipboard, type ExtensionAPI, type ExtensionContext, type ToolInfo } from "@earendil-works/pi-coding-agent";
+import { copyToClipboard, getAgentDir, type ExtensionAPI, type ExtensionContext, type ToolInfo } from "@earendil-works/pi-coding-agent";
 import { commandPaletteActionIds, extractLastAssistantText, formatContextUsage, summarizeSession, type CommandPaletteActionId, type PaletteAction, type PaletteListItem } from "./utilities/command_palette_core.ts";
 import { COMMAND_PALETTE_DISCOVER_EVENT, COMMAND_PALETTE_REGISTER_EVENT, CommandPaletteContributionRegistry, contributionIdentity, type CommandPaletteDisposition } from "./utilities/command_palette_contributions.ts";
 import { loadPaletteKeymap, type ResolvedPaletteKeymap } from "./utilities/command_palette_keymap.ts";
 import { formatPaletteBreadcrumb, PaletteListComponent, runPaletteList } from "./utilities/command_palette_tui.ts";
+import { onActiveProfile } from "./utilities/profile_events.ts";
 
 export function buildCommandPaletteActions(pi: Pick<ExtensionAPI, "getActiveTools" | "getThinkingLevel">, ctx: Pick<ExtensionContext, "model" | "ui">): PaletteAction[] {
     const model = ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : "none";
@@ -75,11 +76,11 @@ async function configureTools(pi: ExtensionAPI, ctx: ExtensionContext, keymap: R
     return `${pi.getActiveTools().length} tools active`;
 }
 
-async function showSessionInfo(ctx: ExtensionContext, keymap: ResolvedPaletteKeymap): Promise<string | undefined> {
+async function showSessionInfo(ctx: ExtensionContext, keymap: ResolvedPaletteKeymap, activeProfileName?: string): Promise<string | undefined> {
     const entries = ctx.sessionManager.getEntries(); const counts = summarizeSession(entries); const header = ctx.sessionManager.getHeader();
     const values = [
         ["Name", ctx.sessionManager.getSessionName() ?? "unnamed"], ["File", ctx.sessionManager.getSessionFile() ?? "in-memory"],
-        ["Session ID", ctx.sessionManager.getSessionId()], ["Entries", String(counts.entryCount)], ["User messages", String(counts.userCount)],
+        ["Session ID", ctx.sessionManager.getSessionId()], ["Profile", activeProfileName ?? "unknown"], ["Entries", String(counts.entryCount)], ["User messages", String(counts.userCount)],
         ["Assistant messages", String(counts.assistantCount)], ["Tool calls", String(counts.toolCallCount)], ["Tool results", String(counts.toolResultCount)],
         ["Current model", ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : "none"], ["Context usage", formatContextUsage(ctx.getContextUsage())],
         ["Working directory", header?.cwd ?? ctx.cwd],
@@ -114,6 +115,7 @@ export async function executePaletteAction(
     ctx: ExtensionContext,
     keymap: ResolvedPaletteKeymap,
     root?: PaletteListComponent<string>,
+    activeProfileName?: string,
 ): Promise<CommandPaletteDisposition> {
     switch (id) {
         case "model": {
@@ -138,7 +140,7 @@ export async function executePaletteAction(
             return "return";
         }
         case "session-info": {
-            await showSessionInfo(ctx, keymap);
+            await showSessionInfo(ctx, keymap, activeProfileName);
             return "return";
         }
         case "copy-last-response": {
@@ -154,12 +156,14 @@ export async function executePaletteAction(
     }
 }
 
-export default function commandPalette(pi: ExtensionAPI): void {
-    const { keymap } = loadPaletteKeymap();
+export default function commandPalette(pi: ExtensionAPI, agentDir = getAgentDir()): void {
+    const { keymap } = loadPaletteKeymap(agentDir);
     const contributions = new CommandPaletteContributionRegistry(commandPaletteActionIds);
     const unregisterContributions = pi.events.on(COMMAND_PALETTE_REGISTER_EVENT, value => { contributions.register(value); });
     pi.on("session_start", () => { pi.events.emit(COMMAND_PALETTE_DISCOVER_EVENT, undefined); });
     pi.on("session_shutdown", unregisterContributions);
+    let activeProfileName: string | undefined;
+    onActiveProfile(pi, event => { activeProfileName = event.name; });
     let opening = false;
     const openPalette = async (ctx: ExtensionContext): Promise<void> => {
         if (opening) return;
@@ -194,7 +198,7 @@ export default function commandPalette(pi: ExtensionAPI): void {
                         try {
                             let disposition: CommandPaletteDisposition = "return";
                             if ((commandPaletteActionIds as readonly string[]).includes(item.value)) {
-                                disposition = await executePaletteAction(item.value as CommandPaletteActionId, pi, ctx, keymap, root);
+                                disposition = await executePaletteAction(item.value as CommandPaletteActionId, pi, ctx, keymap, root, activeProfileName);
                             } else {
                                 const contribution = contributions.list().find(entry => contributionIdentity(entry) === item.value);
                                 const result = await contribution?.run(ctx);

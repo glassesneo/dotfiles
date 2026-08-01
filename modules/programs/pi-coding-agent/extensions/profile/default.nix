@@ -17,6 +17,20 @@
     };
   };
   cleanProfile = profile: lib.filterAttrs (_: value: value != null) profile;
+  # Internal immutable identity. Keep an existing ID when its readable profile key is renamed.
+  profileIds = {
+    full = "28df1eab-0974-48e8-a82c-fd55c38db93a";
+    taskmaster = "d4c63074-3512-4dc6-b10a-120544570fd1";
+    artisan = "a8535230-389d-41f7-b4c2-40e14e49ae95";
+    scout = "960e40e8-3d80-4a9a-ae8f-871911a125ef";
+    operator = "c7a01e0c-896d-41e0-a23f-37c8f56bcf53";
+    cursor-implementer = "64e0f39f-92c7-4b41-b6db-5a667d103915";
+    explorer = "d1353104-3f41-4e53-a23a-b9fb2d445675";
+    tester = "e0bf8181-2cbb-430b-b974-9af15266669f";
+    reviewer = "9a3a45b8-f2df-4b43-97d9-e9abe62e2e0a";
+    focused-reviewer = "a18481a8-7c77-4baf-9280-220505bf9c63";
+    dissent-reviewer = "d7d333ba-df8c-460d-a55b-53daee445259";
+  };
   explorerDelegationInstructions = ''
     Use the explorer subagent for bounded codebase evidence gathering after the user's objective and main issues are sufficiently clear. A bounded exploration question may be useful before or during design, before planning, during other work, or during review; when intent is still ambiguous, delegate only a narrow feasibility question. First inspect likely entrypoints or core interfaces with a small sizing pass, without turning that pass into broad exploration.
 
@@ -33,7 +47,7 @@ in
         enable = readOnly (boolOption (parent.enable && builtins.elem "profile" parent.defaultExtensions));
         extensionPaths = readOnly (listOfOption str ["${./../../extensions_src}/profile.ts"]);
         defaultProfile = strOption "scout";
-        profileCycle = listOfOption str ["scout" "taskmaster" "artisan" "operator" "review-orchestrator"];
+        profileCycle = listOfOption str ["scout" "taskmaster" "artisan" "operator" "reviewer"];
         promptRoutes = attrsOfOption str {};
         defaultTools = listOfOption str [];
         profiles = attrsOfOption profileType {};
@@ -49,7 +63,7 @@ in
         impl = "taskmaster";
         execute = "taskmaster";
         operate = "operator";
-        review = "review-orchestrator";
+        review = "reviewer";
       };
       profiles = {
         full = {
@@ -82,7 +96,7 @@ in
           allowAllTools = false;
           tools = ["write" "edit"];
           instructions = ''
-            You are a command-independent source-changing artisan. Follow the user's current objective or a small approved design and execute lightweight-implementation-lifecycle in direct mode unless the current request explicitly selects another mode. Own bounded implementation, proportionate self-validation, and evidence-backed repair. Do not delegate source implementation or validation. Use focused-reviewer only when review is explicitly requested, then own finding triage, source repair, validation, and the terminal outcome. Stop rather than materially expanding the agreed scope or scale. Return concrete changed-file, diff, validation, deviation, review, and unresolved-risk evidence required by the selected lifecycle mode.
+            You are a command-independent source-changing artisan. Follow the user's current objective or a small approved design and execute lightweight-implementation-lifecycle in direct mode unless the current request explicitly selects another mode. Own bounded implementation, proportionate self-validation, and evidence-backed repair. Do not delegate source implementation or validation. Use one reviewer in solo-only mode only when review is explicitly requested, then own finding triage, source repair, validation, and the terminal outcome. Stop rather than materially expanding the agreed scope or scale. Return concrete changed-file, diff, validation, deviation, review, and unresolved-risk evidence required by the selected lifecycle mode.
           '';
           extensions = {};
         };
@@ -148,15 +162,15 @@ in
           '';
           extensions = {};
         };
-        review-orchestrator = {
+        reviewer = {
           model = "openai-codex/gpt-5.6-sol";
           availability = ["top-level" "subagent"];
-          description = "Use for one risk-tiered read-only review with focused and dissent passes.";
-          thinkingLevel = "medium";
+          description = "Use for adaptive read-only review that is solo-biased and escalates only on concrete hard-risk evidence.";
+          thinkingLevel = "high";
           allowAllTools = false;
           tools = [];
           instructions = ''
-            You are a read-only full-review specialist. For an explicit implementation report and target, execute orchestrated-review: size risk, delegate distinct focused lenses and one dissent pass, reconcile evidence, and persist one canonical review report. Process suitable review tasks from the available artifacts without requiring a command. Return a precise verdict, severity, residual risk, and report path. One invocation does not change source or configuration or remediate findings.
+            You are a command-independent read-only review specialist. Execute adaptive-review in auto mode by default for a defined review target, including suitable standalone review without requiring a design or implementation report. Honor an explicit solo-only or orchestrated mode request. Remain solo unless concrete hard-gate evidence requires independent focused lenses; persist exactly one canonical review report and return its verdict, severity, execution mode, residual risk, and path. One invocation does not change source or configuration or remediate findings.
           '';
           extensions = {};
         };
@@ -240,19 +254,27 @@ in
           else cfg.defaultTools ++ profile.tools
         );
       instructionsValid = profile: profile.instructions == null || nonBlank profile.instructions;
-      serializeProfile = profile:
-        cleanProfile (
-          if profile.allowAllTools || lib.hasPrefix "cursor/" profile.model
-          then profile
-          else profile // {tools = lib.unique (cfg.defaultTools ++ profile.tools);}
-        );
+      serializeProfile = name: profile:
+        cleanProfile ((
+            if profile.allowAllTools || lib.hasPrefix "cursor/" profile.model
+            then profile
+            else profile // {tools = lib.unique (cfg.defaultTools ++ profile.tools);}
+          )
+          // {id = profileIds.${name};});
+      profileIdNames = builtins.attrNames profileIds;
+      profileIdValues = builtins.attrValues profileIds;
+      profileIdValid = id: builtins.match "[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}" id != null;
       runtimeConfig = {
-        schemaVersion = 3;
+        schemaVersion = 4;
         inherit (cfg) defaultProfile profileCycle promptRoutes;
-        profiles = lib.mapAttrs (_: serializeProfile) cfg.profiles;
+        profiles = lib.mapAttrs serializeProfile cfg.profiles;
       };
     in {
       assertions = [
+        {
+          assertion = profileNames == profileIdNames && lib.length profileIdValues == lib.length (lib.unique profileIdValues) && builtins.all profileIdValid profileIdValues;
+          message = "Pi internal profile IDs must exactly cover profiles and be unique valid opaque UUIDs.";
+        }
         {
           assertion = builtins.elem cfg.defaultProfile profileNames && topLevel cfg.profiles.${cfg.defaultProfile};
           message = "Pi defaultProfile must reference an existing top-level profile.";

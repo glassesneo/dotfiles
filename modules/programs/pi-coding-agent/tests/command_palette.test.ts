@@ -28,7 +28,7 @@ void test("the registered shortcut opens the palette whether idle or running", a
         },
         getActiveTools: () => ["read"], getThinkingLevel: () => "medium",
     } as never;
-    commandPalette(pi);
+    commandPalette(pi, "/nonexistent-agent-dir");
     for (const idle of [true, false]) {
         const ctx = {
             mode: "tui", isIdle: () => idle, model: undefined,
@@ -52,7 +52,7 @@ void test("a running palette suppresses duplicate opens and can reopen after clo
         },
         getActiveTools: () => ["read"], getThinkingLevel: () => "medium",
     } as never;
-    commandPalette(pi);
+    commandPalette(pi, "/nonexistent-agent-dir");
     const ctx = {
         mode: "tui", isIdle: () => false, model: undefined,
         ui: {
@@ -107,7 +107,7 @@ void test("root palette stays open for nested children and restores query select
         description: "sessions",
         run: async () => "return" as const,
     });
-    commandPalette(pi as never);
+    commandPalette(pi as never, "/nonexistent-agent-dir");
     let root: PaletteListComponent<string> | undefined;
     const ctx = {
         mode: "tui",
@@ -179,7 +179,7 @@ void test("contribution close disposition closes the root stack", async () => {
         owner: "subagent", id: "agents", label: "/subagent  Manage", description: "sessions",
         async run() { return "close" as const; },
     });
-    commandPalette(pi as never);
+    commandPalette(pi as never, "/nonexistent-agent-dir");
     const ctx = {
         mode: "tui", model: undefined,
         ui: {
@@ -195,6 +195,28 @@ void test("contribution close disposition closes the root stack", async () => {
     } as never;
     await shortcutHandler?.(ctx);
     assert.equal(rootClosed, true);
+});
+
+void test("session information includes the validated active readable profile", async () => {
+    let rendered = "";
+    const ctx = {
+        model: undefined, cwd: "/work", getContextUsage: () => undefined,
+        sessionManager: {
+            getEntries: () => [], getHeader: () => ({ cwd: "/work" }), getSessionName: () => undefined,
+            getSessionFile: () => undefined, getSessionId: () => "sid",
+        },
+        ui: {
+            async custom(factory: any) {
+                return await new Promise(resolve => {
+                    const component = factory({ terminal: { rows: 24, columns: 80 }, requestRender() {} } as TUI, theme, {}, resolve);
+                    rendered = component.render(80).join("\n");
+                    component.handleInput("\r");
+                });
+            },
+        },
+    } as never;
+    await executePaletteAction("session-info", {} as never, ctx, resolvePaletteKeymap(), undefined, "reviewer");
+    assert.match(rendered, /Profile: reviewer/);
 });
 
 void test("immediate tool-output action updates root status without closing", async () => {

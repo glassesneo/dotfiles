@@ -1,4 +1,4 @@
-export const PROFILE_SCHEMA_VERSION = 3 as const;
+export const PROFILE_SCHEMA_VERSION = 4 as const;
 export const PROFILE_DESCRIPTION_MAX_BYTES = 512;
 
 export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
@@ -6,6 +6,7 @@ export type ProfileFacet = Record<string, unknown>;
 export type ProfileAvailability = "top-level" | "subagent";
 
 export interface AgentProfile {
+    id: string;
     model: string;
     availability: ProfileAvailability[];
     description: string;
@@ -17,7 +18,7 @@ export interface AgentProfile {
 }
 
 export interface AgentProfileConfig {
-    schemaVersion: 3;
+    schemaVersion: 4;
     defaultProfile: string;
     profileCycle: string[];
     promptRoutes: Record<string, string>;
@@ -53,11 +54,16 @@ export function validateProfileConfig(value: unknown): AgentProfileConfig {
     const rawProfiles = object(root.profiles, "profiles");
     const profiles: Record<string, AgentProfile> = {};
     const thinkingLevels = new Set(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);
+    const profileIds = new Set<string>();
 
     for (const [name, rawProfile] of Object.entries(rawProfiles)) {
         nonBlank(name, "profile name");
         const profile = object(rawProfile, `profiles.${name}`);
-        exactKeys(profile, ["model", "availability", "description", "thinkingLevel", "allowAllTools", "tools", "instructions", "extensions"], `profiles.${name}`);
+        exactKeys(profile, ["id", "model", "availability", "description", "thinkingLevel", "allowAllTools", "tools", "instructions", "extensions"], `profiles.${name}`);
+        const id = nonBlank(profile.id, `profiles.${name}.id`);
+        if (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(id)) throw new Error(`profiles.${name}.id must be an opaque UUID`);
+        if (profileIds.has(id)) throw new Error(`profiles.${name}.id duplicates another profile ID`);
+        profileIds.add(id);
         const availability = stringArray(profile.availability, `profiles.${name}.availability`) as ProfileAvailability[];
         if (availability.length === 0) throw new Error(`profiles.${name}.availability must not be empty`);
         if (new Set(availability).size !== availability.length) throw new Error(`profiles.${name}.availability must not contain duplicates`);
@@ -82,6 +88,7 @@ export function validateProfileConfig(value: unknown): AgentProfileConfig {
             throw new Error(`profiles.${name}.description must be at most ${PROFILE_DESCRIPTION_MAX_BYTES} UTF-8 bytes`);
         }
         profiles[name] = {
+            id,
             model,
             availability,
             description,
@@ -115,7 +122,7 @@ export function validateProfileConfig(value: unknown): AgentProfileConfig {
         if (!profiles[target].availability.includes("top-level")) throw new Error(`promptRoutes.${command} must reference a top-level profile: ${target}`);
     }
 
-    return { schemaVersion: 3, defaultProfile, profileCycle, promptRoutes, profiles };
+    return { schemaVersion: 4, defaultProfile, profileCycle, promptRoutes, profiles };
 }
 
 export function validateResolvedProfile(value: unknown): { name: string; profile: AgentProfile } {
@@ -125,7 +132,7 @@ export function validateResolvedProfile(value: unknown): { name: string; profile
     const profileRoot = object(root.profile, "PI_AGENT_RESOLVED_PROFILE.profile");
     const synthetic = structuredClone(profileRoot);
     synthetic.availability = ["top-level", "subagent"];
-    const config = validateProfileConfig({ schemaVersion: 3, defaultProfile: name, profileCycle: [name], promptRoutes: {}, profiles: { [name]: synthetic } });
+    const config = validateProfileConfig({ schemaVersion: 4, defaultProfile: name, profileCycle: [name], promptRoutes: {}, profiles: { [name]: synthetic } });
     const availability = stringArray(profileRoot.availability, "PI_AGENT_RESOLVED_PROFILE.profile.availability") as ProfileAvailability[];
     if (availability.length === 0 || new Set(availability).size !== availability.length || availability.some(value => value !== "top-level" && value !== "subagent")) throw new Error("PI_AGENT_RESOLVED_PROFILE.profile.availability is invalid");
     const profile = { ...config.profiles[name]!, availability };

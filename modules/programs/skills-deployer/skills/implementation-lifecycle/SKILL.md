@@ -82,7 +82,7 @@ artifact kind.
    implementation does not consume a remediation round.
 2. Inspect the diff, run proportional focused or broad validation, and save an
    implementation report.
-3. Run the initial `orchestrated-review` and save its review report.
+3. Run the initial `adaptive-review` in `auto` mode and save its review report.
 4. Triage findings. Automatically remediate evidence-backed, in-scope critical,
    high, and medium findings. Remediate a low finding only when it is a concrete
    correctness or contract defect. Style preference, unsupported concern, and
@@ -91,10 +91,12 @@ artifact kind.
    one remediation round, up to three. For each round: invoke the source
    capability, inspect the diff, run focused or broad validation, save an
    implementation report, then re-review.
-6. Use `orchestrated-review` only for the initial review and the re-review after
-   round 1, at most twice per lifecycle. For rounds 2 and 3, select one or two
-   distinct risk-based focused review capabilities directly, omit dissent, triage
-   their results, and save one consolidated canonical review report.
+6. Use `adaptive-review` in `auto` mode only for the initial review and the
+   re-review after round 1, at most twice per lifecycle. For rounds 2 and 3,
+   select one or two distinct risk-based focused review capabilities directly,
+   omit dissent, triage their results, and save one consolidated canonical
+   review report marked with execution mode `focused-consolidated` and concrete
+   escalation evidence or `none`.
 7. When review converges, run `full` validation unless valid full evidence already
    applies to the unchanged source state. An in-scope concrete regression found
    here consumes the next remediation round; after repair, repeat full validation

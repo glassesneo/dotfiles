@@ -28,8 +28,11 @@ void test("implementation entrypoints are thin explicit mode templates", async (
     assert.match(impl, /local-no-review/);
     assert.match(execute, /local-reviewed/);
     assert.match(operate, /delegated-reviewed/);
-    assert.match(review, /orchestrated-review/);
-    assert.match(review, /<implementation-report-path>/);
+    assert.match(review, /adaptive-review/);
+    assert.match(review, /auto/);
+    assert.match(review, /staged, unstaged, and untracked/);
+    assert.match(review, /inconclusive/);
+    assert.doesNotMatch(review, /implementation-report-path/);
     for (const prompt of [impl, execute, operate, review]) assert.doesNotMatch(prompt, /focused-reviewer|dissent-reviewer|subagent_submit/);
 });
 
@@ -50,18 +53,18 @@ void test("lightweight lifecycle is packaged and bounds aligned execution, repai
     assert.match(compact, /explicit confirmation.*do not mutate source/s);
     assert.match(compact, /Do not delegate source work or validation/);
     assert.match(compact, /validation repair is limited to two rounds/);
-    assert.match(compact, /at most two distinct lenses/);
+    assert.match(compact, /one `reviewer` child.*`solo-only`/);
     assert.match(compact, /at most two reviewer passes total/);
     assert.match(compact, /without a third pass/);
     assert.match(compact, /unknown cause/);
     assert.match(compact, /test or infrastructure ownership/);
     assert.match(compact, /material scope or scale expansion/);
-    assert.match(compact, /Return results inline by default/);
-    assert.match(compact, /only when the user or governing design explicitly requires one/);
+    assert.match(compact, /explicitly requested adaptive review always persists its review report/);
+    assert.match(compact, /hard gate is blocking/);
 });
 
 void test("canonical assurance skills have aligned names, registry, and receiver boundaries", async () => {
-    const names = ["source-implementation", "implementation-validation", "orchestrated-review", "implementation-lifecycle"];
+    const names = ["source-implementation", "implementation-validation", "adaptive-review", "implementation-lifecycle"];
     const [registry, guidance, ...skills] = await Promise.all([
         text(join(skillsRoot, "default.nix")),
         text(join(skillsRoot, "AGENTS.md")),
@@ -81,7 +84,7 @@ void test("canonical assurance skills have aligned names, registry, and receiver
     assert.match(implementation!, /Do not persist an implementation report/);
     assert.match(implementation!, /Validation verdicts, implementation reports, review verdicts/);
     assert.match(validation!, /focused.*broad.*full/s);
-    assert.match(review!, /exactly once/);
+    for (const phrase of ["auto", "solo-only", "orchestrated", "exactly one canonical", "file count", "LOC", "two to four", "exactly one `dissent-reviewer`", "Execution mode", "Escalation evidence"]) assert.match(review!, new RegExp(phrase));
     assert.match(lifecycle!, /local-no-review.*local-reviewed.*delegated-reviewed/s);
 });
 
@@ -119,7 +122,7 @@ void test("lifecycle bounds remediation and creates terminal immutable report ch
 void test("profiles expose command-independent implementation, validation, review, and operator capabilities", async () => {
     const profile = await text(join(piRoot, "extensions", "profile", "default.nix"));
 
-    for (const profileName of ["scout", "taskmaster", "artisan", "operator", "tester", "review-orchestrator"]) {
+    for (const profileName of ["scout", "taskmaster", "artisan", "operator", "tester", "reviewer"]) {
         const marker = `        ${profileName} = {`;
         const start = profile.indexOf(marker);
         assert.notEqual(start, -1);
@@ -132,7 +135,12 @@ void test("profiles expose command-independent implementation, validation, revie
     assert.match(profile, /specification-design when the user already holds/);
     assert.match(profile, /ordinary read-only investigation/);
     assert.match(profile, /focused, broad, or full/);
-    assert.match(profile, /profileCycle = listOfOption str \["scout" "taskmaster" "artisan"/);
+    assert.match(profile, /profileCycle = listOfOption str \["scout" "taskmaster" "artisan" "operator" "reviewer"\]/);
+    assert.match(profile, /review = "reviewer"/);
+    assert.match(profile, /schemaVersion = 4/);
+    assert.match(profile, /profiles = lib\.mapAttrs serializeProfile/);
+    assert.match(profile, /profileNames == profileIdNames/);
+    assert.match(profile, /profileIdValues.*lib\.unique/s);
     assert.match(profile, /act = "artisan"/);
 
     const artisanStart = profile.indexOf("        artisan = {");
@@ -143,6 +151,12 @@ void test("profiles expose command-independent implementation, validation, revie
     assert.match(artisanBlock, /tools = \["write" "edit"\]/);
     assert.match(artisanBlock, /lightweight-implementation-lifecycle in direct mode unless the current request explicitly selects another mode/);
     assert.match(artisanBlock, /Do not delegate source implementation or validation/);
+
+    const reviewerStart = profile.indexOf("        reviewer = {");
+    const reviewerBlock = profile.slice(reviewerStart, profile.indexOf("        focused-reviewer = {", reviewerStart));
+    assert.match(reviewerBlock, /model = "openai-codex\/gpt-5\.6-sol"/);
+    assert.match(reviewerBlock, /thinkingLevel = "high"/);
+    assert.match(reviewerBlock, /adaptive-review in auto mode by default/);
 
     const operatorStart = profile.indexOf("        operator = {");
     const operatorBlock = profile.slice(operatorStart, profile.indexOf("        explorer = {", operatorStart));

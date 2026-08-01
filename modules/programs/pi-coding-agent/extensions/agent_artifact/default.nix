@@ -10,7 +10,7 @@ delib.module {
     artisan.tools = ["save_agent_artifact"];
     operator.tools = ["save_agent_artifact"];
     tester.tools = ["save_agent_artifact"];
-    review-orchestrator.tools = ["save_agent_artifact"];
+    reviewer.tools = ["save_agent_artifact"];
   };
 
   home.ifEnabled = {

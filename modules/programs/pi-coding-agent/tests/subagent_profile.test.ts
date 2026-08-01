@@ -12,33 +12,33 @@ import { validateSubagentRuntimeConfig, type SubagentRuntimeConfig } from "../ex
 
 function profiles(): AgentProfileConfig {
     return {
-        schemaVersion: 3,
+        schemaVersion: 4,
         defaultProfile: "full",
         profileCycle: ["scout", "artisan", "operator", "full"],
         promptRoutes: { act: "artisan", impl: "full", operate: "operator", review: "scout" },
         profiles: {
             scout: {
-                model: "provider/model", availability: ["top-level", "subagent"] as ("top-level" | "subagent")[], description: "Read-only exploration.", thinkingLevel: "low", allowAllTools: false,
+                id: "11111111-1111-4111-8111-111111111111", model: "provider/model", availability: ["top-level", "subagent"] as ("top-level" | "subagent")[], description: "Read-only exploration.", thinkingLevel: "low", allowAllTools: false,
                 tools: ["read", "subagent_submit", "subagent_get", "subagent_wait"], instructions: "Scout only.",
                 extensions: { subagent: { allowedTargets: ["scout"] } },
             },
             artisan: {
-                model: "provider/model", availability: ["top-level"] as ("top-level" | "subagent")[], description: "Bounded implementation.", thinkingLevel: "xhigh", allowAllTools: false,
+                id: "22222222-2222-4222-8222-222222222222", model: "provider/model", availability: ["top-level"] as ("top-level" | "subagent")[], description: "Bounded implementation.", thinkingLevel: "xhigh", allowAllTools: false,
                 tools: ["read", "bash", "edit", "write", "save_agent_artifact", "subagent_submit", "subagent_get", "subagent_wait", "subagent_stop"], instructions: "Implement and validate directly.",
                 extensions: { subagent: { allowedTargets: ["focused-reviewer"] } },
             },
             operator: {
-                model: "provider/model", availability: ["top-level", "subagent"] as ("top-level" | "subagent")[], description: "Delegated assurance.", thinkingLevel: "medium", allowAllTools: false,
+                id: "33333333-3333-4333-8333-333333333333", model: "provider/model", availability: ["top-level", "subagent"] as ("top-level" | "subagent")[], description: "Delegated assurance.", thinkingLevel: "medium", allowAllTools: false,
                 tools: ["read", "subagent_submit", "subagent_get", "subagent_wait"], instructions: "Operate.",
                 extensions: { subagent: { allowedTargets: ["scout"] } },
             },
             "focused-reviewer": {
-                model: "provider/model", availability: ["subagent"] as ("top-level" | "subagent")[], description: "Focused review.", thinkingLevel: "medium", allowAllTools: false,
+                id: "44444444-4444-4444-8444-444444444444", model: "provider/model", availability: ["subagent"] as ("top-level" | "subagent")[], description: "Focused review.", thinkingLevel: "medium", allowAllTools: false,
                 tools: ["read", "grep", "find", "ls", "bash"], instructions: "Review one lens.",
                 extensions: { subagent: { allowedTargets: [] } },
             },
             full: {
-                model: "provider/model", availability: ["top-level", "subagent"] as ("top-level" | "subagent")[], description: "Broad coding work.", thinkingLevel: "medium", allowAllTools: true, tools: [],
+                id: "55555555-5555-4555-8555-555555555555", model: "provider/model", availability: ["top-level", "subagent"] as ("top-level" | "subagent")[], description: "Broad coding work.", thinkingLevel: "medium", allowAllTools: true, tools: [],
                 extensions: { subagent: { allowedTargets: ["scout", "full"] } },
             },
         },
@@ -72,6 +72,8 @@ function fakeControllerPi(flag = "scout") {
     const shortcuts: Record<string, { handler: (ctx: any) => Promise<void> }> = {};
     const entries: any[] = [];
     const events: any[] = [];
+    const paletteContributions: any[] = [];
+    const eventHandlers: Record<string, Array<(value: unknown) => void>> = {};
     const notifications: string[] = [];
     let activeTools: string[] = [];
     let thinking = "off";
@@ -84,7 +86,14 @@ function fakeControllerPi(flag = "scout") {
         registerCommand(name: string, value: any) { commands[name] = value; },
         registerShortcut(key: string, value: any) { shortcuts[key] = value; },
         on(name: string, handler: any) { (handlers[name] ??= []).push(handler); },
-        events: { on() {}, emit(name: string, payload: unknown) { events.push({ name, payload }); } },
+        events: {
+            on(name: string, handler: (value: unknown) => void) { (eventHandlers[name] ??= []).push(handler); return () => {}; },
+            emit(name: string, payload: unknown) {
+                if (name === ACTIVE_PROFILE_EVENT) events.push({ name, payload });
+                if (name === "command-palette:register") paletteContributions.push(payload);
+                for (const handler of eventHandlers[name] ?? []) handler(payload);
+            },
+        },
         getAllTools: () => allTools.map(name => ({ name })), getActiveTools: () => activeTools,
         setActiveTools(names: string[]) {
             activeToolApplications += 1;
@@ -105,7 +114,7 @@ function fakeControllerPi(flag = "scout") {
         ui: { notify(message: string) { notifications.push(message); }, setStatus() {}, select: async () => undefined },
     } as unknown as ExtensionContext;
     return {
-        pi, ctx, handlers, commands, shortcuts, entries, events, notifications,
+        pi, ctx, handlers, commands, shortcuts, entries, events, paletteContributions, notifications,
         activeTools: () => activeTools, activeToolApplications: () => activeToolApplications, thinking: () => thinking,
         forceActiveTools: (names: string[]) => { activeTools = [...names]; },
         forceAllTools: (names: string[]) => { allTools = [...names]; },
@@ -140,9 +149,28 @@ void test("profile extension applies CLI, guards tools, restores branches, and e
     assert.equal(fake.events.length, 2);
     assert.equal((fake.events.at(-1)!.payload as any).reason, "switch");
 
-    fake.entries.push({ type: "custom", customType: "agent-profile-state", data: { name: "scout" } });
+    fake.entries.push({ type: "custom", customType: "agent-profile-state", data: { schemaVersion: 2, profileId: "11111111-1111-4111-8111-111111111111" } });
     await fake.handlers.session_tree![0]!({}, fake.ctx);
     assert.equal((fake.events.at(-1)!.payload as any).reason, "restore");
+});
+
+void test("profile owns one discoverable palette contribution with current state and idle chooser", async () => {
+    const { profilePath } = await fixture();
+    const fake = fakeControllerPi("scout");
+    let selected = 0;
+    (fake.ctx.ui as any).select = async () => { selected += 1; return undefined; };
+    registerProfileController(fake.pi, profilePath, {});
+    await fake.handlers.session_start![0]!({ reason: "startup" }, fake.ctx);
+
+    assert.equal(fake.paletteContributions.length, 1);
+    const contribution = fake.paletteContributions[0]!;
+    assert.equal(contribution.owner, "profile");
+    assert.equal(contribution.currentValue(fake.ctx), "Current: scout");
+    assert.equal(contribution.disabledReason(fake.ctx), undefined);
+    await contribution.run(fake.ctx);
+    assert.equal(selected, 1);
+    const running = { ...fake.ctx, isIdle: () => false };
+    assert.match(contribution.disabledReason(running), /idle/);
 });
 
 void test("active tool synchronization is ordered, idempotent, and recovers drift", async () => {
@@ -179,7 +207,7 @@ void test("active tool synchronization is ordered, idempotent, and recovers drif
     assert.equal(fake.activeToolApplications(), 6);
 });
 
-void test("artisan profile wiring is top-level-only and delegates only focused review", async () => {
+void test("artisan profile wiring is top-level-only and delegates only adaptive solo review", async () => {
     const [profileNix, subagentNix, artifactNix] = await Promise.all([
         readFile(join(import.meta.dirname, "..", "extensions", "profile", "default.nix"), "utf8"),
         readFile(join(import.meta.dirname, "..", "extensions", "subagent", "default.nix"), "utf8"),
@@ -196,8 +224,8 @@ void test("artisan profile wiring is top-level-only and delegates only focused r
     assert.match(artisan, /availability = \["top-level"\]/);
     assert.match(artisan, /thinkingLevel = "xhigh"/);
     assert.match(artisan, /tools = \["write" "edit"\]/);
-    assert.match(subagent, /allowedTargets = \["focused-reviewer"\]/);
-    assert.doesNotMatch(subagent, /tester|taskmaster|cursor-implementer|review-orchestrator/);
+    assert.match(subagent, /allowedTargets = \["reviewer"\]/);
+    assert.doesNotMatch(subagent, /tester|taskmaster|cursor-implementer|focused-reviewer/);
     assert.match(artifactNix, /artisan\.tools = \["save_agent_artifact"\]/);
 });
 
@@ -223,12 +251,12 @@ void test("exact raw prompt commands route transactionally before expansion", as
 
     assert.deepEqual(await fake.handlers.input![0]!({ text: "/impl approved.md", source: "interactive" }, fake.ctx), { action: "continue" });
     assert.equal((fake.events.at(-1)!.payload as any).reason, "route");
-    assert.equal(fake.entries.at(-1)?.data.name, "full");
+    assert.equal(fake.entries.at(-1)?.data.profileId, profileConfig.profiles.full!.id);
 
     fake.failModel();
     assert.deepEqual(await fake.handlers.input![0]!({ text: "/review report.md", source: "interactive" }, fake.ctx), { action: "handled" });
     assert.match(fake.notifications.at(-1) ?? "", /no authentication/);
-    assert.equal(fake.entries.at(-1)?.data.name, "full");
+    assert.equal(fake.entries.at(-1)?.data.profileId, profileConfig.profiles.full!.id);
 
     fake.passModel();
     fake.failNextToolApplication();
@@ -238,7 +266,7 @@ void test("exact raw prompt commands route transactionally before expansion", as
     assert.match(fake.notifications.at(-1) ?? "", /injected tool application failure/);
     assert.deepEqual(fake.activeTools(), toolsBeforeFailure);
     assert.equal(fake.thinking(), thinkingBeforeFailure);
-    assert.equal(fake.entries.at(-1)?.data.name, "full");
+    assert.equal(fake.entries.at(-1)?.data.profileId, profileConfig.profiles.full!.id);
 });
 
 void test("active-profile event wrapper validates the complete payload", () => {
@@ -256,7 +284,7 @@ void test("active-profile event wrapper validates the complete payload", () => {
     onActiveProfile(pi, event => accepted.push(event), error => errors.push(error.message));
 
     eventHandler!({ schemaVersion: 1, name: "scout", reason: "startup", profile: profiles().profiles.scout });
-    eventHandler!({ schemaVersion: 1, name: "scout", reason: "startup", profile: { model: "provider/model" } });
+    eventHandler!({ schemaVersion: 1, name: "scout", reason: "startup", profile: { id: "99999999-9999-4999-8999-999999999999", model: "provider/model" } });
     eventHandler!({ schemaVersion: 99, name: "scout", reason: "startup", profile: profiles().profiles.scout });
     eventHandler!({ schemaVersion: 1, name: "scout", reason: "startup", profile: profiles().profiles.scout, unexpected: true });
 
@@ -266,11 +294,36 @@ void test("active-profile event wrapper validates the complete payload", () => {
     assert.match(errors[2] ?? "", /unknown keys/);
 });
 
+void test("profile state restores by opaque ID after a readable key rename and ignores old name-only state", async () => {
+    const value = await fixture();
+    const config = value.profileConfig;
+    const scout = config.profiles.scout!;
+    delete config.profiles.scout;
+    config.profiles.seeker = scout;
+    config.defaultProfile = "full";
+    config.profileCycle = config.profileCycle.map(name => name === "scout" ? "seeker" : name);
+    config.promptRoutes.review = "seeker";
+    await writeFile(value.profilePath, JSON.stringify(config));
+
+    const restored = fakeControllerPi("");
+    restored.entries.push({ type: "custom", customType: "agent-profile-state", data: { schemaVersion: 2, profileId: scout.id } });
+    registerProfileController(restored.pi, value.profilePath, {});
+    await restored.handlers.session_start![0]!({ reason: "startup" }, restored.ctx);
+    assert.equal((restored.events.at(-1)!.payload as any).name, "seeker");
+    assert.deepEqual(restored.entries.at(-1)?.data, { schemaVersion: 2, profileId: scout.id });
+
+    const legacy = fakeControllerPi("");
+    legacy.entries.push({ type: "custom", customType: "agent-profile-state", data: { name: "seeker" } });
+    registerProfileController(legacy.pi, value.profilePath, {});
+    await legacy.handlers.session_start![0]!({ reason: "startup" }, legacy.ctx);
+    assert.equal((legacy.events.at(-1)!.payload as any).name, "full");
+});
+
 void test("profile availability gates parent selection and old runtime schemas are rejected", async () => {
     const value = await fixture();
     const config = value.profileConfig;
     config.profiles.child = {
-        model: "provider/model", availability: ["subagent"], description: "Child only.", allowAllTools: false, tools: ["read"], extensions: { subagent: { allowedTargets: [] } },
+        id: "66666666-6666-4666-8666-666666666666", model: "provider/model", availability: ["subagent"], description: "Child only.", allowAllTools: false, tools: ["read"], extensions: { subagent: { allowedTargets: [] } },
     };
     await writeFile(value.profilePath, JSON.stringify(config));
     const fake = fakeControllerPi("scout");
@@ -279,7 +332,9 @@ void test("profile availability gates parent selection and old runtime schemas a
     assert.equal((fake.commands.profile!.getArgumentCompletions?.("ch") as unknown[] | null), null);
     await fake.commands.profile!.handler("child", fake.ctx);
     assert.match(fake.notifications.at(-1) ?? "", /Unknown top-level profile/u);
-    assert.throws(() => validateProfileConfig({ ...config, schemaVersion: 2 }), /schemaVersion/u);
+    assert.throws(() => validateProfileConfig({ ...config, schemaVersion: 3 }), /schemaVersion/u);
+    assert.throws(() => validateProfileConfig({ ...config, profiles: { ...config.profiles, child: { ...config.profiles.child!, id: config.profiles.scout!.id } } }), /duplicates/u);
+    assert.throws(() => validateProfileConfig({ ...config, profiles: { ...config.profiles, child: { ...config.profiles.child!, id: "child" } } }), /opaque UUID/u);
     assert.throws(() => validateProfileConfig({ ...config, defaultProfile: "child" }), /top-level/u);
     assert.throws(() => validateSubagentRuntimeConfig({ ...value.subagentConfig, schemaVersion: 6 }), /schemaVersion/u);
 });
@@ -287,7 +342,7 @@ void test("profile availability gates parent selection and old runtime schemas a
 void test("resolved child profile overlays the generic profile snapshot", async () => {
     const { profilePath } = await fixture();
     const pinned = {
-        model: "provider/pinned", availability: ["subagent"] as ("top-level" | "subagent")[], description: "Pinned exploration.", thinkingLevel: "low" as const, allowAllTools: false,
+        id: "11111111-1111-4111-8111-111111111111", model: "provider/pinned", availability: ["subagent"] as ("top-level" | "subagent")[], description: "Pinned exploration.", thinkingLevel: "low" as const, allowAllTools: false,
         tools: ["read"], instructions: "pinned", extensions: { subagent: { allowedTargets: ["scout"] } },
     };
     const loaded = await loadAgentProfileConfig(profilePath, {
@@ -325,10 +380,10 @@ void test("subagent_submit schema enum follows active allowed targets without a 
     assert.deepEqual(tools.find(tool => tool.name === "subagent_submit")?.parameters.properties?.profile?.enum, []);
     eventHandlers[ACTIVE_PROFILE_EVENT]![0]!({
         schemaVersion: 1,
-        name: "review-orchestrator",
+        name: "reviewer",
         reason: "startup",
         profile: {
-            model: "provider/model",
+            id: "77777777-7777-4777-8777-777777777777", model: "provider/model",
             availability: ["subagent"] as ("top-level" | "subagent")[],
             description: "Review orchestration.",
             thinkingLevel: "medium",
@@ -364,7 +419,7 @@ void test("child effective profile drops excluded tools from snapshot and launch
     const { projectChildEffectiveProfile } = await import("../extensions_src/utilities/subagent_types.ts");
     const { piLaunchDescriptor } = await import("../extensions_src/utilities/subagent_pi.ts");
     const profile = {
-        model: "provider/model",
+        id: "88888888-8888-4888-8888-888888888888", model: "provider/model",
         availability: ["subagent"] as ("top-level" | "subagent")[],
         description: "Review orchestration.",
         thinkingLevel: "medium" as const,
@@ -389,7 +444,7 @@ void test("child effective profile drops excluded tools from snapshot and launch
     }, {
         agentId: "a",
         agentDirectory: "/state/agents/a",
-        profile: "review-orchestrator",
+        profile: "reviewer",
         profileSnapshot: effective,
         depth: 1,
         originSessionId: "origin",

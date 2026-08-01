@@ -1,10 +1,14 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
+    CustomEditor,
     getAgentDir,
     type ExtensionAPI,
     type ExtensionContext,
+    type KeybindingsManager,
 } from "@earendil-works/pi-coding-agent";
+import { truncateToWidth, visibleWidth, type EditorTheme, type TUI } from "@earendil-works/pi-tui";
+import { provideCommandPaletteContribution } from "./utilities/command_palette_contributions.ts";
 import { emitActiveProfile, type ActiveProfileReason } from "./utilities/profile_events.ts";
 import {
     validateProfileConfig,
@@ -34,9 +38,34 @@ function splitModelId(model: string): [string, string] {
     return [model.slice(0, separator), model.slice(separator + 1)];
 }
 
-function latestProfile(ctx: ExtensionContext): string | undefined {
-    const entry = [...ctx.sessionManager.getBranch()].reverse().find(item => item.type === "custom" && item.customType === PROFILE_STATE) as { data?: { name?: unknown } } | undefined;
-    return typeof entry?.data?.name === "string" ? entry.data.name : undefined;
+interface ProfileStateV2 { schemaVersion: 2; profileId: string }
+
+function latestProfileId(ctx: ExtensionContext): string | undefined {
+    const entry = [...ctx.sessionManager.getBranch()].reverse().find(item => item.type === "custom" && item.customType === PROFILE_STATE) as { data?: unknown } | undefined;
+    if (!entry?.data || typeof entry.data !== "object" || Array.isArray(entry.data)) return undefined;
+    const data = entry.data as Partial<ProfileStateV2>;
+    return data.schemaVersion === 2 && typeof data.profileId === "string" ? data.profileId : undefined;
+}
+
+export class ProfileBadgeEditor extends CustomEditor {
+    #profileName: string | undefined;
+    readonly #theme: EditorTheme;
+    readonly #tui: Pick<TUI, "requestRender">;
+
+    constructor(tui: TUI, theme: EditorTheme, keybindings: KeybindingsManager, profileName?: string) {
+        super(tui, theme, keybindings);
+        this.#tui = tui; this.#theme = theme; this.#profileName = profileName;
+    }
+    setProfileName(name: string): void { this.#profileName = name; this.invalidate(); this.#tui.requestRender(); }
+    override handleInput(data: string): void { super.handleInput(data); }
+    override render(width: number): string[] {
+        const lines = super.render(width);
+        const label = this.#profileName ? ` profile:${this.#profileName} ` : "";
+        if (lines.length === 0 || !label || width < visibleWidth(label) + 8) return lines;
+        const last = lines.at(-1)!;
+        lines[lines.length - 1] = truncateToWidth(last, width - visibleWidth(label), "") + this.#theme.selectList.selectedText(label);
+        return lines;
+    }
 }
 
 export function routedProfileForInput(config: AgentProfileConfig, text: string): string | undefined {
@@ -52,6 +81,9 @@ export function registerProfileController(
     let config: AgentProfileConfig | undefined;
     let activeName: string | undefined;
     let activeProfile: AgentProfile | undefined;
+    let badgeEditor: ProfileBadgeEditor | undefined;
+
+    const nameForId = (id: string | undefined): string | undefined => id === undefined || !config ? undefined : Object.entries(config.profiles).find(([, profile]) => profile.id === id)?.[0];
 
     const setActiveToolsIfChanged = (expectedTools: string[]): void => {
         const currentTools = pi.getActiveTools();
@@ -108,8 +140,8 @@ export function registerProfileController(
         }
         activeName = name;
         activeProfile = structuredClone(profile);
-        ctx.ui.setStatus("agent-profile", `profile:${name}`);
-        if (persist) pi.appendEntry(PROFILE_STATE, { name });
+        badgeEditor?.setProfileName(name);
+        if (persist) pi.appendEntry(PROFILE_STATE, { schemaVersion: 2, profileId: profile.id } satisfies ProfileStateV2);
         emitActiveProfile(pi, name, activeProfile, reason);
         return true;
     };
@@ -120,6 +152,17 @@ export function registerProfileController(
         const selected = await ctx.ui.select("Agent profile", Object.entries(config.profiles).filter(([, profile]) => profile.availability.includes("top-level")).map(([name]) => name));
         if (selected) await apply(selected, ctx, true, "switch");
     };
+
+    provideCommandPaletteContribution(pi.events, {
+        owner: "profile",
+        id: "select",
+        label: "/profile  Select agent profile",
+        description: "Choose the active capability profile.",
+        keywords: ["agent", "capability", "profile"],
+        currentValue: () => activeName === undefined ? undefined : `Current: ${activeName}`,
+        disabledReason: ctx => ctx.isIdle() ? undefined : "Profile can only be changed while the agent is idle",
+        async run(ctx) { await choose(ctx); return "return" as const; },
+    });
 
     pi.registerCommand("profile", {
         description: "Show or switch the active agent profile",
@@ -150,8 +193,14 @@ export function registerProfileController(
 
     pi.on("session_start", async (_event, ctx) => {
         config = await loadAgentProfileConfig(configPath, env);
+        if (ctx.mode === "tui") {
+            ctx.ui.setEditorComponent((tui, theme, keybindings) => {
+                badgeEditor = new ProfileBadgeEditor(tui, theme, keybindings, activeName);
+                return badgeEditor;
+            });
+        }
         const flag = pi.getFlag("profile");
-        const requested = typeof flag === "string" && flag.trim() ? flag.trim() : latestProfile(ctx) ?? config.defaultProfile;
+        const requested = typeof flag === "string" && flag.trim() ? flag.trim() : nameForId(latestProfileId(ctx)) ?? config.defaultProfile;
         if (!await apply(requested, ctx, true, "startup") && requested !== config.defaultProfile) {
             if (env.PI_AGENT_RESOLVED_PROFILE) return;
             await apply(config.defaultProfile, ctx, true, "startup");
@@ -159,7 +208,7 @@ export function registerProfileController(
     });
     pi.on("session_tree", async (_event, ctx) => {
         config ??= await loadAgentProfileConfig(configPath, env);
-        await apply(latestProfile(ctx) ?? config.defaultProfile, ctx, false, "restore");
+        await apply(nameForId(latestProfileId(ctx)) ?? config.defaultProfile, ctx, false, "restore");
     });
     pi.on("input", async (event, ctx) => {
         try {

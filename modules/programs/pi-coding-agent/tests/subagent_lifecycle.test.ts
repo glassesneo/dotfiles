@@ -12,7 +12,7 @@ import { patchAgentStatus, prepareAgent, publishAgent, readAgentSnapshot } from 
 import { launchAgentSession, stopAgentSession, type CommandResult, type TmuxContext } from "../extensions_src/utilities/subagent_tmux.ts";
 import { tmuxOwnership, type AgentSnapshot, type TmuxAgentReference } from "../extensions_src/utilities/subagent_types.ts";
 
-const profile = { model: "provider/model", availability: ["top-level", "subagent"] as ("top-level" | "subagent")[], description: "Tester", allowAllTools: false, tools: [], extensions: { subagent: { allowedTargets: [] } } };
+const profile = { id: "99999999-9999-4999-8999-999999999999", model: "provider/model", availability: ["top-level", "subagent"] as ("top-level" | "subagent")[], description: "Tester", allowAllTools: false, tools: [], extensions: { subagent: { allowedTargets: [] } } };
 const capabilities = { nativeScreen: true, taskDelivery: true, taskCompletion: true, usage: true, interactiveInterventions: true };
 const context: TmuxContext = { socket: "/tmp/tmux", serverPid: "10", sessionId: "$parent", sessionName: "parent", paneId: "%parent" };
 const launch = { command: "/pi", args: [], env: {} };
@@ -85,9 +85,9 @@ void test("child bridge becomes ready only after the expected profile activates"
 
 void test("child bridge stays unready and fails when the expected profile never activates", async () => {
     const root = await mkdtemp(join(tmpdir(), "subagent-profile-gate-"));
-    const prepared = await prepareAgent(root, { profile: "review-orchestrator", purpose: "work", harness: "pi", cwd: "/work", profileSnapshot: profile, lineage: { callerProfile: "full", targetProfile: "review-orchestrator", depth: 1, originSessionId: "origin" }, capabilities });
+    const prepared = await prepareAgent(root, { profile: "reviewer", purpose: "work", harness: "pi", cwd: "/work", profileSnapshot: profile, lineage: { callerProfile: "full", targetProfile: "reviewer", depth: 1, originSessionId: "origin" }, capabilities });
     const tmux = { socket: "/tmp/tmux", serverPid: "10", sessionId: "$hub", sessionName: "hub", windowId: "@1", paneId: "%1", windowName: "sa" };
-    await publishAgent(prepared.paths, { agentId: prepared.agentId, profile: "review-orchestrator", purpose: "work", harness: "pi", cwd: "/work", profileSnapshot: profile, tmux, tmuxOwnership: "origin-hub", capabilities, callerProfile: "full", targetProfile: "review-orchestrator", depth: 1, originSessionId: "origin" });
+    await publishAgent(prepared.paths, { agentId: prepared.agentId, profile: "reviewer", purpose: "work", harness: "pi", cwd: "/work", profileSnapshot: profile, tmux, tmuxOwnership: "origin-hub", capabilities, callerProfile: "full", targetProfile: "reviewer", depth: 1, originSessionId: "origin" });
     const handlers = new Map<string, (...args: any[]) => any>();
     let shutdowns = 0;
     const api = {
@@ -96,9 +96,9 @@ void test("child bridge stays unready and fails when the expected profile never 
         sendUserMessage() {},
     } as unknown as ExtensionAPI;
     const resolved = {
-        name: "review-orchestrator",
+        name: "reviewer",
         profile: {
-            model: "provider/model",
+            id: "99999999-9999-4999-8999-999999999999", model: "provider/model",
             availability: ["subagent"] as ("top-level" | "subagent")[],
             description: "Review orchestration.",
             thinkingLevel: "medium",

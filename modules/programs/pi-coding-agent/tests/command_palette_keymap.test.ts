@@ -1,12 +1,19 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { resolvePaletteKeymap, validatePaletteKeymapConfig } from "../extensions_src/utilities/command_palette_keymap.ts";
+import { paletteActions, resolvePaletteKeymap, validatePaletteKeymapConfig } from "../extensions_src/utilities/command_palette_keymap.ts";
 import { invalidKeyIds, validKeyIds } from "./key_grammar_cases.ts";
 
 void test("deployed palette keymap satisfies the action grammar", () => {
     const config = JSON.parse(readFileSync(new URL("../extensions_src/utilities/command-palette-keybindings.json", import.meta.url), "utf8"));
-    assert.doesNotThrow(() => resolvePaletteKeymap(config));
+    const resolved = resolvePaletteKeymap(config);
+    assert.doesNotThrow(() => resolved);
+    assert.equal(paletteActions.length, 9);
+    assert.deepEqual(resolved.moveUp, ["ctrl+p", "k"]);
+    assert.deepEqual(resolved.moveDown, ["ctrl+n", "j"]);
+    assert.deepEqual(resolved.collapse, ["left", "h"]);
+    assert.deepEqual(resolved.expand, ["right", "l"]);
+    assert.ok(Object.values(resolved).every(keys => keys.length > 0));
 });
 
 void test("palette key validation preserves the shared key ID grammar", () => {
