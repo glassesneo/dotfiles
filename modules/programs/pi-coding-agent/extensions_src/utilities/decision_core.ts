@@ -17,14 +17,13 @@ export interface QuestionItem {
     prompt: string;
     kind: QuestionKind;
     options?: QuestionOption[];
-    initialValue?: string;
 }
 
 export interface QuestionParameters { questions: QuestionItem[]; }
 
 export type QuestionResponse =
     | { kind: "single"; value: string; note?: string }
-    | { kind: "multi"; values: string[]; note?: string }
+    | { kind: "multi"; values: Array<{ value: string; note?: string }> }
     | { kind: "text"; value: string }
     | { kind: "unanswered"; note: string };
 
@@ -45,7 +44,6 @@ const questionItemSchema = Type.Object({
     prompt: Type.String({ minLength: 1 }),
     kind: StringEnum(questionKinds),
     options: Type.Optional(Type.Array(questionOptionSchema)),
-    initialValue: Type.Optional(Type.String()),
 }, { additionalProperties: false });
 
 export const questionParameters = Type.Object({
@@ -134,8 +132,9 @@ export function formatQuestionResponse(
     if (response.kind === "single") {
         return `${optionLabel(response.value)}${noteSuffix(response.note)}`;
     }
-    const values = response.values.map(value => optionLabel(value)).join(", ");
-    return `${values}${noteSuffix(response.note)}`;
+    return response.values
+        .map(selected => `${optionLabel(selected.value)}${noteSuffix(selected.note)}`)
+        .join(", ");
 }
 
 function requireNonBlank(value: string, message: string): void {
@@ -159,6 +158,9 @@ export function validateQuestionParameters(params: QuestionParameters): void {
         if (Object.prototype.hasOwnProperty.call(question, "note")) {
             throw new Error(`note is not supported: ${question.id}`);
         }
+        if (Object.prototype.hasOwnProperty.call(question, "initialValue")) {
+            throw new Error(`initialValue is not supported: ${question.id}`);
+        }
         requireNonBlank(question.id, "Question id must not be blank");
         requireNonBlank(question.prompt, `Question prompt must not be blank: ${question.id}`);
         const optionQuestion = question.kind === "single" || question.kind === "multi";
@@ -174,9 +176,6 @@ export function validateQuestionParameters(params: QuestionParameters): void {
             requireUnique(question.options.map(optionDisplayText), display => `Option display text must be unique in question ${question.id}: ${display}`);
         } else if (question.options !== undefined) {
             throw new Error(`${question.kind} question ${question.id} does not accept options`);
-        }
-        if (question.initialValue !== undefined && question.kind !== "text") {
-            throw new Error(`initialValue is only valid for text questions: ${question.id}`);
         }
     }
 }
@@ -205,15 +204,19 @@ export function normalizeQuestionResponse(question: QuestionItem, pending: Pendi
         case "multi": {
             if (pending.values.length === 0) throw new Error(`multi question ${question.id} requires at least one selection`);
             const allowed = optionValues(question);
-            const selected = new Set<string>();
-            for (const value of pending.values) {
-                if (!allowed.has(value)) throw new Error(`Unknown option value for question ${question.id}: ${value}`);
-                if (selected.has(value)) throw new Error(`Duplicate selected value for question ${question.id}: ${value}`);
-                selected.add(value);
+            const selected = new Map<string, string | undefined>();
+            for (const item of pending.values) {
+                if (!allowed.has(item.value)) throw new Error(`Unknown option value for question ${question.id}: ${item.value}`);
+                if (selected.has(item.value)) throw new Error(`Duplicate selected value for question ${question.id}: ${item.value}`);
+                selected.set(item.value, normalizeNote(item.note));
             }
-            const values = (question.options ?? []).filter(option => selected.has(option.value)).map(option => option.value);
-            const note = normalizeNote(pending.note);
-            return note === undefined ? { kind: "multi", values } : { kind: "multi", values, note };
+            const values = (question.options ?? [])
+                .filter(option => selected.has(option.value))
+                .map(option => {
+                    const note = selected.get(option.value);
+                    return note === undefined ? { value: option.value } : { value: option.value, note };
+                });
+            return { kind: "multi", values };
         }
         case "text":
             requireNonBlank(pending.value, `text question ${question.id} requires a non-blank answer`);
@@ -293,6 +296,9 @@ export class QuestionProgress {
         const response = normalizeQuestionResponse(this.current, pending);
         this.#responses.set(this.current.id, response);
         return response;
+    }
+    clear(questionOrId: QuestionItem | string = this.current): void {
+        this.#responses.delete(typeof questionOrId === "string" ? questionOrId : questionOrId.id);
     }
     submitted(): QuestionResultDetails {
         return { status: "submitted", responses: Object.fromEntries(this.#responses) };

@@ -27,7 +27,6 @@ const questions: QuestionItem[] = [
         id: "details",
         prompt: "Describe the requirement",
         kind: "text",
-        initialValue: "line one\n",
     },
 ];
 
@@ -53,6 +52,9 @@ void test("schema accepts three kinds and multiple questions", () => {
     assert.equal(Value.Check(questionParameters, { questions: [] }), false);
     assert.equal(Value.Check(questionParameters, {
         questions: [{ id: "legacy", prompt: "Legacy", kind: "confirm" }],
+    }), false);
+    assert.equal(Value.Check(questionParameters, {
+        questions: [{ id: "legacy", prompt: "Legacy", kind: "text", initialValue: "old" }],
     }), false);
     assert.equal(Value.Check(questionParameters, {
         questions: [{ id: "legacy", prompt: "Legacy", kind: "single", note: { mode: "answer" } }],
@@ -132,7 +134,7 @@ void test("runtime validation rejects duplicate and kind-specific violations", (
             ],
         ],
         [/does not accept options/, [{ ...questions[1], options: questions[0].options }]],
-        [/initialValue is only valid/, [{ ...questions[0], initialValue: "x" }]],
+        [/initialValue is not supported/, [{ ...questions[1], initialValue: "x" } as never]],
         [/note is not supported/, [{ ...questions[0], note: { mode: "answer" } } as never]],
     ];
 
@@ -161,20 +163,19 @@ void test("response formatting shares labels while preserving presentation polic
     };
     const response = {
         kind: "multi" as const,
-        values: ["a", "b"],
-        note: "overall\nnote",
+        values: [{ value: "a", note: "first\nnote" }, { value: "b" }],
     };
 
     assert.equal(
         formatQuestionResponse(multi, response),
-        "A, B — note: overall\nnote",
+        "A — note: first\nnote, B",
     );
     assert.equal(
         formatQuestionResponse(multi, response, {
             formatText: value => value.replace(/\n/g, " ⏎ "),
             formatResponseNote: value => ` — note: ${value.replace(/\n/g, " ⏎ ")}`,
         }),
-        "A, B — note: overall ⏎ note",
+        "A — note: first ⏎ note, B",
     );
     assert.equal(
         formatQuestionResponse(questions[0], { kind: "unanswered", note: "try another way" }),
@@ -197,10 +198,9 @@ void test("responses normalize notes and multi values in option definition order
     assert.deepEqual(
         normalizeQuestionResponse(multi, {
             kind: "multi",
-            values: ["c", "a"],
-            note: "overall",
+            values: [{ value: "c", note: "third" }, { value: "a", note: "first" }],
         }),
-        { kind: "multi", values: ["a", "c"], note: "overall" },
+        { kind: "multi", values: [{ value: "a", note: "first" }, { value: "c", note: "third" }] },
     );
     assert.deepEqual(
         normalizeQuestionResponse(questions[0], {
@@ -250,6 +250,22 @@ void test("normalization rejects empty or inconsistent pending responses", () =>
                 note: "  ",
             }),
         /non-blank note/,
+    );
+    assert.throws(
+        () =>
+            normalizeQuestionResponse(
+                { ...questions[0], kind: "multi", options: [{ value: "a", label: "A" }, { value: "b", label: "B" }] },
+                { kind: "multi", values: [] },
+            ),
+        /at least one selection/,
+    );
+    assert.throws(
+        () =>
+            normalizeQuestionResponse(
+                { ...questions[0], kind: "multi", options: [{ value: "a", label: "A" }, { value: "b", label: "B" }] },
+                { kind: "multi", values: [{ value: "a" }, { value: "a", note: "duplicate" }] },
+            ),
+        /Duplicate selected value/,
     );
 });
 

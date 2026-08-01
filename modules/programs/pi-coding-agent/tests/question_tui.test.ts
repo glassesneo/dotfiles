@@ -121,26 +121,33 @@ void test("synthetic row cancel preserves the complete existing draft", () => {
     assert.doesNotMatch(restored, /discard/);
 });
 
-void test("edit-note without a selection commits an unanswered response on navigation", () => {
+void test("editing an unselected regular option selects it and previews its note", () => {
     const h = harness([single, { ...single, id: "other", prompt: "Other" }]);
     h.component.handleInput("e");
-    h.component.handleInput("none fit");
+    h.component.handleInput("because Alpha");
     h.component.handleInput(keys.enter);
+    assert.match(h.component.render(80).join("\n"), /> \(●\) Alpha/);
+    assert.match(h.component.render(80).join("\n"), /Alpha[\s\S]*Note: because Alpha/);
     h.component.handleInput(keys.tab);
-    assert.match(h.component.render(80).join("\n"), /\[1 ◐\].*\[2 ●\]/);
+    assert.match(h.component.render(80).join("\n"), /\[1 ✓\].*\[2 ●\]/);
     h.component.handleInput(keys.tab);
     h.component.handleInput(keys.enter);
-    assert.deepEqual(h.results[0]?.responses.single, { kind: "unanswered", note: "none fit" });
+    assert.deepEqual(h.results[0]?.responses.single, { kind: "single", value: "a", note: "because Alpha" });
 });
 
-void test("unanswered note carries over when selecting a regular option", () => {
-    const h = harness([single]);
-    h.component.handleInput("e");
-    h.component.handleInput("carry me");
-    h.component.handleInput(keys.enter);
-    h.component.handleInput(keys.space);
-    h.component.handleInput(keys.enter);
-    assert.deepEqual(h.results[0]?.responses.single, { kind: "single", value: "a", note: "carry me" });
+void test("blank or cancelled regular note edits do not select an option", () => {
+    const cancelled = harness([single]);
+    cancelled.component.handleInput("e");
+    cancelled.component.handleInput("discard");
+    cancelled.component.handleInput(keys.escape);
+    assert.match(cancelled.component.render(80).join("\n"), /> \( \) Alpha/);
+    assert.doesNotMatch(cancelled.component.render(80).join("\n"), /discard/);
+
+    const blank = harness([single]);
+    blank.component.handleInput("e");
+    blank.component.handleInput("   ");
+    blank.component.handleInput(keys.enter);
+    assert.match(blank.component.render(80).join("\n"), /> \( \) Alpha/);
 });
 
 void test("required and blank notes follow decision policy", () => {
@@ -163,7 +170,7 @@ void test("required and blank notes follow decision policy", () => {
     assert.deepEqual(disabled.results[0]?.responses.single, { kind: "single", value: "a" });
 });
 
-void test("multi uses Space and stores response-level note", () => {
+void test("multi uses Space and stores notes on selected options", () => {
     const question: QuestionItem = { id: "multi", prompt: "Many", kind: "multi", options: [{ value: "a", label: "A" }, { value: "b", label: "B" }] };
     const h = harness([question]);
     h.component.handleInput(keys.enter); assert.match(h.component.render(80).join("\n"), /Select at least one/);
@@ -173,7 +180,22 @@ void test("multi uses Space and stores response-level note", () => {
     h.component.handleInput(keys.enter);
     assert.match(h.component.render(80).join("\n"), /Note: note A/);
     h.component.handleInput(keys.down); h.component.handleInput(keys.space); h.component.handleInput(keys.enter); h.component.handleInput(keys.enter);
-    assert.deepEqual(h.results[0]?.responses.multi, { kind: "multi", values: ["a", "b"], note: "note A\nmore detail" });
+    assert.deepEqual(h.results[0]?.responses.multi, { kind: "multi", values: [{ value: "a", note: "note A\nmore detail" }, { value: "b" }] });
+});
+
+void test("multi keeps a deselected option note for a later re-selection", () => {
+    const question: QuestionItem = { id: "multi", prompt: "Many", kind: "multi", options: [{ value: "a", label: "A" }, { value: "b", label: "B" }] };
+    const h = harness([question]);
+    h.component.handleInput(keys.space);
+    h.component.handleInput("e");
+    h.component.handleInput("note A");
+    h.component.handleInput(keys.enter);
+    h.component.handleInput(keys.space);
+    h.component.handleInput(keys.down);
+    h.component.handleInput(keys.up);
+    h.component.handleInput(keys.space);
+    h.component.handleInput(keys.enter);
+    assert.deepEqual(h.results[0]?.responses.multi, { kind: "multi", values: [{ value: "a", note: "note A" }] });
 });
 
 void test("configured alternate navigation keys move selection like Down and Up", () => {
@@ -270,7 +292,8 @@ void test("artifact policy hides synthetic unanswered row and blocks no-selectio
     });
     assert.doesNotMatch(h.component.render(80).join("\n"), new RegExp(SYNTHETIC_UNANSWERED_LABEL));
     h.component.handleInput("e");
-    assert.doesNotMatch(h.component.render(80).join("\n"), /Optional note|Add a note/);
+    assert.match(h.component.render(80).join("\n"), /Optional note for this option/);
+    h.component.handleInput(keys.escape);
     h.component.handleInput(keys.down);
     h.component.handleInput(keys.space);
     h.component.handleInput("e");

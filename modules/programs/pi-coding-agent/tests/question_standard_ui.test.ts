@@ -46,7 +46,7 @@ const allKinds: QuestionItem[] = [
             { value: "c", label: "C" },
         ],
     },
-    { id: "text", prompt: "Details?", kind: "text", initialValue: "initial" },
+    { id: "text", prompt: "Details?", kind: "text" },
     {
         id: "yesno",
         prompt: "Proceed?",
@@ -65,7 +65,8 @@ void test("standard UI answers all kinds, reviews, and explicitly submits", asyn
         "[ ] C",
         "[ ] A",
         "Done — confirm selections",
-        "whole answer",
+        "note A",
+        "note C",
         "Answer this question",
         "line 1\nline 2",
         "[ ] No",
@@ -77,14 +78,14 @@ void test("standard UI answers all kinds, reviews, and explicitly submits", asyn
         status: "submitted",
         responses: {
             one: { kind: "single", value: "a", note: "single note" },
-            many: { kind: "multi", values: ["a", "c"], note: "whole answer" },
+            many: { kind: "multi", values: [{ value: "a", note: "note A" }, { value: "c", note: "note C" }] },
             text: { kind: "text", value: "line 1\nline 2" },
             yesno: { kind: "single", value: "no", note: "not now" },
         },
     });
     assert.equal(mock.remaining.length, 0);
     const textEditor = mock.calls.find(call => call.method === "editor" && call.args[0] === "Question 3/4: Details?");
-    assert.deepEqual(textEditor?.args, ["Question 3/4: Details?", "initial"]);
+    assert.deepEqual(textEditor?.args, ["Question 3/4: Details?", undefined]);
     assert.ok(mock.calls.some(call => call.method === "select" && call.args[0] === "Review responses (choose a question to revise)"));
 });
 
@@ -171,7 +172,7 @@ void test("multi disambiguates a regular option from the synthetic label", async
     const mock = scriptedUI([realLabel, "Done — confirm selections", ""]);
     assert.deepEqual(
         await runStandardQuestionFlow({ hasUI: true, ui: mock.ui }, [question]),
-        { status: "submitted", responses: { collision: { kind: "multi", values: ["regular"] } } },
+        { status: "submitted", responses: { collision: { kind: "multi", values: [{ value: "regular" }] } } },
     );
     const choices = mock.calls.find(call => call.method === "select")?.args[1] as string[];
     assert.ok(choices.includes(realLabel));
@@ -184,12 +185,14 @@ void test("review rehydrates and revises multi and text answers", async () => {
         "[ ] A",
         "[ ] B",
         "Done — confirm selections",
-        "old answer",
+        "old A",
+        "old B",
         "Answer this question",
         "old text",
-        "Q1: Many? — A, B — note: old answer",
+        "Q1: Many? — A — note: old A, B — note: old B",
         "Done — confirm selections",
-        "new answer",
+        "new A",
+        "new B",
         "Q2: Details? — old text",
         "Answer this question",
         "new text",
@@ -201,7 +204,7 @@ void test("review rehydrates and revises multi and text answers", async () => {
         {
             status: "submitted",
             responses: {
-                many: { kind: "multi", values: ["a", "b"], note: "new answer" },
+                many: { kind: "multi", values: [{ value: "a", note: "new A" }, { value: "b", note: "new B" }] },
                 text: { kind: "text", value: "new text" },
             },
         },
@@ -224,7 +227,7 @@ void test("multi requires one selection before Done", async () => {
     const result = await runStandardQuestionFlow({ hasUI: true, ui: mock.ui }, [allKinds[1]]);
     assert.deepEqual(result, {
         status: "submitted",
-        responses: { many: { kind: "multi", values: ["b"] } },
+        responses: { many: { kind: "multi", values: [{ value: "b" }] } },
     });
     assert.equal(mock.calls.filter(call => call.method === "notify").length, 1);
 });

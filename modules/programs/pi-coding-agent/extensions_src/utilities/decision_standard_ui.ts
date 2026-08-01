@@ -43,8 +43,12 @@ function uniqueLabel(base: string, displays: ReadonlySet<string>): string {
     return label;
 }
 
-function noteFrom(response: QuestionResponse | undefined): string | undefined {
-    if (response?.kind === "single" || response?.kind === "multi") return response.note;
+function noteFrom(response: QuestionResponse | undefined, value?: string): string | undefined {
+    if (response?.kind === "single") return value === undefined || response.value === value ? response.note : undefined;
+    if (response?.kind === "multi") {
+        if (value === undefined) return undefined;
+        return response.values.find(selected => selected.value === value)?.note;
+    }
     if (response?.kind === "unanswered") return response.note;
     return undefined;
 }
@@ -119,9 +123,11 @@ async function askSingle(
         const option = options[displays.indexOf(selected)];
         if (option === undefined) throw new Error(`Standard UI returned an unknown option: ${selected}`);
         const requirement = decisionNoteRequirement(policy, question, option);
-        const note = await askNote(context.ui, question, "response", option.label, noteFrom(existing), requirement, signal, policy);
+        const note = await askNote(context.ui, question, "response", option.label, noteFrom(existing, option.value), requirement, signal, policy);
         if (note === null) return undefined;
-        return { kind: "single", value: option.value, note };
+        return note === undefined
+            ? { kind: "single", value: option.value }
+            : { kind: "single", value: option.value, note };
     }
 }
 
@@ -136,7 +142,7 @@ async function askMulti(
 ): Promise<QuestionStepResult> {
     const options = question.options ?? [];
     const selectedValues = new Set(
-        existing?.kind === "multi" ? existing.values : [],
+        existing?.kind === "multi" ? existing.values.map(selected => selected.value) : [],
     );
     const controlDisplays = new Set<string>();
     for (const option of options) {
@@ -181,11 +187,15 @@ async function askMulti(
         else selectedValues.add(option.value);
     }
 
-    const values = (question.options ?? []).filter(option => selectedValues.has(option.value)).map(option => option.value);
-    const requirement = decisionNoteRequirement(policy, question);
-    const note = await askNote(context.ui, question, "response", "answer", noteFrom(existing), requirement, signal, policy);
-    if (note === null) return undefined;
-    return { kind: "multi", values, note };
+    const values: Array<{ value: string; note?: string }> = [];
+    for (const option of options) {
+        if (!selectedValues.has(option.value)) continue;
+        const requirement = decisionNoteRequirement(policy, question, option);
+        const note = await askNote(context.ui, question, "response", option.label, noteFrom(existing, option.value), requirement, signal, policy);
+        if (note === null) return undefined;
+        values.push(note === undefined ? { value: option.value } : { value: option.value, note });
+    }
+    return { kind: "multi", values };
 }
 
 async function askText(
@@ -200,7 +210,7 @@ async function askText(
     const action = await context.ui.select(title, ["Answer this question", reviewActionLabel], { signal });
     if (action === undefined || isCancelled(signal)) return undefined;
     if (action === reviewActionLabel) return REVIEW_NOW;
-    let prefill = existing?.kind === "text" ? existing.value : question.initialValue;
+    let prefill = existing?.kind === "text" ? existing.value : undefined;
     while (true) {
         if (isCancelled(signal)) return undefined;
         const value = await context.ui.editor(title, prefill);
