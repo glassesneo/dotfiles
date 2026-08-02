@@ -13,7 +13,7 @@ export interface HarnessAdapter {
 
 const pi: HarnessAdapter = {
     kind: "pi-native",
-    capabilities: { nativeScreen: true, taskDelivery: true, taskCompletion: true, usage: true, interactiveInterventions: true, terminalHistory: true },
+    capabilities: { nativeScreen: true, taskDelivery: true, taskCompletion: true, taskCancellation: true, usage: true, interactiveInterventions: true, terminalHistory: true },
     validate(profile, harnessId) {
         const facet = profile.extensions.subagent as Record<string, unknown> | undefined;
         if (harnessId !== "pi") throw new Error("pi-native adapter must use the pi harness");
@@ -46,7 +46,7 @@ function cursorOptions(profile: AgentProfile): typeof CURSOR_OPTIONS {
 
 const cursor: HarnessAdapter = {
     kind: "cursor-acp",
-    capabilities: { nativeScreen: true, taskDelivery: true, taskCompletion: true, usage: false, interactiveInterventions: false, terminalHistory: false },
+    capabilities: { nativeScreen: true, taskDelivery: true, taskCompletion: true, taskCancellation: true, usage: false, interactiveInterventions: false, terminalHistory: false },
     validate(profile) { cursorOptions(profile); },
     launch(config, harness, input) {
         cursorOptions(input.profileSnapshot);

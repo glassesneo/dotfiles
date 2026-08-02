@@ -9,19 +9,20 @@ export type TaskState = (typeof TASK_STATES)[number];
 export type TerminalTaskState = Extract<TaskState, "succeeded" | "failed" | "stopped">;
 export type TmuxOwnership = "origin-hub" | "dedicated";
 export interface TmuxAgentReference { socket: string; serverPid: string; sessionId: string; sessionName: string; windowId: string; paneId: string; windowName: string }
-export interface NativeCapabilities { nativeScreen: boolean; taskDelivery: boolean; taskCompletion: boolean; usage: boolean; interactiveInterventions: boolean; terminalHistory?: boolean }
+export interface NativeCapabilities { nativeScreen: boolean; taskDelivery: boolean; taskCompletion: boolean; taskCancellation?: boolean; usage: boolean; interactiveInterventions: boolean; terminalHistory?: boolean }
 export type HarnessAdapterKind = "pi-native" | "cursor-acp";
-export interface HarnessRuntimeConfig { adapter: HarnessAdapterKind; command: string; workerCommand?: string; workerEntrypoint?: string }
+export interface HarnessRuntimeConfig { adapter: HarnessAdapterKind; command: string; workerCommand?: string; workerEntrypoint?: string; bridgeReadyTimeoutMs?: number }
 export interface SubagentRuntimeConfig { schemaVersion: 7; stateRoot: string; tmux: string; historyViewerExtension: string; childExtensions: string[]; harnesses: Record<string, HarnessRuntimeConfig> & { pi: HarnessRuntimeConfig }; maxDepth: number; childExcludedTools: string[]; natureHandleWords: string[]; bridgeReadyTimeoutMs?: number }
 export interface SubagentFacet { allowedTargets: string[]; harness?: string; harnessOptions?: Record<string, unknown> }
 export interface AgentLineage { callerProfile: string; targetProfile: string; depth: number; parentAgentId?: string; originSessionId: string; originSessionFile?: string }
 export interface AgentRecord extends AgentLineage { schemaVersion: 1; agentId: string; profile: string; purpose: string; harness: string; cwd: string; createdAt: string; profileSnapshot: AgentProfile; tmux: TmuxAgentReference; tmuxOwnership?: TmuxOwnership; capabilities: NativeCapabilities }
 export interface AgentStatus { schemaVersion: 1; agentId: string; state: AgentState; activeTaskId?: string; latestTaskId?: string; bridgeReady: boolean; childSessionId?: string; childSessionFile?: string; agentUsage: Usage; accountedTaskIds: string[]; updatedAt: string; exitReason?: string }
 export interface TaskRequest { schemaVersion: 1; agentId: string; taskId: string; purpose: string; prompt: string; createdAt: string }
+export interface TaskCancelRequest { schemaVersion: 1; agentId: string; taskId: string; requestedAt: string; reason: string }
 export interface Intervention { sequence: number; timestamp: string; taskId?: string; text: string; deliveryMode: "steer" | "followUp" | "idle"; images: string[] }
 export interface TaskStatus { schemaVersion: 1; agentId: string; taskId: string; state: TaskState; createdAt: string; startedAt?: string; finishedAt?: string; error?: string }
 export interface TaskResult { schemaVersion: 1; agentId: string; taskId: string; outcome: TerminalTaskState; output: string; usage: Usage; turns: number; interventions: Intervention[]; startedAt: string; finishedAt: string; error?: string }
-export interface UsageClaim { schemaVersion: 1; originSessionId: string; parentSessionFile?: string; toolCallId: string; toolName: "subagent_submit" | "subagent_start" | "subagent_get" | "subagent_wait" | "subagent_stop"; agentId: string; taskId: string; claimedAt: string }
+export interface UsageClaim { schemaVersion: 1; originSessionId: string; parentSessionFile?: string; toolCallId: string; toolName: "subagent_run" | "subagent_submit" | "subagent_start" | "subagent_get" | "subagent_wait" | "subagent_stop"; agentId: string; taskId: string; claimedAt: string }
 export interface AgentSnapshot { agent: AgentRecord; status: AgentStatus; task?: TaskSnapshot }
 export interface TaskSnapshot { request: TaskRequest; status: TaskStatus; result: TaskResult | null; interventions: Intervention[]; claimed: boolean; directory: string }
 
@@ -44,14 +45,24 @@ export function validateSubagentRuntimeConfig(value: unknown): SubagentRuntimeCo
     const parsed: Record<string, HarnessRuntimeConfig> = {};
     for (const [id, raw] of Object.entries(harnesses)) {
         const entry = object(raw, `harnesses.${id}`);
-        const unknown = Object.keys(entry).filter(key => !["adapter", "command", "workerCommand", "workerEntrypoint"].includes(key));
+        const unknown = Object.keys(entry).filter(key => !["adapter", "command", "workerCommand", "workerEntrypoint", "bridgeReadyTimeoutMs"].includes(key));
         if (unknown.length) throw new Error(`harnesses.${id} contains unknown keys: ${unknown.join(", ")}`);
         const adapter = nonBlank(entry.adapter, `harnesses.${id}.adapter`);
         if (adapter !== "pi-native" && adapter !== "cursor-acp") throw new Error(`harnesses.${id}.adapter is unknown: ${adapter}`);
         const workerCommand = entry.workerCommand === undefined ? undefined : nonBlank(entry.workerCommand, `harnesses.${id}.workerCommand`);
         const workerEntrypoint = entry.workerEntrypoint === undefined ? undefined : nonBlank(entry.workerEntrypoint, `harnesses.${id}.workerEntrypoint`);
         if (adapter === "cursor-acp" && (!workerCommand || !workerEntrypoint)) throw new Error(`harnesses.${id} cursor-acp adapter requires workerCommand and workerEntrypoint`);
-        parsed[id] = { adapter, command: nonBlank(entry.command, `harnesses.${id}.command`), ...(workerCommand ? { workerCommand } : {}), ...(workerEntrypoint ? { workerEntrypoint } : {}) } as HarnessRuntimeConfig;
+        const bridgeReadyTimeoutMs = entry.bridgeReadyTimeoutMs;
+        if (bridgeReadyTimeoutMs !== undefined && (!Number.isInteger(bridgeReadyTimeoutMs) || (bridgeReadyTimeoutMs as number) <= 0)) {
+            throw new Error(`harnesses.${id}.bridgeReadyTimeoutMs must be a positive integer`);
+        }
+        parsed[id] = {
+            adapter,
+            command: nonBlank(entry.command, `harnesses.${id}.command`),
+            ...(workerCommand ? { workerCommand } : {}),
+            ...(workerEntrypoint ? { workerEntrypoint } : {}),
+            ...(bridgeReadyTimeoutMs !== undefined ? { bridgeReadyTimeoutMs: bridgeReadyTimeoutMs as number } : {}),
+        } as HarnessRuntimeConfig;
     }
     if (!parsed.pi || parsed.pi.adapter !== "pi-native") throw new Error("harnesses.pi must use the pi-native adapter");
     if (!Number.isInteger(root.maxDepth) || (root.maxDepth as number) < 0) throw new Error("maxDepth must be a non-negative integer");

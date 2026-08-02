@@ -52,21 +52,21 @@ in
         harness = "pi";
       };
       taskmaster = {
-        tools = ["subagent_submit" "subagent_get" "subagent_wait" "subagent_stop"];
+        tools = ["subagent_run" "subagent_submit" "subagent_get" "subagent_wait" "subagent_stop"];
         extensions.subagent = {
           allowedTargets = ["tester" "reviewer" "focused-reviewer"];
           harness = "pi";
         };
       };
       artisan = {
-        tools = ["subagent_submit" "subagent_get" "subagent_wait" "subagent_stop"];
+        tools = ["subagent_run" "subagent_submit" "subagent_get" "subagent_wait" "subagent_stop"];
         extensions.subagent = {
           allowedTargets = ["reviewer"];
           harness = "pi";
         };
       };
       operator = {
-        tools = ["subagent_submit" "subagent_get" "subagent_wait" "subagent_stop"];
+        tools = ["subagent_run" "subagent_submit" "subagent_get" "subagent_wait" "subagent_stop"];
         extensions.subagent = {
           allowedTargets = ["explorer" "taskmaster" "cursor-implementer" "tester" "reviewer" "focused-reviewer"];
           harness = "pi";
@@ -88,14 +88,14 @@ in
         harness = "pi";
       };
       reviewer = {
-        tools = ["subagent_submit" "subagent_get" "subagent_wait" "subagent_stop"];
+        tools = ["subagent_run" "subagent_submit" "subagent_get" "subagent_wait" "subagent_stop"];
         extensions.subagent = {
           allowedTargets = ["focused-reviewer" "dissent-reviewer"];
           harness = "pi";
         };
       };
       scout = {
-        tools = ["subagent_submit" "subagent_get" "subagent_wait" "subagent_stop"];
+        tools = ["subagent_run" "subagent_submit" "subagent_get" "subagent_wait" "subagent_stop"];
         extensions.subagent = {
           allowedTargets = ["reviewer" "focused-reviewer" "explorer"];
           harness = "pi";
@@ -289,6 +289,8 @@ in
             command = lib.getExe llm-agents.cursor-agent;
             workerCommand = lib.getExe pkgs.nodejs;
             workerEntrypoint = externalWorkerEntrypoint;
+            # Cursor ACP cold start (process + initialize/authenticate + session/new) can exceed the Pi-native 5000 ms default.
+            bridgeReadyTimeoutMs = 15000;
           };
         };
         inherit (cfg) maxDepth;

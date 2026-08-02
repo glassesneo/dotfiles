@@ -5,17 +5,17 @@ import { join } from "node:path";
 import test from "node:test";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { registerSubagentChildBridge } from "../extensions_src/subagent_child_bridge.ts";
-import { createSubagentGetTool, createSubagentStopTool, createSubagentSubmitTool, createSubagentWaitTool } from "../extensions_src/subagent.ts";
+import { createSubagentGetTool, createSubagentRunTool, createSubagentStopTool, createSubagentSubmitTool, createSubagentWaitTool } from "../extensions_src/subagent.ts";
 import { defaultPaletteKeymap } from "../extensions_src/utilities/command_palette_keymap.ts";
 import { mapConcurrent } from "../extensions_src/utilities/subagent_concurrency.ts";
 import { piLaunchDescriptor } from "../extensions_src/utilities/subagent_pi.ts";
 import { withRunLock } from "../extensions_src/utilities/subagent_lock.ts";
 import { SubagentPaletteComponent } from "../extensions_src/utilities/subagent_palette.ts";
 import { openLivePreview } from "../extensions_src/utilities/subagent_preview.ts";
-import { claimPendingTask, claimTaskUsage, createTask, failAgent, finishTask, markAgentStopping, markBridgeReady, patchAgentStatus, prepareAgent, publishAgent, readAgentSnapshot, reconcileOriginUsageClaims, recordIdleUsage, recordIntervention, taskPaths } from "../extensions_src/utilities/subagent_store.ts";
-import { failStartedSubagentAgent, readReconciledAgentSnapshot, stopSubagentAgent } from "../extensions_src/utilities/subagent_management.ts";
+import { claimPendingTask, claimTaskUsage, createTask, failAgent, finishTask, markAgentStopping, markBridgeReady, patchAgentStatus, prepareAgent, publishAgent, readAgentSnapshot, readTaskCancellation, reconcileOriginUsageClaims, requestTaskCancellation, recordIdleUsage, recordIntervention, taskPaths } from "../extensions_src/utilities/subagent_store.ts";
+import { failStartedSubagentAgent, readReconciledAgentSnapshot, stopSubagentAgent, stopSubagentAgentWithDisposition, stopSubagentTaskWithDisposition } from "../extensions_src/utilities/subagent_management.ts";
 import { inspectAgentTmux, launchAgentSession, openAgentWindow, probeTmux, stopAgentSession, unlinkAgentWindow, type CommandResult } from "../extensions_src/utilities/subagent_tmux.ts";
-import type { AgentSnapshot, SubagentRuntimeConfig, TmuxAgentReference } from "../extensions_src/utilities/subagent_types.ts";
+import { emptyUsage, type AgentSnapshot, type SubagentRuntimeConfig, type TmuxAgentReference } from "../extensions_src/utilities/subagent_types.ts";
 const profile = { id: "99999999-9999-4999-8999-999999999999", model: "provider/model", availability: ["top-level", "subagent"] as ("top-level" | "subagent")[], description: "Tester", allowAllTools: false, tools: ["read"], extensions: { subagent: { allowedTargets: [] } } };
 const config = (root: string): SubagentRuntimeConfig => ({ schemaVersion: 7, stateRoot: root, tmux: "/tmux", historyViewerExtension: "/history-viewer.ts", childExtensions: ["/profile.ts", "/bridge.ts"], harnesses: { pi: { adapter: "pi-native", command: "/pi" } }, maxDepth: 3, childExcludedTools: ["question"], natureHandleWords: ["Maple", "Cedar"] });
 const tmux: TmuxAgentReference = { socket: "/tmp/tmux", serverPid: "10", sessionId: "$2", sessionName: "pi-sa-test", windowId: "@2", paneId: "%2", windowName: "sa-test" };
@@ -554,8 +554,12 @@ void test("failed Stop restores a live agent instead of reporting a false termin
     const prepared = await prepareAgent(root, { profile: "tester", purpose: "first", harness: "pi", cwd: "/work", profileSnapshot: profile, lineage: { callerProfile: "taskmaster", targetProfile: "tester", depth: 1, originSessionId: "origin" }, capabilities: { nativeScreen: true, taskDelivery: true, taskCompletion: true, usage: true, interactiveInterventions: true } });
     await publishAgent(prepared.paths, { agentId: prepared.agentId, profile: "tester", purpose: "first", harness: "pi", cwd: "/work", profileSnapshot: profile, tmux, capabilities: { nativeScreen: true, taskDelivery: true, taskCompletion: true, usage: true, interactiveInterventions: true }, callerProfile: "taskmaster", targetProfile: "tester", depth: 1, originSessionId: "origin" });
     await patchAgentStatus(prepared.paths, { state: "idle" });
-    const exec = async (_command: string, args: string[]): Promise<CommandResult> => { if (args.at(-1) === "#{pid}") return { stdout: "10\n", stderr: "", code: 0 }; if (args.includes("kill-window")) return { stdout: "", stderr: "permission denied", code: 1 }; if (args.includes("has-session")) return { stdout: "", stderr: "", code: 0 }; if (args.includes("#{pane_id}\t#{pane_dead}")) return { stdout: "%2\t0\n", stderr: "", code: 0 }; return { stdout: "", stderr: "", code: 0 }; };
-    await assert.rejects(stopSubagentAgent({ stateRoot: root, agentId: prepared.agentId, originSessionId: "origin", exec, tmux: "/tmux" }), /permission denied/u);
+    let kills = 0;
+    const exec = async (_command: string, args: string[]): Promise<CommandResult> => { if (args.at(-1) === "#{pid}") return { stdout: "10\n", stderr: "", code: 0 }; if (args.includes("kill-window")) { kills += 1; return { stdout: "", stderr: "permission denied", code: 1 }; } if (args.includes("has-session")) return { stdout: "", stderr: "", code: 0 }; if (args.includes("#{pane_id}\t#{pane_dead}")) return { stdout: "%2\t0\n", stderr: "", code: 0 }; return { stdout: "", stderr: "", code: 0 }; };
+    const options = { stateRoot: root, agentId: prepared.agentId, originSessionId: "origin", exec, tmux: "/tmux" };
+    const results = await Promise.allSettled([stopSubagentAgentWithDisposition(options), stopSubagentAgentWithDisposition(options)]);
+    assert.ok(results.every(result => result.status === "rejected" && /permission denied/u.test(String(result.reason))));
+    assert.equal(kills, 1);
     assert.equal((await readAgentSnapshot(root, prepared.agentId)).status.state, "idle");
 });
 void test("startup rollback never reports failure while the child pane is still live", async () => {
@@ -665,13 +669,12 @@ void test("wait hides a provisional result until task status is terminal", async
     const running = await claimPendingTask(root, prepared.agentId);
     const files = taskPaths(root, prepared.agentId, task.request.taskId);
     await writeFile(files.result, `${JSON.stringify({ schemaVersion: 1, agentId: prepared.agentId, taskId: task.request.taskId, outcome: "succeeded", output: "provisional", usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, totalTokens: 2, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } }, turns: 1, interventions: [], startedAt: running!.status.startedAt, finishedAt: new Date().toISOString() })}\n`);
-    let clock = 0;
     const exec = async (_command: string, args: string[]): Promise<CommandResult> => { if (args.at(-1) === "#{pid}") return { stdout: "10\n", stderr: "", code: 0 }; if (args.includes("has-session")) return { stdout: "", stderr: "", code: 0 }; if (args.includes("#{pane_id}\t#{pane_dead}")) return { stdout: "%2\t0\n", stderr: "", code: 0 }; return { stdout: "", stderr: "", code: 0 }; };
-    const response = await createSubagentWaitTool({ configPath, env: {}, exec, now: () => { clock += 1000; return clock; } }).execute("wait-call", { taskIds: [task.request.taskId], condition: "all", timeoutSeconds: 1 }, undefined, undefined, { sessionManager: { getSessionId: () => "origin", getSessionFile: () => undefined } } as unknown as import("@earendil-works/pi-coding-agent").ExtensionContext) as { content: Array<{ text: string }>; details: { outcome: string; agents: Array<{ task: { result: unknown } }> } };
-    const content = JSON.parse(response.content[0]!.text) as { outcome: string; tasks: Array<{ output?: string }> };
-    assert.equal(content.outcome, "timeout");
-    assert.equal(content.tasks[0]!.output, undefined);
-    assert.equal(response.details.agents[0]!.task.result, null);
+    const controller = new AbortController();
+    let partial: { details: { agents: Array<{ task: { result: unknown } }> } } | undefined;
+    await assert.rejects(createSubagentWaitTool({ configPath, env: {}, exec, sleep: async () => { controller.abort(new Error("observer aborted")); } }).execute("wait-call", { taskIds: [task.request.taskId], condition: "all" }, controller.signal, value => { partial = value as typeof partial; }, { sessionManager: { getSessionId: () => "origin", getSessionFile: () => undefined } } as unknown as import("@earendil-works/pi-coding-agent").ExtensionContext), /observer aborted/);
+    assert.equal(partial?.details.agents[0]!.task.result, null);
+    assert.equal((await readAgentSnapshot(root, prepared.agentId, task.request.taskId)).task?.status.state, "running");
 });
 void test("wait partial updates skip usage claims and final results use outcome", async () => {
     const root = await mkdtemp(join(tmpdir(), "native-wait-outcome-"));
@@ -708,7 +711,7 @@ void test("wait partial updates skip usage claims and final results use outcome"
         },
     }).execute(
         "wait-any",
-        { taskIds: [second.request.taskId, first.request.taskId], condition: "any", timeoutSeconds: 5 },
+        { taskIds: [second.request.taskId, first.request.taskId], condition: "any" },
         undefined,
         value => {
             const details = value.details as { outcome?: string; accounting: { claimedTaskIds: string[] } };
@@ -729,7 +732,7 @@ void test("wait partial updates skip usage claims and final results use outcome"
     assert.ok(updates.length >= 1);
     assert.ok(updates.every(update => update.claimed.length === 0 && update.outcome === undefined));
 });
-void test("submit existing-agent path returns one shape and inline completion claims usage once", async () => {
+void test("run existing-agent path waits for completion and claims usage once", async () => {
     const root = await mkdtemp(join(tmpdir(), "native-submit-inline-complete-"));
     const configPath = join(root, "subagent.json");
     await writeFile(configPath, JSON.stringify(config(root)));
@@ -744,7 +747,7 @@ void test("submit existing-agent path returns one shape and inline completion cl
     };
     let clock = 0;
     let finished = false;
-    const tool = createSubagentSubmitTool({ configPath, env: {}, exec, now: () => clock, sleep: async () => {
+    const tool = createSubagentRunTool({ configPath, env: {}, exec, now: () => clock, sleep: async () => {
         clock += 100;
         if (!finished) {
             const active = await readAgentSnapshot(root, prepared.agentId);
@@ -754,13 +757,11 @@ void test("submit existing-agent path returns one shape and inline completion cl
         }
     } });
     const ctx = { sessionManager: { getSessionId: () => "origin", getSessionFile: () => undefined } } as unknown as import("@earendil-works/pi-coding-agent").ExtensionContext;
-    const response = await tool.execute("submit-call", { agentId: prepared.agentId, purpose: "inline", prompt: "finish this", waitSeconds: 1 }, undefined, undefined, ctx) as { content: Array<{ text: string }>; details: { waitOutcome?: string; accounting: { claimedTaskIds: string[] } }; usage?: { totalTokens: number } };
+    const response = await tool.execute("submit-call", { agentId: prepared.agentId, purpose: "inline", prompt: "finish this" }, undefined, undefined, ctx) as { content: Array<{ text: string }>; details: { accounting: { claimedTaskIds: string[] } }; usage?: { totalTokens: number } };
     const content = JSON.parse(response.content[0]!.text) as Record<string, unknown>;
     assert.equal(content.agentId, prepared.agentId);
     assert.equal(typeof content.taskId, "string");
-    assert.equal(content.waitOutcome, "completed");
     assert.equal(content.output, "inline done");
-    assert.equal(response.details.waitOutcome, "completed");
     assert.deepEqual(response.details.accounting.claimedTaskIds, [content.taskId]);
     assert.equal(response.usage?.totalTokens, 5);
     const later = await createSubagentGetTool({ configPath, env: {}, exec }).execute("get-call", { agentId: prepared.agentId }, undefined, undefined, ctx) as { usage?: unknown; details: { accounting: { claimedTaskIds: string[] } } };
@@ -768,7 +769,7 @@ void test("submit existing-agent path returns one shape and inline completion cl
     assert.deepEqual(later.details.accounting.claimedTaskIds, []);
 });
 
-void test("submit inline timeout preserves the submitted task and agent", async () => {
+void test("submit returns immediately and preserves the running task and agent", async () => {
     const root = await mkdtemp(join(tmpdir(), "native-submit-inline-timeout-"));
     const configPath = join(root, "subagent.json");
     await writeFile(configPath, JSON.stringify(config(root)));
@@ -784,15 +785,69 @@ void test("submit inline timeout preserves the submitted task and agent", async 
     let clock = 0;
     const tool = createSubagentSubmitTool({ configPath, env: {}, exec, now: () => clock, sleep: async () => { clock += 1000; } });
     const ctx = { sessionManager: { getSessionId: () => "origin", getSessionFile: () => undefined } } as unknown as import("@earendil-works/pi-coding-agent").ExtensionContext;
-    const response = await tool.execute("submit-timeout", { agentId: prepared.agentId, purpose: "timeout", prompt: "still work", waitSeconds: 1 }, undefined, undefined, ctx) as { content: Array<{ text: string }>; details: { waitOutcome?: string } };
-    const content = JSON.parse(response.content[0]!.text) as { taskId: string; waitOutcome: string; taskState: string; agentState: string };
-    assert.equal(content.waitOutcome, "timeout");
+    const response = await tool.execute("submit-timeout", { agentId: prepared.agentId, purpose: "background", prompt: "still work" }, undefined, undefined, ctx) as { content: Array<{ text: string }>; details: Record<string, unknown> };
+    const content = JSON.parse(response.content[0]!.text) as { taskId: string; taskState: string; agentState: string };
     assert.ok(["created", "running"].includes(content.taskState));
     assert.equal(content.agentState, "busy");
     const surviving = await readAgentSnapshot(root, prepared.agentId, content.taskId);
     assert.equal(surviving.status.state, "busy");
     assert.equal(surviving.task?.status.state, content.taskState);
-    assert.equal(response.details.waitOutcome, "timeout");
+    assert.equal("waitOutcome" in response.details, false);
+});
+
+void test("an already-aborted existing-agent run creates no task", async () => {
+    const root = await mkdtemp(join(tmpdir(), "native-existing-pre-abort-"));
+    const configPath = join(root, "subagent.json");
+    await writeFile(configPath, JSON.stringify(config(root)));
+    const prepared = await prepareAgent(root, { profile: "tester", purpose: "first", harness: "pi", cwd: "/work", profileSnapshot: profile, lineage: { callerProfile: "taskmaster", targetProfile: "tester", depth: 1, originSessionId: "origin" }, capabilities: { nativeScreen: true, taskDelivery: true, taskCompletion: true, taskCancellation: true, usage: true, interactiveInterventions: true } });
+    await publishAgent(prepared.paths, { agentId: prepared.agentId, profile: "tester", purpose: "first", harness: "pi", cwd: "/work", profileSnapshot: profile, tmux, capabilities: { nativeScreen: true, taskDelivery: true, taskCompletion: true, taskCancellation: true, usage: true, interactiveInterventions: true }, callerProfile: "taskmaster", targetProfile: "tester", depth: 1, originSessionId: "origin" });
+    await patchAgentStatus(prepared.paths, { state: "idle", bridgeReady: true });
+    const controller = new AbortController();
+    controller.abort(new Error("pre-aborted"));
+    const ctx = { sessionManager: { getSessionId: () => "origin", getSessionFile: () => undefined } } as unknown as import("@earendil-works/pi-coding-agent").ExtensionContext;
+    await assert.rejects(createSubagentRunTool({ configPath, env: {}, exec: async () => ({ stdout: "", stderr: "", code: 0 }) }).execute("run", { agentId: prepared.agentId, purpose: "no task", prompt: "do not create" }, controller.signal, undefined, ctx), /pre-aborted/);
+    const unchanged = await readAgentSnapshot(root, prepared.agentId);
+    assert.equal(unchanged.status.state, "idle");
+    assert.equal(unchanged.status.latestTaskId, undefined);
+});
+
+void test("durable task cancellation stops created work and forces running completion while preserving agent reuse", async () => {
+    const root = await mkdtemp(join(tmpdir(), "native-task-cancel-"));
+    const prepared = await prepareAgent(root, { profile: "tester", purpose: "first", harness: "pi", cwd: "/work", profileSnapshot: profile, lineage: { callerProfile: "taskmaster", targetProfile: "tester", depth: 1, originSessionId: "origin" }, capabilities: { nativeScreen: true, taskDelivery: true, taskCompletion: true, taskCancellation: true, usage: true, interactiveInterventions: true } });
+    await publishAgent(prepared.paths, { agentId: prepared.agentId, profile: "tester", purpose: "first", harness: "pi", cwd: "/work", profileSnapshot: profile, tmux, capabilities: { nativeScreen: true, taskDelivery: true, taskCompletion: true, taskCancellation: true, usage: true, interactiveInterventions: true }, callerProfile: "taskmaster", targetProfile: "tester", depth: 1, originSessionId: "origin" });
+    await patchAgentStatus(prepared.paths, { state: "idle", bridgeReady: true });
+    const created = await createTask(root, prepared.agentId, "created", "do not run");
+    const cancelledCreated = await requestTaskCancellation(root, prepared.agentId, created.request.taskId, "cancel created");
+    assert.equal(cancelledCreated.snapshot.task?.status.state, "stopped");
+    assert.equal(await claimPendingTask(root, prepared.agentId), null);
+    const running = await createTask(root, prepared.agentId, "running", "begin work");
+    await claimPendingTask(root, prepared.agentId);
+    await requestTaskCancellation(root, prepared.agentId, running.request.taskId, "cancel running");
+    const repeatedStop = stopSubagentTaskWithDisposition({ stateRoot: root, agentId: prepared.agentId, taskId: running.request.taskId, originSessionId: "origin" });
+    const completion = new Promise<void>((resolve, reject) => { setTimeout(() => { finishTask(root, prepared.agentId, running.request.taskId, { outcome: "succeeded", output: "partial", usage: emptyUsage(), turns: 1 }).then(() => resolve(), reject); }, 50); });
+    assert.equal((await repeatedStop).disposition, "stop-pending");
+    await completion;
+    const stopped = await readAgentSnapshot(root, prepared.agentId, running.request.taskId);
+    assert.equal(stopped.task?.status.state, "stopped");
+    assert.equal(stopped.task?.result?.output, "partial");
+    assert.equal(stopped.status.state, "idle");
+    assert.equal((await readTaskCancellation(root, prepared.agentId, running.request.taskId))?.reason, "cancel running");
+    const next = await createTask(root, prepared.agentId, "next", "reused");
+    assert.equal(next.status.state, "created");
+});
+
+void test("task-targeted stop terminalizes created work without stopping the persistent agent", async () => {
+    const root = await mkdtemp(join(tmpdir(), "native-task-stop-tool-"));
+    const configPath = join(root, "subagent.json");
+    await writeFile(configPath, JSON.stringify(config(root)));
+    const prepared = await prepareAgent(root, { profile: "tester", purpose: "first", harness: "pi", cwd: "/work", profileSnapshot: profile, lineage: { callerProfile: "taskmaster", targetProfile: "tester", depth: 1, originSessionId: "origin" }, capabilities: { nativeScreen: true, taskDelivery: true, taskCompletion: true, taskCancellation: true, usage: true, interactiveInterventions: true } });
+    await publishAgent(prepared.paths, { agentId: prepared.agentId, profile: "tester", purpose: "first", harness: "pi", cwd: "/work", profileSnapshot: profile, tmux, capabilities: { nativeScreen: true, taskDelivery: true, taskCompletion: true, taskCancellation: true, usage: true, interactiveInterventions: true }, callerProfile: "taskmaster", targetProfile: "tester", depth: 1, originSessionId: "origin" });
+    await patchAgentStatus(prepared.paths, { state: "idle", bridgeReady: true });
+    const task = await createTask(root, prepared.agentId, "cancel", "stop this");
+    const ctx = { sessionManager: { getSessionId: () => "origin", getSessionFile: () => undefined } } as unknown as import("@earendil-works/pi-coding-agent").ExtensionContext;
+    const result = await createSubagentStopTool({ configPath, env: {}, exec: async () => ({ stdout: "", stderr: "", code: 0 }) }).execute("stop-task", { taskId: task.request.taskId }, undefined, undefined, ctx) as { details: AgentSnapshot };
+    assert.equal(result.details.task?.status.state, "stopped");
+    assert.equal(result.details.status.state, "idle");
 });
 
 void test("management tools reject the calling agent before reconciliation or mutation", async () => {
@@ -813,7 +868,7 @@ void test("management tools reject the calling agent before reconciliation or mu
     await assert.rejects(createSubagentSubmitTool(deps).execute("submit", { agentId: prepared.agentId, purpose: "again", prompt: "nope" }, undefined, undefined, ctx), /cannot target the calling agent itself/);
     await assert.rejects(createSubagentGetTool(deps).execute("get", { agentId: prepared.agentId }, undefined, undefined, ctx), /cannot target the calling agent itself/);
     await assert.rejects(createSubagentStopTool(deps).execute("stop", { agentId: prepared.agentId }, undefined, undefined, ctx), /cannot target the calling agent itself/);
-    await assert.rejects(createSubagentWaitTool(deps).execute("wait", { taskIds: [task.request.taskId], condition: "all", timeoutSeconds: 1 }, undefined, undefined, ctx), /cannot wait on the calling agent's own task/);
+    await assert.rejects(createSubagentWaitTool(deps).execute("wait", { taskIds: [task.request.taskId], condition: "all" }, undefined, undefined, ctx), /cannot wait on the calling agent's own task/);
     assert.equal(execCalls, 0);
     assert.equal(sleepCalls, 0);
     assert.equal((await readAgentSnapshot(root, prepared.agentId)).status.state, "busy");

@@ -8,14 +8,17 @@ import { onActiveProfile } from "./utilities/profile_events.ts";
 import {
     renderAgentToolResult,
     renderGetCall,
+    renderRunCall,
+    renderRunResult,
     renderStopCall,
+    renderStopResult,
     renderSubmitCall,
     renderSubmitResult,
     renderWaitCall,
     renderWaitResult,
 } from "./utilities/subagent_cards.ts";
 import { resolveHarnessAdapter } from "./utilities/subagent_harness.ts";
-import { cleanupOriginAgents, failStartedSubagentAgent, readReconciledAgentSnapshot, stopSubagentAgent } from "./utilities/subagent_management.ts";
+import { cleanupOriginAgents, failStartedSubagentAgent, readReconciledAgentSnapshot, stopSubagentAgentWithDisposition, stopSubagentTask, stopSubagentTaskWithDisposition } from "./utilities/subagent_management.ts";
 import {
     projectDebugSnapshot,
     projectMinimalAgentTask,
@@ -36,7 +39,15 @@ import { loadPaletteKeymap } from "./utilities/command_palette_keymap.ts";
 import { provideCommandPaletteContribution } from "./utilities/command_palette_contributions.ts";
 
 const CONFIG = join(getAgentDir(), "subagent.json"); const PROFILES = join(getAgentDir(), "agent-profiles.json");
-const submitParametersFor = (allowedTargets: readonly string[]) => Type.Object({
+const runPromptGuidelines = [
+    "Use `subagent_run` when the child result is the next dependency; do not call `subagent_wait` after it.",
+    "Emit multiple sibling `subagent_run` calls for independent foreground tasks on distinct or new agents.",
+];
+const submitPromptGuidelines = ["Use `subagent_submit` only when independent parent work can proceed before the child result is needed."];
+const getPromptGuidelines = ["Use `subagent_get` for one-time nonblocking inspection of a task or agent."];
+const waitPromptGuidelines = ["Use `subagent_wait` only to collect previously background-submitted task IDs."];
+const stopPromptGuidelines = ["Use `subagent_stop` only to terminate one task or agent."];
+const taskParametersFor = (allowedTargets: readonly string[]) => Type.Object({
     profile: Type.Optional(StringEnum([...allowedTargets], {
         description: allowedTargets.length > 0
             ? `New agent profile target. Allowed: ${allowedTargets.join(", ")}`
@@ -45,9 +56,8 @@ const submitParametersFor = (allowedTargets: readonly string[]) => Type.Object({
     agentId: Type.Optional(Type.String({ description: "Existing idle agent target. Mutually exclusive with profile." })),
     purpose: Type.String({ minLength: 1, maxLength: PURPOSE_MAX_LENGTH }),
     prompt: Type.String({ minLength: 1 }),
-    waitSeconds: Type.Optional(Type.Integer({ minimum: 1, maximum: 3600, description: "Wait only for the task created by this submission." })),
-});
-type SubmitParameters = Static<ReturnType<typeof submitParametersFor>>;
+}, { additionalProperties: false });
+type TaskParameters = Static<ReturnType<typeof taskParametersFor>>;
 const getParameters = Type.Object({
     agentId: Type.String(),
     taskId: Type.Optional(Type.String()),
@@ -55,13 +65,12 @@ const getParameters = Type.Object({
         default: false,
         description: "Abnormal-state diagnosis only. When true, returns full sanitized persisted snapshot metadata. Not needed for normal operation.",
     })),
-});
+}, { additionalProperties: false });
 const waitParameters = Type.Object({
     taskIds: Type.Array(Type.String(), { minItems: 1, maxItems: 128, uniqueItems: true }),
     condition: StringEnum(["any", "all"] as const),
-    timeoutSeconds: Type.Integer({ minimum: 1, maximum: 3600 }),
-});
-const stopParameters = Type.Object({ agentId: Type.String() });
+}, { additionalProperties: false });
+const stopParameters = Type.Object({ agentId: Type.Optional(Type.String()), taskId: Type.Optional(Type.String()) }, { additionalProperties: false });
 export interface ActiveSubagentProfile { name: string; facet?: SubagentFacet; error?: string }
 export interface SubagentDependencies { configPath: string; profileConfigPath?: string; env: NodeJS.ProcessEnv; exec: CommandExecutor; activeProfile?: () => ActiveSubagentProfile | undefined; natureHandleWords?: () => readonly string[]; sleep?: (ms: number, signal?: AbortSignal) => Promise<void>; now?: () => number }
 export async function loadSubagentConfig(path: string): Promise<SubagentRuntimeConfig> { try { return validateSubagentRuntimeConfig(JSON.parse(await readFile(path, "utf8"))); } catch (error) { throw new Error(`Cannot read subagent config ${path}: ${error instanceof Error ? error.message : String(error)}`); } }
@@ -110,16 +119,12 @@ function agentResult(rawSnapshot: AgentSnapshot, accounting: { usage?: Usage; cl
 function submitResult(
     rawSnapshot: AgentSnapshot,
     accounting: { usage?: Usage; claimedTaskIds: string[] },
-    waitOutcome?: "completed" | "timeout",
-    waitSeconds?: number,
 ) {
     const snapshot = sanitizeSnapshot(rawSnapshot);
-    const payload = projectMinimalSubmitResult(snapshot, waitOutcome);
+    const payload = projectMinimalSubmitResult(snapshot);
     const details: SubmitDetails = {
         ...snapshot,
         accounting,
-        ...(waitSeconds === undefined ? {} : { waitSeconds }),
-        ...(waitOutcome ? { waitOutcome } : {}),
     };
     return {
         content: [{ type: "text" as const, text: serializeModelVisibleJson(payload) }],
@@ -129,7 +134,7 @@ function submitResult(
 }
 
 function active(deps: SubagentDependencies) { const value = deps.activeProfile?.(); if (!value) throw new Error("Subagent configuration unavailable: no active-profile event has been received"); if (value.error) throw new Error(`Subagent configuration unavailable: ${value.error}`); return value; }
-function rejectSelfTarget(env: NodeJS.ProcessEnv, agentId: string, operation: "submit" | "get" | "stop" | "wait"): void {
+function rejectSelfTarget(env: NodeJS.ProcessEnv, agentId: string, operation: "run" | "submit" | "get" | "stop" | "wait"): void {
     const self = env.PI_SUBAGENT_AGENT_ID;
     if (self && self === agentId) throw new Error(`subagent_${operation} cannot target the calling agent itself (${agentId})`);
 }
@@ -137,25 +142,20 @@ type WaitAccounting = { usage?: Usage; claimedTaskIds: string[] };
 type PollTasksOptions = {
     readSnapshots: () => Promise<AgentSnapshot[]>;
     condition: "any" | "all";
-    timeoutSeconds: number;
     signal?: AbortSignal;
-    now: () => number;
     sleep: (ms: number, signal?: AbortSignal) => Promise<void>;
     claim: (snapshot: AgentSnapshot) => Promise<{ usage?: Usage; claimedTaskIds: string[] }>;
     onWaiting?: (snapshots: AgentSnapshot[]) => void;
 };
-type PollTasksResult = { snapshots: AgentSnapshot[]; outcome: "completed" | "timeout"; accounting: WaitAccounting };
+type PollTasksResult = { snapshots: AgentSnapshot[]; accounting: WaitAccounting };
 
 async function pollTasks(options: PollTasksOptions): Promise<PollTasksResult> {
-    const started = options.now();
-    const deadline = started + options.timeoutSeconds * 1000;
     while (true) {
         if (options.signal?.aborted) throw options.signal.reason;
         const snapshots = await options.readSnapshots();
         const done = snapshots.filter(value => value.task && isTerminalTask(value.task.status.state));
         const met = options.condition === "any" ? done.length > 0 : done.length === snapshots.length;
-        const timedOut = options.now() >= deadline;
-        if (met || timedOut) {
+        if (met) {
             const accounting: WaitAccounting = { claimedTaskIds: [] };
             for (const snapshot of snapshots) {
                 const item = await options.claim(snapshot);
@@ -165,24 +165,23 @@ async function pollTasks(options: PollTasksOptions): Promise<PollTasksResult> {
                     addUsage(accounting.usage, item.usage);
                 }
             }
-            return { snapshots, outcome: met ? "completed" : "timeout", accounting };
+            return { snapshots, accounting };
         }
         options.onWaiting?.(snapshots);
-        await options.sleep(Math.min(1000, deadline - options.now()), options.signal);
+        await options.sleep(250, options.signal);
     }
 }
 
 function waitResult(
     snapshots: readonly AgentSnapshot[],
     condition: "any" | "all",
-    timeoutSeconds: number,
-    outcome: "completed" | "timeout" | undefined,
+    outcome: "completed" | undefined,
     accounting: WaitAccounting,
 ) {
     const agents = snapshots.map(sanitizeSnapshot);
-    const details: WaitDetails = { condition, timeoutSeconds, ...(outcome ? { outcome } : {}), agents, accounting };
+    const details: WaitDetails = { condition, ...(outcome ? { outcome } : {}), agents, accounting };
     const contentPayload = outcome
-        ? projectMinimalWaitResult(agents, outcome)
+        ? projectMinimalWaitResult(agents, "completed")
         : { tasks: agents.map(projectMinimalAgentTask) };
     return {
         content: [{ type: "text" as const, text: serializeModelVisibleJson(contentPayload) }],
@@ -195,10 +194,13 @@ async function startProfileSubmission(
     deps: SubagentDependencies,
     config: SubagentRuntimeConfig,
     current: ActiveSubagentProfile,
-    params: SubmitParameters & { profile: string },
+    params: TaskParameters & { profile: string },
     signal: AbortSignal | undefined,
     ctx: ExtensionContext,
+    onTaskCreated?: (snapshot: AgentSnapshot) => void,
+    preserveOnAbortAfterSubmission = false,
 ): Promise<AgentSnapshot> {
+    if (signal?.aborted) throw signal.reason;
     if (!current.facet?.allowedTargets.includes(params.profile)) throw new Error(`Profile ${current.name} is not allowed to start subagent profile ${params.profile}`);
     const profiles = await loadAgentProfileConfig(deps.profileConfigPath ?? PROFILES, deps.env);
     const profile = profiles.profiles[params.profile];
@@ -225,6 +227,7 @@ async function startProfileSubmission(
     });
     let tmux;
     let published = false;
+    let taskCreated = false;
     try {
         const launch = adapter.launch(config, resolvedHarness.harness, {
             agentId: prepared.agentId,
@@ -255,8 +258,12 @@ async function startProfileSubmission(
             originSessionFile: lineage.originSessionFile,
         });
         published = true;
-        await createTask(config.stateRoot, prepared.agentId, params.purpose, params.prompt);
-        const deadline = (deps.now ?? (() => performance.now()))() + (config.bridgeReadyTimeoutMs ?? 5000);
+        if (signal?.aborted) throw signal.reason;
+        const task = await createTask(config.stateRoot, prepared.agentId, params.purpose, params.prompt);
+        taskCreated = true;
+        onTaskCreated?.(await readAgentSnapshot(config.stateRoot, prepared.agentId, task.request.taskId));
+        const readyTimeoutMs = resolvedHarness.harness.bridgeReadyTimeoutMs ?? config.bridgeReadyTimeoutMs ?? 5000;
+        const deadline = (deps.now ?? (() => performance.now()))() + readyTimeoutMs;
         while ((deps.now ?? (() => performance.now()))() < deadline) {
             if (signal?.aborted) throw signal.reason;
             const snapshot = await readAgentSnapshot(config.stateRoot, prepared.agentId);
@@ -270,6 +277,7 @@ async function startProfileSubmission(
         }
         throw new Error("Child bridge readiness timed out");
     } catch (error) {
+        if (preserveOnAbortAfterSubmission && taskCreated && signal?.aborted) throw error;
         const message = error instanceof Error ? error.message : String(error);
         let cleanupError: unknown;
         if (published) {
@@ -298,28 +306,86 @@ async function startProfileSubmission(
     }
 }
 
-function validateSubmitTarget(params: SubmitParameters): { kind: "profile"; profile: string } | { kind: "agent"; agentId: string } {
+function validateTaskTarget(params: TaskParameters, toolName: "subagent_run" | "subagent_submit"): { kind: "profile"; profile: string } | { kind: "agent"; agentId: string } {
     const hasProfile = params.profile !== undefined;
     const hasAgent = params.agentId !== undefined;
-    if (hasProfile === hasAgent) throw new Error("subagent_submit requires exactly one of profile or agentId");
+    if (hasProfile === hasAgent) throw new Error(`${toolName} requires exactly one of profile or agentId`);
     return hasProfile ? { kind: "profile", profile: params.profile! } : { kind: "agent", agentId: params.agentId! };
 }
 
-export function createSubagentSubmitTool(deps: SubagentDependencies, allowedTargets: readonly string[] = []): ToolDefinition {
-    const parameters = submitParametersFor(allowedTargets);
+export function createSubagentRunTool(deps: SubagentDependencies, allowedTargets: readonly string[] = []): ToolDefinition {
+    const parameters = taskParametersFor(allowedTargets);
     return defineTool({
-        name: "subagent_submit",
-        label: "Submit agent task",
-        description: "Submit one task to exactly one target: profile for a new profiled agent or agentId for an existing idle agent. Returns one submission result with distinct agentId and taskId. Omit waitSeconds for immediate return; provide it to wait only for this task. Busy existing agents reject without queueing. Use subagent_wait for multi-task coordination; use subagent_get for later inspection.",
-        promptSnippet: "Submit a task to a new or existing persistent agent",
+        name: "subagent_run",
+        label: "Run agent task",
+        description: "Run one task on exactly one target and wait until it is terminal. Use profile for a new agent or agentId for an existing idle agent. Child failed or stopped outcomes are returned normally. Independent sibling runs can execute concurrently.",
+        promptSnippet: "Run one foreground task on a new or existing persistent agent",
+        promptGuidelines: runPromptGuidelines,
         parameters,
-        executionMode: "sequential",
         prepareArguments(args) {
-            const value = stripLegacyDetail(args) as SubmitParameters & { purpose?: string; prompt: string };
+            const value = stripLegacyDetail(args) as TaskParameters & { purpose?: string; prompt: string };
             return value.purpose === undefined ? { ...value, purpose: fallbackRunPurpose(value.prompt) } : value;
         },
         async execute(toolCallId, params, signal, update, ctx) {
-            const target = validateSubmitTarget(params);
+            const target = validateTaskTarget(params, "subagent_run");
+            const config = await loadSubagentConfig(deps.configPath);
+            let snapshot: AgentSnapshot | undefined;
+            try {
+                if (target.kind === "profile") {
+                    snapshot = await startProfileSubmission(deps, config, active(deps), { ...params, profile: target.profile }, signal, ctx, created => { snapshot = created; }, true);
+                } else {
+                    if (signal?.aborted) throw signal.reason;
+                    rejectSelfTarget(deps.env, target.agentId, "run");
+                    const stored = await readAgentSnapshot(config.stateRoot, target.agentId);
+                    if (stored.agent.originSessionId !== origin(ctx, deps.env).originSessionId) throw new Error(`Agent ${target.agentId} belongs to a different origin session`);
+                    await readReconciledAgentSnapshot(deps.exec, config.tmux, config.stateRoot, target.agentId);
+                    if (signal?.aborted) throw signal.reason;
+                    const task = await createTask(config.stateRoot, target.agentId, params.purpose, params.prompt);
+                    snapshot = await readAgentSnapshot(config.stateRoot, target.agentId, task.request.taskId);
+                }
+                const taskId = snapshot.task!.request.taskId;
+                update?.(agentResult(snapshot, { claimedTaskIds: [] }));
+                const waited = await pollTasks({
+                    readSnapshots: async () => [await readReconciledAgentSnapshot(deps.exec, config.tmux, config.stateRoot, snapshot!.agent.agentId, taskId)],
+                    condition: "all",
+                    signal,
+                    sleep: deps.sleep ?? sleep,
+                    claim: value => claim(config, value, ctx, deps.env, toolCallId, "subagent_run"),
+                    onWaiting: values => update?.(agentResult(values[0]!, { claimedTaskIds: [] })),
+                });
+                return agentResult(waited.snapshots[0]!, waited.accounting);
+            } catch (error) {
+                if (!signal?.aborted || !snapshot?.task) throw error;
+                const taskId = snapshot.task.request.taskId;
+                try {
+                    await stopSubagentTask({ stateRoot: config.stateRoot, agentId: snapshot.agent.agentId, taskId, originSessionId: origin(ctx, deps.env).originSessionId, reason: "Foreground run aborted by parent" });
+                } catch (cleanupError) {
+                    throw new Error(`subagent_run abort cleanup failed for agent ${snapshot.agent.agentId}, task ${taskId}; durable cancellation state may remain active: ${errorText(cleanupError)}`, { cause: error });
+                }
+                throw error;
+            }
+        },
+        renderCall(args, theme, context) { return renderRunCall(args, theme, context); },
+        renderResult(result, options, theme, context) { return renderRunResult(result, options, theme, context, deps.natureHandleWords?.()); },
+    });
+}
+
+export function createSubagentSubmitTool(deps: SubagentDependencies, allowedTargets: readonly string[] = []): ToolDefinition {
+    const parameters = taskParametersFor(allowedTargets);
+    return defineTool({
+        name: "subagent_submit",
+        label: "Submit agent task",
+        description: "Submit one task to exactly one target: profile for a new profiled agent or agentId for an existing idle agent. Returns one submission result with distinct agentId and taskId. Returns immediately after task creation. Busy existing agents reject without queueing. Use subagent_run when the result is the next dependency, subagent_wait for background fan-in, and subagent_get for later inspection.",
+        promptSnippet: "Submit one background task to a new or existing persistent agent",
+        promptGuidelines: submitPromptGuidelines,
+        parameters,
+        executionMode: "sequential",
+        prepareArguments(args) {
+            const value = stripLegacyDetail(args) as TaskParameters & { purpose?: string; prompt: string };
+            return value.purpose === undefined ? { ...value, purpose: fallbackRunPurpose(value.prompt) } : value;
+        },
+        async execute(toolCallId, params, signal, update, ctx) {
+            const target = validateTaskTarget(params, "subagent_submit");
             let config: SubagentRuntimeConfig;
             let snapshot: AgentSnapshot;
             if (target.kind === "profile") {
@@ -335,24 +401,7 @@ export function createSubagentSubmitTool(deps: SubagentDependencies, allowedTarg
                 snapshot = await readAgentSnapshot(config.stateRoot, target.agentId);
             }
 
-            if (params.waitSeconds === undefined) return submitResult(snapshot, await claim(config, snapshot, ctx, deps.env, toolCallId, "subagent_submit"));
-            update?.(submitResult(snapshot, { claimedTaskIds: [] }, undefined, params.waitSeconds));
-            try {
-                const waited = await pollTasks({
-                    readSnapshots: async () => [await readReconciledAgentSnapshot(deps.exec, config.tmux, config.stateRoot, snapshot.agent.agentId, snapshot.task!.request.taskId)],
-                    condition: "all",
-                    timeoutSeconds: params.waitSeconds,
-                    signal,
-                    now: deps.now ?? (() => performance.now()),
-                    sleep: deps.sleep ?? sleep,
-                    claim: value => claim(config, value, ctx, deps.env, toolCallId, "subagent_submit"),
-                    onWaiting: values => update?.(submitResult(values[0]!, { claimedTaskIds: [] }, undefined, params.waitSeconds)),
-                });
-                return submitResult(waited.snapshots[0]!, waited.accounting, waited.outcome, params.waitSeconds);
-            } catch (error) {
-                if (signal?.aborted) throw error;
-                throw new Error(`subagent_submit created agent ${snapshot.agent.agentId}, task ${snapshot.task!.request.taskId}, but inline wait failed: ${errorText(error)}`);
-            }
+            return submitResult(snapshot, await claim(config, snapshot, ctx, deps.env, toolCallId, "subagent_submit"));
         },
         renderCall(args, theme, context) { return renderSubmitCall(args, theme, context); },
         renderResult(result, options, theme, context) { return renderSubmitResult(result, options, theme, context, deps.natureHandleWords?.()); },
@@ -364,6 +413,7 @@ export function createSubagentGetTool(deps: SubagentDependencies): ToolDefinitio
         label: "Get agent task",
         description: "Read a persistent agent and a specified, active, or latest task once without waiting. Optional debug returns full sanitized persisted snapshot metadata for abnormal-state diagnosis only; it is not needed for normal operation.",
         promptSnippet: "Read an agent session and task state",
+        promptGuidelines: getPromptGuidelines,
         parameters: getParameters,
         executionMode: "sequential",
         prepareArguments: prepareGetArguments,
@@ -386,8 +436,9 @@ export function createSubagentWaitTool(deps: SubagentDependencies): ToolDefiniti
     return defineTool({
         name: "subagent_wait",
         label: "Wait for tasks",
-        description: "Wait for specified task IDs to become terminal; timeout is a normal result and agent processes remain alive. For abnormal-state diagnosis of one agent, use subagent_get with debug=true.",
-        promptSnippet: "Wait for one or more tasks",
+        description: "Wait for specified task IDs to become terminal without a deadline until the any/all condition is met. Aborting this observer leaves agent tasks alive. For abnormal-state diagnosis of one agent, use subagent_get with debug=true.",
+        promptSnippet: "Wait for one or more background tasks",
+        promptGuidelines: waitPromptGuidelines,
         parameters: waitParameters,
         executionMode: "sequential",
         prepareArguments(args) { return stripLegacyDetail(args) as Static<typeof waitParameters>; },
@@ -405,14 +456,12 @@ export function createSubagentWaitTool(deps: SubagentDependencies): ToolDefiniti
             const waited = await pollTasks({
                 readSnapshots,
                 condition: params.condition,
-                timeoutSeconds: params.timeoutSeconds,
                 signal,
-                now: deps.now ?? (() => performance.now()),
                 sleep: deps.sleep ?? sleep,
                 claim: snapshot => claim(config, snapshot, ctx, deps.env, id, "subagent_wait"),
-                onWaiting: snapshots => update?.(waitResult(snapshots, params.condition, params.timeoutSeconds, undefined, { claimedTaskIds: [] })),
+                onWaiting: snapshots => update?.(waitResult(snapshots, params.condition, undefined, { claimedTaskIds: [] })),
             });
-            return waitResult(waited.snapshots, params.condition, params.timeoutSeconds, waited.outcome, waited.accounting);
+            return waitResult(waited.snapshots, params.condition, "completed", waited.accounting);
         },
         renderCall(args, theme, context) { return renderWaitCall(args, theme, context); },
         renderResult(result, options, theme, context) { return renderWaitResult(result, options, theme, context, deps.natureHandleWords?.()); },
@@ -421,20 +470,38 @@ export function createSubagentWaitTool(deps: SubagentDependencies): ToolDefiniti
 export function createSubagentStopTool(deps: SubagentDependencies): ToolDefinition<typeof stopParameters, unknown> {
     return defineTool({
         name: "subagent_stop",
-        label: "Stop agent session",
-        description: "Stop an agent's dedicated tmux session and terminalize its active task. For abnormal-state diagnosis, use subagent_get with debug=true.",
-        promptSnippet: "Stop one persistent agent session",
+        label: "Stop agent or task",
+        description: "Stop exactly one agent or task. agentId terminates the whole persistent agent session; taskId cancels only that task and leaves the agent reusable.",
+        promptSnippet: "Stop one persistent agent session or one task",
+        promptGuidelines: stopPromptGuidelines,
         parameters: stopParameters,
         executionMode: "sequential",
         prepareArguments(args) { return stripLegacyDetail(args) as Static<typeof stopParameters>; },
         async execute(id, params, _signal, _update, ctx) {
-            rejectSelfTarget(deps.env, params.agentId, "stop");
+            const hasAgent = params.agentId !== undefined;
+            const hasTask = params.taskId !== undefined;
+            if (hasAgent === hasTask) throw new Error("subagent_stop requires exactly one of agentId or taskId");
             const config = await loadSubagentConfig(deps.configPath);
-            const snapshot = await stopSubagentAgent({ stateRoot: config.stateRoot, agentId: params.agentId, originSessionId: origin(ctx, deps.env).originSessionId, exec: deps.exec, tmux: config.tmux });
-            return agentResult(snapshot, await claim(config, snapshot, ctx, deps.env, id, "subagent_stop"));
+            let snapshot: AgentSnapshot;
+            let stopDisposition: "stopped-now" | "stop-pending" | "already-terminal";
+            if (params.agentId) {
+                rejectSelfTarget(deps.env, params.agentId, "stop");
+                const stopped = await stopSubagentAgentWithDisposition({ stateRoot: config.stateRoot, agentId: params.agentId, originSessionId: origin(ctx, deps.env).originSessionId, exec: deps.exec, tmux: config.tmux });
+                stopDisposition = stopped.disposition;
+                snapshot = stopped.snapshot;
+            } else {
+                const taskId = params.taskId!;
+                const agentId = await findTaskAgent(config.stateRoot, taskId, origin(ctx, deps.env).originSessionId);
+                rejectSelfTarget(deps.env, agentId, "stop");
+                const stopped = await stopSubagentTaskWithDisposition({ stateRoot: config.stateRoot, agentId, taskId, originSessionId: origin(ctx, deps.env).originSessionId });
+                stopDisposition = stopped.disposition;
+                snapshot = stopped.snapshot;
+            }
+            const result = agentResult(snapshot, await claim(config, snapshot, ctx, deps.env, id, "subagent_stop"));
+            return { ...result, details: { ...result.details, stopDisposition } };
         },
         renderCall(args, theme, context) { return renderStopCall(args, theme, context); },
-        renderResult(result, options, theme, context) { return renderAgentToolResult(result, options, theme, context, undefined, undefined, deps.natureHandleWords?.()); },
+        renderResult(result, options, theme, context) { return renderStopResult(result, options, theme, context, deps.natureHandleWords?.()); },
     });
 }
 export async function registerSubagent(pi: ExtensionAPI, options: Partial<Pick<SubagentDependencies, "configPath" | "profileConfigPath" | "env">> = {}): Promise<boolean> {
@@ -455,21 +522,22 @@ export async function registerSubagent(pi: ExtensionAPI, options: Partial<Pick<S
         activeProfile: () => current,
         natureHandleWords: () => natureHandleWords,
     };
-    const registerSubmit = (targets: readonly string[]) => {
+    const registerDispatch = (targets: readonly string[]) => {
+        pi.registerTool(createSubagentRunTool(deps, targets));
         pi.registerTool(createSubagentSubmitTool(deps, targets));
     };
     onActiveProfile(pi, event => {
         try {
             const facet = parseSubagentFacet(event.profile.extensions.subagent ?? { allowedTargets: [] });
             current = { name: event.name, facet };
-            registerSubmit(facet.allowedTargets);
+            registerDispatch(facet.allowedTargets);
         } catch (error) {
             current = { name: event.name, error: error instanceof Error ? error.message : String(error) };
-            registerSubmit([]);
+            registerDispatch([]);
         }
     }, error => {
         current = { name: "unknown", error: error.message };
-        registerSubmit([]);
+        registerDispatch([]);
     });
     pi.on("session_start", async (_event, ctx) => {
         const config = await loadSubagentConfig(configPath);
@@ -508,7 +576,7 @@ export async function registerSubagent(pi: ExtensionAPI, options: Partial<Pick<S
         const hubContext = await probeTmux(exec, config.tmux, env) ?? undefined;
         await cleanupOriginAgents({ stateRoot: config.stateRoot, originSessionId: lineage.originSessionId, exec, tmux: config.tmux, shutdownReason: event.reason, hubContext });
     });
-    registerSubmit([]);
+    registerDispatch([]);
     pi.registerTool(createSubagentGetTool(deps));
     pi.registerTool(createSubagentWaitTool(deps));
     pi.registerTool(createSubagentStopTool(deps));

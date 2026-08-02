@@ -1,13 +1,15 @@
 import assert from "node:assert/strict";
-import { chmod, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { createSubagentSubmitTool } from "../extensions_src/subagent.ts";
 import { runExternalWorker } from "../extensions_src/subagent_external_worker.ts";
 import { CursorAcpDriver, type ExternalDriver } from "../extensions_src/utilities/subagent_cursor_acp.ts";
 import { resolveHarnessAdapter } from "../extensions_src/utilities/subagent_harness.ts";
 import { historyAvailability } from "../extensions_src/utilities/subagent_history.ts";
-import { createTask, markAgentStopping, prepareAgent, publishAgent, readAgentSnapshot } from "../extensions_src/utilities/subagent_store.ts";
+import { agentPaths, createTask, markAgentStopping, markBridgeReady, prepareAgent, publishAgent, readAgentSnapshot, requestTaskCancellation } from "../extensions_src/utilities/subagent_store.ts";
 import type { AgentProfile } from "../extensions_src/utilities/profile_types.ts";
 import type { SubagentRuntimeConfig, TmuxAgentReference } from "../extensions_src/utilities/subagent_types.ts";
 
@@ -37,6 +39,99 @@ void test("harness registry validates Cursor policy before producing a worker la
     assert.match(launch.env.PI_SUBAGENT_EXTERNAL_CONFIG!, /cursor-grok-4\.5-high/);
     assert.throws(() => resolveHarnessAdapter(runtime, "cursor-agent", { ...cursorProfile, model: "openai/model" }), /cursor\/<model>/u);
     assert.throws(() => resolveHarnessAdapter(runtime, "cursor-agent", { ...cursorProfile, extensions: { subagent: { allowedTargets: [], harness: "cursor-agent", harnessOptions: { ...options, sandbox: "workspace" } } } }), /sandbox/u);
+});
+
+void test("Cursor ACP cold start readiness past 5000 ms succeeds within the harness deadline", async () => {
+    const root = await mkdtemp(join(tmpdir(), "cursor-acp-cold-start-"));
+    const stateRoot = join(root, "state");
+    const configPath = join(root, "subagent.json");
+    const profilePath = join(root, "agent-profiles.json");
+    const runtime: SubagentRuntimeConfig = {
+        ...config(stateRoot),
+        harnesses: {
+            pi: { adapter: "pi-native", command: "/pi" },
+            "cursor-agent": {
+                adapter: "cursor-acp",
+                command: "/cursor-agent",
+                workerCommand: "/node",
+                workerEntrypoint: "/worker.ts",
+                bridgeReadyTimeoutMs: 15000,
+            },
+        },
+    };
+    await writeFile(configPath, JSON.stringify(runtime));
+    await writeFile(profilePath, JSON.stringify({
+        schemaVersion: 4,
+        defaultProfile: "operator",
+        profileCycle: ["operator"],
+        promptRoutes: {},
+        profiles: {
+            operator: {
+                id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+                model: "provider/model",
+                availability: ["top-level"],
+                description: "Operator.",
+                allowAllTools: false,
+                tools: ["subagent_submit"],
+                extensions: { subagent: { allowedTargets: ["cursor-implementer"], harness: "pi" } },
+            },
+            "cursor-implementer": cursorProfile,
+        },
+    }));
+    let hubSession = false;
+    const exec = async (_command: string, args: string[]) => {
+        if (args.includes("display-message") && args.at(-1)?.includes("#{pid}\t#{session_id}")) {
+            return { stdout: "10\t$1\tmain\t%1\t/dev/ttys001\n", stderr: "", code: 0 };
+        }
+        if (args.includes("display-message") && args.at(-1) === "#{pid}") return { stdout: "10\n", stderr: "", code: 0 };
+        if (args.includes("has-session")) return hubSession ? { stdout: "", stderr: "", code: 0 } : { stdout: "", stderr: "missing", code: 1 };
+        if (args.includes("new-session")) {
+            hubSession = true;
+            return { stdout: "$hub\t@2\t%2\n", stderr: "", code: 0 };
+        }
+        if (args.includes("list-panes")) return { stdout: "%2\t0\n", stderr: "", code: 0 };
+        return { stdout: "", stderr: "", code: 0 };
+    };
+    let clock = 0;
+    let markedReady = false;
+    const tool = createSubagentSubmitTool({
+        configPath,
+        profileConfigPath: profilePath,
+        env: { TMUX: "/tmp/tmux,1,0" },
+        exec,
+        activeProfile: () => ({ name: "operator", facet: { allowedTargets: ["cursor-implementer"], harness: "pi" } }),
+        now: () => clock,
+        sleep: async () => {
+            clock += 550;
+            if (!markedReady && clock >= 5500) {
+                const agents = await readdir(join(stateRoot, "agents"));
+                assert.equal(agents.length, 1);
+                await markBridgeReady(agentPaths(stateRoot, agents[0]!));
+                markedReady = true;
+            }
+        },
+    }, ["cursor-implementer"]);
+    const ctx = {
+        cwd: root,
+        sessionManager: { getSessionId: () => "origin", getSessionFile: () => join(root, "session.jsonl") },
+    } as unknown as ExtensionContext;
+    const response = await tool.execute(
+        "cold-start",
+        { profile: "cursor-implementer", purpose: "Cursor ACP smoke", prompt: "Read package.json and report its name." },
+        undefined,
+        undefined,
+        ctx,
+    ) as { content: Array<{ text: string }> };
+    const content = JSON.parse(response.content[0]!.text) as { agentId: string; taskId: string; agentState: string };
+    assert.ok(markedReady);
+    assert.ok(clock > 5000);
+    assert.ok(clock < 15000);
+    assert.equal(typeof content.agentId, "string");
+    assert.equal(typeof content.taskId, "string");
+    const snapshot = await readAgentSnapshot(stateRoot, content.agentId, content.taskId);
+    assert.equal(snapshot.status.bridgeReady, true);
+    assert.equal(snapshot.status.state, "busy");
+    assert.equal(snapshot.task?.status.state, "created");
 });
 
 void test("Cursor ACP driver reuses one session, streams text, and selects allow-always", async () => {
@@ -171,8 +266,46 @@ void test("external worker observes parent stopping during an active turn and ca
     await worker;
     const snapshot = await readAgentSnapshot(root, prepared.agentId, task.request.taskId);
     assert.equal(cancels, 1);
-    assert.equal(snapshot.status.state, "stopping");
+    assert.equal(snapshot.status.state, "stopped");
     assert.equal(snapshot.task?.status.state, "stopped");
+});
+
+void test("external task cancellation waits for ACP settlement, preserves partial output, and then reuses the driver", async () => {
+    const root = await mkdtemp(join(tmpdir(), "external-worker-task-cancel-"));
+    const tmux: TmuxAgentReference = { socket: "/tmp/tmux", serverPid: "1", sessionId: "$1", sessionName: "hub", windowId: "@1", paneId: "%1", windowName: "cursor" };
+    const capabilities = { nativeScreen: true, taskDelivery: true, taskCompletion: true, taskCancellation: true, usage: false, interactiveInterventions: false, terminalHistory: false };
+    const prepared = await prepareAgent(root, { profile: "cursor-implementer", purpose: "first", harness: "cursor-agent", cwd: root, profileSnapshot: cursorProfile, lineage: { callerProfile: "operator", targetProfile: "cursor-implementer", depth: 1, originSessionId: "origin" }, capabilities });
+    await publishAgent(prepared.paths, { agentId: prepared.agentId, profile: "cursor-implementer", purpose: "first", harness: "cursor-agent", cwd: root, profileSnapshot: cursorProfile, tmux, capabilities, callerProfile: "operator", targetProfile: "cursor-implementer", depth: 1, originSessionId: "origin" });
+    let rejectFirst!: (error: Error) => void;
+    const firstTurn = new Promise<never>((_resolve, reject) => { rejectFirst = reject; });
+    let calls = 0;
+    let cancels = 0;
+    const driver: ExternalDriver = {
+        async start() {},
+        async runTask() { calls += 1; if (calls === 1) return firstTurn; return { output: "second done", stopReason: "end_turn" }; },
+        async cancel() { cancels += 1; },
+        partialOutput: () => "partial before cancel",
+        async shutdown() {},
+        waitForClose: () => new Promise(() => {}),
+        fatalError: () => undefined,
+    };
+    const worker = runExternalWorker({ PI_SUBAGENT_AGENT_ID: prepared.agentId, PI_SUBAGENT_STATE_ROOT: root, PI_SUBAGENT_EXTERNAL_CONFIG: JSON.stringify({ adapter: "cursor-acp", command: "/cursor", cwd: root, model: "cursor-grok-4.5-high", profile: "cursor-implementer", instructions: "contract", permissionPolicy: "allow-always" }) }, { createDriver: () => driver, sleep: ms => new Promise(resolve => setTimeout(resolve, Math.min(ms, 5))) });
+    while (!(await readAgentSnapshot(root, prepared.agentId)).status.bridgeReady) await new Promise(resolve => setTimeout(resolve, 5));
+    const first = await createTask(root, prepared.agentId, "first", "long turn");
+    while ((await readAgentSnapshot(root, prepared.agentId, first.request.taskId)).task?.status.state !== "running") await new Promise(resolve => setTimeout(resolve, 5));
+    await requestTaskCancellation(root, prepared.agentId, first.request.taskId, "cancel first");
+    while (cancels === 0) await new Promise(resolve => setTimeout(resolve, 5));
+    assert.equal((await readAgentSnapshot(root, prepared.agentId, first.request.taskId)).task?.status.state, "running");
+    assert.equal(calls, 1);
+    rejectFirst(new Error("cancelled by ACP"));
+    while ((await readAgentSnapshot(root, prepared.agentId, first.request.taskId)).task?.status.state !== "stopped") await new Promise(resolve => setTimeout(resolve, 5));
+    const stopped = await readAgentSnapshot(root, prepared.agentId, first.request.taskId);
+    assert.equal(stopped.task?.result?.output, "partial before cancel");
+    const second = await createTask(root, prepared.agentId, "second", "reuse");
+    while ((await readAgentSnapshot(root, prepared.agentId, second.request.taskId)).task?.status.state !== "succeeded") await new Promise(resolve => setTimeout(resolve, 5));
+    assert.equal(calls, 2);
+    await markAgentStopping(prepared.paths);
+    await worker;
 });
 
 void test("external worker persists two sequential tasks through one driver instance", async () => {

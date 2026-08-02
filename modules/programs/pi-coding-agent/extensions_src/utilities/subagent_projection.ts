@@ -23,7 +23,7 @@ export type MinimalAgentTask = {
 };
 
 export type MinimalWaitResult = {
-    outcome: "completed" | "timeout";
+    outcome: "completed";
     tasks: MinimalAgentTask[];
 };
 
@@ -37,13 +37,11 @@ export type MinimalSubmitResult = {
     output?: string;
     error?: string;
     outputTruncated?: true;
-    waitOutcome?: "completed" | "timeout";
 };
 
 export type WaitDetails = {
     condition: "any" | "all";
-    timeoutSeconds: number;
-    outcome?: "completed" | "timeout";
+    outcome?: "completed";
     agents: AgentSnapshot[];
     accounting: { usage?: Usage; claimedTaskIds: string[] };
 };
@@ -52,10 +50,7 @@ export type AgentToolDetails = AgentSnapshot & {
     accounting: { usage?: Usage; claimedTaskIds: string[] };
 };
 
-export type SubmitDetails = AgentToolDetails & {
-    waitSeconds?: number;
-    waitOutcome?: "completed" | "timeout";
-};
+export type SubmitDetails = AgentToolDetails;
 /** Hide provisional task results until the task status is terminal. */
 export function sanitizeSnapshot(snapshot: AgentSnapshot): AgentSnapshot {
     const task = snapshot.task && !isTerminalTask(snapshot.task.status.state) && snapshot.task.result
@@ -86,7 +81,7 @@ export function projectMinimalAgentTask(rawSnapshot: AgentSnapshot): MinimalAgen
 
 export function projectMinimalWaitResult(
     snapshots: readonly AgentSnapshot[],
-    outcome: "completed" | "timeout",
+    outcome: "completed",
 ): MinimalWaitResult {
     return {
         outcome,
@@ -96,7 +91,6 @@ export function projectMinimalWaitResult(
 
 export function projectMinimalSubmitResult(
     rawSnapshot: AgentSnapshot,
-    waitOutcome?: "completed" | "timeout",
 ): MinimalSubmitResult {
     const projected = projectMinimalAgentTask(rawSnapshot);
     if (!projected.taskId || !projected.taskState) throw new Error(`Subagent ${projected.agentId} has no submitted task`);
@@ -110,7 +104,6 @@ export function projectMinimalSubmitResult(
         ...(projected.output ? { output: projected.output } : {}),
         ...(projected.error ? { error: projected.error } : {}),
         ...(projected.outputTruncated ? { outputTruncated: true } : {}),
-        ...(waitOutcome ? { waitOutcome } : {}),
     };
 }
 

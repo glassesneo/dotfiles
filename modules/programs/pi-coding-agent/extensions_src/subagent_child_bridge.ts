@@ -3,7 +3,7 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 import { onActiveProfile } from "./utilities/profile_events.ts";
 import { validateResolvedProfile } from "./utilities/profile_types.ts";
 import { addUsage, emptyUsage, type TerminalTaskState } from "./utilities/subagent_types.ts";
-import { claimPendingTask, failAgent, finishTask, markBridgeReady, agentPaths, readAgentStatus, recordChildSessionIdentity, recordIdleUsage, recordIntervention } from "./utilities/subagent_store.ts";
+import { claimPendingTask, failAgent, finishTask, markBridgeReady, agentPaths, readAgentStatus, readTaskCancellation, recordChildSessionIdentity, recordIdleUsage, recordIntervention } from "./utilities/subagent_store.ts";
 
 function record(value: unknown): Record<string, unknown> { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {}; }
 function usage(value: unknown): Partial<Usage> | undefined { const item = record(value); return typeof item.input === "number" || typeof item.output === "number" ? item as unknown as Partial<Usage> : undefined; }
@@ -58,6 +58,8 @@ export function registerSubagentChildBridge(pi: ExtensionAPI, env: NodeJS.Proces
     let pendingCompletion: { taskId: string; input: Parameters<typeof finishTask>[3] } | undefined;
     let awaitingDelivery: { taskId: string; prompt: string; deadline: number } | undefined;
     let timer: NodeJS.Timeout | undefined;
+    let bridgeContext: ExtensionContext | undefined;
+    let cancellationAbortedTaskId: string | undefined;
     const persistCompletion = async () => {
         if (!pendingCompletion || completing) return;
         completing = true;
@@ -75,6 +77,7 @@ export function registerSubagentChildBridge(pi: ExtensionAPI, env: NodeJS.Proces
             const task = await claimPendingTask(stateRoot, agentId);
             if (!task) return;
             activeTaskId = task.request.taskId;
+            cancellationAbortedTaskId = undefined;
             taskUsage = emptyUsage();
             turns = 0;
             output = "";
@@ -92,6 +95,17 @@ export function registerSubagentChildBridge(pi: ExtensionAPI, env: NodeJS.Proces
         } finally { pumping = false; }
     };
     const tick = async () => {
+        if (activeTaskId && cancellationAbortedTaskId !== activeTaskId) {
+            const cancellation = await readTaskCancellation(stateRoot, agentId, activeTaskId);
+            if (cancellation) {
+                cancellationAbortedTaskId = activeTaskId;
+                if (awaitingDelivery?.taskId === activeTaskId) {
+                    awaitingDelivery = undefined;
+                    settled = true;
+                    pendingCompletion = { taskId: activeTaskId, input: { outcome: "stopped", output, usage: taskUsage, turns, error: cancellation.reason } };
+                } else bridgeContext?.abort();
+            }
+        }
         if (awaitingDelivery && (dependencies.now ?? Date.now)() >= awaitingDelivery.deadline) {
             const taskId = awaitingDelivery.taskId;
             awaitingDelivery = undefined;
@@ -102,6 +116,7 @@ export function registerSubagentChildBridge(pi: ExtensionAPI, env: NodeJS.Proces
         if (!pendingCompletion) await pump();
     };
     pi.on("session_start", async (_event, ctx?: ExtensionContext) => {
+        bridgeContext = ctx;
         const paths = agentPaths(stateRoot, agentId);
         const childSessionId = ctx?.sessionManager.getSessionId() ?? env.PI_SESSION_ID;
         const childSessionFile = ctx?.sessionManager.getSessionFile() ?? env.PI_SESSION_FILE;

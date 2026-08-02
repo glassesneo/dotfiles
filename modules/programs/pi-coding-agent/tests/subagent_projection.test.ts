@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createSubagentGetTool, createSubagentStopTool, createSubagentSubmitTool, createSubagentWaitTool } from "../extensions_src/subagent.ts";
+import Value from "typebox/value";
+import { createSubagentGetTool, createSubagentRunTool, createSubagentStopTool, createSubagentSubmitTool, createSubagentWaitTool } from "../extensions_src/subagent.ts";
 import {
     exceedsModelVisibleLimit,
     projectDebugSnapshot,
@@ -86,6 +87,7 @@ const baseSnapshot = (overrides: Partial<{ agentState: AgentSnapshot["status"]["
 };
 
 void test("public schemas omit detail and expose submit targets plus debug only on get", () => {
+    const run = createSubagentRunTool({ configPath: "/x", env: {}, exec: async () => ({ stdout: "", stderr: "", code: 0 }) }, ["scout"]);
     const submit = createSubagentSubmitTool({ configPath: "/x", env: {}, exec: async () => ({ stdout: "", stderr: "", code: 0 }) }, ["scout"]);
     const get = createSubagentGetTool({ configPath: "/x", env: {}, exec: async () => ({ stdout: "", stderr: "", code: 0 }) });
     const wait = createSubagentWaitTool({ configPath: "/x", env: {}, exec: async () => ({ stdout: "", stderr: "", code: 0 }) });
@@ -96,14 +98,19 @@ void test("public schemas omit detail and expose submit targets plus debug only 
         required: [...(tool.parameters.required ?? [])].sort(),
     });
 
-    assert.deepEqual(props(submit), { keys: ["agentId", "profile", "prompt", "purpose", "waitSeconds"], required: ["prompt", "purpose"] });
+    assert.deepEqual(props(run), { keys: ["agentId", "profile", "prompt", "purpose"], required: ["prompt", "purpose"] });
+    assert.deepEqual(props(submit), { keys: ["agentId", "profile", "prompt", "purpose"], required: ["prompt", "purpose"] });
     assert.deepEqual(props(get), { keys: ["agentId", "debug", "taskId"], required: ["agentId"] });
-    assert.deepEqual(props(wait), { keys: ["condition", "taskIds", "timeoutSeconds"], required: ["condition", "taskIds", "timeoutSeconds"] });
-    assert.deepEqual(props(stop), { keys: ["agentId"], required: ["agentId"] });
+    assert.deepEqual(props(wait), { keys: ["condition", "taskIds"], required: ["condition", "taskIds"] });
+    assert.deepEqual(props(stop), { keys: ["agentId", "taskId"], required: [] });
     assert.match(submit.description, /exactly one.*profile.*agentId/iu);
     assert.match(submit.description, /subagent_wait/iu);
     assert.match(get.description, /debug/i);
     assert.match(get.description, /not needed for normal operation/i);
+    assert.equal(Value.Check(run.parameters, { profile: "scout", purpose: "x", prompt: "x", waitSeconds: 1 }), false);
+    assert.equal(Value.Check(submit.parameters, { profile: "scout", purpose: "x", prompt: "x", waitSeconds: 1 }), false);
+    assert.equal(Value.Check(wait.parameters, { taskIds: ["t1"], condition: "all", timeoutSeconds: 1 }), false);
+    assert.equal(Value.Check(stop.parameters, { agentId: "a", reason: "legacy" }), false);
 });
 
 void test("prepareArguments maps legacy detail and purpose fallback", () => {
@@ -119,9 +126,9 @@ void test("prepareArguments maps legacy detail and purpose fallback", () => {
     assert.equal((preparedGet as { debug: boolean }).debug, true);
     assert.equal("detail" in (preparedGet as object), false);
 
-    const preparedWait = wait.prepareArguments?.({ taskIds: ["t1"], condition: "all", timeoutSeconds: 30, detail: true } as never);
+    const preparedWait = wait.prepareArguments?.({ taskIds: ["t1"], condition: "all", detail: true } as never);
     assert.equal("detail" in (preparedWait as object), false);
-    assert.deepEqual(preparedWait, { taskIds: ["t1"], condition: "all", timeoutSeconds: 30 });
+    assert.deepEqual(preparedWait, { taskIds: ["t1"], condition: "all" });
 });
 
 void test("minimal projection keeps only parent-facing fields", () => {
@@ -141,9 +148,9 @@ void test("minimal projection keeps only parent-facing fields", () => {
     assert.equal("activeTaskId" in succeeded, false);
     assert.equal("interventions" in succeeded, false);
 
-    const wait = projectMinimalWaitResult([baseSnapshot({ taskState: "succeeded" }), baseSnapshot({ taskState: "running", result: false })], "timeout");
+    const wait = projectMinimalWaitResult([baseSnapshot({ taskState: "succeeded" }), baseSnapshot({ taskState: "running", result: false })], "completed");
     assert.deepEqual(Object.keys(wait).sort(), ["outcome", "tasks"]);
-    assert.equal(wait.outcome, "timeout");
+    assert.equal(wait.outcome, "completed");
     assert.equal(wait.tasks.length, 2);
 });
 

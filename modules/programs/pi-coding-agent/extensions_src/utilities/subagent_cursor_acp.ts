@@ -7,7 +7,7 @@ export type ExternalWorkerEvent =
     | { type: "tool"; text: string }
     | { type: "permission"; text: string };
 export interface ExternalTaskResult { output: string; stopReason: string }
-export interface ExternalDriver { start(): Promise<void>; runTask(prompt: string): Promise<ExternalTaskResult>; cancel(): Promise<void>; shutdown(): Promise<void>; waitForClose(): Promise<Error>; fatalError(): Error | undefined }
+export interface ExternalDriver { start(): Promise<void>; runTask(prompt: string): Promise<ExternalTaskResult>; cancel(): Promise<void>; partialOutput?(): string; shutdown(): Promise<void>; waitForClose(): Promise<Error>; fatalError(): Error | undefined }
 
 function record(value: unknown): Record<string, unknown> | undefined { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : undefined; }
 function scalar(value: unknown): string { return typeof value === "string" || typeof value === "number" || typeof value === "boolean" ? String(value) : ""; }
@@ -111,6 +111,7 @@ export class CursorAcpDriver implements ExternalDriver {
     async cancel(): Promise<void> {
         if (this.#transport && this.#sessionId) this.#transport.notify("session/cancel", { sessionId: this.#sessionId });
     }
+    partialOutput(): string { return this.#output; }
     async shutdown(): Promise<void> { await this.#transport?.shutdown(); }
     waitForClose(): Promise<Error> { return this.#transport?.waitForClose() ?? new Promise(() => {}); }
     fatalError(): Error | undefined { return this.#transport?.fatalError(); }

@@ -5,7 +5,7 @@ import { join } from "node:path";
 import test from "node:test";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { loadAgentProfileConfig, registerProfileController, routedProfileForInput } from "../extensions_src/profile.ts";
-import { createSubagentSubmitTool, registerSubagent } from "../extensions_src/subagent.ts";
+import { createSubagentRunTool, createSubagentSubmitTool, registerSubagent } from "../extensions_src/subagent.ts";
 import { ACTIVE_PROFILE_EVENT, onActiveProfile } from "../extensions_src/utilities/profile_events.ts";
 import { validateProfileConfig, type AgentProfileConfig } from "../extensions_src/utilities/profile_types.ts";
 import { validateSubagentRuntimeConfig, type SubagentRuntimeConfig } from "../extensions_src/utilities/subagent_types.ts";
@@ -376,7 +376,8 @@ void test("subagent_submit schema enum follows active allowed targets without a 
         async exec() { return { stdout: "123\t$0\tmain\t%1\n", stderr: "", code: 0, killed: false }; },
     } as unknown as ExtensionAPI;
     assert.equal(await registerSubagent(pi, { configPath: value.subagentPath, profileConfigPath: value.profilePath, env: { TMUX: "yes" } }), true);
-    assert.deepEqual(tools.map(tool => tool.name).sort(), ["subagent_get", "subagent_stop", "subagent_submit", "subagent_wait"]);
+    assert.deepEqual(tools.map(tool => tool.name).sort(), ["subagent_get", "subagent_run", "subagent_stop", "subagent_submit", "subagent_wait"]);
+    assert.deepEqual(tools.find(tool => tool.name === "subagent_run")?.parameters.properties?.profile?.enum, []);
     assert.deepEqual(tools.find(tool => tool.name === "subagent_submit")?.parameters.properties?.profile?.enum, []);
     eventHandlers[ACTIVE_PROFILE_EVENT]![0]!({
         schemaVersion: 1,
@@ -392,7 +393,9 @@ void test("subagent_submit schema enum follows active allowed targets without a 
             extensions: { subagent: { allowedTargets: ["focused-reviewer", "dissent-reviewer"] } },
         },
     });
+    const run = tools.find(tool => tool.name === "subagent_run");
     const submit = tools.find(tool => tool.name === "subagent_submit");
+    assert.deepEqual(run?.parameters.properties?.profile?.enum, ["focused-reviewer", "dissent-reviewer"]);
     assert.deepEqual(submit?.parameters.properties?.profile?.enum, ["focused-reviewer", "dissent-reviewer"]);
     assert.match(submit?.parameters.properties?.profile?.description ?? "", /focused-reviewer, dissent-reviewer/);
     assert.equal(handlers.before_agent_start, undefined);
@@ -411,6 +414,9 @@ void test("delegation fails closed and rejects policy or depth before resource a
     await assert.rejects(createSubagentSubmitTool({ ...base, activeProfile: () => ({ name: "scout", facet: { allowedTargets: ["scout"] } }) }).execute("call", { profile: "full", purpose: "Policy task", prompt: "task" }, undefined, undefined, toolContext(fixtureValue.root)), /not allowed/);
     await assert.rejects(createSubagentSubmitTool({ ...base, env: { TMUX: "yes", PI_SUBAGENT_DEPTH: "3" }, activeProfile: () => ({ name: "full", facet: { allowedTargets: ["scout"] } }) }).execute("call", { profile: "scout", purpose: "Policy task", prompt: "task" }, undefined, undefined, toolContext(fixtureValue.root)), /exceeds maxDepth/);
     await assert.rejects(createSubagentSubmitTool({ ...base, activeProfile: () => ({ name: "full", facet: { allowedTargets: ["full"] } }) }).execute("call", { profile: "full", purpose: "Policy task", prompt: "task" }, undefined, undefined, toolContext(fixtureValue.root)), /allowAllTools/);
+    const controller = new AbortController();
+    controller.abort(new Error("parent aborted before submission"));
+    await assert.rejects(createSubagentRunTool({ ...base, activeProfile: () => ({ name: "full", facet: { allowedTargets: ["scout"] } }) }).execute("run", { profile: "scout", purpose: "Policy task", prompt: "task" }, controller.signal, undefined, toolContext(fixtureValue.root)), /parent aborted before submission/);
     await assert.rejects(access(fixtureValue.subagentConfig.stateRoot));
     assert.equal(execCalls, 0);
 });

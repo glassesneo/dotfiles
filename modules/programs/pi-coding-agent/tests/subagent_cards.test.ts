@@ -84,7 +84,7 @@ void test("call cards summarize submit get wait stop without raw JSON", () => {
     const stop = createSubagentStopTool({ configPath: "/x", env: {}, exec: async () => ({ stdout: "", stderr: "", code: 0 }) });
     const ctx = { lastComponent: undefined } as never;
 
-    const startText = renderText(submit.renderCall?.({ profile: "scout", purpose: "scan tree", prompt: "List modules\nand summarize", waitSeconds: 30 }, theme, ctx));
+    const startText = renderText(submit.renderCall?.({ profile: "scout", purpose: "scan tree", prompt: "List modules\nand summarize" }, theme, ctx));
     assert.match(startText, /1 new agent/);
     assert.match(startText, /scout/);
     assert.match(startText, /scan tree/);
@@ -101,23 +101,48 @@ void test("call cards summarize submit get wait stop without raw JSON", () => {
     assert.match(getText, /active\/latest task/);
     assert.match(getText, /DEBUG/);
 
-    const waitText = renderText(wait.renderCall?.({ taskIds: ["t1", "t2", "t3"], condition: "all", timeoutSeconds: 120 }, theme, ctx));
-    assert.match(waitText, /all · 3 tasks · 120s/);
+    const waitText = renderText(wait.renderCall?.({ taskIds: ["t1", "t2", "t3"], condition: "all" }, theme, ctx));
+    assert.match(waitText, /all · 3 tasks/);
 
     const stopText = renderText(stop.renderCall?.({ agentId: "550e8400-e29b-41d4-a716-446655440000" }, theme, ctx));
     assert.match(stopText, /1 agent/);
     assert.match(stopText, /550e8400/);
 });
 
-void test("submit result cards distinguish target and inline wait states", () => {
+void test("stop result cards distinguish fresh stops from idempotent terminal no-ops", () => {
+    const stop = createSubagentStopTool({ configPath: "/x", env: {}, exec: async () => ({ stdout: "", stderr: "", code: 0 }) });
+    const stopped = snapshot();
+    stopped.task!.status.state = "stopped";
+    stopped.task!.result!.outcome = "stopped";
+    const fresh = renderText(stop.renderResult?.(
+        { content: [{ type: "text", text: "{}" }], details: { ...stopped, accounting: { claimedTaskIds: [] }, stopDisposition: "stopped-now" } } as never,
+        { expanded: false, isPartial: false }, theme,
+        { args: { taskId: stopped.task!.request.taskId }, lastComponent: undefined } as never,
+    ));
+    assert.match(fresh, /TASK STOPPED/);
+    const repeated = renderText(stop.renderResult?.(
+        { content: [{ type: "text", text: "{}" }], details: { ...stopped, accounting: { claimedTaskIds: [] }, stopDisposition: "already-terminal" } } as never,
+        { expanded: false, isPartial: false }, theme,
+        { args: { taskId: stopped.task!.request.taskId }, lastComponent: undefined } as never,
+    ));
+    assert.match(repeated, /TASK ALREADY TERMINAL/);
+    const pending = renderText(stop.renderResult?.(
+        { content: [{ type: "text", text: "{}" }], details: { ...stopped, accounting: { claimedTaskIds: [] }, stopDisposition: "stop-pending" } } as never,
+        { expanded: false, isPartial: false }, theme,
+        { args: { taskId: stopped.task!.request.taskId }, lastComponent: undefined } as never,
+    ));
+    assert.match(pending, /TASK CANCELLATION COMPLETED/);
+});
+
+void test("submit result cards distinguish background target contexts", () => {
     const submit = createSubagentSubmitTool({ configPath: "/x", env: {}, exec: async () => ({ stdout: "", stderr: "", code: 0 }) }, ["scout"]);
     const completed = renderText(submit.renderResult?.(
-        { content: [{ type: "text", text: "{}" }], details: { ...snapshot(), accounting: { claimedTaskIds: [] }, waitSeconds: 30, waitOutcome: "completed" } } as never,
+        { content: [{ type: "text", text: "{}" }], details: { ...snapshot(), accounting: { claimedTaskIds: [] } } } as never,
         { expanded: false, isPartial: false },
         theme,
-        { args: { profile: "scout", purpose: "scan tree", prompt: "List modules", waitSeconds: 30 }, lastComponent: undefined } as never,
+        { args: { profile: "scout", purpose: "scan tree", prompt: "List modules" }, lastComponent: undefined } as never,
     ));
-    assert.match(completed, /COMPLETED/);
+    assert.match(completed, /SUBMITTED/);
     assert.match(completed, /NEW PROFILED AGENT/);
 
     const running = snapshot();
@@ -125,12 +150,12 @@ void test("submit result cards distinguish target and inline wait states", () =>
     running.task!.status.state = "running";
     running.task!.result = null;
     const timeout = renderText(submit.renderResult?.(
-        { content: [{ type: "text", text: "{}" }], details: { ...running, accounting: { claimedTaskIds: [] }, waitSeconds: 1, waitOutcome: "timeout" } } as never,
+        { content: [{ type: "text", text: "{}" }], details: { ...running, accounting: { claimedTaskIds: [] } } } as never,
         { expanded: false, isPartial: false },
         theme,
-        { args: { agentId: running.agent.agentId, purpose: "scan tree", prompt: "List modules", waitSeconds: 1 }, lastComponent: undefined } as never,
+        { args: { agentId: running.agent.agentId, purpose: "scan tree", prompt: "List modules" }, lastComponent: undefined } as never,
     ));
-    assert.match(timeout, /TIMEOUT/);
+    assert.match(timeout, /SUBMITTED/);
     assert.match(timeout, /EXISTING AGENT/);
 });
 
@@ -157,7 +182,7 @@ void test("result cards show profile state purpose prompt and terminal preview",
     assert.doesNotMatch(expanded, /^\s*\{/m);
 });
 
-void test("wait cards distinguish WAITING COMPLETED TIMEOUT and reuse Text", () => {
+void test("wait cards distinguish WAITING and COMPLETED and reuse Text", () => {
     const wait = createSubagentWaitTool({ configPath: "/x", env: {}, exec: async () => ({ stdout: "", stderr: "", code: 0 }) });
     const running = snapshot();
     running.status.state = "busy";
@@ -165,7 +190,6 @@ void test("wait cards distinguish WAITING COMPLETED TIMEOUT and reuse Text", () 
     running.task!.result = null;
     const details = {
         condition: "all" as const,
-        timeoutSeconds: 30,
         agents: [running],
         accounting: { claimedTaskIds: [] as string[] },
     };
@@ -178,7 +202,6 @@ void test("wait cards distinguish WAITING COMPLETED TIMEOUT and reuse Text", () 
     const completedAgent = snapshot();
     const completedDetails = {
         condition: "all" as const,
-        timeoutSeconds: 30,
         outcome: "completed" as const,
         agents: [completedAgent],
         accounting: { claimedTaskIds: ["task-1"] },
@@ -192,13 +215,6 @@ void test("wait cards distinguish WAITING COMPLETED TIMEOUT and reuse Text", () 
     assert.equal(completed, first);
     assert.match(renderText(completed), /COMPLETED/);
 
-    const timeout = renderText(wait.renderResult?.(
-        { content: [{ type: "text", text: "{}" }], details: { ...details, outcome: "timeout" as const } } as never,
-        { expanded: false, isPartial: false },
-        theme,
-        { args: {}, lastComponent: undefined } as never,
-    ));
-    assert.match(timeout, /TIMEOUT/);
 });
 
 void test("debug and legacy malformed results stay card-safe", () => {

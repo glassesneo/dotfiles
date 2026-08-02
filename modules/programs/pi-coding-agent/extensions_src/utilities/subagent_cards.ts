@@ -117,17 +117,13 @@ function isWaitDetails(value: unknown): value is WaitDetails {
     if (!value || typeof value !== "object") return false;
     const record = value as Record<string, unknown>;
     return (record.condition === "any" || record.condition === "all")
-        && typeof record.timeoutSeconds === "number"
         && Array.isArray(record.agents);
 }
 
 function isSubmitDetails(value: unknown): value is SubmitDetails {
     if (!isRenderableAgentSnapshot(value)) return false;
     const record = value as unknown as Record<string, unknown>;
-    const outcome = record.waitOutcome;
-    return Boolean(record.accounting && typeof record.accounting === "object")
-        && (record.waitSeconds === undefined || typeof record.waitSeconds === "number")
-        && (outcome === undefined || outcome === "completed" || outcome === "timeout");
+    return Boolean(record.accounting && typeof record.accounting === "object");
 }
 
 function snapshotPrompt(snapshot: AgentSnapshot, argsPrompt?: string): string | undefined {
@@ -240,7 +236,7 @@ function callPromptText(theme: Theme, prompt: string, expanded: boolean): string
 }
 
 export function renderSubmitCall(
-    args: { profile?: string; agentId?: string; purpose: string; prompt: string; waitSeconds?: number },
+    args: { profile?: string; agentId?: string; purpose: string; prompt: string },
     theme: Theme,
     context: CardRenderContext,
 ): Component {
@@ -248,12 +244,23 @@ export function renderSubmitCall(
     const target = args.profile !== undefined
         ? joinParts(["1 new agent", profileText(theme, args.profile)])
         : joinParts(["1 existing agent", args.agentId ? shortId(args.agentId) : undefined]);
-    const wait = args.waitSeconds === undefined ? theme.fg("muted", "immediate") : theme.fg("muted", `wait ${args.waitSeconds}s`);
     const body = [
-        joinParts([target, wait, theme.fg("muted", args.purpose)]),
+        joinParts([target, theme.fg("muted", args.purpose)]),
         callPromptText(theme, args.prompt, context.expanded === true),
     ].join("\n");
     return textFromComponent(context.lastComponent, `${title} — ${body}`);
+}
+
+export function renderRunCall(
+    args: { profile?: string; agentId?: string; purpose: string; prompt: string },
+    theme: Theme,
+    context: CardRenderContext,
+): Component {
+    const target = args.profile !== undefined
+        ? joinParts(["1 new agent", profileText(theme, args.profile)])
+        : joinParts(["1 existing agent", args.agentId ? shortId(args.agentId) : undefined]);
+    const body = [joinParts([target, theme.fg("muted", args.purpose)]), callPromptText(theme, args.prompt, context.expanded === true)].join("\n");
+    return textFromComponent(context.lastComponent, `${theme.fg("accent", "subagent_run")} — ${body}`);
 }
 
 export function renderGetCall(
@@ -271,7 +278,7 @@ export function renderGetCall(
 }
 
 export function renderWaitCall(
-    args: { taskIds: string[]; condition: "any" | "all"; timeoutSeconds: number },
+    args: { taskIds: string[]; condition: "any" | "all" },
     theme: Theme,
     context: CardRenderContext,
 ): Component {
@@ -279,18 +286,17 @@ export function renderWaitCall(
     const body = joinParts([
         args.condition,
         `${args.taskIds.length} task${args.taskIds.length === 1 ? "" : "s"}`,
-        `${args.timeoutSeconds}s`,
     ]);
     return textFromComponent(context.lastComponent, `${title} — ${body}`);
 }
 
 export function renderStopCall(
-    args: { agentId: string },
+    args: { agentId?: string; taskId?: string },
     theme: Theme,
     context: CardRenderContext,
 ): Component {
     const title = theme.fg("accent", "subagent_stop");
-    const body = joinParts(["1 agent", shortId(args.agentId)]);
+    const body = args.agentId ? joinParts(["1 agent", shortId(args.agentId)]) : joinParts(["1 task", args.taskId ? shortId(args.taskId) : undefined]);
     return textFromComponent(context.lastComponent, `${title} — ${body}`);
 }
 
@@ -338,6 +344,47 @@ export function renderAgentToolResult(
     return renderSingleResult(result, options, theme, context, argsPrompt, debug, words);
 }
 
+export function renderRunResult(
+    result: AgentToolResult<unknown>,
+    options: ToolRenderResultOptions,
+    theme: Theme,
+    context: CardRenderContext,
+    words?: readonly string[],
+): Component {
+    if (!isRenderableAgentSnapshot(result.details)) return renderSingleResult(result, options, theme, context, undefined, undefined, words);
+    const details = result.details;
+    const handles = assignNatureHandles([details.agent.agentId], words);
+    const prompt = typeof context.args?.prompt === "string" ? context.args.prompt : undefined;
+    const card = options.expanded ? expandedAgentCard(theme, details, prompt, handles) : collapsedAgentCard(theme, details, prompt, handles);
+    const completed = isTerminalRenderedTask(details);
+    const target = context.args?.profile !== undefined ? "NEW PROFILED AGENT" : "EXISTING AGENT";
+    const state = theme.fg(completed ? "success" : "warning", completed ? "COMPLETED" : "RUNNING");
+    return textFromComponent(context.lastComponent, `${state} · ${target}\n${card}`);
+}
+
+export function renderStopResult(
+    result: AgentToolResult<unknown>,
+    options: ToolRenderResultOptions,
+    theme: Theme,
+    context: CardRenderContext,
+    words?: readonly string[],
+): Component {
+    if (!isRenderableAgentSnapshot(result.details)) return renderSingleResult(result, options, theme, context, undefined, undefined, words);
+    const details = result.details;
+    const handles = assignNatureHandles([details.agent.agentId], words);
+    const card = options.expanded ? expandedAgentCard(theme, details, undefined, handles) : collapsedAgentCard(theme, details, undefined, handles);
+    const taskTarget = context.args?.taskId !== undefined;
+    const disposition = (result.details as { stopDisposition?: unknown }).stopDisposition;
+    const stoppedNow = disposition === "stopped-now";
+    const pending = disposition === "stop-pending";
+    const heading = stoppedNow
+        ? taskTarget ? "TASK STOPPED" : "AGENT STOPPED"
+        : pending
+            ? taskTarget ? "TASK CANCELLATION COMPLETED" : "AGENT STOP COMPLETED"
+            : taskTarget ? "TASK ALREADY TERMINAL" : "AGENT ALREADY TERMINAL";
+    return textFromComponent(context.lastComponent, `${theme.fg(stoppedNow ? "success" : "muted", heading)}\n${card}`);
+}
+
 export function renderSubmitResult(
     result: AgentToolResult<unknown>,
     options: ToolRenderResultOptions,
@@ -355,12 +402,7 @@ export function renderSubmitResult(
             return textFromComponent(context.lastComponent, text);
         }
         const target = context.args?.profile !== undefined ? "NEW PROFILED AGENT" : "EXISTING AGENT";
-        const waitRequested = details.waitSeconds !== undefined || context.args?.waitSeconds !== undefined;
-        const state = !waitRequested
-            ? theme.fg("success", "SUBMITTED")
-            : options.isPartial || details.waitOutcome === undefined
-                ? waitOutcomeText(theme, "waiting")
-                : waitOutcomeText(theme, details.waitOutcome);
+        const state = theme.fg("success", "SUBMITTED");
         const handles = assignNatureHandles([details.agent.agentId], words);
         const argsPrompt = typeof context.args?.prompt === "string" ? context.args.prompt : undefined;
         const card = options.expanded
@@ -391,12 +433,8 @@ export function renderWaitResult(
 
         const done = details.agents.filter(agent => isRenderableAgentSnapshot(agent) && isTerminalRenderedTask(agent)).length;
         const total = details.agents.length;
-        const kind = options.isPartial || details.outcome === undefined
-            ? "waiting"
-            : details.outcome === "timeout"
-                ? "timeout"
-                : "completed";
-        const heading = `${waitOutcomeText(theme, kind)} · ${done}/${total} complete · ${details.condition} · ${details.timeoutSeconds}s`;
+        const kind = options.isPartial || details.outcome === undefined ? "waiting" : "completed";
+        const heading = `${waitOutcomeText(theme, kind)} · ${done}/${total} complete · ${details.condition}`;
         const agentIds = details.agents.flatMap(agent => isRenderableAgentSnapshot(agent) ? [agent.agent.agentId] : []);
         const handles = assignNatureHandles(agentIds, words);
         const cards = details.agents.map(snapshot => {
