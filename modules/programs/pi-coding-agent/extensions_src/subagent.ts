@@ -39,7 +39,9 @@ import { loadPaletteKeymap } from "./utilities/command_palette_keymap.ts";
 import { provideCommandPaletteContribution } from "./utilities/command_palette_contributions.ts";
 
 const CONFIG = join(getAgentDir(), "subagent.json"); const PROFILES = join(getAgentDir(), "agent-profiles.json");
+const taskPromptGuideline = "For `subagent_run` and `subagent_submit`, treat the selected target profile as a stable capability contract. Include the local objective and task-specific input or context in `prompt`; add task-specific constraints, output requirements, or stop conditions only when the target profile or its discoverable receiver skill does not already own them. Omit invocation instructions, skill paths, procedures, default constraints, and default output contracts already owned by the target profile or discoverable skill. To intentionally override the profile's normal skill, name the different skill; provide a skill path only for a task-specific resource that cannot be discovered by name. If the profile does not fit and no override is intended, choose a suitable profile or stop and report the gap.";
 const runPromptGuidelines = [
+    taskPromptGuideline,
     "Use `subagent_run` when the child result is the next dependency; do not call `subagent_wait` after it.",
     "Emit multiple sibling `subagent_run` calls for independent foreground tasks on distinct or new agents.",
 ];

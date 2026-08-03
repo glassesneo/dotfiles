@@ -20,15 +20,15 @@ Require:
 
 - one local question to investigate;
 - the context that made the question relevant;
-- the included scope and explicit exclusions;
-- allowed operations, including the read-only boundary;
-- the expected report content;
-- a stopping condition;
-- starting files or symbols when the question needs them.
+- the included scope and explicit exclusions.
 
-When required information is missing and the question cannot be answered with
-evidence, do not infer or expand the parent task. Identify the missing
-conditions under `Unknowns` and stop.
+Include starting files or symbols only when the question needs them. This Skill
+owns read-only operations, the default report shape, and stop conditions; the
+handoff does not restate them.
+
+When required task-specific information is missing and the question cannot be
+answered with evidence, do not infer or expand the parent task. Identify the
+missing conditions under `Unknowns` and stop.
 
 ## Exploration Procedure
 

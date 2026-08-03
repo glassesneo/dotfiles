@@ -99,6 +99,52 @@ void test("validation contract implements adaptive levels, escalation, and failu
     assert.match(validation, /Escalate to `broad` or `full`/);
 });
 
+void test("lifecycle handoffs contain only task-specific deltas and preserve override ownership", async () => {
+    const [lifecycleText, sourceText, validationText, explorationText, subagentSource] = await Promise.all([
+        text(join(skillsRoot, "skills", "implementation-lifecycle", "SKILL.md")),
+        text(join(skillsRoot, "skills", "source-implementation", "SKILL.md")),
+        text(join(skillsRoot, "skills", "implementation-validation", "SKILL.md")),
+        text(join(skillsRoot, "skills", "codebase-exploration", "SKILL.md")),
+        text(join(piRoot, "extensions_src", "subagent.ts")),
+    ]);
+    const start = lifecycleText.indexOf("## Capability Handoffs");
+    const handoffs = lifecycleText.slice(start, lifecycleText.indexOf("## Artifact Chain", start)).replace(/\s+/g, " ");
+    const requiredValidationFields: Array<[RegExp, RegExp]> = [
+        [/design/, /explicit approved design path/],
+        [/concrete diff reference/, /concrete diff reference/],
+        [/requested `focused \| broad \| full` level/, /requested level: `focused`, `broad`, or `full`/],
+        [/level rationale/, /rationale for that level/],
+        [/exactly one objective/, /exactly one concrete validation objective/],
+        [/known risks/, /known risks/],
+    ];
+
+    assert.match(handoffs, /shared `subagent_run` and `subagent_submit` task-specific-delta guideline/);
+    for (const phrase of ["design or bounded contract", "local source objective", "repository target", "current diff context", "known findings", "caller-specific constraints"]) {
+        assert.match(handoffs, new RegExp(phrase));
+    }
+    assert.equal(handoffs.match(/repository target/g)?.length, 1);
+    assert.match(sourceText.replace(/\s+/g, " "), /source objective and repository target/);
+    assert.doesNotMatch(handoffs, /`source-implementation` output contract|failure classification|return shape|artifact persistence/);
+    for (const [lifecycleField, receiverField] of requiredValidationFields) {
+        assert.match(handoffs, lifecycleField);
+        assert.match(validationText.replace(/\s+/g, " "), receiverField);
+    }
+    assert.match(handoffs, /review mode, defined target, applicable design, implementation report or diff reference/);
+    assert.match(handoffs, /`focused-reviewer` and `dissent-reviewer`.*local lens or bounded dossier/);
+
+    const explorationHandoffStart = explorationText.indexOf("## Required Handoff");
+    const explorationHandoff = explorationText.slice(explorationHandoffStart, explorationText.indexOf("## Exploration Procedure", explorationHandoffStart)).replace(/\s+/g, " ");
+    for (const phrase of ["one local question", "context that made the question relevant", "included scope and explicit exclusions"]) {
+        assert.match(explorationHandoff, new RegExp(phrase));
+    }
+    assert.match(explorationHandoff, /starting files or symbols only when the question needs them/);
+    assert.match(explorationHandoff, /Skill owns read-only operations, the default report shape, and stop conditions/);
+    assert.doesNotMatch(explorationHandoff, /allowed operations, including|expected report content|a stopping condition;/);
+
+    assert.match(subagentSource, /intentionally override the profile's normal skill, name the different skill/);
+    assert.match(subagentSource, /skill path only for a task-specific resource that cannot be discovered by name/);
+});
+
 void test("lifecycle bounds remediation and creates terminal immutable report chains", async () => {
     const lifecycle = (await text(join(skillsRoot, "skills", "implementation-lifecycle", "SKILL.md"))).replace(/\s+/g, " ");
 
@@ -152,14 +198,39 @@ void test("profiles expose command-independent implementation, validation, revie
     assert.match(artisanBlock, /lightweight-implementation-lifecycle in direct mode unless the current request explicitly selects another mode/);
     assert.match(artisanBlock, /Do not delegate source implementation or validation/);
 
+    const taskmasterStart = profile.indexOf("        taskmaster = {");
+    const taskmasterBlock = profile.slice(taskmasterStart, profile.indexOf("        artisan = {", taskmasterStart));
+    assert.match(taskmasterBlock, /source-changing implementation specialist/);
+    assert.match(taskmasterBlock, /Default to source-implementation.*implementation-lifecycle/);
+    assert.match(taskmasterBlock, /required input is unavailable.*stop/);
+    assert.doesNotMatch(taskmasterBlock, /inspect your diff|artifact persistence|Return concrete changed-file/);
+
+    const explorerStart = profile.indexOf("        explorer = {");
+    const explorerBlock = profile.slice(explorerStart, profile.indexOf("        tester = {", explorerStart));
+    assert.match(explorerBlock, /read-only explorer subagent/);
+    assert.match(explorerBlock, /Default to codebase-exploration/);
+    assert.match(explorerBlock, /required local question is unavailable.*stop/);
+    assert.doesNotMatch(explorerBlock, /expected report content|stopping condition|allowed operations/);
+
+    const testerStart = profile.indexOf("        tester = {");
+    const testerBlock = profile.slice(testerStart, profile.indexOf("        reviewer = {", testerStart));
+    assert.match(testerBlock, /read-only validation specialist/);
+    assert.match(testerBlock, /Default to implementation-validation/);
+    assert.match(testerBlock, /required handoff input is unavailable.*stop/);
+    assert.doesNotMatch(testerBlock, /aggregate command|classify every failure|persist non-trivial|Return concrete command evidence/);
+
     const reviewerStart = profile.indexOf("        reviewer = {");
     const reviewerBlock = profile.slice(reviewerStart, profile.indexOf("        focused-reviewer = {", reviewerStart));
     assert.match(reviewerBlock, /model = "openai-codex\/gpt-5\.6-sol"/);
     assert.match(reviewerBlock, /thinkingLevel = "high"/);
-    assert.match(reviewerBlock, /adaptive-review in auto mode by default/);
+    assert.match(reviewerBlock, /Default to adaptive-review in auto mode/);
+    assert.match(reviewerBlock, /required target is unavailable.*stop/);
+    assert.doesNotMatch(reviewerBlock, /persist exactly one canonical review report|return its verdict/);
 
     const operatorStart = profile.indexOf("        operator = {");
-    const operatorBlock = profile.slice(operatorStart, profile.indexOf("        explorer = {", operatorStart));
-    assert.match(operatorBlock, /select taskmaster or cursor-implementer/);
-    assert.match(operatorBlock, /same implementation agent ID/);
+    const operatorBlock = profile.slice(operatorStart, profile.indexOf("        cursor-implementer = {", operatorStart));
+    assert.match(operatorBlock, /Default to implementation-lifecycle in delegated-reviewed mode/);
+    assert.match(operatorBlock, /selecting taskmaster or cursor-implementer/);
+    assert.match(operatorBlock, /required input is unavailable.*stop/);
+    assert.doesNotMatch(operatorBlock, /same implementation agent ID|persist the artifact chain|independently inspect every diff/);
 });

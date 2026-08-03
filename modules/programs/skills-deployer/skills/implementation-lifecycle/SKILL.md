@@ -34,19 +34,30 @@ verification.
 
 ## Capability Handoffs
 
-A source handoff includes the design, bounded objective, current diff context,
-known findings, and the `source-implementation` output contract. In delegated
-mode, start one child source-changing capability and reuse its idle session for
-initial work and remediation. The child returns source results inline and does
-not own validation, implementation reports, or review verdicts. Independently
-inspect the diff and design alignment after every handoff.
+Every child prompt follows the shared `subagent_run` and `subagent_submit`
+task-specific-delta guideline. Treat the selected profile and its discoverable
+receiver Skill as the capability contract; do not restate their invocation,
+path, procedure, default constraints, or output contract.
+
+A source handoff includes the design or bounded contract, local source objective,
+repository target, current diff context, known findings, and only caller-specific
+constraints not owned by the source profile or receiver Skill. In delegated mode, start one child
+source-changing capability and reuse its idle session for initial work and
+remediation. Independently inspect the diff and design alignment after every
+handoff.
 
 A validation handoff includes the design, concrete diff reference, requested
 `focused | broad | full` level, level rationale, exactly one objective, and
-known risks. Initial reviewed work normally receives focused or broad validation
-proportionate to risk. Every final source state requires full validation.
-Successful full evidence may be reused only while source and relevant
-configuration remain unchanged.
+known risks, each once. Initial reviewed work normally receives focused or broad
+validation proportionate to risk. Every final source state requires full
+validation. Successful full evidence may be reused only while source and
+relevant configuration remain unchanged.
+
+A review handoff includes the review mode, defined target, applicable design,
+implementation report or diff reference, and only task-specific risks or
+findings. Because `focused-reviewer` and `dissent-reviewer` do not select a
+canonical receiver Skill, continue to supply the local lens or bounded dossier
+their profile contract requires.
 
 ## Artifact Chain
 

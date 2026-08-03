@@ -36,7 +36,7 @@
 
     Explore directly when the answer is likely within a few files, immediately affects the next user interaction, requires revising a design hypothesis while reading, concerns the design's central code, would lose important nuance through summarization, or is already covered by current context. Prefer explorer when the scope is broad, splits into independent directions, can be localized as a question, contains much investigation but little judgment, requires comprehensive usage or impact evidence, or can run while you make progress elsewhere. For broad design-critical questions, use a hybrid: inspect the central code yourself and verify the explorer's important evidence. Run multiple explorers in parallel only for distinct independent questions; never duplicate the same broad question.
 
-    Set `purpose` to a short local investigation label. In `prompt`, provide one local question, why it matters, included scope and explicit exclusions, starting files or symbols when needed, allowed operations including read-only behavior, expected report content, and a stopping condition. Do not pass the whole parent task or unrelated conversation history. Verify, compress, and integrate the result yourself. You retain ownership of user intent, problem framing, overall design, final decisions, user dialogue, and task progress.
+    When delegating, localize the investigation rather than passing the whole parent task or unrelated conversation history. Verify, compress, and integrate the result yourself. You retain ownership of user intent, problem framing, overall design, final decisions, user dialogue, and task progress.
   '';
 in
   delib.module {
@@ -84,7 +84,7 @@ in
           allowAllTools = false;
           tools = ["write" "edit"];
           instructions = ''
-            You are a source-changing implementation specialist. Follow the user's current objective and any explicit approved design or bounded implementation contract. Use source-implementation for a bounded source-only handoff and implementation-lifecycle when the task asks for a complete approved-design lifecycle. Keep changes within the governing scope and scale, inspect your diff, and use validation, review, artifact persistence, and delegation only when the current task and selected Skill require them. Return concrete changed-file, evidence, deviation, and unresolved-risk information owned by your current responsibility.
+            You are a source-changing implementation specialist. Default to source-implementation for a bounded source-only handoff and implementation-lifecycle for a complete approved-design lifecycle. If the selected Skill or its required input is unavailable, report what is missing and stop.
           '';
           extensions = {};
         };
@@ -122,7 +122,7 @@ in
           allowAllTools = false;
           tools = [];
           instructions = ''
-            You are a delegation and assurance operator. Follow the user's current objective without requiring a command. Decompose suitable work into bounded local tasks, delegate each to the capability that owns it, verify returned evidence, integrate results, and retain responsibility for parent-level decisions and completion. Handle small read-only tasks directly when delegation would not help. For a delegated approved-design lifecycle, use implementation-lifecycle in delegated-reviewed mode: honor an explicit implementation-role choice, otherwise select taskmaster or cursor-implementer from the task contract, and keep that one implementation child session for source implementation and remediation. Send remediation to the same implementation agent ID, independently inspect every diff, obtain tester and reviewer evidence, persist the artifact chain, and decide the terminal outcome. You do not change source or configuration directly.
+            You are a delegation and assurance operator. Default to implementation-lifecycle in delegated-reviewed mode for an approved-design lifecycle, honoring an explicit implementation-role choice and otherwise selecting taskmaster or cursor-implementer from the task contract. You do not change source or configuration directly. If the selected Skill or its required input is unavailable, report what is missing and stop.
           '';
           extensions = {};
         };
@@ -146,7 +146,7 @@ in
           allowAllTools = false;
           tools = [];
           instructions = ''
-            You are an explorer subagent. Load and execute codebase-exploration for the one bounded investigation handoff you receive. Gather evidence without changing source or configuration. Do not take ownership of the parent task.
+            You are a read-only explorer subagent. Default to codebase-exploration for one bounded investigation handoff. If the Skill or required local question is unavailable, report what is missing and stop.
           '';
           extensions = {};
         };
@@ -158,7 +158,7 @@ in
           allowAllTools = false;
           tools = [];
           instructions = ''
-            You are a validation specialist. Execute implementation-validation for the caller's explicit objective and requested focused, broad, or full level. Do not silently lower the level or change repository source or configuration. Always include design-required automated checks, escalate when evidence demands it, continue safe independent stages after an aggregate command stops, classify every failure and likely owner, and persist non-trivial failing runs through agent-artifact. Return concrete command evidence, requested and actual levels, blockers, and residual risk.
+            You are a read-only validation specialist. Default to implementation-validation for the caller's explicit objective and requested focused, broad, or full level. If the Skill or its required handoff input is unavailable, report what is missing and stop.
           '';
           extensions = {};
         };
@@ -170,7 +170,7 @@ in
           allowAllTools = false;
           tools = [];
           instructions = ''
-            You are a command-independent read-only review specialist. Execute adaptive-review in auto mode by default for a defined review target, including suitable standalone review without requiring a design or implementation report. Honor an explicit solo-only or orchestrated mode request. Remain solo unless concrete hard-gate evidence requires independent focused lenses; persist exactly one canonical review report and return its verdict, severity, execution mode, residual risk, and path. One invocation does not change source or configuration or remediate findings.
+            You are a command-independent read-only review specialist. Default to adaptive-review in auto mode for a defined review target, including standalone review without a design or implementation report, and honor an explicit mode override. If the Skill or its required target is unavailable, report what is missing and stop.
           '';
           extensions = {};
         };
@@ -243,6 +243,16 @@ in
       knownFacets = builtins.attrNames cfg.facetOwners;
       profileFacetsKnown = profile:
         builtins.all (facet: builtins.elem facet knownFacets) (builtins.attrNames profile.extensions);
+      configuredTools = profile: lib.unique (cfg.defaultTools ++ profile.tools);
+      childEffectiveTools = profile:
+        if builtins.elem "subagent" profile.availability
+        then builtins.filter (tool: !(builtins.elem tool myconfig.programs.pi-coding-agent.subagent.childExcludedTools)) (configuredTools profile)
+        else configuredTools profile;
+      subagentTaskToolsPaired = profile: let
+        tools = childEffectiveTools profile;
+      in
+        profile.allowAllTools
+        || (builtins.elem "subagent_run" tools == builtins.elem "subagent_submit" tools);
       topLevel = profile: builtins.elem "top-level" profile.availability;
       availabilityValid = profile: profile.availability != [] && lib.length profile.availability == lib.length (lib.unique profile.availability);
       modelValid = profile: builtins.match "[^/[:space:]]+/[^/[:space:]]+" profile.model != null;
@@ -318,6 +328,10 @@ in
         {
           assertion = builtins.all profileFacetsKnown profiles;
           message = "Pi profile extension facets must have a registered facet owner.";
+        }
+        {
+          assertion = builtins.all subagentTaskToolsPaired profiles;
+          message = "Pi profiles must allow all tools or expose subagent_run and subagent_submit together after shared defaults and child exclusions.";
         }
       ];
 

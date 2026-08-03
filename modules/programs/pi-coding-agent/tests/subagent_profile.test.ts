@@ -19,18 +19,23 @@ function profiles(): AgentProfileConfig {
         profiles: {
             scout: {
                 id: "11111111-1111-4111-8111-111111111111", model: "provider/model", availability: ["top-level", "subagent"] as ("top-level" | "subagent")[], description: "Read-only exploration.", thinkingLevel: "low", allowAllTools: false,
-                tools: ["read", "subagent_submit", "subagent_get", "subagent_wait"], instructions: "Scout only.",
+                tools: ["read", "subagent_run", "subagent_submit", "subagent_get", "subagent_wait"], instructions: "Scout only.",
                 extensions: { subagent: { allowedTargets: ["scout"] } },
             },
             artisan: {
                 id: "22222222-2222-4222-8222-222222222222", model: "provider/model", availability: ["top-level"] as ("top-level" | "subagent")[], description: "Bounded implementation.", thinkingLevel: "xhigh", allowAllTools: false,
-                tools: ["read", "bash", "edit", "write", "save_agent_artifact", "subagent_submit", "subagent_get", "subagent_wait", "subagent_stop"], instructions: "Implement and validate directly.",
+                tools: ["read", "bash", "edit", "write", "save_agent_artifact", "subagent_run", "subagent_submit", "subagent_get", "subagent_wait", "subagent_stop"], instructions: "Implement and validate directly.",
                 extensions: { subagent: { allowedTargets: ["focused-reviewer"] } },
             },
             operator: {
                 id: "33333333-3333-4333-8333-333333333333", model: "provider/model", availability: ["top-level", "subagent"] as ("top-level" | "subagent")[], description: "Delegated assurance.", thinkingLevel: "medium", allowAllTools: false,
-                tools: ["read", "subagent_submit", "subagent_get", "subagent_wait"], instructions: "Operate.",
+                tools: ["read", "subagent_run", "subagent_submit", "subagent_get", "subagent_wait"], instructions: "Operate.",
                 extensions: { subagent: { allowedTargets: ["scout"] } },
+            },
+            "session-parent": {
+                id: "66666666-6666-4666-8666-666666666667", model: "provider/model", availability: ["top-level", "subagent"] as ("top-level" | "subagent")[], description: "Existing-agent delegation only.", thinkingLevel: "medium", allowAllTools: false,
+                tools: ["read", "subagent_run", "subagent_submit"], instructions: "Reuse agents.",
+                extensions: { subagent: { allowedTargets: [] } },
             },
             "focused-reviewer": {
                 id: "44444444-4444-4444-8444-444444444444", model: "provider/model", availability: ["subagent"] as ("top-level" | "subagent")[], description: "Focused review.", thinkingLevel: "medium", allowAllTools: false,
@@ -80,7 +85,7 @@ function fakeControllerPi(flag = "scout") {
     let modelSucceeds = true;
     let toolApplicationFails = false;
     let activeToolApplications = 0;
-    let allTools = ["read", "bash", "edit", "write", "save_agent_artifact", "subagent_submit", "subagent_get", "subagent_wait", "subagent_stop", "project_tool"];
+    let allTools = ["read", "bash", "edit", "write", "save_agent_artifact", "subagent_run", "subagent_submit", "subagent_get", "subagent_wait", "subagent_stop", "project_tool"];
     const pi = {
         registerFlag() {}, getFlag: () => flag,
         registerCommand(name: string, value: any) { commands[name] = value; },
@@ -129,7 +134,7 @@ void test("profile extension applies CLI, guards tools, restores branches, and e
     registerProfileController(fake.pi, profilePath, {});
     await fake.handlers.session_start![0]!({ reason: "startup" }, fake.ctx);
 
-    assert.deepEqual(fake.activeTools(), ["read", "subagent_submit", "subagent_get", "subagent_wait"]);
+    assert.deepEqual(fake.activeTools(), ["read", "subagent_run", "subagent_submit", "subagent_get", "subagent_wait"]);
     assert.equal(fake.thinking(), "low");
     assert.equal(fake.events.length, 1);
     assert.deepEqual((fake.events[0]!.payload as any).profile.extensions.subagent.allowedTargets, ["scout"]);
@@ -179,7 +184,7 @@ void test("active tool synchronization is ordered, idempotent, and recovers drif
     registerProfileController(fake.pi, profilePath, {});
     await fake.handlers.session_start![0]!({ reason: "startup" }, fake.ctx);
 
-    const scoutTools = ["read", "subagent_submit", "subagent_get", "subagent_wait"];
+    const scoutTools = ["read", "subagent_run", "subagent_submit", "subagent_get", "subagent_wait"];
     assert.equal(fake.activeToolApplications(), 1);
     assert.deepEqual(await fake.handlers.input![0]!({ text: "ordinary text", source: "interactive" }, fake.ctx), { action: "continue" });
     await fake.handlers.before_agent_start![0]!({ systemPrompt: "base" }, fake.ctx);
@@ -356,6 +361,37 @@ function toolContext(root: string): ExtensionContext {
     return { cwd: root, sessionManager: { getSessionId: () => "session", getSessionFile: () => join(root, "session.jsonl") } } as ExtensionContext;
 }
 
+void test("every delegation-capable profile receives one shared task-specific-delta guideline", async () => {
+    const guideline = (tool: unknown) => (tool as { promptGuidelines?: readonly string[] }).promptGuidelines ?? [];
+    const taskGuidelines = {
+        subagent_run: guideline(createSubagentRunTool({} as never)),
+        subagent_submit: guideline(createSubagentSubmitTool({} as never)),
+    };
+
+    for (const profile of Object.values(profiles().profiles)) {
+        const activeTaskTools = profile.allowAllTools
+            ? ["subagent_run", "subagent_submit"] as const
+            : profile.tools.filter((name): name is keyof typeof taskGuidelines => name in taskGuidelines);
+        assert.equal(activeTaskTools.includes("subagent_run"), activeTaskTools.includes("subagent_submit"), profile.description);
+        if (activeTaskTools.length === 0) continue;
+        assert.deepEqual(activeTaskTools, ["subagent_run", "subagent_submit"]);
+        const shared = activeTaskTools.flatMap(name => taskGuidelines[name]).filter(line => line.includes("stable capability contract"));
+        assert.equal(shared.length, 1, profile.description);
+        assert.match(shared[0]!, /`subagent_run` and `subagent_submit`/);
+        assert.match(shared[0]!, /local objective and task-specific input or context/);
+        assert.match(shared[0]!, /Omit invocation instructions, skill paths, procedures, default constraints, and default output contracts/);
+        assert.match(shared[0]!, /intentionally override.*name the different skill/);
+        assert.match(shared[0]!, /skill path only for a task-specific resource that cannot be discovered by name/);
+    }
+
+    const profileNix = await readFile(join(import.meta.dirname, "..", "extensions", "profile", "default.nix"), "utf8");
+    assert.match(profileNix, /configuredTools = profile: lib\.unique \(cfg\.defaultTools \+\+ profile\.tools\)/);
+    assert.match(profileNix, /childEffectiveTools = profile:[\s\S]*subagent\.childExcludedTools/);
+    assert.match(profileNix, /subagentTaskToolsPaired/);
+    assert.match(profileNix, /builtins\.elem "subagent_run" tools == builtins\.elem "subagent_submit" tools/);
+    assert.match(profileNix, /profiles must allow all tools or expose subagent_run and subagent_submit together after shared defaults and child exclusions/);
+});
+
 void test("subagent_submit schema enum follows active allowed targets without a prompt catalog", async () => {
     const value = await fixture();
     const tools: Array<{ name: string; parameters: { properties?: { profile?: { enum?: string[]; description?: string } } } }> = [];
@@ -372,7 +408,7 @@ void test("subagent_submit schema enum follows active allowed targets without a 
             on(name: string, handler: (value: unknown) => void) { (eventHandlers[name] ??= []).push(handler); return () => {}; },
             emit(name: string, value: unknown) { for (const handler of eventHandlers[name] ?? []) handler(value); },
         },
-        getActiveTools: () => ["subagent_submit"],
+        getActiveTools: () => ["subagent_run", "subagent_submit"],
         async exec() { return { stdout: "123\t$0\tmain\t%1\n", stderr: "", code: 0, killed: false }; },
     } as unknown as ExtensionAPI;
     assert.equal(await registerSubagent(pi, { configPath: value.subagentPath, profileConfigPath: value.profilePath, env: { TMUX: "yes" } }), true);
@@ -389,7 +425,7 @@ void test("subagent_submit schema enum follows active allowed targets without a 
             description: "Review orchestration.",
             thinkingLevel: "medium",
             allowAllTools: false,
-            tools: ["subagent_submit"],
+            tools: ["subagent_run", "subagent_submit"],
             extensions: { subagent: { allowedTargets: ["focused-reviewer", "dissent-reviewer"] } },
         },
     });
@@ -430,13 +466,15 @@ void test("child effective profile drops excluded tools from snapshot and launch
         description: "Review orchestration.",
         thinkingLevel: "medium" as const,
         allowAllTools: false,
-        tools: ["read", "question", "subagent_submit", "subagent_get"],
+        tools: ["read", "question", "subagent_run", "subagent_submit", "subagent_get"],
         instructions: "orchestrate",
         extensions: { subagent: { allowedTargets: ["focused-reviewer"] } },
     };
     const effective = projectChildEffectiveProfile(profile, ["question"]);
-    assert.deepEqual(effective.tools, ["read", "subagent_submit", "subagent_get"]);
+    assert.deepEqual(effective.tools, ["read", "subagent_run", "subagent_submit", "subagent_get"]);
     assert.ok(!effective.tools.includes("question"));
+    const invalidSplit = projectChildEffectiveProfile(profile, ["subagent_run"]);
+    assert.deepEqual(invalidSplit.tools, ["read", "question", "subagent_submit", "subagent_get"]);
     const launch = piLaunchDescriptor({
         schemaVersion: 7,
         stateRoot: "/state",
@@ -456,10 +494,10 @@ void test("child effective profile drops excluded tools from snapshot and launch
         originSessionId: "origin",
     });
     const toolsArg = launch.args[launch.args.indexOf("--tools") + 1];
-    assert.equal(toolsArg, "read,subagent_submit,subagent_get");
+    assert.equal(toolsArg, "read,subagent_run,subagent_submit,subagent_get");
     assert.doesNotMatch(toolsArg ?? "", /question/);
     const resolved = JSON.parse(launch.env.PI_AGENT_RESOLVED_PROFILE!);
-    assert.deepEqual(resolved.profile.tools, ["read", "subagent_submit", "subagent_get"]);
+    assert.deepEqual(resolved.profile.tools, ["read", "subagent_run", "subagent_submit", "subagent_get"]);
 });
 
 void test("resolved child profile does not fall back to the default profile on apply failure", async () => {
@@ -467,11 +505,11 @@ void test("resolved child profile does not fall back to the default profile on a
     const profileConfig = restrictive.profileConfig;
     profileConfig.profiles.scout = {
         ...profileConfig.profiles.scout!,
-        tools: ["read", "question", "subagent_submit"],
+        tools: ["read", "question", "subagent_run", "subagent_submit"],
     };
     await writeFile(restrictive.profilePath, JSON.stringify(profileConfig));
     const childFake = fakeControllerPi("scout");
-    const available = ["read", "bash", "edit", "write", "subagent_submit", "subagent_get", "subagent_wait", "project_tool"];
+    const available = ["read", "bash", "edit", "write", "subagent_run", "subagent_submit", "subagent_get", "subagent_wait", "project_tool"];
     (childFake.pi as any).getAllTools = () => available.filter(name => name !== "question").map((name: string) => ({ name }));
     registerProfileController(childFake.pi, restrictive.profilePath, {
         PI_AGENT_RESOLVED_PROFILE: JSON.stringify({ name: "scout", profile: profileConfig.profiles.scout }),
