@@ -1,5 +1,6 @@
 import { CustomEditor, type ExtensionAPI, type ExtensionContext, type KeybindingsManager } from "@earendil-works/pi-coding-agent";
 import { isKeyRepeat, matchesKey, parseKey, type EditorTheme, type TUI } from "@earendil-works/pi-tui";
+import { loadFeatureKeybindings } from "./utilities/extension_keybindings.ts";
 
 const STOP_CONFIRMATION_STATUS_KEY = "interaction-policy-stop-confirmation";
 const STOP_CONFIRMATION_WINDOW_MS = 1500;
@@ -135,12 +136,13 @@ export class InteractionPolicyEditor extends CustomEditor {
     }
 
     override handleInput(data: string): void {
-        if (matchesKey(data, "ctrl+c")) {
+        if (this.#keybindings.matches(data, "app.clear")) {
+            const key = parseKey(data) ?? this.#keybindings.getKeys("app.clear").find(candidate => matchesKey(data, candidate)) ?? data;
             if (this.#context.isIdle()) {
                 this.#stopConfirmation.clear();
                 applyCtrlCPolicy(this.#context, this);
             } else {
-                this.#stopConfirmation.handle("ctrl+c", isKeyRepeat(data), () => applyCtrlCPolicy(this.#context, this));
+                this.#stopConfirmation.handle(key, isKeyRepeat(data), () => applyCtrlCPolicy(this.#context, this));
             }
             return;
         }
@@ -180,6 +182,7 @@ export function installInteractionPolicy(ctx: ExtensionContext): StopConfirmatio
 }
 
 export default function interactionPolicy(pi: ExtensionAPI): void {
+    loadFeatureKeybindings("interactionPolicy");
     let stopConfirmation: StopConfirmationController | undefined;
     pi.on("session_start", (_event, ctx) => {
         stopConfirmation?.clear();

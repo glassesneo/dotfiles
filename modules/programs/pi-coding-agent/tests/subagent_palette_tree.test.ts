@@ -218,7 +218,7 @@ void test("v rejects terminal agents without launching a preview", async () => {
         agentId: a, purpose: "done", state: "stopped", createdAt: "2026-01-01T00:00:00.000Z",
         childSessionId: "child-session", childSessionFile: "/tmp/history.jsonl",
     })]);
-    palette.handleInput("v");
+    palette.handleInput(" ");
     await new Promise(resolve => setImmediate(resolve));
     assert.equal(previews, 0);
     const rendered = palette.render(80).join("\n");
@@ -240,7 +240,7 @@ void test("v dismissal refreshes and retains the selected live agent", async () 
         discover: async () => ({ agents: [live], malformedCount: 0 }),
     });
     palette.replaceAgents([live]);
-    palette.handleInput("v");
+    palette.handleInput(" ");
     while (palette.acting) await new Promise(resolve => setImmediate(resolve));
     assert.equal(previews, 1);
     assert.equal(palette.selectedAgentId, a);

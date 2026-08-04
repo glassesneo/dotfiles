@@ -150,7 +150,8 @@ void test("profile extension applies CLI, guards tools, restores branches, and e
     await fake.commands.profile!.handler("full", fake.ctx);
     assert.equal(fake.events.length, 1);
     fake.passModel();
-    await fake.shortcuts["shift+tab"]!.handler(fake.ctx);
+    assert.equal(fake.shortcuts["shift+tab"], undefined);
+    await fake.commands.profile!.handler("full", fake.ctx);
     assert.equal(fake.events.length, 2);
     assert.equal((fake.events.at(-1)!.payload as any).reason, "switch");
 

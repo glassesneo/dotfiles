@@ -121,7 +121,7 @@ void test("live preview isolates one target, uses a read-only 80% popup, and cle
     assert.ok(!popup.includes("%parent"));
     assert.ok(calls.some(args => args.some(arg => arg.includes("list-clients") && arg.includes("resize-window -A") && arg.includes("#{client_width} #{client_height}") && arg.includes("resize-window -x \"$1\" -y \"$2\"") && arg.includes("$view") && arg.includes("@2") && arg.includes("env -u TMUX -u TMUX_PANE") && arg.includes("attach-session -r"))));
     assert.ok(calls.some(args => args.includes("bind-key") && args.includes("Enter") && args.includes("\\;") && args.includes("detach-client")));
-    for (const key of ["Escape", "C-c", "q"]) {
+    for (const key of ["Escape", "C-c"]) {
         assert.ok(calls.some(args => args.includes("bind-key") && args.includes(key) && args.includes("detach-client")));
     }
     assert.ok(calls.some(args => args.some(arg => arg.includes("'link-window'") && arg.includes(tmux.windowId))));

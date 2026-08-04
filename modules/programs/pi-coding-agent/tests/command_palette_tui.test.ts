@@ -47,7 +47,7 @@ void test("framed palette keeps four borders, textual marker, help, and never ov
     assert.match(rendered, /└/);
     assert.match(rendered, /│/);
     assert.match(rendered, /> Alpha/);
-    assert.match(rendered, /ctrl\+p up.*ctrl\+n down/);
+    assert.match(rendered, /Ctrl\+P up.*Ctrl\+N down/);
 });
 
 void test("filtering and status changes preserve overlay height and input position", () => {

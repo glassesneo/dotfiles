@@ -17,6 +17,7 @@ import {
     type QuestionResultDetails,
 } from "./decision_core.ts";
 import { loadQuestionKeymapConfig, questionHelp, resolveQuestionKeymap, resolveUiAction, type QuestionContext, type ResolvedQuestionKeymap, type UiAction } from "./decision_keymap.ts";
+import { keyLabel } from "./extension_keybindings.ts";
 
 interface DisplayChoice { value?: string; label: string; description?: string; synthetic?: boolean; }
 interface ChoiceDraft {
@@ -338,7 +339,7 @@ export class DecisionComponent implements Component, Focusable {
         if (this.#mode === "review") { this.#progress.moveTo(this.#lastEditedIndex); this.#openQuestion(true); this.#refresh(); return; }
         if (this.#questionSnapshot !== undefined) this.#drafts.set(this.#question().id, cloneDraft(this.#questionSnapshot));
         if (this.#fromReview) { this.#mode = "review"; this.#reviewIndex = this.#progress.index + 1; this.#fromReview = false; this.#reviewEntryWasResponded = false; this.#syncEditorFocus(); this.#refresh(); }
-        else { this.#validation = "Nothing to go back to. Press Ctrl-C to cancel all questions."; if (this.#question().kind === "text") this.#editor.setText(this.#textDraft().value); this.#refresh(); }
+        else { const cancel = (this.#keymap["question.common"].cancel ?? []).map(keyLabel).join("/"); this.#validation = `Nothing to go back to. Press ${cancel} to cancel all questions.`; if (this.#question().kind === "text") this.#editor.setText(this.#textDraft().value); this.#refresh(); }
     }
     #handleToggle(): void {
         const question = this.#question();

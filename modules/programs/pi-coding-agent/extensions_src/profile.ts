@@ -9,6 +9,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { truncateToWidth, visibleWidth, type EditorTheme, type TUI } from "@earendil-works/pi-tui";
 import { provideCommandPaletteContribution } from "./utilities/command_palette_contributions.ts";
+import { loadFeatureKeybindings } from "./utilities/extension_keybindings.ts";
 import { emitActiveProfile, type ActiveProfileReason } from "./utilities/profile_events.ts";
 import {
     validateProfileConfig,
@@ -78,6 +79,7 @@ export function registerProfileController(
     configPath = DEFAULT_CONFIG_PATH,
     env: NodeJS.ProcessEnv = process.env,
 ): { activeProfile: () => string | undefined } {
+    const profileKeys = loadFeatureKeybindings("profile").actions;
     let config: AgentProfileConfig | undefined;
     let activeName: string | undefined;
     let activeProfile: AgentProfile | undefined;
@@ -181,7 +183,7 @@ export function registerProfileController(
         },
     });
 
-    pi.registerShortcut("shift+tab", {
+    for (const shortcut of profileKeys.cycle ?? []) pi.registerShortcut(shortcut, {
         description: "Cycle agent profiles",
         async handler(ctx) {
             config ??= await loadAgentProfileConfig(configPath, env);

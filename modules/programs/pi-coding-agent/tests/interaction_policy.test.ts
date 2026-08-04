@@ -43,8 +43,8 @@ function editorFixture(idle = false) {
     let aborts = 0;
     const context = { isIdle: () => idle, abort: () => { aborts += 1; } };
     const keybindings = {
-        matches(data: string, action: string) { return data === "\x1b" && action === "app.interrupt"; },
-        getKeys(action: string) { return action === "app.interrupt" ? ["escape"] : []; },
+        matches(data: string, action: string) { return (data === "\x1b" && action === "app.interrupt") || (data === "\x03" && action === "app.clear"); },
+        getKeys(action: string) { return action === "app.interrupt" ? ["escape"] : action === "app.clear" ? ["ctrl+c"] : []; },
     };
     const stopConfirmation = new StopConfirmationController(text => { statuses.push(text); }, timers);
     const editor = new InteractionPolicyEditor(

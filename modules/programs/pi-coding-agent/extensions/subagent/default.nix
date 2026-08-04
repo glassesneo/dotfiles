@@ -44,7 +44,103 @@ in
         ];
       });
 
-    myconfig.always.programs.pi-coding-agent.profile.facetOwners.subagent = moduleName;
+    myconfig.always = {cfg, ...}: {
+      programs.pi-coding-agent.profile.facetOwners.subagent = moduleName;
+      programs.pi-coding-agent.keybindings.contributions = {
+        subagentPalette = {
+          enabled = cfg.enable;
+          actions = {
+            moveUp = {
+              role = "moveUp";
+              contexts = ["subagentPalette"];
+              required = true;
+              target = "extension";
+            };
+            moveDown = {
+              role = "moveDown";
+              contexts = ["subagentPalette"];
+              required = true;
+              target = "extension";
+            };
+            collapse = {
+              role = "collapse";
+              contexts = ["subagentPalette"];
+              required = true;
+              target = "extension";
+            };
+            expand = {
+              role = "expand";
+              contexts = ["subagentPalette"];
+              required = true;
+              target = "extension";
+            };
+            confirm = {
+              role = "confirm";
+              contexts = ["subagentPalette"];
+              required = true;
+              target = "extension";
+            };
+            cancel = {
+              role = "cancel";
+              contexts = ["subagentPalette"];
+              required = true;
+              target = "extension";
+            };
+            refresh = {
+              defaultKeys = [];
+              contexts = ["subagentPalette"];
+              required = false;
+              target = "extension";
+            };
+            stop = {
+              defaultKeys = ["x"];
+              contexts = ["subagentPalette"];
+              required = false;
+              target = "extension";
+            };
+            preview = {
+              defaultKeys = ["space"];
+              contexts = ["subagentPalette"];
+              required = false;
+              target = "extension";
+            };
+            unlink = {
+              defaultKeys = [];
+              contexts = ["subagentPalette"];
+              required = false;
+              target = "extension";
+            };
+          };
+        };
+        historyViewer = {
+          enabled = cfg.enable;
+          actions.exit = {
+            role = "exit";
+            contexts = ["historyViewer"];
+            required = true;
+            target = "native";
+            nativeAction = "app.exit";
+          };
+        };
+        tmuxPreview = {
+          enabled = cfg.enable;
+          actions = {
+            openFull = {
+              role = "confirm";
+              contexts = ["tmuxPreview"];
+              required = true;
+              target = "tmux";
+            };
+            cancel = {
+              role = "cancel";
+              contexts = ["tmuxPreview"];
+              required = true;
+              target = "tmux";
+            };
+          };
+        };
+      };
+    };
 
     myconfig.ifEnabled.programs.pi-coding-agent.profile.profiles = {
       full.extensions.subagent = {

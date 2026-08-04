@@ -1,50 +1,33 @@
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
-import { getAgentDir, type KeybindingsManager } from "@earendil-works/pi-coding-agent";
+import type { KeybindingsManager } from "@earendil-works/pi-coding-agent";
 import { matchesKey, type KeyId } from "@earendil-works/pi-tui";
 import { canonicalKeyId, isValidKeyId } from "./private_key_id.ts";
+import { keyLabel, loadFeatureKeybindings } from "./extension_keybindings.ts";
 
-export const questionContexts = [
-    "question.single", "question.multi", "question.text",
-    "question.note", "question.review", "question.common",
-] as const;
+export const questionContexts = ["question.single", "question.multi", "question.text", "question.note", "question.review", "question.common"] as const;
 export type QuestionContext = (typeof questionContexts)[number];
-
-export const uiActions = [
-    "accept", "newline", "next-question", "previous-question", "back", "cancel",
-    "move-up", "move-down", "toggle", "edit-note",
-] as const;
+export const uiActions = ["accept", "newline", "next-question", "previous-question", "back", "cancel", "move-up", "move-down", "toggle", "edit-note"] as const;
 export type UiAction = (typeof uiActions)[number];
 export type QuestionKeymapConfig = Partial<Record<QuestionContext, Partial<Record<UiAction, string[]>>>>;
 export type ResolvedQuestionKeymap = Record<QuestionContext, Partial<Record<UiAction, KeyId[]>>>;
 
-const DEFAULT_OVERRIDES: QuestionKeymapConfig = {
-    "question.common": {
-        "next-question": ["tab"], "previous-question": ["shift+tab"],
-        back: ["escape"], cancel: ["ctrl+c"],
-    },
-    "question.single": { "move-up": ["up", "k"], "move-down": ["down", "j"], toggle: ["space"], "edit-note": ["e"] },
-    "question.multi": { "move-up": ["up", "k"], "move-down": ["down", "j"], toggle: ["space"], "edit-note": ["e"] },
-    "question.review": { "move-up": ["up", "k"], "move-down": ["down", "j"] },
-};
-
-const inherited: Partial<Record<QuestionContext, Partial<Record<UiAction, string>>>> = {
-    "question.single": { accept: "tui.select.confirm", "move-up": "tui.select.up", "move-down": "tui.select.down" },
-    "question.multi": { accept: "tui.select.confirm", "move-up": "tui.select.up", "move-down": "tui.select.down" },
-    "question.text": { accept: "tui.input.submit", newline: "tui.input.newLine" },
-    "question.note": { accept: "tui.input.submit", newline: "tui.input.newLine" },
-    "question.review": { accept: "tui.select.confirm", "move-up": "tui.select.up", "move-down": "tui.select.down" },
+const DEFAULT_CONFIG: QuestionKeymapConfig = {
+    "question.common": { "next-question": ["ctrl+f"], "previous-question": ["ctrl+b"], back: ["escape"], cancel: ["ctrl+c"] },
+    "question.single": { accept: ["enter"], "move-up": ["ctrl+p"], "move-down": ["ctrl+n"], toggle: ["space"], "edit-note": ["e"] },
+    "question.multi": { accept: ["enter"], "move-up": ["ctrl+p"], "move-down": ["ctrl+n"], toggle: ["space"], "edit-note": ["e"] },
+    "question.review": { accept: ["enter"], "move-up": ["ctrl+p"], "move-down": ["ctrl+n"] },
+    "question.text": { accept: ["enter"], newline: ["shift+enter"] },
+    "question.note": { accept: ["enter"], newline: ["shift+enter"] },
 };
 
 const required: Partial<Record<QuestionContext, UiAction[][]>> = {
-    "question.single": [["accept"], ["move-up", "move-down"], ["back", "cancel"]],
-    "question.multi": [["accept"], ["move-up", "move-down"], ["back", "cancel"]],
+    "question.single": [["accept"], ["move-up"], ["move-down"], ["back", "cancel"]],
+    "question.multi": [["accept"], ["move-up"], ["move-down"], ["back", "cancel"]],
     "question.text": [["accept"], ["newline"], ["back", "cancel"]],
     "question.note": [["accept"], ["newline"], ["back", "cancel"]],
-    "question.review": [["accept"], ["move-up", "move-down", "next-question", "previous-question"], ["back", "cancel"]],
+    "question.review": [["accept"], ["move-up"], ["move-down"], ["next-question", "previous-question"], ["back", "cancel"]],
 };
 
-export function validateQuestionKeymapConfig(config: unknown, path = "question-keybindings.json"): QuestionKeymapConfig {
+export function validateQuestionKeymapConfig(config: unknown, path = "extension-keybindings.json"): QuestionKeymapConfig {
     if (config === null || typeof config !== "object" || Array.isArray(config)) throw new Error(`${path}: expected an object`);
     for (const [context, actions] of Object.entries(config)) {
         if (!(questionContexts as readonly string[]).includes(context)) throw new Error(`${path}: unknown context ${context}`);
@@ -58,70 +41,40 @@ export function validateQuestionKeymapConfig(config: unknown, path = "question-k
     return config as QuestionKeymapConfig;
 }
 
-export function loadQuestionKeymapConfig(agentDir = getAgentDir()): { config: QuestionKeymapConfig; path: string } {
-    const path = join(agentDir, "question-keybindings.json");
-    if (!existsSync(path)) return { config: DEFAULT_OVERRIDES, path: "<bundled question-keybindings.json>" };
-    let parsed: unknown;
-    try { parsed = JSON.parse(readFileSync(path, "utf8")); }
-    catch (error) { throw new Error(`${path}: ${error instanceof Error ? error.message : String(error)}`); }
-    return { config: validateQuestionKeymapConfig(parsed, path), path };
+export function loadQuestionKeymapConfig(agentDir?: string): { config: QuestionKeymapConfig; path: string } {
+    const loaded = loadFeatureKeybindings("question", agentDir);
+    const get = (name: string): KeyId[] => loaded.actions[name] ?? [];
+    const choice = { accept: get("choice.accept"), "move-up": get("choice.move-up"), "move-down": get("choice.move-down"), toggle: get("choice.toggle"), "edit-note": get("choice.edit-note") };
+    return { path: loaded.path, config: {
+        "question.common": { "next-question": get("common.next-question"), "previous-question": get("common.previous-question"), back: get("common.back"), cancel: get("common.cancel") },
+        "question.single": choice, "question.multi": choice,
+        "question.review": { accept: get("review.accept"), "move-up": get("review.move-up"), "move-down": get("review.move-down") },
+        "question.text": { accept: get("text.accept"), newline: get("text.newline") },
+        "question.note": { accept: get("text.accept"), newline: get("text.newline") },
+    } };
 }
 
-export function resolveQuestionKeymap(manager: Pick<KeybindingsManager, "getKeys">, config: QuestionKeymapConfig = DEFAULT_OVERRIDES, path = "question-keybindings.json"): ResolvedQuestionKeymap {
+export function resolveQuestionKeymap(_manager: Pick<KeybindingsManager, "getKeys">, config: QuestionKeymapConfig = DEFAULT_CONFIG, path = "extension-keybindings.json"): ResolvedQuestionKeymap {
     validateQuestionKeymapConfig(config, path);
-    const result = Object.fromEntries(questionContexts.map(context => [context, {}])) as ResolvedQuestionKeymap;
-    for (const context of questionContexts) {
-        const map = result[context];
-        for (const [action, binding] of Object.entries(inherited[context] ?? {}) as Array<[UiAction, string]>) {
-            map[action] = [...manager.getKeys(binding as never)];
-        }
-        for (const [action, keys] of Object.entries(DEFAULT_OVERRIDES[context] ?? {}) as Array<[UiAction, string[]]>) map[action] = keys as KeyId[];
-        for (const [action, keys] of Object.entries(config[context] ?? {}) as Array<[UiAction, string[]]>) map[action] = keys as KeyId[];
-    }
+    const result = Object.fromEntries(questionContexts.map(context => [context, { ...DEFAULT_CONFIG[context], ...config[context] }])) as ResolvedQuestionKeymap;
     for (const context of questionContexts.filter(value => value !== "question.common")) {
         const effective = { ...result["question.common"], ...result[context] };
         const byKey = new Map<string, UiAction[]>();
-        for (const [action, keys] of Object.entries(effective) as Array<[UiAction, KeyId[]]>) {
-            for (const key of keys) {
-                const canonical = canonicalKeyId(key);
-                byKey.set(canonical, [...(byKey.get(canonical) ?? []), action]);
-            }
+        for (const [action, keys] of Object.entries(effective) as Array<[UiAction, KeyId[]]>) for (const key of keys) {
+            const canonical = canonicalKeyId(key); byKey.set(canonical, [...(byKey.get(canonical) ?? []), action]);
         }
-        for (const [key, actions] of byKey) if (actions.length > 1) {
-            throw new Error(`${path}: ${context}: key ${key} conflicts between actions ${actions.join(", ")}`);
-        }
-        for (const alternatives of required[context] ?? []) if (!alternatives.some(action => (effective[action]?.length ?? 0) > 0)) {
-            throw new Error(`${path}: ${context}: required action missing (${alternatives.join(" or ")})`);
-        }
+        for (const [key, actions] of byKey) if (actions.length > 1) throw new Error(`${path}: ${context}: key ${key} conflicts between actions ${actions.join(", ")}`);
+        for (const alternatives of required[context] ?? []) if (!alternatives.some(action => (effective[action]?.length ?? 0) > 0)) throw new Error(`${path}: ${context}: required action missing (${alternatives.join(" or ")})`);
     }
     return result;
 }
 
-function effectiveMap(keymap: ResolvedQuestionKeymap, context: QuestionContext): Partial<Record<UiAction, KeyId[]>> {
-    return context === "question.common" ? keymap[context] : { ...keymap["question.common"], ...keymap[context] };
-}
-
+function effectiveMap(keymap: ResolvedQuestionKeymap, context: QuestionContext): Partial<Record<UiAction, KeyId[]>> { return context === "question.common" ? keymap[context] : { ...keymap["question.common"], ...keymap[context] }; }
 export function resolveUiAction(data: string, context: QuestionContext, keymap: ResolvedQuestionKeymap): UiAction | undefined {
     const matches: Array<{ action: UiAction; specificity: number }> = [];
-    for (const [action, keys] of Object.entries(effectiveMap(keymap, context)) as Array<[UiAction, KeyId[]]>) {
-        for (const key of keys) if (matchesKey(data, key)) {
-            matches.push({ action, specificity: key.split("+").length - 1 });
-        }
-    }
-    // Some terminals encode Ctrl-J as LF, which also matches Enter. Prefer the
-    // explicitly modified binding so newline remains distinguishable from submit.
-    matches.sort((left, right) => right.specificity - left.specificity);
-    return matches[0]?.action;
+    for (const [action, keys] of Object.entries(effectiveMap(keymap, context)) as Array<[UiAction, KeyId[]]>) for (const key of keys) if (matchesKey(data, key)) matches.push({ action, specificity: key.split("+").length - 1 });
+    matches.sort((left, right) => right.specificity - left.specificity); return matches[0]?.action;
 }
-
-const actionLabels: Record<UiAction, string> = {
-    accept: "confirm", newline: "newline", "next-question": "next", "previous-question": "previous",
-    back: "back", cancel: "cancel", "move-up": "up", "move-down": "down", toggle: "toggle",
-    "edit-note": "edit note",
-};
-export function detailedQuestionHelp(context: QuestionContext, keymap: ResolvedQuestionKeymap): Array<{ action: UiAction; keys: string[]; label: string }> {
-    return (Object.entries(effectiveMap(keymap, context)) as Array<[UiAction, KeyId[]]>).filter(([, keys]) => keys.length > 0).map(([action, keys]) => ({ action, keys: [...keys], label: actionLabels[action] }));
-}
-export function questionHelp(context: QuestionContext, keymap: ResolvedQuestionKeymap): string {
-    return detailedQuestionHelp(context, keymap).map(item => `${item.keys[0]} ${item.label}`).join(" • ");
-}
+const actionLabels: Record<UiAction, string> = { accept: "confirm", newline: "newline", "next-question": "next", "previous-question": "previous", back: "back", cancel: "cancel", "move-up": "up", "move-down": "down", toggle: "toggle", "edit-note": "edit note" };
+export function detailedQuestionHelp(context: QuestionContext, keymap: ResolvedQuestionKeymap): Array<{ action: UiAction; keys: string[]; label: string }> { return (Object.entries(effectiveMap(keymap, context)) as Array<[UiAction, KeyId[]]>).filter(([, keys]) => keys.length > 0).map(([action, keys]) => ({ action, keys: [...keys], label: actionLabels[action] })); }
+export function questionHelp(context: QuestionContext, keymap: ResolvedQuestionKeymap): string { return detailedQuestionHelp(context, keymap).map(item => `${keyLabel(item.keys[0]!)} ${item.label}`).join(" • "); }

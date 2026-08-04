@@ -54,149 +54,160 @@ in
         facetOwners = attrsOfOption str {};
       });
 
-    myconfig.always.programs.pi-coding-agent.profile = {
-      defaultTools = ["read" "grep" "find" "ls" "bash"];
-      promptRoutes = {
-        spec-design = "scout";
-        idea-design = "scout";
-        act = "artisan";
-        impl = "taskmaster";
-        execute = "taskmaster";
-        operate = "operator";
-        review = "reviewer";
+    myconfig.always = {cfg, ...}: {
+      programs.pi-coding-agent.keybindings.contributions.profile = {
+        enabled = cfg.enable;
+        actions.cycle = {
+          defaultKeys = [];
+          contexts = ["app.global"];
+          required = false;
+          target = "shortcut";
+        };
       };
-      profiles = {
-        full = {
-          model = "openai-codex/gpt-5.6-sol";
-          availability = ["top-level" "subagent"];
-          description = "Use for work that needs broad coding capability.";
-          thinkingLevel = "medium";
-          allowAllTools = true;
-          tools = [];
-          instructions = explorerDelegationInstructions;
-          extensions = {};
+      programs.pi-coding-agent.profile = {
+        defaultTools = ["read" "grep" "find" "ls" "bash"];
+        promptRoutes = {
+          spec-design = "scout";
+          idea-design = "scout";
+          act = "artisan";
+          impl = "taskmaster";
+          execute = "taskmaster";
+          operate = "operator";
+          review = "reviewer";
         };
-        taskmaster = {
-          model = "openai-codex/gpt-5.6-sol";
-          availability = ["top-level" "subagent"];
-          description = "Use for source-changing implementation, repair, and implementation lifecycle work.";
-          thinkingLevel = "medium";
-          allowAllTools = false;
-          tools = ["write" "edit"];
-          instructions = ''
-            You are a source-changing implementation specialist. Default to source-implementation for a bounded source-only handoff and implementation-lifecycle for a complete approved-design lifecycle. If the selected Skill or its required input is unavailable, report what is missing and stop.
-          '';
-          extensions = {};
-        };
-        artisan = {
-          model = "openai-codex/gpt-5.6-luna";
-          availability = ["top-level"];
-          description = "Use to implement bounded changes with self-validation and optional focused review remediation.";
-          thinkingLevel = "xhigh";
-          allowAllTools = false;
-          tools = ["write" "edit"];
-          instructions = ''
-            You are a command-independent source-changing artisan. Follow the user's current objective or a small approved design and execute lightweight-implementation-lifecycle in direct mode unless the current request explicitly selects another mode. Own bounded implementation, proportionate self-validation, and evidence-backed repair. Do not delegate source implementation or validation. Use one reviewer in solo-only mode only when review is explicitly requested, then own finding triage, source repair, validation, and the terminal outcome. Stop rather than materially expanding the agreed scope or scale. Return concrete changed-file, diff, validation, deviation, review, and unresolved-risk evidence required by the selected lifecycle mode.
-          '';
-          extensions = {};
-        };
-        scout = {
-          model = "openai-codex/gpt-5.6-sol";
-          availability = ["top-level" "subagent"];
-          description = "Use for read-only investigation, evidence gathering, and design dialogue.";
-          thinkingLevel = "high";
-          allowAllTools = false;
-          tools = [];
-          instructions = ''
-            You are a read-only investigation and design specialist. Follow the user's current objective without requiring a command. Use ideation-design when direction is open and preference-led, specification-design when the user already holds most intended behavior, and ordinary read-only investigation when no design artifact is requested. Do not force research into design dialogue. Preserve user-owned decisions and return evidence, explicit uncertainty, or the requested approved artifact.
+        profiles = {
+          full = {
+            model = "openai-codex/gpt-5.6-sol";
+            availability = ["top-level" "subagent"];
+            description = "Use for work that needs broad coding capability.";
+            thinkingLevel = "medium";
+            allowAllTools = true;
+            tools = [];
+            instructions = explorerDelegationInstructions;
+            extensions = {};
+          };
+          taskmaster = {
+            model = "openai-codex/gpt-5.6-sol";
+            availability = ["top-level" "subagent"];
+            description = "Use for source-changing implementation, repair, and implementation lifecycle work.";
+            thinkingLevel = "medium";
+            allowAllTools = false;
+            tools = ["write" "edit"];
+            instructions = ''
+              You are a source-changing implementation specialist. Default to source-implementation for a bounded source-only handoff and implementation-lifecycle for a complete approved-design lifecycle. If the selected Skill or its required input is unavailable, report what is missing and stop.
+            '';
+            extensions = {};
+          };
+          artisan = {
+            model = "openai-codex/gpt-5.6-luna";
+            availability = ["top-level"];
+            description = "Use to implement bounded changes with self-validation and optional focused review remediation.";
+            thinkingLevel = "xhigh";
+            allowAllTools = false;
+            tools = ["write" "edit"];
+            instructions = ''
+              You are a command-independent source-changing artisan. Follow the user's current objective or a small approved design and execute lightweight-implementation-lifecycle in direct mode unless the current request explicitly selects another mode. Own bounded implementation, proportionate self-validation, and evidence-backed repair. Do not delegate source implementation or validation. Use one reviewer in solo-only mode only when review is explicitly requested, then own finding triage, source repair, validation, and the terminal outcome. Stop rather than materially expanding the agreed scope or scale. Return concrete changed-file, diff, validation, deviation, review, and unresolved-risk evidence required by the selected lifecycle mode.
+            '';
+            extensions = {};
+          };
+          scout = {
+            model = "openai-codex/gpt-5.6-sol";
+            availability = ["top-level" "subagent"];
+            description = "Use for read-only investigation, evidence gathering, and design dialogue.";
+            thinkingLevel = "high";
+            allowAllTools = false;
+            tools = [];
+            instructions = ''
+              You are a read-only investigation and design specialist. Follow the user's current objective without requiring a command. Use ideation-design when direction is open and preference-led, specification-design when the user already holds most intended behavior, and ordinary read-only investigation when no design artifact is requested. Do not force research into design dialogue. Preserve user-owned decisions and return evidence, explicit uncertainty, or the requested approved artifact.
 
-            ${explorerDelegationInstructions}
-          '';
-          extensions = {};
-        };
-        operator = {
-          model = "openai-codex/gpt-5.6-sol";
-          availability = ["top-level" "subagent"];
-          description = "Use to decompose work, delegate local objectives, verify evidence, and own the parent outcome.";
-          thinkingLevel = "high";
-          allowAllTools = false;
-          tools = [];
-          instructions = ''
-            You are a delegation and assurance operator. Default to implementation-lifecycle in delegated-reviewed mode for an approved-design lifecycle, honoring an explicit implementation-role choice and otherwise selecting taskmaster or cursor-implementer from the task contract. You do not change source or configuration directly. If the selected Skill or its required input is unavailable, report what is missing and stop.
-          '';
-          extensions = {};
-        };
-        cursor-implementer = {
-          model = "cursor/cursor-grok-4.5-high-fast";
-          availability = ["subagent"];
-          description = "Use for bounded source implementation and remediation through Cursor Agent.";
-          thinkingLevel = null;
-          allowAllTools = false;
-          tools = [];
-          instructions = ''
-            Implement the delegated bounded source change in the current repository workspace. Follow repository guidance and remain within the supplied objective and constraints. Inspect the resulting diff and run proportionate validation. Return changed files, validation evidence, any deviation from the handoff, and unresolved risks or blockers.
-          '';
-          extensions = {};
-        };
-        explorer = {
-          model = "openai-codex/gpt-5.6-luna";
-          availability = ["subagent"];
-          description = "Use for source-read-only codebase exploration that returns evidence for one parent-localized question.";
-          thinkingLevel = "medium";
-          allowAllTools = false;
-          tools = [];
-          instructions = ''
-            You are a read-only explorer subagent. Default to codebase-exploration for one bounded investigation handoff. If the Skill or required local question is unavailable, report what is missing and stop.
-          '';
-          extensions = {};
-        };
-        tester = {
-          model = "openai-codex/gpt-5.6-luna";
-          availability = ["top-level" "subagent"];
-          description = "Use for focused, broad, or full automated validation without changing repository source.";
-          thinkingLevel = "medium";
-          allowAllTools = false;
-          tools = [];
-          instructions = ''
-            You are a read-only validation specialist. Default to implementation-validation for the caller's explicit objective and requested focused, broad, or full level. If the Skill or its required handoff input is unavailable, report what is missing and stop.
-          '';
-          extensions = {};
-        };
-        reviewer = {
-          model = "openai-codex/gpt-5.6-sol";
-          availability = ["top-level" "subagent"];
-          description = "Use for adaptive read-only review that is solo-biased and escalates only on concrete hard-risk evidence.";
-          thinkingLevel = "high";
-          allowAllTools = false;
-          tools = [];
-          instructions = ''
-            You are a command-independent read-only review specialist. Default to adaptive-review in auto mode for a defined review target, including standalone review without a design or implementation report, and honor an explicit mode override. If the Skill or its required target is unavailable, report what is missing and stop.
-          '';
-          extensions = {};
-        };
-        focused-reviewer = {
-          model = "openai-codex/gpt-5.6-terra";
-          availability = ["subagent"];
-          description = "Use for a read-only review limited to a caller-specified lens; include the lens, review target, and higher-level design or implementation report in the delegated prompt.";
-          thinkingLevel = "medium";
-          allowAllTools = false;
-          tools = [];
-          instructions = ''
-            Review only the caller-specified lens and target without changing source or configuration. Return severity-ordered findings with precise evidence, then residual risks, skipped areas, and verification gaps. Do not broaden into orchestration or persist a review report.
-          '';
-          extensions = {};
-        };
-        dissent-reviewer = {
-          model = "openai-codex/gpt-5.6-luna";
-          availability = ["subagent"];
-          description = "Use once to challenge tentative review findings, severity, evidence, and uncovered perspectives from a bounded dossier.";
-          thinkingLevel = "high";
-          allowAllTools = false;
-          tools = [];
-          instructions = ''
-            Independently challenge the supplied bounded review dossier without changing source or configuration. For each disputed item, state supported, weakened, rejected, or severity-adjusted with evidence; identify material missed perspectives and remaining uncertainty. Do not repeat the full review or persist a report.
-          '';
-          extensions = {};
+              ${explorerDelegationInstructions}
+            '';
+            extensions = {};
+          };
+          operator = {
+            model = "openai-codex/gpt-5.6-sol";
+            availability = ["top-level" "subagent"];
+            description = "Use to decompose work, delegate local objectives, verify evidence, and own the parent outcome.";
+            thinkingLevel = "high";
+            allowAllTools = false;
+            tools = [];
+            instructions = ''
+              You are a delegation and assurance operator. Default to implementation-lifecycle in delegated-reviewed mode for an approved-design lifecycle, honoring an explicit implementation-role choice and otherwise selecting taskmaster or cursor-implementer from the task contract. You do not change source or configuration directly. If the selected Skill or its required input is unavailable, report what is missing and stop.
+            '';
+            extensions = {};
+          };
+          cursor-implementer = {
+            model = "cursor/cursor-grok-4.5-high-fast";
+            availability = ["subagent"];
+            description = "Use for bounded source implementation and remediation through Cursor Agent.";
+            thinkingLevel = null;
+            allowAllTools = false;
+            tools = [];
+            instructions = ''
+              Implement the delegated bounded source change in the current repository workspace. Follow repository guidance and remain within the supplied objective and constraints. Inspect the resulting diff and run proportionate validation. Return changed files, validation evidence, any deviation from the handoff, and unresolved risks or blockers.
+            '';
+            extensions = {};
+          };
+          explorer = {
+            model = "openai-codex/gpt-5.6-luna";
+            availability = ["subagent"];
+            description = "Use for source-read-only codebase exploration that returns evidence for one parent-localized question.";
+            thinkingLevel = "medium";
+            allowAllTools = false;
+            tools = [];
+            instructions = ''
+              You are a read-only explorer subagent. Default to codebase-exploration for one bounded investigation handoff. If the Skill or required local question is unavailable, report what is missing and stop.
+            '';
+            extensions = {};
+          };
+          tester = {
+            model = "openai-codex/gpt-5.6-luna";
+            availability = ["top-level" "subagent"];
+            description = "Use for focused, broad, or full automated validation without changing repository source.";
+            thinkingLevel = "medium";
+            allowAllTools = false;
+            tools = [];
+            instructions = ''
+              You are a read-only validation specialist. Default to implementation-validation for the caller's explicit objective and requested focused, broad, or full level. If the Skill or its required handoff input is unavailable, report what is missing and stop.
+            '';
+            extensions = {};
+          };
+          reviewer = {
+            model = "openai-codex/gpt-5.6-sol";
+            availability = ["top-level" "subagent"];
+            description = "Use for adaptive read-only review that is solo-biased and escalates only on concrete hard-risk evidence.";
+            thinkingLevel = "high";
+            allowAllTools = false;
+            tools = [];
+            instructions = ''
+              You are a command-independent read-only review specialist. Default to adaptive-review in auto mode for a defined review target, including standalone review without a design or implementation report, and honor an explicit mode override. If the Skill or its required target is unavailable, report what is missing and stop.
+            '';
+            extensions = {};
+          };
+          focused-reviewer = {
+            model = "openai-codex/gpt-5.6-terra";
+            availability = ["subagent"];
+            description = "Use for a read-only review limited to a caller-specified lens; include the lens, review target, and higher-level design or implementation report in the delegated prompt.";
+            thinkingLevel = "medium";
+            allowAllTools = false;
+            tools = [];
+            instructions = ''
+              Review only the caller-specified lens and target without changing source or configuration. Return severity-ordered findings with precise evidence, then residual risks, skipped areas, and verification gaps. Do not broaden into orchestration or persist a review report.
+            '';
+            extensions = {};
+          };
+          dissent-reviewer = {
+            model = "openai-codex/gpt-5.6-luna";
+            availability = ["subagent"];
+            description = "Use once to challenge tentative review findings, severity, evidence, and uncovered perspectives from a bounded dossier.";
+            thinkingLevel = "high";
+            allowAllTools = false;
+            tools = [];
+            instructions = ''
+              Independently challenge the supplied bounded review dossier without changing source or configuration. For each disputed item, state supported, weakened, rejected, or severity-adjusted with evidence; identify material missed perspectives and remaining uncertainty. Do not repeat the full review or persist a report.
+            '';
+            extensions = {};
+          };
         };
       };
     };

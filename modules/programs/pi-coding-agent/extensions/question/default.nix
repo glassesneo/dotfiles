@@ -4,15 +4,102 @@ delib.module {
 
   options = delib.singleCascadeEnableOption;
 
+  myconfig.always = {cfg, ...}: {
+    programs.pi-coding-agent.keybindings.contributions.question = {
+      enabled = cfg.enable;
+      actions = {
+        "common.next-question" = {
+          role = "next";
+          contexts = ["question.common"];
+          required = true;
+          target = "extension";
+        };
+        "common.previous-question" = {
+          role = "previous";
+          contexts = ["question.common"];
+          required = true;
+          target = "extension";
+        };
+        "common.back" = {
+          role = "back";
+          contexts = ["question.common"];
+          required = true;
+          target = "extension";
+        };
+        "common.cancel" = {
+          defaultKeys = ["ctrl+c"];
+          contexts = ["question.common"];
+          required = true;
+          target = "extension";
+        };
+        "choice.accept" = {
+          role = "confirm";
+          contexts = ["question.choice"];
+          required = true;
+          target = "extension";
+        };
+        "choice.move-up" = {
+          role = "moveUp";
+          contexts = ["question.choice"];
+          required = true;
+          target = "extension";
+        };
+        "choice.move-down" = {
+          role = "moveDown";
+          contexts = ["question.choice"];
+          required = true;
+          target = "extension";
+        };
+        "choice.toggle" = {
+          role = "itemToggle";
+          contexts = ["question.choice"];
+          required = false;
+          target = "extension";
+        };
+        "choice.edit-note" = {
+          defaultKeys = ["e"];
+          contexts = ["question.choice"];
+          required = false;
+          target = "extension";
+        };
+        "review.accept" = {
+          role = "confirm";
+          contexts = ["question.review"];
+          required = true;
+          target = "extension";
+        };
+        "review.move-up" = {
+          role = "moveUp";
+          contexts = ["question.review"];
+          required = true;
+          target = "extension";
+        };
+        "review.move-down" = {
+          role = "moveDown";
+          contexts = ["question.review"];
+          required = true;
+          target = "extension";
+        };
+        "text.accept" = {
+          role = "submit";
+          contexts = ["question.text"];
+          required = true;
+          target = "extension";
+        };
+        "text.newline" = {
+          role = "newline";
+          contexts = ["question.text"];
+          required = true;
+          target = "extension";
+        };
+      };
+    };
+  };
+
   myconfig.ifEnabled.programs.pi-coding-agent.profile.defaultTools = ["question"];
   myconfig.ifEnabled.programs.pi-coding-agent.subagent.childExcludedTools = ["question"];
 
-  home.ifEnabled = {myconfig, ...}: {
-    programs.pi-coding-agent.settings.extensions = [
-      "${./../../extensions_src}/question.ts"
-    ];
-
-    home.file."${myconfig.programs.pi-coding-agent.configDir}/question-keybindings.json".source =
-      ../../extensions_src/utilities/question-keybindings.json;
-  };
+  home.ifEnabled.programs.pi-coding-agent.settings.extensions = [
+    "${./../../extensions_src}/question.ts"
+  ];
 }

@@ -22,6 +22,8 @@ const testKeymapConfig = {
     "question.single": { "move-up": ["up", "k"], "move-down": ["down", "j"], toggle: ["space"], "edit-note": ["e"] },
     "question.multi": { "move-up": ["up", "k"], "move-down": ["down", "j"], toggle: ["space"], "edit-note": ["e"] },
     "question.review": { "move-up": ["up", "k"], "move-down": ["down", "j"] },
+    "question.text": { newline: ["ctrl+j"] },
+    "question.note": { newline: ["ctrl+j"] },
 };
 const single: QuestionItem = { id: "single", prompt: "Choose one", kind: "single", options: [{ value: "a", label: "Alpha", description: "First option" }, { value: "b", label: "Beta" }] };
 
@@ -271,7 +273,7 @@ void test("review j/k navigation and hybrid return focus follow response state",
 
 void test("Esc backs out without cancelling; Ctrl-C cancels the entire call", () => {
     const h = harness([single]);
-    h.component.handleInput(keys.escape); assert.equal(h.results.length, 0); assert.match(h.component.render(80).join("\n"), /Ctrl-C/);
+    h.component.handleInput(keys.escape); assert.equal(h.results.length, 0); assert.match(h.component.render(80).join("\n"), /Ctrl\+C/);
     h.component.handleInput(keys.ctrlC);
     assert.deepEqual(h.results, [{ status: "cancelled", responses: {}, currentQuestionId: "single" }]);
 });

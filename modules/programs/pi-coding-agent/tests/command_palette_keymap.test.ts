@@ -1,19 +1,16 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
-import { paletteActions, resolvePaletteKeymap, validatePaletteKeymapConfig } from "../extensions_src/utilities/command_palette_keymap.ts";
+import { loadPaletteKeymap, paletteActions, resolvePaletteKeymap, validatePaletteKeymapConfig } from "../extensions_src/utilities/command_palette_keymap.ts";
 import { invalidKeyIds, validKeyIds } from "./key_grammar_cases.ts";
 
-void test("deployed palette keymap satisfies the action grammar", () => {
-    const config = JSON.parse(readFileSync(new URL("../extensions_src/utilities/command-palette-keybindings.json", import.meta.url), "utf8"));
-    const resolved = resolvePaletteKeymap(config);
-    assert.doesNotThrow(() => resolved);
-    assert.equal(paletteActions.length, 9);
-    assert.deepEqual(resolved.moveUp, ["ctrl+p", "k"]);
-    assert.deepEqual(resolved.moveDown, ["ctrl+n", "j"]);
-    assert.deepEqual(resolved.collapse, ["left", "h"]);
-    assert.deepEqual(resolved.expand, ["right", "l"]);
-    assert.ok(Object.values(resolved).every(keys => keys.length > 0));
+void test("generated palette keymap satisfies the action contract", () => {
+    const resolved = loadPaletteKeymap().keymap;
+    assert.equal(paletteActions.length, 11);
+    assert.deepEqual(resolved.moveUp, ["ctrl+p"]);
+    assert.deepEqual(resolved.moveDown, ["ctrl+n"]);
+    assert.deepEqual(resolved.collapse, ["left"]);
+    assert.deepEqual(resolved.expand, ["right"]);
+    assert.deepEqual(resolved.refresh, []);
 });
 
 void test("palette key validation preserves the shared key ID grammar", () => {
@@ -24,7 +21,7 @@ void test("palette key validation preserves the shared key ID grammar", () => {
 void test("palette keymap validates actions, keys, required bindings, and collisions", () => {
     assert.throws(() => validatePaletteKeymapConfig({ unknown: ["x"] }), /unknown action/);
     assert.throws(() => validatePaletteKeymapConfig({ open: ["not-a-key"] }), /invalid key/);
-    assert.throws(() => resolvePaletteKeymap({ moveUp: [] }), /required action moveUp/);
+    assert.throws(() => resolvePaletteKeymap({ moveUp: [] }, "test", ["moveUp"]), /required action moveUp/);
     assert.throws(() => resolvePaletteKeymap({ moveUp: ["ctrl+n"] }), /conflicts between moveUp, moveDown/);
     assert.throws(() => resolvePaletteKeymap({ moveUp: ["ctrl+shift+n"], moveDown: ["shift+ctrl+n"] }), /conflicts between moveUp, moveDown/);
     assert.throws(() => resolvePaletteKeymap({ collapse: ["enter"] }), /conflicts between/);

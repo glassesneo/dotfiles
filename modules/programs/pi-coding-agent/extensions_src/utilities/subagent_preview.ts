@@ -22,11 +22,29 @@ export interface LivePreviewTestSeams {
     sleep?: (ms: number) => Promise<void>;
     inspectTarget?: typeof inspectAgentTmux;
     monitorIntervalMs?: number;
+    bindings?: Record<string, readonly string[]>;
 }
 
 const at = (socket: string, args: string[]): string[] => ["-S", socket, ...args];
 const shellQuote = (value: string): string => `'${value.replaceAll("'", `'"'"'`)}'`;
 const ABSENT_WRAPPER_ERROR = /no server running|no such file or directory|connection refused/iu;
+
+const TMUX_KEY_NAMES: Record<string, string> = {
+    escape: "Escape", esc: "Escape", enter: "Enter", return: "Enter", tab: "Tab", space: "Space",
+    backspace: "BSpace", delete: "DC", home: "Home", end: "End", pageUp: "PPage", pageDown: "NPage",
+    up: "Up", down: "Down", left: "Left", right: "Right",
+};
+
+export function tmuxKeyToken(key: string): string {
+    const parts = key.split("+");
+    const base = parts.at(-1)!;
+    const modifiers = parts.slice(0, -1);
+    if (modifiers.some(modifier => modifier !== "ctrl" && modifier !== "shift")) throw new Error(`Unsupported tmux key modifier in ${key}`);
+    const token = TMUX_KEY_NAMES[base] ?? (/^[a-z0-9]$/u.test(base) || /^f(?:[1-9]|1[0-2])$/u.test(base) ? base : undefined);
+    if (!token) throw new Error(`Unsupported tmux key ${key}`);
+    const prefix = modifiers.map(modifier => modifier === "ctrl" ? "C" : "S").join("-");
+    return prefix ? `${prefix}-${token}` : token;
+}
 
 async function requireSuccess(result: { stderr: string; code: number }, fallback: string): Promise<void> {
     if (result.code !== 0) throw new Error(result.stderr.trim() || fallback);
@@ -107,9 +125,14 @@ export async function openLivePreview(
         await requireSuccess(await exec(tmux, at(wrapperSocket, ["set-option", "-g", "status", "off"])), "Could not hide preview wrapper status");
         await requireSuccess(await exec(tmux, at(wrapperSocket, ["set-option", "-g", "prefix", "None"])), "Could not disable preview wrapper prefix");
         await requireSuccess(await exec(tmux, at(wrapperSocket, ["set-option", "-g", "prefix2", "None"])), "Could not disable preview wrapper secondary prefix");
-        await requireSuccess(await exec(tmux, at(wrapperSocket, ["bind-key", "-n", "Enter", "run-shell", `touch -- ${shellQuote(marker)}`, "\\;", "detach-client"])), "Could not bind preview promotion key");
-        for (const key of ["Escape", "C-c", "q"]) {
-            await requireSuccess(await exec(tmux, at(wrapperSocket, ["bind-key", "-n", key, "detach-client"])), `Could not bind preview dismissal key ${key}`);
+        const bindings = seams.bindings ?? { openFull: ["enter"], cancel: ["escape", "ctrl+c"] };
+        for (const key of bindings.openFull ?? []) {
+            const token = tmuxKeyToken(key);
+            await requireSuccess(await exec(tmux, at(wrapperSocket, ["bind-key", "-n", token, "run-shell", `touch -- ${shellQuote(marker)}`, "\\;", "detach-client"])), `Could not bind preview promotion key ${token}`);
+        }
+        for (const key of bindings.cancel ?? []) {
+            const token = tmuxKeyToken(key);
+            await requireSuccess(await exec(tmux, at(wrapperSocket, ["bind-key", "-n", token, "detach-client"])), `Could not bind preview dismissal key ${token}`);
         }
 
         const popupCommand = `/bin/sh -c ${shellQuote(popupCleanupScript(tmux, wrapperSocket, context, view, directory))}`;

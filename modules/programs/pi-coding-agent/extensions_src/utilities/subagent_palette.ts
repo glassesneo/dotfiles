@@ -2,6 +2,7 @@ import { type ExtensionContext, type ExtensionUIContext, type Theme, type ThemeC
 import { truncateToWidth, visibleWidth, wrapTextWithAnsi, type Component, type Focusable, type TUI } from "@earendil-works/pi-tui";
 import type { CommandPaletteDisposition } from "./command_palette_contributions.ts";
 import { paletteHelp, paletteKeyAction, type ResolvedPaletteKeymap } from "./command_palette_keymap.ts";
+import { actionHint } from "./extension_keybindings.ts";
 import { formatPaletteBreadcrumb, renderFramedLines } from "./command_palette_tui.ts";
 import { historyAvailability, openSubagentHistory } from "./subagent_history.ts";
 import {
@@ -30,13 +31,14 @@ export interface SubagentPaletteDependencies {
     historyViewerExtension: string;
     piCommand: string;
     natureHandleWords: readonly string[];
+    tmuxPreviewActions?: Record<string, readonly string[]>;
     env?: NodeJS.ProcessEnv;
     setTimeout?: typeof setTimeout;
     clearTimeout?: typeof clearTimeout;
     /** Optional test/harness overrides for open paths. */
     openHistory?: typeof openSubagentHistory;
     openLiveWindow?: typeof openAgentWindow;
-    previewLive?: (exec: CommandExecutor, tmux: string, context: NonNullable<Awaited<ReturnType<typeof probeTmux>>>, target: AgentSnapshot["agent"]["tmux"], title: string) => Promise<LivePreviewDisposition>;
+    previewLive?: (exec: CommandExecutor, tmux: string, context: NonNullable<Awaited<ReturnType<typeof probeTmux>>>, target: AgentSnapshot["agent"]["tmux"], title: string, seams?: Parameters<typeof openLivePreview>[5]) => Promise<LivePreviewDisposition>;
     stopAgent?: typeof stopSubagentAgent;
     discover?: () => Promise<{ agents: AgentSnapshot[]; malformedCount: number }>;
 }
@@ -475,7 +477,7 @@ export class SubagentPaletteComponent implements Component, Focusable {
             return;
         }
         if (kind === "preview" && isTerminalAgent(selected.status.state)) {
-            this.#setStatus("warning", "Live preview is available only for live agents. Press Enter for history.");
+            this.#setStatus("warning", `Live preview is available only for live agents. Press ${actionHint(this.#keymap, "confirm")} for history.`);
             return;
         }
         this.#acting = true;
@@ -528,7 +530,8 @@ export class SubagentPaletteComponent implements Component, Focusable {
                     this.#deps.tmux,
                     context,
                     selected.agent.tmux,
-                    `${node.handle} · Esc/C-c/q back · Enter open full`,
+                    `${node.handle} · ${actionHint(this.#deps.tmuxPreviewActions ?? {}, "cancel")} back · ${actionHint(this.#deps.tmuxPreviewActions ?? {}, "openFull")} open full`,
+                    { bindings: this.#deps.tmuxPreviewActions },
                 );
                 if (disposition === "open-full") {
                     const currentContext = await probeTmux(this.#deps.exec, this.#deps.tmux, this.#deps.env);
@@ -579,8 +582,8 @@ export class SubagentPaletteComponent implements Component, Focusable {
         else if (action === "confirm") void this.action("open");
         else if (action === "stop") void this.action("stop");
         else if (action === "refresh") void this.refresh();
-        else if (data === "v") void this.action("preview");
-        else if (data === "u") void this.action("unlink");
+        else if (action === "preview") void this.action("preview");
+        else if (action === "unlink") void this.action("unlink");
         else return;
         this.invalidate();
         this.#tui.requestRender();
@@ -679,17 +682,18 @@ export class SubagentPaletteComponent implements Component, Focusable {
         const inner = Math.max(1, w - 2);
         const visible = this.visibleNodes();
         const connectors = treeConnectors(visible, this.#tree.byId);
-        const help = paletteHelp(this.#keymap, ["moveUp", "moveDown", "collapse", "expand", "confirm", "stop", "refresh", "cancel"]);
-        const terminalPreviewMessage = "Live preview is available only for live agents. Press Enter for history.";
+        const help = paletteHelp(this.#keymap, ["moveUp", "moveDown", "collapse", "expand", "confirm", "stop", "refresh", "preview", "unlink", "cancel"]);
+        const confirmHint = actionHint(this.#keymap, "confirm");
+        const terminalPreviewMessage = `Live preview is available only for live agents. Press ${confirmHint} for history.`;
         const statusLines = !this.#acting && this.#status === terminalPreviewMessage
-            ? ["Live preview is available only for live agents.", "Press Enter for history."]
+            ? ["Live preview is available only for live agents.", `Press ${confirmHint} for history.`]
             : [this.#acting ? "WORKING" : this.#status];
         const body: string[] = [
-            truncateToWidth(` ${this.#theme.fg("muted", "Enter open/history · v preview · u unlink · Stop ends a live agent")}`, inner, ""),
+            truncateToWidth(` ${this.#theme.fg("muted", `${paletteHelp(this.#keymap, ["confirm", "preview", "unlink"])} · Stop ends a live agent`)}`, inner, ""),
             "",
             ...this.#viewport(visible, connectors, inner, Math.max(2, rows - 5 - statusLines.length)),
             ...statusLines.map(line => truncateToWidth(` ${this.#theme.fg(this.#statusKind, line)}`, inner, "")),
-            truncateToWidth(` ${this.#theme.fg("dim", `${help} · v preview · u unlink`)}`, inner, ""),
+            truncateToWidth(` ${this.#theme.fg("dim", help)}`, inner, ""),
         ];
         const lines = renderFramedLines({
             theme: this.#theme,

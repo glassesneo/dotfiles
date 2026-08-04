@@ -8,8 +8,65 @@ delib.module {
       extensionPaths = readOnly (listOfOption str ["${./../../extensions_src}/command_palette.ts"]);
     });
 
-  home.ifEnabled = {myconfig, ...}: {
-    home.file."${myconfig.programs.pi-coding-agent.configDir}/command-palette-keybindings.json".source =
-      ../../extensions_src/utilities/command-palette-keybindings.json;
+  myconfig.always = {cfg, ...}: {
+    programs.pi-coding-agent.keybindings.contributions.commandPalette = {
+      enabled = cfg.enable;
+      actions = {
+        open = {
+          defaultKeys = ["ctrl+shift+p"];
+          contexts = ["app.global"];
+          required = true;
+          target = "shortcut";
+        };
+        moveUp = {
+          role = "moveUp";
+          contexts = ["commandPalette"];
+          required = true;
+          target = "extension";
+        };
+        moveDown = {
+          role = "moveDown";
+          contexts = ["commandPalette"];
+          required = true;
+          target = "extension";
+        };
+        collapse = {
+          role = "collapse";
+          contexts = ["commandPalette"];
+          required = true;
+          target = "extension";
+        };
+        expand = {
+          role = "expand";
+          contexts = ["commandPalette"];
+          required = true;
+          target = "extension";
+        };
+        confirm = {
+          role = "confirm";
+          contexts = ["commandPalette"];
+          required = true;
+          target = "extension";
+        };
+        cancel = {
+          role = "cancel";
+          contexts = ["commandPalette"];
+          required = true;
+          target = "extension";
+        };
+        refresh = {
+          defaultKeys = [];
+          contexts = ["commandPalette"];
+          required = false;
+          target = "extension";
+        };
+        stop = {
+          defaultKeys = ["x"];
+          contexts = ["commandPalette"];
+          required = false;
+          target = "extension";
+        };
+      };
+    };
   };
 }

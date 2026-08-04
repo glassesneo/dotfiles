@@ -1,17 +1,19 @@
 import { execFile } from "node:child_process";
 import { rm, writeFile } from "node:fs/promises";
 import { promisify } from "node:util";
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { Key, matchesKey, type EditorComponent } from "@earendil-works/pi-tui";
+import type { ExtensionAPI, ExtensionContext, KeybindingsManager } from "@earendil-works/pi-coding-agent";
+import type { EditorComponent } from "@earendil-works/pi-tui";
+import { keyLabel, loadFeatureKeybindings } from "./utilities/extension_keybindings.ts";
 
 const run = promisify(execFile);
 
-function readOnlyEditor(ctx: ExtensionContext): EditorComponent {
+function readOnlyEditor(ctx: ExtensionContext, keybindings: Pick<KeybindingsManager, "matches" | "getKeys">): EditorComponent {
+    const hint = keybindings.getKeys("app.exit").map(keyLabel).join("/");
     return {
         getText: () => "",
         setText: () => {},
-        handleInput: data => { if (matchesKey(data, Key.ctrl("d"))) ctx.shutdown(); },
-        render: width => ["History snapshot is read-only · Ctrl+D exits".slice(0, Math.max(0, width))],
+        handleInput: data => { if (keybindings.matches(data, "app.exit")) ctx.shutdown(); },
+        render: width => [`History snapshot is read-only · ${hint} exits`.slice(0, Math.max(0, width))],
         invalidate: () => {},
     };
 }
@@ -24,6 +26,7 @@ export interface HistoryViewerDependencies {
     writeReady?: (path: string) => Promise<void>;
 }
 export function registerSubagentHistoryViewer(pi: ExtensionAPI, env: NodeJS.ProcessEnv = process.env, dependencies: HistoryViewerDependencies = {}): boolean {
+    loadFeatureKeybindings("historyViewer");
     const tmux = env.PI_SUBAGENT_VIEWER_TMUX;
     const socket = env.PI_SUBAGENT_VIEWER_SOCKET;
     let windowId = env.PI_SUBAGENT_VIEWER_WINDOW_ID;
@@ -54,7 +57,7 @@ export function registerSubagentHistoryViewer(pi: ExtensionAPI, env: NodeJS.Proc
     };
     pi.on("session_start", async (_event, ctx) => {
         pi.setActiveTools([]);
-        if (ctx.mode === "tui") ctx.ui.setEditorComponent(() => readOnlyEditor(ctx));
+        if (ctx.mode === "tui") ctx.ui.setEditorComponent((_tui, _theme, keybindings) => readOnlyEditor(ctx, keybindings));
         timer = (dependencies.setInterval ?? setInterval)(() => { void poll(ctx).catch(() => {}); }, 250);
         await poll(ctx);
         await (dependencies.writeReady ?? (path => writeFile(path, "ready\n", { mode: 0o600 })))(readyFile);

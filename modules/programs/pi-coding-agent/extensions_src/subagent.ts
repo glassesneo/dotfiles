@@ -36,6 +36,7 @@ import { PURPOSE_MAX_LENGTH, addUsage, emptyUsage, fallbackRunPurpose, isTermina
 import { NATURE_HANDLE_WORDS } from "./utilities/subagent_display_tree.ts";
 import { openSubagentPalette } from "./utilities/subagent_palette.ts";
 import { loadPaletteKeymap } from "./utilities/command_palette_keymap.ts";
+import { loadFeatureKeybindings } from "./utilities/extension_keybindings.ts";
 import { provideCommandPaletteContribution } from "./utilities/command_palette_contributions.ts";
 
 const CONFIG = join(getAgentDir(), "subagent.json"); const PROFILES = join(getAgentDir(), "agent-profiles.json");
@@ -507,6 +508,8 @@ export function createSubagentStopTool(deps: SubagentDependencies): ToolDefiniti
     });
 }
 export async function registerSubagent(pi: ExtensionAPI, options: Partial<Pick<SubagentDependencies, "configPath" | "profileConfigPath" | "env">> = {}): Promise<boolean> {
+    loadFeatureKeybindings("subagentPalette");
+    loadFeatureKeybindings("tmuxPreview");
     const configPath = options.configPath ?? CONFIG;
     const profileConfigPath = options.profileConfigPath ?? PROFILES;
     const env = options.env ?? process.env;
@@ -550,7 +553,7 @@ export async function registerSubagent(pi: ExtensionAPI, options: Partial<Pick<S
     const open = async (ctx: ExtensionContext) => {
         const config = await loadSubagentConfig(configPath);
         natureHandleWords = config.natureHandleWords;
-        return openSubagentPalette(ctx, loadPaletteKeymap().keymap, {
+        return openSubagentPalette(ctx, loadPaletteKeymap(undefined, "subagentPalette").keymap, {
             stateRoot: config.stateRoot,
             originSessionId: origin(ctx, env).originSessionId,
             exec,
@@ -559,6 +562,7 @@ export async function registerSubagent(pi: ExtensionAPI, options: Partial<Pick<S
             historyViewerExtension: config.historyViewerExtension,
             piCommand: config.harnesses.pi.command,
             natureHandleWords: config.natureHandleWords,
+            tmuxPreviewActions: loadFeatureKeybindings("tmuxPreview").actions,
         });
     };
     const unregister = provideCommandPaletteContribution(pi.events, {
