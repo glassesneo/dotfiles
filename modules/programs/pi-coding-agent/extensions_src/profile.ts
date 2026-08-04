@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
     CustomEditor,
+    formatSkillsForPrompt,
     getAgentDir,
     type ExtensionAPI,
     type ExtensionContext,
@@ -84,6 +85,7 @@ export function registerProfileController(
     let activeName: string | undefined;
     let activeProfile: AgentProfile | undefined;
     let badgeEditor: ProfileBadgeEditor | undefined;
+    let abortBeforeProviderRequest = false;
 
     const nameForId = (id: string | undefined): string | undefined => id === undefined || !config ? undefined : Object.entries(config.profiles).find(([, profile]) => profile.id === id)?.[0];
 
@@ -124,6 +126,14 @@ export function registerProfileController(
         const missingTools = profile.allowAllTools ? [] : profile.tools.filter(tool => !allTools.has(tool));
         if (missingTools.length > 0) {
             ctx.ui.notify(`Profile ${name}: tools unavailable: ${missingTools.join(", ")}`, "error");
+            return false;
+        }
+        const discoveredSkills = new Set(pi.getCommands()
+            .filter(command => command.source === "skill")
+            .map(command => command.name.replace(/^skill:/u, "")));
+        const missingSkills = profile.hiddenSkillOptIns.filter(skill => !discoveredSkills.has(skill));
+        if (missingSkills.length > 0) {
+            ctx.ui.notify(`Profile ${name}: hidden skills unavailable: ${missingSkills.join(", ")}`, "error");
             return false;
         }
         const previousModel = ctx.model;
@@ -228,10 +238,29 @@ export function registerProfileController(
             return { action: "handled" as const };
         }
     });
-    pi.on("before_agent_start", async event => {
+    pi.on("before_agent_start", async (event, ctx) => {
+        abortBeforeProviderRequest = false;
         if (!activeProfile) return;
         syncActiveTools();
-        if (activeProfile.instructions) return { systemPrompt: `${event.systemPrompt}\n\n${activeProfile.instructions}` };
+        const loadedSkills = event.systemPromptOptions.skills ?? [];
+        const loadedNames = new Set(loadedSkills.map(skill => skill.name));
+        const missingSkills = activeProfile.hiddenSkillOptIns.filter(skill => !loadedNames.has(skill));
+        if (missingSkills.length > 0) {
+            ctx.ui.notify(`Profile ${activeName}: loaded skill catalog mismatch: ${missingSkills.join(", ")}`, "error");
+            abortBeforeProviderRequest = true;
+            return;
+        }
+        const optIns = new Set(activeProfile.hiddenSkillOptIns);
+        const hiddenSkills = loadedSkills
+            .filter(skill => optIns.has(skill.name) && skill.disableModelInvocation)
+            .map(skill => ({ ...skill, disableModelInvocation: false }));
+        const additions = [formatSkillsForPrompt(hiddenSkills), activeProfile.instructions].filter(Boolean);
+        if (additions.length > 0) return { systemPrompt: `${event.systemPrompt}\n\n${additions.join("\n\n")}` };
+    });
+    pi.on("before_provider_request", (_event, ctx) => {
+        if (!abortBeforeProviderRequest) return;
+        abortBeforeProviderRequest = false;
+        ctx.abort();
     });
     pi.on("tool_call", event => {
         if (activeProfile && !activeProfile.allowAllTools && !activeProfile.tools.includes(event.toolName)) {

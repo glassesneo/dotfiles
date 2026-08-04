@@ -27,7 +27,7 @@ const baseSnapshot = (overrides: Partial<{ agentState: AgentSnapshot["status"]["
             harness: "pi",
             cwd: "/work",
             createdAt: "2026-01-01T00:00:00.000Z",
-            profileSnapshot: { id: "99999999-9999-4999-8999-999999999999", model: "provider/model", availability: ["top-level", "subagent"] as ("top-level" | "subagent")[], description: "x", allowAllTools: false, tools: ["read"], extensions: { subagent: { allowedTargets: [] } } },
+            profileSnapshot: { id: "99999999-9999-4999-8999-999999999999", model: "provider/model", availability: ["top-level", "subagent"] as ("top-level" | "subagent")[], description: "x", allowAllTools: false, tools: ["read"], hiddenSkillOptIns: [], extensions: { subagent: { allowedTargets: [] } } },
             tmux: { socket: "/tmp/tmux", serverPid: "1", sessionId: "$1", sessionName: "s", windowId: "@1", paneId: "%1", windowName: "w" },
             capabilities: { nativeScreen: true, taskDelivery: true, taskCompletion: true, usage: true, interactiveInterventions: true },
             callerProfile: "taskmaster",

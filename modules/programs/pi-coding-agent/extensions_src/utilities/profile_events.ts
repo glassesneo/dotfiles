@@ -1,5 +1,5 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { validateProfileConfig, type AgentProfile } from "./profile_types.ts";
+import { PROFILE_SCHEMA_VERSION, validateProfileConfig, type AgentProfile } from "./profile_types.ts";
 
 export const ACTIVE_PROFILE_EVENT = "neo.dotfiles.pi:active-profile" as const;
 
@@ -31,7 +31,7 @@ function validateActiveProfileEvent(value: unknown): ActiveProfileEvent {
     if (raw.reason !== "startup" && raw.reason !== "switch" && raw.reason !== "restore" && raw.reason !== "route") throw new Error("active-profile event reason is invalid");
     const rawProfile = raw.profile && typeof raw.profile === "object" && !Array.isArray(raw.profile) ? raw.profile as Record<string, unknown> : {};
     const config = validateProfileConfig({
-        schemaVersion: 4,
+        schemaVersion: PROFILE_SCHEMA_VERSION,
         defaultProfile: raw.name,
         profileCycle: [raw.name],
         promptRoutes: {},

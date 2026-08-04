@@ -12,7 +12,7 @@ import { patchAgentStatus, prepareAgent, publishAgent, readAgentSnapshot } from 
 import { launchAgentSession, stopAgentSession, type CommandResult, type TmuxContext } from "../extensions_src/utilities/subagent_tmux.ts";
 import { tmuxOwnership, type AgentSnapshot, type TmuxAgentReference } from "../extensions_src/utilities/subagent_types.ts";
 
-const profile = { id: "99999999-9999-4999-8999-999999999999", model: "provider/model", availability: ["top-level", "subagent"] as ("top-level" | "subagent")[], description: "Tester", allowAllTools: false, tools: [], extensions: { subagent: { allowedTargets: [] } } };
+const profile = { id: "99999999-9999-4999-8999-999999999999", model: "provider/model", availability: ["top-level", "subagent"] as ("top-level" | "subagent")[], description: "Tester", allowAllTools: false, tools: [], hiddenSkillOptIns: [], extensions: { subagent: { allowedTargets: [] } } };
 const capabilities = { nativeScreen: true, taskDelivery: true, taskCompletion: true, usage: true, interactiveInterventions: true };
 const context: TmuxContext = { socket: "/tmp/tmux", serverPid: "10", sessionId: "$parent", sessionName: "parent", paneId: "%parent" };
 const launch = { command: "/pi", args: [], env: {} };
@@ -104,6 +104,7 @@ void test("child bridge stays unready and fails when the expected profile never 
             thinkingLevel: "medium",
             allowAllTools: false,
             tools: ["read"],
+            hiddenSkillOptIns: [],
             extensions: { subagent: { allowedTargets: [] } },
         },
     };

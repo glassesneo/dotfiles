@@ -12,6 +12,7 @@
       thinkingLevel = allowNull (enumOption ["off" "minimal" "low" "medium" "high" "xhigh" "max"] null);
       allowAllTools = boolOption false;
       tools = listOfOption str [];
+      hiddenSkillOptIns = listOfOption str [];
       instructions = allowNull (strOption null);
       extensions = attrsOfOption attrs {};
     };
@@ -83,6 +84,7 @@ in
             thinkingLevel = "medium";
             allowAllTools = true;
             tools = [];
+            hiddenSkillOptIns = ["agent-artifact" "codebase-exploration" "source-implementation" "implementation-validation" "adaptive-review" "implementation-lifecycle"];
             instructions = explorerDelegationInstructions;
             extensions = {};
           };
@@ -93,6 +95,7 @@ in
             thinkingLevel = "medium";
             allowAllTools = false;
             tools = ["write" "edit"];
+            hiddenSkillOptIns = ["agent-artifact" "source-implementation" "implementation-lifecycle"];
             instructions = ''
               You are a source-changing implementation specialist. Default to source-implementation for a bounded source-only handoff and implementation-lifecycle for a complete approved-design lifecycle. If the selected Skill or its required input is unavailable, report what is missing and stop.
             '';
@@ -105,6 +108,7 @@ in
             thinkingLevel = "xhigh";
             allowAllTools = false;
             tools = ["write" "edit"];
+            hiddenSkillOptIns = ["agent-artifact"];
             instructions = ''
               You are a command-independent source-changing artisan. Follow the user's current objective or a small approved design and execute lightweight-implementation-lifecycle in direct mode unless the current request explicitly selects another mode. Own bounded implementation, proportionate self-validation, and evidence-backed repair. Do not delegate source implementation or validation. Use one reviewer in solo-only mode only when review is explicitly requested, then own finding triage, source repair, validation, and the terminal outcome. Stop rather than materially expanding the agreed scope or scale. Return concrete changed-file, diff, validation, deviation, review, and unresolved-risk evidence required by the selected lifecycle mode.
             '';
@@ -117,6 +121,7 @@ in
             thinkingLevel = "high";
             allowAllTools = false;
             tools = [];
+            hiddenSkillOptIns = ["agent-artifact"];
             instructions = ''
               You are a read-only investigation and collaborative-dialogue specialist. Follow the user's current objective without requiring a command. Use ideation-dialogue for open, preference-led shaping and intent-elicitation to draw out an outcome the user already substantially holds. Investigate directly when neither dialogue mode is needed; artifact creation is not a prerequisite for either dialogue mode. Preserve user-owned decisions and return evidence, explicit uncertainty, or the requested deliverable.
 
@@ -131,6 +136,7 @@ in
             thinkingLevel = "high";
             allowAllTools = false;
             tools = [];
+            hiddenSkillOptIns = ["agent-artifact" "implementation-lifecycle"];
             instructions = ''
               You are a delegation and assurance operator. Default to implementation-lifecycle in delegated-reviewed mode for an approved-design lifecycle, honoring an explicit implementation-role choice and otherwise selecting taskmaster or cursor-implementer from the task contract. You do not change source or configuration directly. If the selected Skill or its required input is unavailable, report what is missing and stop.
             '';
@@ -143,6 +149,7 @@ in
             thinkingLevel = null;
             allowAllTools = false;
             tools = [];
+            hiddenSkillOptIns = [];
             instructions = ''
               Implement the delegated bounded source change in the current repository workspace. Follow repository guidance and remain within the supplied objective and constraints. Inspect the resulting diff and run proportionate validation. Return changed files, validation evidence, any deviation from the handoff, and unresolved risks or blockers.
             '';
@@ -155,6 +162,7 @@ in
             thinkingLevel = "medium";
             allowAllTools = false;
             tools = [];
+            hiddenSkillOptIns = ["codebase-exploration"];
             instructions = ''
               You are a read-only explorer subagent. Default to codebase-exploration for one bounded investigation handoff. If the Skill or required local question is unavailable, report what is missing and stop.
             '';
@@ -167,6 +175,7 @@ in
             thinkingLevel = "medium";
             allowAllTools = false;
             tools = [];
+            hiddenSkillOptIns = ["agent-artifact" "implementation-validation"];
             instructions = ''
               You are a read-only validation specialist. Default to implementation-validation for the caller's explicit objective and requested focused, broad, or full level. If the Skill or its required handoff input is unavailable, report what is missing and stop.
             '';
@@ -179,6 +188,7 @@ in
             thinkingLevel = "high";
             allowAllTools = false;
             tools = [];
+            hiddenSkillOptIns = ["agent-artifact" "adaptive-review"];
             instructions = ''
               You are a command-independent read-only review specialist. Default to adaptive-review in auto mode for a defined review target, including standalone review without a design or implementation report, and honor an explicit mode override. If the Skill or its required target is unavailable, report what is missing and stop.
             '';
@@ -191,6 +201,7 @@ in
             thinkingLevel = "medium";
             allowAllTools = false;
             tools = [];
+            hiddenSkillOptIns = [];
             instructions = ''
               Review only the caller-specified lens and target without changing source or configuration. Return severity-ordered findings with precise evidence, then residual risks, skipped areas, and verification gaps. Do not broaden into orchestration or persist a review report.
             '';
@@ -203,6 +214,7 @@ in
             thinkingLevel = "high";
             allowAllTools = false;
             tools = [];
+            hiddenSkillOptIns = [];
             instructions = ''
               Independently challenge the supplied bounded review dossier without changing source or configuration. For each disputed item, state supported, weakened, rejected, or severity-adjusted with evidence; identify material missed perspectives and remaining uncertainty. Do not repeat the full review or persist a report.
             '';
@@ -274,6 +286,10 @@ in
           then profile.tools
           else cfg.defaultTools ++ profile.tools
         );
+      hiddenSkillOptInsValid = profile:
+        builtins.all nonBlank profile.hiddenSkillOptIns
+        && lib.length profile.hiddenSkillOptIns == lib.length (lib.unique profile.hiddenSkillOptIns)
+        && (profile.hiddenSkillOptIns == [] || profile.allowAllTools || builtins.elem "read" (configuredTools profile));
       instructionsValid = profile: profile.instructions == null || nonBlank profile.instructions;
       serializeProfile = name: profile:
         cleanProfile ((
@@ -286,7 +302,7 @@ in
       profileIdValues = builtins.attrValues profileIds;
       profileIdValid = id: builtins.match "[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}" id != null;
       runtimeConfig = {
-        schemaVersion = 4;
+        schemaVersion = 5;
         inherit (cfg) defaultProfile profileCycle promptRoutes;
         profiles = lib.mapAttrs serializeProfile cfg.profiles;
       };
@@ -327,6 +343,10 @@ in
         {
           assertion = builtins.all toolsValid profiles;
           message = "Pi profile tools must be non-blank.";
+        }
+        {
+          assertion = builtins.all hiddenSkillOptInsValid profiles;
+          message = "Pi profile hiddenSkillOptIns must contain unique non-blank names and restrictive opt-in profiles must retain read.";
         }
         {
           assertion = builtins.all instructionsValid profiles;

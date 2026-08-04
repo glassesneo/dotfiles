@@ -1,4 +1,4 @@
-export const PROFILE_SCHEMA_VERSION = 4 as const;
+export const PROFILE_SCHEMA_VERSION = 5 as const;
 export const PROFILE_DESCRIPTION_MAX_BYTES = 512;
 
 export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
@@ -13,12 +13,13 @@ export interface AgentProfile {
     thinkingLevel?: ThinkingLevel;
     allowAllTools: boolean;
     tools: string[];
+    hiddenSkillOptIns: string[];
     instructions?: string;
     extensions: Record<string, ProfileFacet>;
 }
 
 export interface AgentProfileConfig {
-    schemaVersion: 4;
+    schemaVersion: 5;
     defaultProfile: string;
     profileCycle: string[];
     promptRoutes: Record<string, string>;
@@ -59,7 +60,7 @@ export function validateProfileConfig(value: unknown): AgentProfileConfig {
     for (const [name, rawProfile] of Object.entries(rawProfiles)) {
         nonBlank(name, "profile name");
         const profile = object(rawProfile, `profiles.${name}`);
-        exactKeys(profile, ["id", "model", "availability", "description", "thinkingLevel", "allowAllTools", "tools", "instructions", "extensions"], `profiles.${name}`);
+        exactKeys(profile, ["id", "model", "availability", "description", "thinkingLevel", "allowAllTools", "tools", "hiddenSkillOptIns", "instructions", "extensions"], `profiles.${name}`);
         const id = nonBlank(profile.id, `profiles.${name}.id`);
         if (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(id)) throw new Error(`profiles.${name}.id must be an opaque UUID`);
         if (profileIds.has(id)) throw new Error(`profiles.${name}.id duplicates another profile ID`);
@@ -75,6 +76,9 @@ export function validateProfileConfig(value: unknown): AgentProfileConfig {
         if (typeof profile.allowAllTools !== "boolean") throw new Error(`profiles.${name}.allowAllTools must be boolean`);
         const tools = stringArray(profile.tools, `profiles.${name}.tools`);
         if (profile.allowAllTools && tools.length > 0) throw new Error(`profiles.${name} cannot set tools when allowAllTools is true`);
+        const hiddenSkillOptIns = stringArray(profile.hiddenSkillOptIns, `profiles.${name}.hiddenSkillOptIns`);
+        if (new Set(hiddenSkillOptIns).size !== hiddenSkillOptIns.length) throw new Error(`profiles.${name}.hiddenSkillOptIns must not contain duplicates`);
+        if (!profile.allowAllTools && hiddenSkillOptIns.length > 0 && !tools.includes("read")) throw new Error(`profiles.${name} with hiddenSkillOptIns must include read`);
         const rawExtensions = object(profile.extensions, `profiles.${name}.extensions`);
         const extensions: Record<string, ProfileFacet> = {};
         for (const [facet, rawFacet] of Object.entries(rawExtensions)) {
@@ -95,6 +99,7 @@ export function validateProfileConfig(value: unknown): AgentProfileConfig {
             thinkingLevel: thinkingLevel as ThinkingLevel | undefined,
             allowAllTools: profile.allowAllTools,
             tools,
+            hiddenSkillOptIns,
             instructions: profile.instructions === undefined ? undefined : nonBlank(profile.instructions, `profiles.${name}.instructions`),
             extensions,
         };
@@ -122,7 +127,7 @@ export function validateProfileConfig(value: unknown): AgentProfileConfig {
         if (!profiles[target].availability.includes("top-level")) throw new Error(`promptRoutes.${command} must reference a top-level profile: ${target}`);
     }
 
-    return { schemaVersion: 4, defaultProfile, profileCycle, promptRoutes, profiles };
+    return { schemaVersion: 5, defaultProfile, profileCycle, promptRoutes, profiles };
 }
 
 export function validateResolvedProfile(value: unknown): { name: string; profile: AgentProfile } {
@@ -132,7 +137,7 @@ export function validateResolvedProfile(value: unknown): { name: string; profile
     const profileRoot = object(root.profile, "PI_AGENT_RESOLVED_PROFILE.profile");
     const synthetic = structuredClone(profileRoot);
     synthetic.availability = ["top-level", "subagent"];
-    const config = validateProfileConfig({ schemaVersion: 4, defaultProfile: name, profileCycle: [name], promptRoutes: {}, profiles: { [name]: synthetic } });
+    const config = validateProfileConfig({ schemaVersion: 5, defaultProfile: name, profileCycle: [name], promptRoutes: {}, profiles: { [name]: synthetic } });
     const availability = stringArray(profileRoot.availability, "PI_AGENT_RESOLVED_PROFILE.profile.availability") as ProfileAvailability[];
     if (availability.length === 0 || new Set(availability).size !== availability.length || availability.some(value => value !== "top-level" && value !== "subagent")) throw new Error("PI_AGENT_RESOLVED_PROFILE.profile.availability is invalid");
     const profile = { ...config.profiles[name]!, availability };

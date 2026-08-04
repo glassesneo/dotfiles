@@ -14,7 +14,7 @@ import { failAgent, patchAgentStatus, prepareAgent, publishAgent, readAgentSnaps
 import { originHubName, type CommandResult, type TmuxContext } from "../extensions_src/utilities/subagent_tmux.ts";
 import type { AgentSnapshot, TmuxAgentReference } from "../extensions_src/utilities/subagent_types.ts";
 
-const profile = { id: "99999999-9999-4999-8999-999999999999", model: "provider/model", availability: ["top-level", "subagent"] as ("top-level" | "subagent")[], description: "Tester", allowAllTools: false, tools: [], extensions: { subagent: { allowedTargets: [] } } };
+const profile = { id: "99999999-9999-4999-8999-999999999999", model: "provider/model", availability: ["top-level", "subagent"] as ("top-level" | "subagent")[], description: "Tester", allowAllTools: false, tools: [], hiddenSkillOptIns: [], extensions: { subagent: { allowedTargets: [] } } };
 const capabilities = { nativeScreen: true, taskDelivery: true, taskCompletion: true, usage: true, interactiveInterventions: true };
 const context: TmuxContext = { socket: "/tmp/tmux", serverPid: "10", sessionId: "$parent", sessionName: "parent", paneId: "%parent" };
 async function agent(root: string, windowId: string, paneId: string, ownership: "origin-hub" | "dedicated" = "origin-hub") {

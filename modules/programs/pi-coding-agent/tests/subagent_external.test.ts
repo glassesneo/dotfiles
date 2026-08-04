@@ -15,7 +15,7 @@ import type { SubagentRuntimeConfig, TmuxAgentReference } from "../extensions_sr
 
 const options = { mode: "agent", permissionPolicy: "allow-always", sandbox: "disabled", trustWorkspace: true, worktree: false };
 const cursorProfile: AgentProfile = {
-    id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", model: "cursor/cursor-grok-4.5-high", availability: ["subagent"], description: "Cursor implementation.", allowAllTools: false, tools: [], instructions: "Implement and report evidence.",
+    id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", model: "cursor/cursor-grok-4.5-high", availability: ["subagent"], description: "Cursor implementation.", allowAllTools: false, tools: [], hiddenSkillOptIns: [], instructions: "Implement and report evidence.",
     extensions: { subagent: { allowedTargets: [], harness: "cursor-agent", harnessOptions: options } },
 };
 const config = (root: string): SubagentRuntimeConfig => ({
@@ -61,7 +61,7 @@ void test("Cursor ACP cold start readiness past 5000 ms succeeds within the harn
     };
     await writeFile(configPath, JSON.stringify(runtime));
     await writeFile(profilePath, JSON.stringify({
-        schemaVersion: 4,
+        schemaVersion: 5,
         defaultProfile: "operator",
         profileCycle: ["operator"],
         promptRoutes: {},
@@ -73,6 +73,7 @@ void test("Cursor ACP cold start readiness past 5000 ms succeeds within the harn
                 description: "Operator.",
                 allowAllTools: false,
                 tools: ["subagent_submit"],
+                hiddenSkillOptIns: [],
                 extensions: { subagent: { allowedTargets: ["cursor-implementer"], harness: "pi" } },
             },
             "cursor-implementer": cursorProfile,

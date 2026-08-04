@@ -90,6 +90,14 @@ void test("canonical assurance skills have aligned names, registry, and receiver
     assert.match(lifecycle!, /local-no-review.*local-reviewed.*delegated-reviewed/s);
 });
 
+void test("canonical hidden workflow skills retain model-invocation opt-out", async () => {
+    const names = ["agent-artifact", "codebase-exploration", "source-implementation", "implementation-validation", "adaptive-review", "implementation-lifecycle"];
+    for (const name of names) {
+        const skill = await text(join(skillsRoot, "skills", name, "SKILL.md"));
+        assert.match(skill, /^---[\s\S]*?disable-model-invocation:\s*true[\s\S]*?---/);
+    }
+});
+
 void test("validation contract implements adaptive levels, escalation, and failure ownership", async () => {
     const validation = (await text(join(skillsRoot, "skills", "implementation-validation", "SKILL.md"))).replace(/\s+/g, " ");
     for (const phrase of [
@@ -267,11 +275,33 @@ void test("profiles expose command-independent implementation, validation, revie
     assert.match(profile, /focused, broad, or full/);
     assert.match(profile, /profileCycle = listOfOption str \["scout" "taskmaster" "artisan" "operator" "reviewer"\]/);
     assert.match(profile, /review = "reviewer"/);
-    assert.match(profile, /schemaVersion = 4/);
+    assert.match(profile, /schemaVersion = 5/);
     assert.match(profile, /profiles = lib\.mapAttrs serializeProfile/);
     assert.match(profile, /profileNames == profileIdNames/);
     assert.match(profile, /profileIdValues.*lib\.unique/s);
     assert.match(profile, /act = "artisan"/);
+
+    const hiddenOptIns = new Map([
+        ["full", ["agent-artifact", "codebase-exploration", "source-implementation", "implementation-validation", "adaptive-review", "implementation-lifecycle"]],
+        ["taskmaster", ["agent-artifact", "source-implementation", "implementation-lifecycle"]],
+        ["artisan", ["agent-artifact"]],
+        ["scout", ["agent-artifact"]],
+        ["operator", ["agent-artifact", "implementation-lifecycle"]],
+        ["cursor-implementer", []],
+        ["explorer", ["codebase-exploration"]],
+        ["tester", ["agent-artifact", "implementation-validation"]],
+        ["reviewer", ["agent-artifact", "adaptive-review"]],
+        ["focused-reviewer", []],
+        ["dissent-reviewer", []],
+    ]);
+    for (const [profileName, expected] of hiddenOptIns) {
+        const marker = `          ${profileName} = {`;
+        const start = profile.indexOf(marker);
+        const block = profile.slice(start, profile.indexOf("          };", start));
+        const match = /hiddenSkillOptIns = \[([^\]]*)\]/.exec(block);
+        assert.ok(match, `${profileName} hiddenSkillOptIns`);
+        assert.deepEqual([...match[1]!.matchAll(/"([^"]+)"/g)].map(value => value[1]), expected, profileName);
+    }
 
     const artisanStart = profile.indexOf("        artisan = {");
     const artisanBlock = profile.slice(artisanStart, profile.indexOf("        scout = {", artisanStart));

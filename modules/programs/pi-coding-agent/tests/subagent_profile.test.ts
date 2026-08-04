@@ -12,42 +12,46 @@ import { validateSubagentRuntimeConfig, type SubagentRuntimeConfig } from "../ex
 
 function profiles(): AgentProfileConfig {
     return {
-        schemaVersion: 4,
+        schemaVersion: 5,
         defaultProfile: "full",
         profileCycle: ["scout", "artisan", "operator", "full"],
         promptRoutes: { act: "artisan", impl: "full", operate: "operator", review: "scout" },
         profiles: {
             scout: {
                 id: "11111111-1111-4111-8111-111111111111", model: "provider/model", availability: ["top-level", "subagent"] as ("top-level" | "subagent")[], description: "Read-only exploration.", thinkingLevel: "low", allowAllTools: false,
-                tools: ["read", "subagent_run", "subagent_submit", "subagent_get", "subagent_wait"], instructions: "Scout only.",
+                tools: ["read", "subagent_run", "subagent_submit", "subagent_get", "subagent_wait"], hiddenSkillOptIns: ["agent-artifact"], instructions: "Scout only.",
                 extensions: { subagent: { allowedTargets: ["scout"] } },
             },
             artisan: {
                 id: "22222222-2222-4222-8222-222222222222", model: "provider/model", availability: ["top-level"] as ("top-level" | "subagent")[], description: "Bounded implementation.", thinkingLevel: "xhigh", allowAllTools: false,
-                tools: ["read", "bash", "edit", "write", "save_agent_artifact", "subagent_run", "subagent_submit", "subagent_get", "subagent_wait", "subagent_stop"], instructions: "Implement and validate directly.",
+                tools: ["read", "bash", "edit", "write", "save_agent_artifact", "subagent_run", "subagent_submit", "subagent_get", "subagent_wait", "subagent_stop"], hiddenSkillOptIns: ["agent-artifact"], instructions: "Implement and validate directly.",
                 extensions: { subagent: { allowedTargets: ["focused-reviewer"] } },
             },
             operator: {
                 id: "33333333-3333-4333-8333-333333333333", model: "provider/model", availability: ["top-level", "subagent"] as ("top-level" | "subagent")[], description: "Delegated assurance.", thinkingLevel: "medium", allowAllTools: false,
-                tools: ["read", "subagent_run", "subagent_submit", "subagent_get", "subagent_wait"], instructions: "Operate.",
+                tools: ["read", "subagent_run", "subagent_submit", "subagent_get", "subagent_wait"], hiddenSkillOptIns: [], instructions: "Operate.",
                 extensions: { subagent: { allowedTargets: ["scout"] } },
             },
             "session-parent": {
                 id: "66666666-6666-4666-8666-666666666667", model: "provider/model", availability: ["top-level", "subagent"] as ("top-level" | "subagent")[], description: "Existing-agent delegation only.", thinkingLevel: "medium", allowAllTools: false,
-                tools: ["read", "subagent_run", "subagent_submit"], instructions: "Reuse agents.",
+                tools: ["read", "subagent_run", "subagent_submit"], hiddenSkillOptIns: [], instructions: "Reuse agents.",
                 extensions: { subagent: { allowedTargets: [] } },
             },
             "focused-reviewer": {
                 id: "44444444-4444-4444-8444-444444444444", model: "provider/model", availability: ["subagent"] as ("top-level" | "subagent")[], description: "Focused review.", thinkingLevel: "medium", allowAllTools: false,
-                tools: ["read", "grep", "find", "ls", "bash"], instructions: "Review one lens.",
+                tools: ["read", "grep", "find", "ls", "bash"], hiddenSkillOptIns: [], instructions: "Review one lens.",
                 extensions: { subagent: { allowedTargets: [] } },
             },
             full: {
-                id: "55555555-5555-4555-8555-555555555555", model: "provider/model", availability: ["top-level", "subagent"] as ("top-level" | "subagent")[], description: "Broad coding work.", thinkingLevel: "medium", allowAllTools: true, tools: [],
+                id: "55555555-5555-4555-8555-555555555555", model: "provider/model", availability: ["top-level", "subagent"] as ("top-level" | "subagent")[], description: "Broad coding work.", thinkingLevel: "medium", allowAllTools: true, tools: [], hiddenSkillOptIns: [],
                 extensions: { subagent: { allowedTargets: ["scout", "full"] } },
             },
         },
     };
+}
+
+function visibleSkills(...names: string[]) {
+    return names.map(name => ({ name, disableModelInvocation: false }));
 }
 
 async function fixture() {
@@ -81,11 +85,13 @@ function fakeControllerPi(flag = "scout") {
     const eventHandlers: Record<string, Array<(value: unknown) => void>> = {};
     const notifications: string[] = [];
     let activeTools: string[] = [];
+    let aborts = 0;
     let thinking = "off";
     let modelSucceeds = true;
     let toolApplicationFails = false;
     let activeToolApplications = 0;
     let allTools = ["read", "bash", "edit", "write", "save_agent_artifact", "subagent_run", "subagent_submit", "subagent_get", "subagent_wait", "subagent_stop", "project_tool"];
+    let discoveredSkills = ["agent-artifact", "codebase-exploration", "source-implementation", "implementation-validation", "adaptive-review", "implementation-lifecycle"];
     const pi = {
         registerFlag() {}, getFlag: () => flag,
         registerCommand(name: string, value: any) { commands[name] = value; },
@@ -100,6 +106,7 @@ function fakeControllerPi(flag = "scout") {
             },
         },
         getAllTools: () => allTools.map(name => ({ name })), getActiveTools: () => activeTools,
+        getCommands: () => discoveredSkills.map(name => ({ name: `skill:${name}`, source: "skill", sourceInfo: { path: `/skills/${name}/SKILL.md`, source: "skill", scope: "user", origin: "top-level" } })),
         setActiveTools(names: string[]) {
             activeToolApplications += 1;
             if (toolApplicationFails) {
@@ -117,12 +124,14 @@ function fakeControllerPi(flag = "scout") {
         modelRegistry: { find: () => ({ provider: "provider", id: "model" }) },
         sessionManager: { getBranch: () => entries, getEntries: () => entries, getSessionId: () => "session", getSessionFile: () => "/session.jsonl" },
         ui: { notify(message: string) { notifications.push(message); }, setStatus() {}, select: async () => undefined },
+        abort() { aborts += 1; },
     } as unknown as ExtensionContext;
     return {
         pi, ctx, handlers, commands, shortcuts, entries, events, paletteContributions, notifications,
-        activeTools: () => activeTools, activeToolApplications: () => activeToolApplications, thinking: () => thinking,
+        activeTools: () => activeTools, activeToolApplications: () => activeToolApplications, aborts: () => aborts, thinking: () => thinking,
         forceActiveTools: (names: string[]) => { activeTools = [...names]; },
         forceAllTools: (names: string[]) => { allTools = [...names]; },
+        forceDiscoveredSkills: (names: string[]) => { discoveredSkills = [...names]; },
         failModel: () => { modelSucceeds = false; }, passModel: () => { modelSucceeds = true; },
         failNextToolApplication: () => { toolApplicationFails = true; },
     };
@@ -143,7 +152,7 @@ void test("profile extension applies CLI, guards tools, restores branches, and e
         { value: "scout", label: "scout", description: "Read-only exploration." },
     ]);
     assert.deepEqual(fake.handlers.tool_call![0]!({ toolName: "bash" }, fake.ctx), { block: true, reason: "Tool bash is not allowed by profile scout" });
-    const patch = await fake.handlers.before_agent_start![0]!({ systemPrompt: "base" }, fake.ctx);
+    const patch = await fake.handlers.before_agent_start![0]!({ systemPrompt: "base", systemPromptOptions: { skills: visibleSkills("agent-artifact") } }, fake.ctx);
     assert.equal(patch.systemPrompt, "base\n\nScout only.");
 
     fake.failModel();
@@ -158,6 +167,87 @@ void test("profile extension applies CLI, guards tools, restores branches, and e
     fake.entries.push({ type: "custom", customType: "agent-profile-state", data: { schemaVersion: 2, profileId: "11111111-1111-4111-8111-111111111111" } });
     await fake.handlers.session_tree![0]!({}, fake.ctx);
     assert.equal((fake.events.at(-1)!.payload as any).reason, "restore");
+});
+
+void test("profile appends only configured hidden skills in Pi native metadata format", async () => {
+    const { profilePath } = await fixture();
+    const fake = fakeControllerPi("scout");
+    registerProfileController(fake.pi, profilePath, {});
+    await fake.handlers.session_start![0]!({ reason: "startup" }, fake.ctx);
+
+    const skill = (name: string, disableModelInvocation: boolean, description: string) => ({
+        name,
+        description,
+        filePath: `/skills/${name}/SKILL.md`,
+        baseDir: `/skills/${name}`,
+        source: "test",
+        disableModelInvocation,
+    });
+    const patch = await fake.handlers.before_agent_start![0]!({
+        systemPrompt: "base-visible-skill <name>ordinary-visible</name>",
+        systemPromptOptions: {
+            skills: [
+                skill("ordinary-visible", false, "ordinary visible description"),
+                skill("agent-artifact", true, "artifact metadata only"),
+                skill("unconfigured-hidden", true, "must stay hidden"),
+            ],
+        },
+    }, fake.ctx);
+
+    assert.match(patch.systemPrompt, /^base-visible-skill <name>ordinary-visible<\/name>/);
+    assert.match(patch.systemPrompt, /<name>agent-artifact<\/name>/);
+    assert.match(patch.systemPrompt, /artifact metadata only/);
+    assert.match(patch.systemPrompt, /\/skills\/agent-artifact\/SKILL\.md/);
+    assert.doesNotMatch(patch.systemPrompt, /unconfigured-hidden|must stay hidden|ordinary visible description/);
+    assert.doesNotMatch(patch.systemPrompt, /# Agent Artifact|full skill body/);
+    assert.match(patch.systemPrompt, /Scout only\.$/);
+
+    const alreadyVisible = await fake.handlers.before_agent_start![0]!({
+        systemPrompt: "base already has <name>agent-artifact</name>",
+        systemPromptOptions: { skills: [skill("agent-artifact", false, "already visible metadata")] },
+    }, fake.ctx);
+    assert.equal(alreadyVisible.systemPrompt.match(/<name>agent-artifact<\/name>/g)?.length, 1);
+    assert.doesNotMatch(alreadyVisible.systemPrompt, /already visible metadata/);
+});
+
+void test("profile aborts a turn when the loaded skill catalog omits an activated opt-in", async () => {
+    const { profilePath } = await fixture();
+    const fake = fakeControllerPi("scout");
+    registerProfileController(fake.pi, profilePath, {});
+    await fake.handlers.session_start![0]!({ reason: "startup" }, fake.ctx);
+
+    const patch = await fake.handlers.before_agent_start![0]!({
+        systemPrompt: "base",
+        systemPromptOptions: { skills: [] },
+    }, fake.ctx);
+
+    assert.equal(patch, undefined);
+    assert.equal(fake.aborts(), 0);
+    assert.equal(fake.notifications.at(-1), "Profile scout: loaded skill catalog mismatch: agent-artifact");
+    await fake.handlers.before_provider_request![0]!({ payload: {} }, fake.ctx);
+    assert.equal(fake.aborts(), 1);
+    await fake.handlers.before_provider_request![0]!({ payload: {} }, fake.ctx);
+    assert.equal(fake.aborts(), 1);
+});
+
+void test("profile activation fails transactionally when hidden opt-ins are undiscovered", async () => {
+    const { profilePath, profileConfig } = await fixture();
+    profileConfig.profiles.operator!.hiddenSkillOptIns = ["missing-one", "missing-two"];
+    await writeFile(profilePath, JSON.stringify(profileConfig));
+    const fake = fakeControllerPi("scout");
+    registerProfileController(fake.pi, profilePath, {});
+    await fake.handlers.session_start![0]!({ reason: "startup" }, fake.ctx);
+    const toolsBefore = fake.activeTools();
+    const thinkingBefore = fake.thinking();
+    const applicationsBefore = fake.activeToolApplications();
+
+    assert.deepEqual(await fake.handlers.input![0]!({ text: "/operate", source: "interactive" }, fake.ctx), { action: "handled" });
+    assert.equal(fake.notifications.at(-1), "Profile operator: hidden skills unavailable: missing-one, missing-two");
+    assert.deepEqual(fake.activeTools(), toolsBefore);
+    assert.equal(fake.thinking(), thinkingBefore);
+    assert.equal(fake.activeToolApplications(), applicationsBefore);
+    assert.equal(fake.events.length, 1);
+    assert.equal(fake.entries.at(-1)?.data.profileId, profileConfig.profiles.scout!.id);
 });
 
 void test("profile owns one discoverable palette contribution with current state and idle chooser", async () => {
@@ -188,7 +278,7 @@ void test("active tool synchronization is ordered, idempotent, and recovers drif
     const scoutTools = ["read", "subagent_run", "subagent_submit", "subagent_get", "subagent_wait"];
     assert.equal(fake.activeToolApplications(), 1);
     assert.deepEqual(await fake.handlers.input![0]!({ text: "ordinary text", source: "interactive" }, fake.ctx), { action: "continue" });
-    await fake.handlers.before_agent_start![0]!({ systemPrompt: "base" }, fake.ctx);
+    await fake.handlers.before_agent_start![0]!({ systemPrompt: "base", systemPromptOptions: { skills: visibleSkills("agent-artifact") } }, fake.ctx);
     assert.equal(fake.activeToolApplications(), 1);
 
     for (const drift of [
@@ -206,10 +296,10 @@ void test("active tool synchronization is ordered, idempotent, and recovers drif
     assert.equal(fake.activeToolApplications(), 5);
     const expandedTools = [...fake.activeTools(), "dynamic_tool"];
     fake.forceAllTools(expandedTools);
-    await fake.handlers.before_agent_start![0]!({ systemPrompt: "base" }, fake.ctx);
+    await fake.handlers.before_agent_start![0]!({ systemPrompt: "base", systemPromptOptions: { skills: visibleSkills("agent-artifact", "codebase-exploration", "source-implementation", "implementation-validation", "adaptive-review", "implementation-lifecycle") } }, fake.ctx);
     assert.deepEqual(fake.activeTools(), expandedTools);
     assert.equal(fake.activeToolApplications(), 6);
-    await fake.handlers.before_agent_start![0]!({ systemPrompt: "base" }, fake.ctx);
+    await fake.handlers.before_agent_start![0]!({ systemPrompt: "base", systemPromptOptions: { skills: visibleSkills("agent-artifact", "codebase-exploration", "source-implementation", "implementation-validation", "adaptive-review", "implementation-lifecycle") } }, fake.ctx);
     assert.equal(fake.activeToolApplications(), 6);
 });
 
@@ -329,7 +419,7 @@ void test("profile availability gates parent selection and old runtime schemas a
     const value = await fixture();
     const config = value.profileConfig;
     config.profiles.child = {
-        id: "66666666-6666-4666-8666-666666666666", model: "provider/model", availability: ["subagent"], description: "Child only.", allowAllTools: false, tools: ["read"], extensions: { subagent: { allowedTargets: [] } },
+        id: "66666666-6666-4666-8666-666666666666", model: "provider/model", availability: ["subagent"], description: "Child only.", allowAllTools: false, tools: ["read"], hiddenSkillOptIns: [], extensions: { subagent: { allowedTargets: [] } },
     };
     await writeFile(value.profilePath, JSON.stringify(config));
     const fake = fakeControllerPi("scout");
@@ -338,7 +428,10 @@ void test("profile availability gates parent selection and old runtime schemas a
     assert.equal((fake.commands.profile!.getArgumentCompletions?.("ch") as unknown[] | null), null);
     await fake.commands.profile!.handler("child", fake.ctx);
     assert.match(fake.notifications.at(-1) ?? "", /Unknown top-level profile/u);
-    assert.throws(() => validateProfileConfig({ ...config, schemaVersion: 3 }), /schemaVersion/u);
+    assert.throws(() => validateProfileConfig({ ...config, schemaVersion: 4 }), /schemaVersion/u);
+    assert.throws(() => validateProfileConfig({ ...config, profiles: { ...config.profiles, child: { ...config.profiles.child!, hiddenSkillOptIns: ["", "skill"] } } }), /non-empty strings/u);
+    assert.throws(() => validateProfileConfig({ ...config, profiles: { ...config.profiles, child: { ...config.profiles.child!, hiddenSkillOptIns: ["skill", "skill"] } } }), /duplicates/u);
+    assert.throws(() => validateProfileConfig({ ...config, profiles: { ...config.profiles, child: { ...config.profiles.child!, tools: [], hiddenSkillOptIns: ["skill"] } } }), /must include read/u);
     assert.throws(() => validateProfileConfig({ ...config, profiles: { ...config.profiles, child: { ...config.profiles.child!, id: config.profiles.scout!.id } } }), /duplicates/u);
     assert.throws(() => validateProfileConfig({ ...config, profiles: { ...config.profiles, child: { ...config.profiles.child!, id: "child" } } }), /opaque UUID/u);
     assert.throws(() => validateProfileConfig({ ...config, defaultProfile: "child" }), /top-level/u);
@@ -349,7 +442,7 @@ void test("resolved child profile overlays the generic profile snapshot", async 
     const { profilePath } = await fixture();
     const pinned = {
         id: "11111111-1111-4111-8111-111111111111", model: "provider/pinned", availability: ["subagent"] as ("top-level" | "subagent")[], description: "Pinned exploration.", thinkingLevel: "low" as const, allowAllTools: false,
-        tools: ["read"], instructions: "pinned", extensions: { subagent: { allowedTargets: ["scout"] } },
+        tools: ["read"], hiddenSkillOptIns: ["agent-artifact"], instructions: "pinned", extensions: { subagent: { allowedTargets: ["scout"] } },
     };
     const loaded = await loadAgentProfileConfig(profilePath, {
         PI_AGENT_RESOLVED_PROFILE: JSON.stringify({ name: "scout", profile: pinned }),
@@ -427,6 +520,7 @@ void test("subagent_submit schema enum follows active allowed targets without a 
             thinkingLevel: "medium",
             allowAllTools: false,
             tools: ["subagent_run", "subagent_submit"],
+            hiddenSkillOptIns: [],
             extensions: { subagent: { allowedTargets: ["focused-reviewer", "dissent-reviewer"] } },
         },
     });
@@ -468,6 +562,7 @@ void test("child effective profile drops excluded tools from snapshot and launch
         thinkingLevel: "medium" as const,
         allowAllTools: false,
         tools: ["read", "question", "subagent_run", "subagent_submit", "subagent_get"],
+        hiddenSkillOptIns: ["adaptive-review"],
         instructions: "orchestrate",
         extensions: { subagent: { allowedTargets: ["focused-reviewer"] } },
     };
@@ -499,6 +594,7 @@ void test("child effective profile drops excluded tools from snapshot and launch
     assert.doesNotMatch(toolsArg ?? "", /question/);
     const resolved = JSON.parse(launch.env.PI_AGENT_RESOLVED_PROFILE!);
     assert.deepEqual(resolved.profile.tools, ["read", "subagent_run", "subagent_submit", "subagent_get"]);
+    assert.deepEqual(resolved.profile.hiddenSkillOptIns, ["adaptive-review"]);
 });
 
 void test("resolved child profile does not fall back to the default profile on apply failure", async () => {
