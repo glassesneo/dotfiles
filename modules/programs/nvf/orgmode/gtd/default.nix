@@ -1,4 +1,9 @@
-{delib, ...}:
+{
+  delib,
+  lib,
+  orgmodeJournal,
+  ...
+}:
 delib.module {
   name = "programs.nvf.orgmode.gtd";
 
@@ -32,6 +37,7 @@ delib.module {
       habits_file
       dates_file
     ];
+    journal_files = lib.optionals orgmodeJournal.enabled [orgmodeJournal.dailyFile];
   in {
     programs.nvf.settings.vim = {
       notes.orgmode.setupOpts = let
@@ -108,11 +114,13 @@ delib.module {
               {
                 type = "tags_todo";
                 match = "LEVEL>=1";
-                org_agenda_files = [
-                  tasks_file
-                  projects_file
-                  habits_file
-                ];
+                org_agenda_files =
+                  [
+                    tasks_file
+                    projects_file
+                    habits_file
+                  ]
+                  ++ journal_files;
                 org_agenda_overriding_header = "Managed tasks";
                 org_agenda_sorting_strategy = [
                   "todo-state-up"
@@ -126,13 +134,15 @@ delib.module {
             types = [
               {
                 type = "agenda";
-                org_agenda_files = [
-                  inbox_file
-                  tasks_file
-                  projects_file
-                  dates_file
-                  habits_file
-                ];
+                org_agenda_files =
+                  [
+                    inbox_file
+                    tasks_file
+                    projects_file
+                    dates_file
+                    habits_file
+                  ]
+                  ++ journal_files;
                 org_agenda_overriding_header = "Upcoming dates";
                 org_agenda_span = 30;
                 org_agenda_start_on_weekday = false;
