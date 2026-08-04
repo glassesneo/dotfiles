@@ -2,13 +2,16 @@
 description: Explore an open-ended idea and select the design elements together
 argument-hint: "<request>"
 ---
-Load and execute the `ideation-design` Skill for the following request:
+Use `ideation-dialogue` as the dialogue method and `agent-artifact` as the
+format, approval, and persistence owner for this request:
 
 $ARGUMENTS
 
-If the dialogue shows that the user already holds the intended behavior and only
-needs it drawn out, say so and offer to continue with `specification-design`
-instead of manufacturing choices.
+The requested deliverable is one implementation-ready `design` artifact and,
+when warranted, a companion `decision-record`. Before assembling the design,
+present the expected footprint, required new interfaces or dependencies, and
+an explicit do-not-build list as a scale contract, and obtain the user's
+explicit agreement. A proposal alone is not agreement.
 
 In the final response, include `Design: <approved design path>` and
 `Decision record: <path or none>`.

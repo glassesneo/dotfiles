@@ -79,12 +79,12 @@ delib.module {
         source = ./skills/lightweight-implementation-lifecycle;
         targetDirs = piAuthoringTargets;
       };
-      specification-design = {
-        source = ./skills/specification-design;
+      intent-elicitation = {
+        source = ./skills/intent-elicitation;
         targetDirs = piAuthoringTargets;
       };
-      ideation-design = {
-        source = ./skills/ideation-design;
+      ideation-dialogue = {
+        source = ./skills/ideation-dialogue;
         targetDirs = piAuthoringTargets;
       };
       accessibility-ux = {
@@ -128,11 +128,11 @@ delib.module {
     assertions = [
       {
         assertion =
-          builtins.pathExists ./skills/specification-design/SKILL.md
-          && builtins.pathExists ./skills/ideation-design/SKILL.md
-          && skills.specification-design.targetDirs == piAuthoringTargets
-          && skills.ideation-design.targetDirs == piAuthoringTargets;
-        message = "Pi design skills must be packaged and deployed to the shared agents skill directory.";
+          builtins.pathExists ./skills/intent-elicitation/SKILL.md
+          && builtins.pathExists ./skills/ideation-dialogue/SKILL.md
+          && skills.intent-elicitation.targetDirs == piAuthoringTargets
+          && skills.ideation-dialogue.targetDirs == piAuthoringTargets;
+        message = "Pi dialogue skills must be packaged and deployed to the shared agents skill directory.";
       }
       {
         assertion =

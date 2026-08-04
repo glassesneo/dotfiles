@@ -18,7 +18,7 @@ void test("implementation entrypoints are thin explicit mode templates", async (
     assert.match(act, /lightweight-implementation-lifecycle/);
     assert.match(act, /aligned-request/);
     assert.match(act, /explicit\s+confirmation/s);
-    assert.doesNotMatch(act, /specification-design|ideation-design|focused-reviewer|subagent_submit/);
+    assert.doesNotMatch(act, /intent-elicitation|ideation-dialogue|specification-design|ideation-design|focused-reviewer|subagent_submit/);
 
     for (const prompt of [impl, execute, operate]) {
         assert.match(prompt, /implementation-lifecycle/);
@@ -165,6 +165,81 @@ void test("lifecycle bounds remediation and creates terminal immutable report ch
     assert.match(lifecycle, /Never overwrite an artifact/);
 });
 
+void test("generalized dialogue skills preserve distinct routing and adaptive completion contracts", async () => {
+    const names = ["ideation-dialogue", "intent-elicitation"] as const;
+    const [registry, ideation, elicitation] = await Promise.all([
+        text(join(skillsRoot, "default.nix")),
+        ...names.map(name => text(join(skillsRoot, "skills", name, "SKILL.md"))),
+    ]);
+
+    for (const [index, name] of names.entries()) {
+        const skill = [ideation, elicitation][index]!;
+        const compact = skill.replace(/\s+/g, " ");
+        await access(join(skillsRoot, "skills", name, "SKILL.md"));
+        assert.match(skill, new RegExp(`^---\\nname: ${name}\\n`));
+        assert.match(registry, new RegExp(`^      ${name} = \\{`, "m"));
+        assert.match(registry, new RegExp(`source = \\./skills/${name};`));
+        assert.match(skill, /liminal-lens/);
+        assert.match(skill, /Return the deliverable requested by the user/);
+        assert.match(skill, /When no output form was requested/);
+        assert.match(skill, /settled content/);
+        assert.match(skill, /material remaining uncertainty/);
+        assert.match(skill, /explicitly deferred/);
+        assert.match(skill, /no fixed document schema/);
+        assert.match(compact, /relevant context or external world/);
+        assert.match(compact, /Investigate it when it can affect the requested outcome/);
+        assert.match(compact, /investigate only relevant discoverable context and constraints/);
+        assert.doesNotMatch(compact, /investigate repository facts|Establish the actual repository/);
+        assert.match(compact, /inspect the proposed deliverable for consequential choices/);
+        assert.match(compact, /must already have been settled with the user or be forced by verified constraints/);
+        assert.match(compact, /Otherwise resume the dialogue/);
+        assert.match(compact, /must not be the first place the user encounters that choice/);
+        assert.doesNotMatch(skill, /## Artifact Boundary|## Scale Contract|## Acceptance Criteria/);
+        assert.doesNotMatch(skill, /Save the design|Design file:|Decision record:|implementation-ready \| blocked/);
+    }
+    await Promise.all([
+        assert.rejects(access(join(skillsRoot, "skills", "ideation-design", "SKILL.md")), { code: "ENOENT" }),
+        assert.rejects(access(join(skillsRoot, "skills", "specification-design", "SKILL.md")), { code: "ENOENT" }),
+    ]);
+    assert.doesNotMatch(registry, /specification-design|ideation-design/);
+
+    const ideationCompact = ideation.replace(/\s+/g, " ");
+    assert.match(ideationCompact, /preference-led/);
+    assert.match(ideationCompact, /Any point where more than one direction is defensible is user-owned/);
+    assert.match(ideationCompact, /Open with free-form exploration, not options/);
+    assert.match(ideationCompact, /reject the axis itself/);
+    assert.match(ideationCompact, /offer to continue with `intent-elicitation`/);
+
+    const elicitationCompact = elicitation.replace(/\s+/g, " ");
+    assert.match(elicitationCompact, /user already substantially holds/);
+    assert.match(elicitationCompact, /Challenge user input only when it conflicts with observed evidence or with itself/);
+    assert.match(elicitationCompact, /observation, its concrete impact, and a viable alternative/);
+    assert.match(elicitationCompact, /further answers can no longer change the requested outcome/);
+    assert.match(elicitationCompact, /For software work, these may include existing interfaces/);
+    assert.match(elicitationCompact, /offer to continue with `ideation-dialogue`/);
+});
+
+void test("design prompts add only artifact and scale contracts to generalized dialogue", async () => {
+    const promptCases = [
+        ["idea-design", "ideation-dialogue", "intent-elicitation"],
+        ["spec-design", "intent-elicitation", "ideation-dialogue"],
+    ] as const;
+
+    for (const [promptName, dialogueSkill, otherDialogueSkill] of promptCases) {
+        const prompt = await text(join(piRoot, "prompts", `${promptName}.md`));
+        const compact = prompt.replace(/\s+/g, " ");
+        assert.match(prompt, new RegExp("Use `" + dialogueSkill + "` as the dialogue method"));
+        assert.match(compact, /`agent-artifact` as the format, approval, and persistence owner/);
+        assert.match(compact, /one implementation-ready `design` artifact/);
+        assert.match(compact, /when warranted, a companion `decision-record`/);
+        assert.match(compact, /expected footprint, required new interfaces or dependencies, and an explicit do-not-build list/);
+        assert.match(compact, /obtain the user's explicit agreement/);
+        assert.match(prompt, /Design: <approved design path>/);
+        assert.match(prompt, /Decision record: <path or none>/);
+        assert.doesNotMatch(prompt, new RegExp(`${otherDialogueSkill}|ideation-design|specification-design`));
+    }
+});
+
 void test("profiles expose command-independent implementation, validation, review, and operator capabilities", async () => {
     const profile = await text(join(piRoot, "extensions", "profile", "default.nix"));
 
@@ -177,9 +252,10 @@ void test("profiles expose command-independent implementation, validation, revie
         assert.match(block, /instructions =/);
         assert.doesNotMatch(block, /entrypoint-selected|\/execute|\/operate|\/impl|slash command/);
     }
-    assert.match(profile, /Use ideation-design when direction is open/);
-    assert.match(profile, /specification-design when the user already holds/);
-    assert.match(profile, /ordinary read-only investigation/);
+    assert.match(profile, /Use ideation-dialogue for open, preference-led shaping/);
+    assert.match(profile, /intent-elicitation to draw out an outcome the user already substantially holds/);
+    assert.match(profile, /Investigate directly when neither dialogue mode is needed/);
+    assert.match(profile, /artifact creation is not a prerequisite for either dialogue mode/);
     assert.match(profile, /focused, broad, or full/);
     assert.match(profile, /profileCycle = listOfOption str \["scout" "taskmaster" "artisan" "operator" "reviewer"\]/);
     assert.match(profile, /review = "reviewer"/);
