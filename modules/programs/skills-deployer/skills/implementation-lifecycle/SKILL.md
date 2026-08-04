@@ -48,10 +48,15 @@ handoff.
 
 A validation handoff includes the design, concrete diff reference, requested
 `focused | broad | full` level, level rationale, exactly one objective, and
-known risks, each once. Initial reviewed work normally receives focused or broad
-validation proportionate to risk. Every final source state requires full
-validation. Successful full evidence may be reused only while source and
-relevant configuration remain unchanged.
+known risks, each once. Pass successful independent stage evidence with its
+stage, command, environment, concrete diff reference, and source-state
+reference. Initial reviewed work normally receives focused or broad validation
+proportionate to risk. Every final source state requires full validation. A
+later tester may reuse a successful stage only while source, relevant
+configuration, test definitions, and toolchain remain unchanged; otherwise it
+must rerun that stage. Terminal full validation retains the same success
+condition while executing only stages not covered by valid evidence and reports
+reused and rerun stages separately.
 
 A review handoff includes the review mode, defined target, applicable design,
 implementation report or diff reference, and only task-specific risks or

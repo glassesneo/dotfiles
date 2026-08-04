@@ -18,6 +18,7 @@ in
           "profile"
           "command_palette"
           "subagent"
+          "performance"
         ]);
       };
 

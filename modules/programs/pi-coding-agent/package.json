@@ -11,7 +11,8 @@
     "lint": "oxlint --deny-warnings --report-unused-disable-directives extensions_src tests",
     "test": "PI_EXTENSION_KEYBINDINGS_PATH=tests/fixtures/extension-keybindings.json node --test \"tests/**/*.test.ts\"",
     "test:nix-keybindings": "bash tests/keybindings_nix_fixtures.sh",
-    "check": "npm run typecheck && npm run lint && npm test && npm run test:nix-keybindings"
+    "check": "npm run typecheck && npm run lint && npm test",
+    "check:full": "npm run check && npm run test:nix-keybindings"
   },
   "devDependencies": {
     "@earendil-works/pi-ai": "0.82.0",

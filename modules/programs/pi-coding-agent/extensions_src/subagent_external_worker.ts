@@ -48,15 +48,21 @@ export async function runExternalWorker(env: NodeJS.ProcessEnv = process.env, de
         event: event => view.event(event),
     });
     let stopping = false;
-    let agentStopPromise: Promise<void> | undefined;
+    let stopPromise: Promise<void> | undefined;
+    let shutdownPromise: Promise<void> | undefined;
     let activeTaskId: string | undefined;
-    const stop = async (reason: string): Promise<void> => {
-        if (stopping) return;
-        stopping = true;
-        await driver.cancel().catch(() => {});
-        if (activeTaskId) await finishTask(stateRoot, agentId, activeTaskId, { outcome: "stopped", usage: emptyUsage(), turns: 1, error: reason }).catch(() => {});
-        await failAgent(stateRoot, agentId, reason, true, { overrideTerminalReason: true }).catch(() => {});
-        await driver.shutdown().catch(() => {});
+    let parentTerminalOutcome: "stopped" | "failed" | undefined;
+    const shutdown = (): Promise<void> => shutdownPromise ??= driver.shutdown().catch(() => {});
+    const stop = (reason: string, preserveTerminalOutcome?: "stopped" | "failed"): Promise<void> => {
+        stopPromise ??= (async () => {
+            stopping = true;
+            parentTerminalOutcome = preserveTerminalOutcome;
+            await driver.cancel().catch(() => {});
+            if (activeTaskId) await finishTask(stateRoot, agentId, activeTaskId, { outcome: preserveTerminalOutcome ?? "stopped", usage: emptyUsage(), turns: 1, error: reason }).catch(() => {});
+            if (!preserveTerminalOutcome) await failAgent(stateRoot, agentId, reason, true, { overrideTerminalReason: true }).catch(() => {});
+            await shutdown();
+        })();
+        return stopPromise;
     };
     const signal = (name: string) => { void stop(`External worker received ${name}`).finally(() => { process.exitCode = 0; }); };
     process.once("SIGTERM", () => signal("SIGTERM"));
@@ -64,14 +70,17 @@ export async function runExternalWorker(env: NodeJS.ProcessEnv = process.env, de
     process.once("SIGHUP", () => signal("SIGHUP"));
     try {
         await driver.start();
+        const driverClosed = driver.waitForClose().then(driverError => ({ driverError }));
         await markBridgeReady(agentPaths(stateRoot, agentId));
         view.event({ type: "state", text: "ready" });
         while (!stopping) {
             const snapshot = await readAgentSnapshot(stateRoot, agentId);
-            if (isTerminalAgent(snapshot.status.state) || snapshot.status.state === "stopping") { await stop(snapshot.status.exitReason ?? "Stopped by parent"); break; }
+            if (isTerminalAgent(snapshot.status.state)) { await stop(snapshot.status.exitReason ?? "Stopped by parent", snapshot.status.state === "failed" ? "failed" : "stopped"); break; }
+            if (snapshot.status.state === "stopping") { await stop(snapshot.status.exitReason ?? "Stopped by parent"); break; }
             const task = await claimPendingTask(stateRoot, agentId);
             if (!task) {
-                await wait(100);
+                const closed = await Promise.race([wait(100).then(() => undefined), driverClosed]);
+                if (closed) throw closed.driverError;
                 const fatal = driver.fatalError();
                 if (fatal) throw fatal;
                 continue;
@@ -81,39 +90,47 @@ export async function runExternalWorker(env: NodeJS.ProcessEnv = process.env, de
             const prompt = [rawConfig.instructions.trim(), task.request.prompt].filter(Boolean).join("\n\nDelegated task:\n");
             let turnSettled = false;
             let taskCancelled = false;
+            let driverFailed = false;
             const monitorStop = async (): Promise<void> => {
                 while (!turnSettled) {
                     await wait(50);
                     const status = (await readAgentSnapshot(stateRoot, agentId)).status;
+                    if (isTerminalAgent(status.state)) {
+                        await stop(status.exitReason ?? "Stopped by parent", status.state === "failed" ? "failed" : "stopped");
+                        throw new Error(status.exitReason ?? "Stopped by parent");
+                    }
                     if (status.state === "stopping") {
-                        agentStopPromise ??= stop("Stopped by parent");
-                        await agentStopPromise;
-                        throw new Error("Stopped by parent");
+                        await stop(status.exitReason ?? "Stopped by parent");
+                        throw new Error(status.exitReason ?? "Stopped by parent");
                     }
                     if (await readTaskCancellation(stateRoot, agentId, activeTaskId!)) {
                         taskCancelled = true;
                         await driver.cancel();
                         throw new Error("Task cancelled by parent");
                     }
+                    const fatal = driver.fatalError();
+                    if (fatal) { driverFailed = true; throw fatal; }
                 }
                 return;
             };
             const taskPromise = driver.runTask(prompt);
+            void taskPromise.catch(() => undefined);
             try {
-                const result = await Promise.race([taskPromise, monitorStop()]);
+                const result = await Promise.race([taskPromise, monitorStop(), driverClosed]);
                 if (stopping) continue;
                 if (!result) throw new Error("External task monitor settled without a task result");
+                if ("driverError" in result) { driverFailed = true; throw result.driverError; }
                 await finishTask(stateRoot, agentId, activeTaskId, { outcome: "succeeded", output: result.output, usage: emptyUsage(), turns: 1 });
                 view.outcome("succeeded", result.stopReason);
             } catch (error) {
-                if (agentStopPromise) await agentStopPromise;
+                if (stopPromise) await stopPromise;
                 const message = errorText(error);
                 if (taskCancelled) await taskPromise.catch(() => undefined);
-                const outcome = stopping || taskCancelled ? "stopped" : "failed";
+                const outcome = parentTerminalOutcome ?? (stopping || taskCancelled ? "stopped" : "failed");
                 const output = taskCancelled ? driver.partialOutput?.() ?? "" : "";
                 await finishTask(stateRoot, agentId, activeTaskId, { outcome, output, usage: emptyUsage(), turns: 1, error: message });
                 view.outcome(outcome, message);
-                if (!stopping && driver.fatalError()) {
+                if (!stopping && (driverFailed || driver.fatalError())) {
                     await failAgent(stateRoot, agentId, message, false);
                     stopping = true;
                 }
@@ -126,7 +143,7 @@ export async function runExternalWorker(env: NodeJS.ProcessEnv = process.env, de
         await failAgent(stateRoot, agentId, message, false);
         throw error;
     } finally {
-        await driver.shutdown().catch(() => {});
+        await shutdown();
     }
 }
 

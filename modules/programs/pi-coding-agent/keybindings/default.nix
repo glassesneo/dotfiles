@@ -538,7 +538,7 @@ in
           message =
             if collisions == []
             then ""
-            else let item = builtins.head collisions; in "Pi keybinding conflict: ${item.left.feature}.${item.left.action} and ${item.right.feature}.${item.right.action} use ${item.left.canonical}.";
+            else "Pi keybinding conflicts: ${lib.concatStringsSep "; " (map (item: "${item.left.feature}.${item.left.action} and ${item.right.feature}.${item.right.action} use ${item.left.canonical}") collisions)}.";
         }
         {
           assertion = badTmux == [];

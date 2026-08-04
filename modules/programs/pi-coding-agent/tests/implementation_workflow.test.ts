@@ -81,6 +81,8 @@ void test("canonical assurance skills have aligned names, registry, and receiver
     const [implementation, validation, review, lifecycle] = skills;
     assert.match(implementation!, /source or configuration/);
     assert.match(implementation!, /concrete diff reference/);
+    assert.match(implementation!, /only focused\s+development diagnostics/s);
+    assert.match(implementation!, /Do not\s+preemptively run package full checks, flake aggregate checks, or\s+representative host builds/s);
     assert.match(implementation!, /Do not persist an implementation report/);
     assert.match(implementation!, /Validation verdicts, implementation reports, review verdicts/);
     assert.match(validation!, /focused.*broad.*full/s);
@@ -97,6 +99,9 @@ void test("validation contract implements adaptive levels, escalation, and failu
         "environment/infra", "unknown", "failure-report", "Do not create a success-only validation artifact",
     ]) assert.match(validation, new RegExp(phrase));
     assert.match(validation, /Escalate to `broad` or `full`/);
+    assert.match(validation, /stage, command, environment, concrete diff reference, and source-state\s+reference/s);
+    assert.match(validation, /source,\s+relevant configuration, test definitions, and toolchain are unchanged/s);
+    assert.match(validation, /Record\s+reused successful stages separately from stages actually rerun/s);
 });
 
 void test("lifecycle handoffs contain only task-specific deltas and preserve override ownership", async () => {
@@ -158,6 +163,9 @@ void test("lifecycle bounds remediation and creates terminal immutable report ch
     assert.match(lifecycle, /scope or scale expansion/);
     assert.match(lifecycle, /test or infrastructure ownership/);
     assert.match(lifecycle, /successful full validation for the current source state/);
+    assert.match(lifecycle, /stage, command, environment, concrete diff reference, and source-state\s+reference/s);
+    assert.match(lifecycle, /source, relevant\s+configuration, test definitions, and toolchain remain unchanged/s);
+    assert.match(lifecycle, /reports\s+reused and rerun stages separately/s);
     assert.match(lifecycle, /latest review pass with no blocking finding/);
     assert.match(lifecycle, /return `blocked`, not success/);
     assert.match(lifecycle, /save one immutable `implementation-report`/);

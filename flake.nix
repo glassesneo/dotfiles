@@ -144,6 +144,8 @@
               version = "0";
               src = ./modules/programs/pi-coding-agent;
               SKILLS_DEPLOYER_ROOT = ./modules/programs/skills-deployer;
+              PI_FLAKE_ROOT = ./.;
+              nativeBuildInputs = [pkgs.nix pkgs.jq];
 
               npmDepsHash = "sha256-Qw6kEXFEofwWUVieD4Fhf7XhRESbSodTjHxLI1ZPmCI=";
               npmDepsFetcherVersion = 2;
@@ -152,7 +154,7 @@
               doCheck = true;
               checkPhase = ''
                 runHook preCheck
-                npm run check
+                npm run check:full
                 runHook postCheck
               '';
               installPhase = ''

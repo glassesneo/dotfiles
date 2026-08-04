@@ -22,7 +22,10 @@ Require:
 - requested level: `focused`, `broad`, or `full`;
 - rationale for that level;
 - exactly one concrete validation objective;
-- known risks, including `none known` when applicable.
+- known risks, including `none known` when applicable;
+- any successful independent stage evidence offered for reuse, including its
+  stage, command, environment, concrete diff reference, and source-state
+  reference.
 
 Return a blocker when required input is unavailable. Use context priority
 `design > implementation report > diff > source`; a recorded deviation never
@@ -48,7 +51,11 @@ and actual levels and why escalation occurred.
 
 1. Read the design, repository guidance, diff, and standard manifests or scripts.
 2. Select canonical commands matching the requested level and objective. Do not
-   guess commands.
+   guess commands. Reuse offered successful stage evidence only when source,
+   relevant configuration, test definitions, and toolchain are unchanged and
+   the evidence identifies the same source state, stage, command, environment,
+   and concrete diff reference. Failure, incomplete evidence, or any such
+   change requires that stage to be rerun.
 3. Prefer the canonical aggregate command when the level calls for it. If it
    stops before later stages, run only unexecuted stages whose standard
    independent commands are identifiable, safe, and independent of failed
@@ -56,7 +63,9 @@ and actual levels and why escalation occurred.
 4. Do not edit source or configuration. Use a temporary workspace for generated
    output or caches when feasible; otherwise report mutation risk.
 5. Capture commands, exit status, failing identifiers, diagnostics, successful
-   stages, blockers, skipped checks, and the concrete diff reference.
+   stages, blockers, skipped checks, and the concrete diff reference. Record
+   reused successful stages separately from stages actually rerun; full
+   validation still runs every applicable stage not covered by valid evidence.
 6. Re-run a failure when proportionate to distinguish deterministic behavior
    from flakiness, usually three to five repeats when feasible.
 7. Classify each failure as `regression`, `flaky`, `test bug`,

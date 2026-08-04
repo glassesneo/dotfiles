@@ -36,8 +36,12 @@ exclusions, and verification requirements as governing.
 3. Implement in dependency order without leaving duplicate old and new runtime
    contracts.
 4. Inspect the resulting diff for design alignment and unintended changes.
-5. Run narrow development diagnostics when useful. These commands are not an
-   independent validation verdict and the caller must not treat them as one.
+5. When the parent lifecycle owns independent validation, run only focused
+   development diagnostics directly needed by the changed locations. Do not
+   preemptively run package full checks, flake aggregate checks, or
+   representative host builds unless a concrete failure must be reproduced or
+   a repair must be confirmed. These commands are not an independent validation
+   verdict and the caller must not treat them as one.
 6. Return the source handoff inline. Do not persist an implementation report or
    decide review or validation outcomes.
 
