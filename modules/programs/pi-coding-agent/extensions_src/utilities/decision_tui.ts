@@ -134,7 +134,11 @@ export class DecisionComponent implements Component, Focusable {
     #choiceDraft(): ChoiceDraft { const draft = this.#draft(); if (!("selected" in draft)) throw new Error("Not a choice question"); return draft; }
     #textDraft(): TextDraft { const draft = this.#draft(); if (!("value" in draft)) throw new Error("Not a text question"); return draft; }
     #choices(): DisplayChoice[] { return choicesFor(this.#question()); }
-    #syncEditorFocus(): void { this.#editor.focused = this.#focused && (this.#mode === "note" || this.#mode === "write-in" || (this.#mode === "question" && this.#question().kind === "text")); }
+    #isInlineWriteInFocused(): boolean {
+        const question = this.#question();
+        return question.kind === "multi" && this.#allowWriteIn() && this.#choiceDraft().focusIndex === this.#choices().length;
+    }
+    #syncEditorFocus(): void { this.#editor.focused = this.#focused && (this.#mode === "note" || this.#mode === "write-in" || (this.#mode === "question" && (this.#question().kind === "text" || this.#isInlineWriteInFocused()))); }
     #context(): QuestionContext { return this.#mode === "review" ? "question.review" : this.#mode === "note" ? "question.note" : this.#mode === "write-in" ? "question.write-in" : `question.${this.#question().kind}` as QuestionContext; }
     #openQuestion(fromReview: boolean): void {
         this.#mode = "question"; this.#fromReview = fromReview;
@@ -162,8 +166,26 @@ export class DecisionComponent implements Component, Focusable {
         if (next < 0 || next >= this.#progress.total) return;
         this.#progress.moveTo(next); this.#openQuestion(false); this.#refresh();
     }
-    #moveChoice(delta: number): void { const choices = this.#choices(); const draft = this.#choiceDraft(); draft.focusIndex = (draft.focusIndex + delta + choices.length) % choices.length; this.#validation = undefined; this.#refresh(); }
-    #focusedChoice(): DisplayChoice { return this.#choices()[this.#choiceDraft().focusIndex]!; }
+    #choiceFocusCount(): number {
+        const question = this.#question();
+        return this.#choices().length + (question.kind === "multi" && this.#allowWriteIn() ? 1 : 0);
+    }
+    #focusedRegularChoice(): DisplayChoice | undefined { return this.#choices()[this.#choiceDraft().focusIndex]; }
+    #moveChoice(delta: number): void {
+        const count = this.#choiceFocusCount();
+        if (count === 0) return;
+        const draft = this.#choiceDraft();
+        const next = (draft.focusIndex + delta + count) % count;
+        this.#validation = undefined;
+        if (this.#question().kind === "multi" && this.#allowWriteIn() && next === this.#choices().length) return this.#openWriteIn();
+        draft.focusIndex = next;
+        this.#refresh();
+    }
+    #focusedChoice(): DisplayChoice {
+        const choice = this.#focusedRegularChoice();
+        if (choice === undefined) throw new Error("Focused choice is the write-in row");
+        return choice;
+    }
     #noteRequirement(context: NoteContext = this.#noteContext, option?: QuestionOption): DecisionNoteRequirement {
         const question = this.#question();
         const focused = this.#focusedChoice();
@@ -212,6 +234,7 @@ export class DecisionComponent implements Component, Focusable {
     #openWriteIn(): void {
         const draft = this.#choiceDraft();
         this.#writeInDraftSnapshot = cloneDraft(draft) as ChoiceDraft;
+        if (this.#question().kind === "multi") draft.focusIndex = this.#choices().length;
         this.#editor.setText(draft.writeIn ?? "");
         this.#mode = "write-in";
         this.#validation = undefined;
@@ -232,6 +255,7 @@ export class DecisionComponent implements Component, Focusable {
             const draft = this.#choiceDraft();
             draft.writeIn = edited.trim() === "" ? undefined : edited;
             if (this.#question().kind === "single" && draft.writeIn !== undefined) draft.selected.clear();
+            if (this.#question().kind === "multi") draft.focusIndex = Math.min(snapshot?.focusIndex ?? 0, this.#choices().length - 1);
         }
         this.#writeInDraftSnapshot = undefined;
         this.#mode = "question";
@@ -239,6 +263,15 @@ export class DecisionComponent implements Component, Focusable {
         this.#syncEditorFocus();
         if (save && this.#question().kind === "single" && this.#choiceDraft().writeIn !== undefined) this.#commit();
         else this.#refresh();
+    }
+    #closeWriteInForNavigation(): void {
+        const draft = this.#choiceDraft();
+        const edited = this.#editor.getExpandedText();
+        draft.writeIn = edited.trim() === "" ? undefined : edited;
+        this.#writeInDraftSnapshot = undefined;
+        this.#mode = "question";
+        this.#validation = undefined;
+        this.#syncEditorFocus();
     }
     #pendingFromDraft(): PendingQuestionResponse | undefined {
         const question = this.#question();
@@ -273,11 +306,11 @@ export class DecisionComponent implements Component, Focusable {
             return { kind: "text", value };
         }
         const draft = this.#choiceDraft();
-        const focused = this.#focusedChoice();
+        const focused = this.#focusedRegularChoice();
         if (question.kind === "single" && draft.writeIn !== undefined) return { kind: "write-in", value: draft.writeIn };
         if (question.kind === "multi") {
-            const focusedOption = question.options?.find(candidate => candidate.value === focused.value);
-            if (decisionNoteRequirement(this.#policy, question, focusedOption) === "required"
+            const focusedOption = focused === undefined ? undefined : question.options?.find(candidate => candidate.value === focused.value);
+            if (focused !== undefined && decisionNoteRequirement(this.#policy, question, focusedOption) === "required"
                 && (!draft.selected.has(focused.value) || draft.optionNotes.get(focused.value) === undefined)) {
                 this.#openNote({ context: "response" });
                 return undefined;
@@ -298,7 +331,7 @@ export class DecisionComponent implements Component, Focusable {
         }
         let realSelected = [...draft.selected];
         if (realSelected.length === 0) {
-            if (focused.value === undefined) throw new Error("Focused regular choice has no value");
+            if (focused === undefined) throw new Error("Focused regular choice is the write-in row");
             draft.selected.add(focused.value);
             realSelected = [focused.value];
         }
@@ -346,7 +379,8 @@ export class DecisionComponent implements Component, Focusable {
         const question = this.#question();
         if (question.kind !== "single" && question.kind !== "multi") return;
         const draft = this.#choiceDraft();
-        const choice = this.#focusedChoice();
+        const choice = this.#focusedRegularChoice();
+        if (choice === undefined) return;
         if (question.kind === "single") draft.writeIn = undefined;
         if (question.kind === "single") {
             draft.selected.clear();
@@ -395,10 +429,22 @@ export class DecisionComponent implements Component, Focusable {
     }
     handleInput(data: string): void {
         if (this.#finished) return;
-        const action = resolveUiAction(data, this.#context(), this.#keymap);
+        const primaryAction = resolveUiAction(data, this.#context(), this.#keymap);
+        const action = primaryAction ?? (this.#mode === "write-in" && this.#question().kind === "multi"
+            ? resolveUiAction(data, "question.multi", this.#keymap)
+            : undefined);
         if (action === "cancel") return this.#cancel();
         if (this.#mode === "note") { if (action === "back") this.#closeNote(false); else if (action === "accept") this.#closeNote(true); else if (action === "clear") { this.#editor.setText(""); this.#validation = undefined; this.#refresh(); } else if (action === "newline") { this.#editor.insertTextAtCursor("\n"); this.#refresh(); } else { this.#editor.handleInput(data); this.#refresh(); } }
-        else if (this.#mode === "write-in") { if (action === "back") this.#closeWriteIn(false); else if (action === "accept") this.#closeWriteIn(true); else if (action === "clear") { this.#editor.setText(""); this.#validation = undefined; this.#refresh(); } else if (action === "newline") { this.#editor.insertTextAtCursor("\n"); this.#refresh(); } else { this.#editor.handleInput(data); this.#refresh(); } }
+        else if (this.#mode === "write-in") {
+            if (action === "move-up" || action === "move-down") {
+                this.#closeWriteInForNavigation();
+                this.#moveChoice(action === "move-up" ? -1 : 1);
+            } else if (action === "back") this.#closeWriteIn(false);
+            else if (action === "accept") this.#closeWriteIn(true);
+            else if (action === "clear") { this.#editor.setText(""); this.#validation = undefined; this.#refresh(); }
+            else if (action === "newline") { this.#editor.insertTextAtCursor("\n"); this.#refresh(); }
+            else { this.#editor.handleInput(data); this.#refresh(); }
+        }
         else if (this.#mode === "review") this.#handleReview(action); else this.#handleQuestion(action, data);
     }
     #responseStatusLabel(question: QuestionItem): string {
@@ -439,9 +485,30 @@ export class DecisionComponent implements Component, Focusable {
             const note = draft.optionNotes.get(choice.value);
             const preview = notePreview(note);
             if (preview) appendWrapped(lines, width, this.#theme.fg("muted", `Note: ${preview}`), "    ");
+            if (question.kind === "multi" && this.#mode === "note" && choice.value === this.#noteTarget) this.#renderNoteEditor(lines, width);
+        }
+        if (question.kind === "multi" && this.#allowWriteIn()) {
+            const focused = draft.focusIndex === this.#choices().length;
+            const selected = draft.writeIn !== undefined;
+            const text = `[${selected ? "x" : " "}] Write another response`;
+            const styled = this.#theme.fg(focused ? "accent" : selected ? "success" : "text", focused || selected ? this.#theme.bold(text) : text);
+            appendWrapped(lines, width, styled, focused ? "> " : "  ", focused ? line => this.#theme.bg("selectedBg", line) : undefined);
+            const preview = notePreview(draft.writeIn);
+            if (preview) appendWrapped(lines, width, this.#theme.fg("muted", `Response: ${preview}`), "    ");
+            if (this.#mode === "write-in") {
+                const presentation = notePresentation(this.#policy, question, "write-in");
+                this.#renderEditor(lines, width, presentation.prompt ?? "Write another response");
+                if (presentation.placeholder) appendWrapped(lines, width, this.#theme.fg("dim", presentation.placeholder), " ");
+            }
         }
     }
     #renderEditor(lines: string[], width: number, label: string): void { appendWrapped(lines, width, this.#theme.fg("accent", this.#theme.bold(label)), " "); for (const line of this.#editor.render(Math.max(1, width - 1))) lines.push(width > 1 ? ` ${line}` : line); }
+    #renderNoteEditor(lines: string[], width: number): void {
+        const presentation = notePresentation(this.#policy, this.#question(), this.#noteContext);
+        const fallback = this.#noteRequirement() === "required" ? "Required note for this option" : "Optional note for this option";
+        this.#renderEditor(lines, width, presentation.prompt ?? fallback);
+        if (presentation.placeholder) appendWrapped(lines, width, this.#theme.fg("dim", presentation.placeholder), " ");
+    }
     #renderNoteTarget(lines: string[], width: number): void {
         const choice = this.#question().options?.find(option => option.value === this.#noteTarget);
         if (choice !== undefined) {
@@ -450,10 +517,7 @@ export class DecisionComponent implements Component, Focusable {
             appendWrapped(lines, width, this.#theme.fg("accent", this.#theme.bold(`${control} ${choice.label}`)), " ");
             if (choice.description) appendWrapped(lines, width, this.#theme.fg("muted", choice.description), "    ");
         }
-        const presentation = notePresentation(this.#policy, this.#question(), this.#noteContext);
-        const fallback = this.#noteRequirement() === "required" ? "Required note for this option" : "Optional note for this option";
-        this.#renderEditor(lines, width, presentation.prompt ?? fallback);
-        if (presentation.placeholder) appendWrapped(lines, width, this.#theme.fg("dim", presentation.placeholder), " ");
+        this.#renderNoteEditor(lines, width);
     }
     #renderReview(lines: string[], width: number): void {
         const submitText = `Submit responses — ready (${this.#progress.answeredCount} answered, ${this.#progress.untouchedCount} untouched)`;
@@ -473,8 +537,8 @@ export class DecisionComponent implements Component, Focusable {
         const lines = [this.#theme.fg("border", "─".repeat(w))]; this.#renderHeader(lines, w); lines.push("");
         if (this.#mode === "review") this.#renderReview(lines, w); else {
             appendWrapped(lines, w, this.#theme.fg("accent", this.#theme.bold(this.#question().prompt)), " "); lines.push("");
-            if (this.#mode === "note") this.#renderNoteTarget(lines, w);
-            else if (this.#mode === "write-in") this.#renderEditor(lines, w, "Write another response");
+            if (this.#mode === "note" && this.#question().kind !== "multi") this.#renderNoteTarget(lines, w);
+            else if (this.#mode === "write-in" && this.#question().kind !== "multi") this.#renderEditor(lines, w, "Write another response");
             else if (this.#question().kind === "text") this.#renderEditor(lines, w, "Answer");
             else this.#renderChoices(lines, w);
         }

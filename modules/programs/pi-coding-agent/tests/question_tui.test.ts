@@ -204,12 +204,34 @@ void test("multi write-in preserves selections, supports deletion, and Ctrl-C cl
     assert.deepEqual(h.results[0]?.responses["multi-write"], { kind: "multi", values: [{ value: "a" }] });
 });
 
+void test("multi write-in row opens an inline editor on focus and preserves navigation context", () => {
+    const question: QuestionItem = { id: "multi-inline-write", prompt: "Many", kind: "multi", options: [{ value: "a", label: "A" }, { value: "b", label: "B" }] };
+    const h = harness([question]);
+    h.component.handleInput(keys.space);
+    h.component.handleInput(keys.down);
+    h.component.handleInput(keys.down);
+    const editor = h.component.render(80).join("\n");
+    assert.match(editor, /> \[ \] Write another response/);
+    assert.match(editor, /\[x\] A/);
+    assert.match(editor, /\[ \] B/);
+    h.component.handleInput("another response");
+    assert.match(h.component.render(80).join("\n"), /another response/);
+    h.component.handleInput(keys.enter);
+    assert.match(h.component.render(80).join("\n"), /Response: another response/);
+    h.component.handleInput(keys.enter);
+    assert.deepEqual(h.results[0]?.responses["multi-inline-write"], { kind: "multi", values: [{ value: "a" }], writeIn: "another response" });
+});
+
 void test("multi uses Space and stores notes on selected options", () => {
     const question: QuestionItem = { id: "multi", prompt: "Many", kind: "multi", options: [{ value: "a", label: "A" }, { value: "b", label: "B" }] };
     const h = harness([question]);
     h.component.handleInput(keys.enter); assert.match(h.component.render(80).join("\n"), /Select at least one/);
     h.component.handleInput(keys.space);
     h.component.handleInput("e");
+    const noteEditor = h.component.render(80).join("\n");
+    assert.match(noteEditor, /\[x\] A/);
+    assert.match(noteEditor, /\[ \] B/);
+    assert.match(noteEditor, /Optional note for this option/);
     h.component.handleInput("note A\nmore detail");
     h.component.handleInput(keys.enter);
     assert.match(h.component.render(80).join("\n"), /Note: note A/);
@@ -368,6 +390,11 @@ void test("render applies semantic theme roles and refreshes themed output after
 void test("render output never exceeds narrow widths", () => {
     const h = harness([{ ...single, prompt: "A deliberately long question that must wrap" }]);
     for (const width of [20, 8, 4, 1]) for (const line of h.component.render(width)) assert.ok(visibleWidth(line) <= width);
+
+    const multi = harness([{ id: "narrow-multi", prompt: "Many choices", kind: "multi", options: [{ value: "a", label: "A long option" }, { value: "b", label: "B long option" }] }]);
+    multi.component.handleInput(keys.down);
+    multi.component.handleInput(keys.down);
+    for (const width of [20, 8, 4, 1]) for (const line of multi.component.render(width)) assert.ok(visibleWidth(line) <= width);
 });
 
 void test("completion, abort, and disposal remove listeners and finish once", () => {

@@ -170,8 +170,9 @@ void test("tool renderers show question prompts, responses, notes, and untouched
   const collapsed = tool.renderResult?.(result, { expanded: false } as never, renderTheme, { args } as never);
   const collapsedText = collapsed?.render(160).join("\n") ?? "";
   assert.match(collapsedText, /2 answered, 0 untouched/);
-  assert.match(collapsedText, /Choose — B — note: because/);
-  assert.match(collapsedText, /Explain — need another path/);
+  assert.match(collapsedText, /Q1 — B — note: because/);
+  assert.match(collapsedText, /Q2 — need another path/);
+  assert.doesNotMatch(collapsedText, /Choose|Explain/);
 });
 
 void test("multi tool results keep each option note paired in collapsed and expanded output", () => {
@@ -193,9 +194,10 @@ void test("multi tool results keep each option note paired in collapsed and expa
     },
   } as never;
   const collapsed = tool.renderResult?.(result, { expanded: false } as never, renderTheme, { args } as never)?.render(160).join("\n") ?? "";
-  assert.match(collapsed, /Targets — A — note: first ⏎ line, B — note: second, another/);
+  assert.match(collapsed, /Q1 — A — note: first ⏎ line, B — note: second, another/);
   const expanded = tool.renderResult?.(result, { expanded: true } as never, renderTheme, { args } as never)?.render(160).join("\n") ?? "";
-  assert.match(expanded, /Q1: Targets[\s\S]*A — note: first[\s\S]*line[\s\S]*B — note: second/);
+  assert.match(expanded, /Q1[\s\S]*A — note: first[\s\S]*line[\s\S]*B — note: second/);
+  assert.doesNotMatch(expanded, /Targets/);
 });
 
 void test("runtime contract violations throw tool errors before UI", async () => {

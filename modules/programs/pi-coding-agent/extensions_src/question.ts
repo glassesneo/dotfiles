@@ -101,7 +101,7 @@ export function createQuestionToolDefinition(): ToolDefinition<
             const summary = `${theme.fg("accent", details.status)} — ${answered} answered, ${untouched} untouched${current}`;
             const rows = questions.map((question, index) => {
                 const response = details.responses[question.id];
-                const title = `Q${index + 1}: ${question.prompt}`;
+                const title = `Q${index + 1}`;
                 if (response === undefined) return `${title} — Untouched`;
                 const display = responseDisplay(question, response, options.expanded);
                 return options.expanded ? `${title}\n  ${display.replace(/\n/g, "\n  ")}` : `${title} — ${display}`;
