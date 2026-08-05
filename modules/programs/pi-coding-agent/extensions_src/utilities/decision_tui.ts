@@ -5,9 +5,8 @@ import {
     formatQuestionResponse,
     notePresentation,
     QuestionProgress,
-    shouldAllowUnansweredNote,
+    shouldAllowWriteIn,
     shouldAutoSubmitSingle,
-    SYNTHETIC_UNANSWERED_LABEL,
     type DecisionFlowPolicy,
     type DecisionNoteRequirement,
     type PendingQuestionResponse,
@@ -19,18 +18,17 @@ import {
 import { loadQuestionKeymapConfig, questionHelp, resolveQuestionKeymap, resolveUiAction, type QuestionContext, type ResolvedQuestionKeymap, type UiAction } from "./decision_keymap.ts";
 import { keyLabel } from "./extension_keybindings.ts";
 
-interface DisplayChoice { value?: string; label: string; description?: string; synthetic?: boolean; }
+interface DisplayChoice { value: string; label: string; description?: string; }
 interface ChoiceDraft {
     focusIndex: number;
     selected: Set<string>;
     optionNotes: Map<string, string>;
-    unansweredNote?: string;
-    syntheticSelected: boolean;
+    writeIn?: string;
 }
 interface TextDraft { value: string; }
 type QuestionDraft = ChoiceDraft | TextDraft;
-type Mode = "question" | "note" | "review";
-type NoteContext = "response" | "unanswered";
+type Mode = "question" | "note" | "write-in" | "review";
+type NoteContext = "response";
 interface TuiQuestionContext { ui: Pick<ExtensionUIContext, "custom">; }
 
 function editorTheme(theme: Theme): EditorTheme {
@@ -39,12 +37,8 @@ function editorTheme(theme: Theme): EditorTheme {
         description: text => theme.fg("muted", text), scrollInfo: text => theme.fg("dim", text), noMatch: text => theme.fg("warning", text),
     } };
 }
-function choicesFor(question: QuestionItem, allowUnansweredNote: boolean): DisplayChoice[] {
-    const options: DisplayChoice[] = (question.options ?? []).map((option: QuestionOption) => ({ ...option }));
-    if (allowUnansweredNote && (question.kind === "single" || question.kind === "multi")) {
-        options.push({ label: SYNTHETIC_UNANSWERED_LABEL, synthetic: true });
-    }
-    return options;
+function choicesFor(question: QuestionItem): DisplayChoice[] {
+    return (question.options ?? []).map((option: QuestionOption) => ({ ...option }));
 }
 function appendWrapped(lines: string[], width: number, text: string, prefix = "", decorate?: (line: string) => string): void {
     const append = (line: string): void => { lines.push(decorate?.(line) ?? line); };
@@ -58,13 +52,12 @@ function cloneDraft(draft: QuestionDraft): QuestionDraft {
         focusIndex: draft.focusIndex,
         selected: new Set(draft.selected),
         optionNotes: new Map(draft.optionNotes),
-        unansweredNote: draft.unansweredNote,
-        syntheticSelected: draft.syntheticSelected,
+        writeIn: draft.writeIn,
     };
 }
 function draftFrom(question: QuestionItem, response?: QuestionResponse): QuestionDraft {
     if (question.kind === "text") return { value: response?.kind === "text" ? response.value : "" };
-    const draft: ChoiceDraft = { focusIndex: 0, selected: new Set(), optionNotes: new Map(), syntheticSelected: false };
+    const draft: ChoiceDraft = { focusIndex: 0, selected: new Set(), optionNotes: new Map() };
     if (response?.kind === "single") {
         draft.selected.add(response.value);
         if (response.note !== undefined) draft.optionNotes.set(response.value, response.note);
@@ -74,9 +67,9 @@ function draftFrom(question: QuestionItem, response?: QuestionResponse): Questio
             draft.selected.add(item.value);
             if (item.note !== undefined) draft.optionNotes.set(item.value, item.note);
         }
-    } else if (response?.kind === "unanswered") {
-        draft.unansweredNote = response.note;
-        draft.syntheticSelected = true;
+        draft.writeIn = response.writeIn;
+    } else if (response?.kind === "write-in") {
+        draft.writeIn = response.value;
     }
     return draft;
 }
@@ -103,11 +96,10 @@ export class DecisionComponent implements Component, Focusable {
     #lastEditedIndex = 0;
     #questionSnapshot?: QuestionDraft;
     #noteDraftSnapshot?: ChoiceDraft;
-    #syntheticDraftSnapshot?: ChoiceDraft;
+    #writeInDraftSnapshot?: ChoiceDraft;
     #noteSnapshot?: string;
     #noteTarget?: string;
     #noteContext: NoteContext = "response";
-    #noteFromSynthetic = false;
     #submitAfterNote = false;
     #validation?: string;
     #cachedLines?: string[];
@@ -137,13 +129,13 @@ export class DecisionComponent implements Component, Focusable {
     #cancel(): void { this.#finish(this.#progress.cancelled(this.#mode !== "review")); }
     #question(): QuestionItem { return this.#progress.current; }
     #autoSubmitSingle(): boolean { return this.#progress.total === 1 && shouldAutoSubmitSingle(this.#policy); }
-    #allowUnansweredNote(): boolean { return shouldAllowUnansweredNote(this.#policy); }
+    #allowWriteIn(): boolean { return shouldAllowWriteIn(this.#policy); }
     #draft(): QuestionDraft { return this.#drafts.get(this.#question().id)!; }
     #choiceDraft(): ChoiceDraft { const draft = this.#draft(); if (!("selected" in draft)) throw new Error("Not a choice question"); return draft; }
     #textDraft(): TextDraft { const draft = this.#draft(); if (!("value" in draft)) throw new Error("Not a text question"); return draft; }
-    #choices(): DisplayChoice[] { return choicesFor(this.#question(), this.#allowUnansweredNote()); }
-    #syncEditorFocus(): void { this.#editor.focused = this.#focused && (this.#mode === "note" || (this.#mode === "question" && this.#question().kind === "text")); }
-    #context(): QuestionContext { return this.#mode === "review" ? "question.review" : this.#mode === "note" ? "question.note" : `question.${this.#question().kind}` as QuestionContext; }
+    #choices(): DisplayChoice[] { return choicesFor(this.#question()); }
+    #syncEditorFocus(): void { this.#editor.focused = this.#focused && (this.#mode === "note" || this.#mode === "write-in" || (this.#mode === "question" && this.#question().kind === "text")); }
+    #context(): QuestionContext { return this.#mode === "review" ? "question.review" : this.#mode === "note" ? "question.note" : this.#mode === "write-in" ? "question.write-in" : `question.${this.#question().kind}` as QuestionContext; }
     #openQuestion(fromReview: boolean): void {
         this.#mode = "question"; this.#fromReview = fromReview;
         this.#reviewEntryWasResponded = fromReview && this.#progress.isResponded(this.#question());
@@ -174,7 +166,6 @@ export class DecisionComponent implements Component, Focusable {
     #focusedChoice(): DisplayChoice { return this.#choices()[this.#choiceDraft().focusIndex]!; }
     #noteRequirement(context: NoteContext = this.#noteContext, option?: QuestionOption): DecisionNoteRequirement {
         const question = this.#question();
-        if (context === "unanswered") return "required";
         const focused = this.#focusedChoice();
         const target = option ?? (this.#noteTarget === undefined
             ? question.options?.find(candidate => candidate.value === focused.value)
@@ -184,20 +175,10 @@ export class DecisionComponent implements Component, Focusable {
     #openNote(options: { submitAfterSave?: boolean; context?: NoteContext } = {}): void {
         const draft = this.#choiceDraft();
         const focused = this.#focusedChoice();
-        this.#noteContext = options.context ?? (focused.synthetic ? "unanswered" : "response");
-        this.#noteFromSynthetic = this.#noteContext === "unanswered";
-        this.#noteTarget = this.#noteFromSynthetic ? undefined : focused.value;
-        this.#noteDraftSnapshot = this.#noteFromSynthetic && this.#syntheticDraftSnapshot !== undefined
-            ? cloneDraft(this.#syntheticDraftSnapshot) as ChoiceDraft
-            : cloneDraft(draft) as ChoiceDraft;
-        if (this.#noteFromSynthetic) {
-            draft.selected.clear();
-            draft.syntheticSelected = true;
-            this.#noteSnapshot = draft.unansweredNote;
-        } else {
-            if (this.#noteTarget === undefined) throw new Error("Regular choice has no value");
-            this.#noteSnapshot = draft.optionNotes.get(this.#noteTarget);
-        }
+        this.#noteContext = options.context ?? "response";
+        this.#noteTarget = focused.value;
+        this.#noteDraftSnapshot = cloneDraft(draft) as ChoiceDraft;
+        this.#noteSnapshot = draft.optionNotes.get(this.#noteTarget);
         this.#submitAfterNote = options.submitAfterSave ?? false;
         this.#editor.setText(this.#noteSnapshot ?? "");
         this.#mode = "note"; this.#validation = undefined; this.#syncEditorFocus(); this.#refresh();
@@ -212,30 +193,52 @@ export class DecisionComponent implements Component, Focusable {
         } else {
             const draft = this.#choiceDraft();
             const normalized = editedNote.trim() === "" ? undefined : editedNote;
-            if (this.#noteFromSynthetic) {
-                if (normalized === undefined) {
-                    this.#validation = "Note must contain non-whitespace text."; this.#refresh(); return;
-                }
+            const target = this.#noteTarget;
+            if (target === undefined) throw new Error("Regular note has no target");
+            if (normalized === undefined) draft.optionNotes.delete(target);
+            else draft.optionNotes.set(target, normalized);
+            if (this.#question().kind === "single") {
                 draft.selected.clear();
-                draft.syntheticSelected = true;
-                draft.unansweredNote = normalized;
-            } else {
-                const target = this.#noteTarget;
-                if (target === undefined) throw new Error("Regular note has no target");
-                if (normalized === undefined) draft.optionNotes.delete(target);
-                else {
-                    draft.optionNotes.set(target, normalized);
-                    if (this.#question().kind === "single") draft.selected.clear();
-                    draft.selected.add(target);
-                    draft.syntheticSelected = false;
-                }
+                draft.writeIn = undefined;
             }
+            draft.selected.add(target);
         }
         const submit = save && this.#submitAfterNote;
-        this.#noteDraftSnapshot = undefined; this.#syntheticDraftSnapshot = undefined; this.#noteSnapshot = undefined; this.#noteTarget = undefined;
-        this.#noteFromSynthetic = false; this.#submitAfterNote = false; this.#noteContext = "response"; this.#mode = "question";
+        this.#noteDraftSnapshot = undefined; this.#noteSnapshot = undefined; this.#noteTarget = undefined;
+        this.#submitAfterNote = false; this.#noteContext = "response"; this.#mode = "question";
         this.#validation = undefined; this.#syncEditorFocus();
         if (submit) this.#commit(); else this.#refresh();
+    }
+    #openWriteIn(): void {
+        const draft = this.#choiceDraft();
+        this.#writeInDraftSnapshot = cloneDraft(draft) as ChoiceDraft;
+        this.#editor.setText(draft.writeIn ?? "");
+        this.#mode = "write-in";
+        this.#validation = undefined;
+        this.#syncEditorFocus();
+        this.#refresh();
+    }
+    #closeWriteIn(save: boolean): void {
+        const snapshot = this.#writeInDraftSnapshot;
+        const existing = snapshot?.writeIn;
+        const edited = this.#editor.getExpandedText();
+        if (save && edited.trim() === "" && existing === undefined) {
+            this.#validation = "Response must contain non-whitespace text.";
+            this.#refresh();
+            return;
+        }
+        if (!save && snapshot !== undefined) this.#drafts.set(this.#question().id, cloneDraft(snapshot));
+        else if (save) {
+            const draft = this.#choiceDraft();
+            draft.writeIn = edited.trim() === "" ? undefined : edited;
+            if (this.#question().kind === "single" && draft.writeIn !== undefined) draft.selected.clear();
+        }
+        this.#writeInDraftSnapshot = undefined;
+        this.#mode = "question";
+        this.#validation = undefined;
+        this.#syncEditorFocus();
+        if (save && this.#question().kind === "single" && this.#choiceDraft().writeIn !== undefined) this.#commit();
+        else this.#refresh();
     }
     #pendingFromDraft(): PendingQuestionResponse | undefined {
         const question = this.#question();
@@ -244,14 +247,15 @@ export class DecisionComponent implements Component, Focusable {
             return value.trim() === "" ? undefined : { kind: "text", value };
         }
         const draft = this.#choiceDraft();
-        if (draft.syntheticSelected) return draft.unansweredNote === undefined ? undefined : { kind: "unanswered", note: draft.unansweredNote };
-        if (draft.selected.size === 0) return undefined;
+        if (question.kind === "single" && draft.writeIn !== undefined) return { kind: "write-in", value: draft.writeIn };
+        if (draft.selected.size === 0 && draft.writeIn === undefined) return undefined;
         if (question.kind === "multi") {
             return { kind: "multi", values: (question.options ?? [])
                 .filter(option => draft.selected.has(option.value))
                 .map(option => draft.optionNotes.has(option.value)
                     ? { value: option.value, note: draft.optionNotes.get(option.value) }
-                    : { value: option.value }) };
+                    : { value: option.value }),
+                ...(draft.writeIn === undefined ? {} : { writeIn: draft.writeIn }) };
         }
         const value = [...draft.selected][0]!;
         const note = draft.optionNotes.get(value);
@@ -270,20 +274,16 @@ export class DecisionComponent implements Component, Focusable {
         }
         const draft = this.#choiceDraft();
         const focused = this.#focusedChoice();
-        if (draft.syntheticSelected) {
-            if (draft.unansweredNote === undefined) {
-                this.#openNote({ submitAfterSave: true, context: "unanswered" });
+        if (question.kind === "single" && draft.writeIn !== undefined) return { kind: "write-in", value: draft.writeIn };
+        if (question.kind === "multi") {
+            const focusedOption = question.options?.find(candidate => candidate.value === focused.value);
+            if (decisionNoteRequirement(this.#policy, question, focusedOption) === "required"
+                && (!draft.selected.has(focused.value) || draft.optionNotes.get(focused.value) === undefined)) {
+                this.#openNote({ context: "response" });
                 return undefined;
             }
-            return { kind: "unanswered", note: draft.unansweredNote };
-        }
-        if (focused.synthetic) {
-            this.#openNote({ submitAfterSave: true, context: "unanswered" });
-            return undefined;
-        }
-        if (question.kind === "multi") {
-            if (draft.selected.size === 0) {
-                if (!options.silent) { this.#validation = "Select at least one option."; this.#refresh(); }
+            if (draft.selected.size === 0 && draft.writeIn === undefined) {
+                if (!options.silent) { this.#validation = "Select at least one option or write another response."; this.#refresh(); }
                 return undefined;
             }
             for (const [index, option] of (question.options ?? []).entries()) {
@@ -336,6 +336,7 @@ export class DecisionComponent implements Component, Focusable {
     }
     #back(): void {
         if (this.#mode === "note") { this.#closeNote(false); return; }
+        if (this.#mode === "write-in") { this.#closeWriteIn(false); return; }
         if (this.#mode === "review") { this.#progress.moveTo(this.#lastEditedIndex); this.#openQuestion(true); this.#refresh(); return; }
         if (this.#questionSnapshot !== undefined) this.#drafts.set(this.#question().id, cloneDraft(this.#questionSnapshot));
         if (this.#fromReview) { this.#mode = "review"; this.#reviewIndex = this.#progress.index + 1; this.#fromReview = false; this.#reviewEntryWasResponded = false; this.#syncEditorFocus(); this.#refresh(); }
@@ -346,30 +347,15 @@ export class DecisionComponent implements Component, Focusable {
         if (question.kind !== "single" && question.kind !== "multi") return;
         const draft = this.#choiceDraft();
         const choice = this.#focusedChoice();
-        if (choice.synthetic) {
-            if (draft.syntheticSelected) {
-                if (this.#syntheticDraftSnapshot !== undefined) {
-                    this.#drafts.set(question.id, cloneDraft(this.#syntheticDraftSnapshot));
-                    this.#syntheticDraftSnapshot = undefined;
-                } else {
-                    draft.syntheticSelected = false;
-                }
-            } else {
-                this.#syntheticDraftSnapshot = cloneDraft(draft) as ChoiceDraft;
-                draft.selected.clear();
-                draft.syntheticSelected = true;
-            }
-            this.#validation = undefined;
-            return this.#refresh();
-        }
-        if (choice.value === undefined) throw new Error("Regular choice has no value");
-        draft.syntheticSelected = false;
-        this.#syntheticDraftSnapshot = undefined;
+        if (question.kind === "single") draft.writeIn = undefined;
         if (question.kind === "single") {
             draft.selected.clear();
             draft.selected.add(choice.value);
         } else {
-            if (draft.selected.has(choice.value)) draft.selected.delete(choice.value); else draft.selected.add(choice.value);
+            if (draft.selected.has(choice.value)) {
+                draft.selected.delete(choice.value);
+                draft.optionNotes.delete(choice.value);
+            } else draft.selected.add(choice.value);
         }
         this.#validation = undefined;
         this.#refresh();
@@ -377,14 +363,13 @@ export class DecisionComponent implements Component, Focusable {
     #handleQuestion(action: UiAction | undefined, data: string): void {
         if (action === "next-question") return this.#moveQuestion(1); if (action === "previous-question") return this.#moveQuestion(-1);
         if (action === "back") return this.#back(); if (action === "move-up") return this.#moveChoice(-1); if (action === "move-down") return this.#moveChoice(1);
-        if (action === "edit-note" && this.#question().kind !== "text") {
+        if (action === "select-and-note" && this.#question().kind !== "text") {
             const choice = this.#focusedChoice();
-            if (choice.synthetic) {
-                if (this.#allowUnansweredNote()) return this.#openNote({ context: "unanswered" });
-            } else if (this.#noteRequirement("response", this.#question().options?.find(option => option.value === choice.value)) !== "none") {
-                return this.#openNote({ context: "response" });
+            if (this.#noteRequirement("response", this.#question().options?.find(option => option.value === choice.value)) !== "none") {
+                return this.#openNote({ submitAfterSave: this.#question().kind === "single", context: "response" });
             }
         }
+        if (action === "write-in" && this.#question().kind !== "text" && this.#allowWriteIn()) return this.#openWriteIn();
         if (action === "toggle") return this.#handleToggle();
         if (action === "accept") return this.#commit();
         if (action === "newline" && this.#question().kind === "text") { this.#editor.insertTextAtCursor("\n"); this.#validation = undefined; return this.#refresh(); }
@@ -412,22 +397,21 @@ export class DecisionComponent implements Component, Focusable {
         if (this.#finished) return;
         const action = resolveUiAction(data, this.#context(), this.#keymap);
         if (action === "cancel") return this.#cancel();
-        if (this.#mode === "note") { if (action === "back") this.#closeNote(false); else if (action === "accept") this.#closeNote(true); else if (action === "newline") { this.#editor.insertTextAtCursor("\n"); this.#refresh(); } else { this.#editor.handleInput(data); this.#refresh(); } }
+        if (this.#mode === "note") { if (action === "back") this.#closeNote(false); else if (action === "accept") this.#closeNote(true); else if (action === "clear") { this.#editor.setText(""); this.#validation = undefined; this.#refresh(); } else if (action === "newline") { this.#editor.insertTextAtCursor("\n"); this.#refresh(); } else { this.#editor.handleInput(data); this.#refresh(); } }
+        else if (this.#mode === "write-in") { if (action === "back") this.#closeWriteIn(false); else if (action === "accept") this.#closeWriteIn(true); else if (action === "clear") { this.#editor.setText(""); this.#validation = undefined; this.#refresh(); } else if (action === "newline") { this.#editor.insertTextAtCursor("\n"); this.#refresh(); } else { this.#editor.handleInput(data); this.#refresh(); } }
         else if (this.#mode === "review") this.#handleReview(action); else this.#handleQuestion(action, data);
     }
     #responseStatusLabel(question: QuestionItem): string {
         if (this.#progress.isAnswered(question)) return "✓ Answered";
-        if (this.#progress.isUnansweredWithNote(question)) return "◐ Unanswered (note)";
         return "○ Unanswered";
     }
     #renderHeader(lines: string[], width: number): void {
         const tabs = this.#questions.map((question, index) => {
             const active = this.#mode !== "review" && index === this.#progress.index;
-            const marker = this.#progress.isAnswered(question) ? "✓" : this.#progress.isUnansweredWithNote(question) ? "◐" : "○";
+            const marker = this.#progress.isAnswered(question) ? "✓" : "○";
             const text = `[${index + 1} ${active ? "●" : marker}]`;
             if (active) return this.#theme.fg("accent", this.#theme.bold(text));
             if (this.#progress.isAnswered(question)) return this.#theme.fg("success", text);
-            if (this.#progress.isUnansweredWithNote(question)) return this.#theme.fg("warning", text);
             return this.#theme.fg("dim", text);
         });
         if (!this.#autoSubmitSingle()) {
@@ -440,39 +424,39 @@ export class DecisionComponent implements Component, Focusable {
         const question = this.#question(); const draft = this.#choiceDraft();
         for (let index = 0; index < this.#choices().length; index += 1) {
             const choice = this.#choices()[index]!; const focused = index === draft.focusIndex;
-            const virtualSelected = this.#mode === "note" && !this.#noteFromSynthetic && choice.value === this.#noteTarget;
-            const selected = choice.synthetic ? draft.syntheticSelected : choice.value !== undefined && (draft.selected.has(choice.value) || virtualSelected);
+            const virtualSelected = this.#mode === "note" && choice.value === this.#noteTarget;
+            const selected = draft.selected.has(choice.value) || virtualSelected;
             const control = question.kind === "multi" ? `[${selected ? "x" : " "}]` : `(${selected ? "●" : " "})`;
-            const text = `${control} ${choice.label}`;
-            const styled = this.#theme.fg(focused ? "accent" : selected ? "success" : choice.synthetic ? "muted" : "text", focused || selected ? this.#theme.bold(text) : text);
+            const option = question.options?.find(candidate => candidate.value === choice.value);
+            const noteKey = this.#keymap[`question.${question.kind}` as QuestionContext]["select-and-note"]?.[0];
+            const required = decisionNoteRequirement(this.#policy, question, option) === "required"
+                ? ` (note required${noteKey === undefined ? "" : `; ${keyLabel(noteKey)} select and note`})`
+                : "";
+            const text = `${control} ${choice.label}${required}`;
+            const styled = this.#theme.fg(focused ? "accent" : selected ? "success" : "text", focused || selected ? this.#theme.bold(text) : text);
             appendWrapped(lines, width, styled, focused ? "> " : "  ", focused ? line => this.#theme.bg("selectedBg", line) : undefined);
             if (choice.description) appendWrapped(lines, width, this.#theme.fg("muted", choice.description), "    ");
-            const note = choice.synthetic ? draft.unansweredNote : choice.value === undefined ? undefined : draft.optionNotes.get(choice.value);
+            const note = draft.optionNotes.get(choice.value);
             const preview = notePreview(note);
             if (preview) appendWrapped(lines, width, this.#theme.fg("muted", `Note: ${preview}`), "    ");
         }
     }
     #renderEditor(lines: string[], width: number, label: string): void { appendWrapped(lines, width, this.#theme.fg("accent", this.#theme.bold(label)), " "); for (const line of this.#editor.render(Math.max(1, width - 1))) lines.push(width > 1 ? ` ${line}` : line); }
     #renderNoteTarget(lines: string[], width: number): void {
-        const draft = this.#choiceDraft();
-        const choice = this.#noteFromSynthetic
-            ? this.#choices().find(candidate => candidate.synthetic)
-            : this.#question().options?.find(option => option.value === this.#noteTarget);
+        const choice = this.#question().options?.find(option => option.value === this.#noteTarget);
         if (choice !== undefined) {
-            const selected = this.#noteFromSynthetic ? draft.syntheticSelected : true;
+            const selected = true;
             const control = this.#question().kind === "multi" ? `[${selected ? "x" : " "}]` : `(${selected ? "●" : " "})`;
             appendWrapped(lines, width, this.#theme.fg("accent", this.#theme.bold(`${control} ${choice.label}`)), " ");
             if (choice.description) appendWrapped(lines, width, this.#theme.fg("muted", choice.description), "    ");
         }
         const presentation = notePresentation(this.#policy, this.#question(), this.#noteContext);
-        const fallback = this.#noteContext === "unanswered"
-            ? "Add a note when none of the options apply"
-            : this.#noteRequirement() === "required" ? "Required note for this option" : "Optional note for this option";
+        const fallback = this.#noteRequirement() === "required" ? "Required note for this option" : "Optional note for this option";
         this.#renderEditor(lines, width, presentation.prompt ?? fallback);
         if (presentation.placeholder) appendWrapped(lines, width, this.#theme.fg("dim", presentation.placeholder), " ");
     }
     #renderReview(lines: string[], width: number): void {
-        const submitText = `Submit responses — ready (${this.#progress.answeredCount} answered, ${this.#progress.unansweredWithNoteCount} unanswered with note, ${this.#progress.untouchedCount} untouched)`;
+        const submitText = `Submit responses — ready (${this.#progress.answeredCount} answered, ${this.#progress.untouchedCount} untouched)`;
         const submitFocused = this.#reviewIndex === 0;
         appendWrapped(lines, width, this.#theme.fg(submitFocused ? "accent" : "success", this.#theme.bold(submitText)), submitFocused ? "> " : "  ", submitFocused ? line => this.#theme.bg("selectedBg", line) : undefined);
         this.#questions.forEach((question, index) => {
@@ -490,11 +474,13 @@ export class DecisionComponent implements Component, Focusable {
         if (this.#mode === "review") this.#renderReview(lines, w); else {
             appendWrapped(lines, w, this.#theme.fg("accent", this.#theme.bold(this.#question().prompt)), " "); lines.push("");
             if (this.#mode === "note") this.#renderNoteTarget(lines, w);
+            else if (this.#mode === "write-in") this.#renderEditor(lines, w, "Write another response");
             else if (this.#question().kind === "text") this.#renderEditor(lines, w, "Answer");
             else this.#renderChoices(lines, w);
         }
         if (this.#validation) { lines.push(""); appendWrapped(lines, w, this.#theme.fg("error", this.#theme.bold(`Error: ${this.#validation}`)), " "); }
-        lines.push(""); appendWrapped(lines, w, this.#theme.fg("dim", questionHelp(this.#context(), this.#keymap)), " "); lines.push(this.#theme.fg("border", "─".repeat(w)));
+        const help = questionHelp(this.#context(), this.#keymap, this.#allowWriteIn() ? undefined : new Set<UiAction>(["write-in"]));
+        lines.push(""); appendWrapped(lines, w, this.#theme.fg("dim", help), " "); lines.push(this.#theme.fg("border", "─".repeat(w)));
         this.#cachedLines = lines.map(line => truncateToWidth(line, w, "")); this.#cachedWidth = w; return this.#cachedLines;
     }
 }

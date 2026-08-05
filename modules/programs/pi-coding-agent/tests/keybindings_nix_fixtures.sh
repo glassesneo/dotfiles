@@ -9,7 +9,7 @@ tail='}]; }; in x.activationPackage.drvPath'
 
 invalid='myconfig.programs.pi-coding-agent.keybindings.overrides = {
   commandPalette = { open = ["not-a-key"]; moveUp = ["esc"]; cancel = ["escape"]; typo = ["x"]; };
-  question.submit = [];
+  question = { submit = []; "common.cancel" = ["e"]; };
   pi = { "tui.editor.cursorUp" = ["ctrl+c"]; "app.exit" = []; };
   tmuxPreview.openFull = ["clear"];
 };'
@@ -32,6 +32,7 @@ expect_diagnostic grammar 'commandPalette\.open=not-a-key'
 expect_diagnostic alias-collision 'commandPalette\.cancel.*commandPalette\.moveUp.*escape|commandPalette\.moveUp.*commandPalette\.cancel.*escape'
 expect_diagnostic unknown-action 'commandPalette\.typo'
 expect_diagnostic required-empty 'question\.submit'
+expect_diagnostic question-choice-collision 'question\.common\.cancel.*question\.choice\.select-and-note.*e|question\.choice\.select-and-note.*question\.common\.cancel.*e'
 expect_diagnostic overlapping-context 'pi\.app\.clear.*pi\.tui\.editor\.cursorUp.*ctrl\+c|pi\.tui\.editor\.cursorUp.*pi\.app\.clear.*ctrl\+c'
 expect_diagnostic tmux-unrepresentable 'tmuxPreview\.openFull=clear'
 expect_diagnostic direct-native-required-empty 'historyViewer\.exit'

@@ -3,6 +3,7 @@ import test from "node:test";
 import Value from "typebox/value";
 import {
     buildQuestionToolResult,
+    decisionNoteRequirement,
     formatQuestionResponse,
     normalizeQuestionResponse,
     optionDisplayText,
@@ -74,7 +75,7 @@ void test("schema characterizes required fields, closed objects, and option shap
     const valid = {
         questions: [{
             id: "choice", prompt: "Choose", kind: "single",
-            options: [{ value: "a", label: "A", description: "First" }],
+            options: [{ value: "a", label: "A", description: "First", noteRequired: true }],
         }],
     };
     assert.equal(Value.Check(questionParameters, valid), true);
@@ -88,6 +89,7 @@ void test("schema characterizes required fields, closed objects, and option shap
         { questions: [{ id: "choice", prompt: "Choose", kind: "single", options: [{ label: "A" }] }] },
         { questions: [{ id: "choice", prompt: "Choose", kind: "single", options: [{ value: "a" }] }] },
         { questions: [{ id: "choice", prompt: "Choose", kind: "single", options: [{ value: "a", label: "A", extra: true }] }] },
+        { questions: [{ id: "choice", prompt: "Choose", kind: "single", options: [{ value: "a", label: "A", noteRequired: "yes" }] }] },
         { questions: [{ id: "choice", prompt: "Choose", kind: "single", note: { mode: "answer" } }] },
         { questions: valid.questions, extra: true },
     ];
@@ -143,6 +145,13 @@ void test("runtime validation rejects duplicate and kind-specific violations", (
     }
 });
 
+void test("noteRequired defaults to optional and requires notes when true", () => {
+    const question = questions[0]!;
+    assert.equal(decisionNoteRequirement(undefined, question, question.options?.[0]), "optional");
+    assert.equal(decisionNoteRequirement(undefined, question, { value: "x", label: "X", noteRequired: true }), "required");
+    assert.equal(decisionNoteRequirement({ noteRequirement: () => "none" }, question, { value: "x", label: "X", noteRequired: true }), "none");
+});
+
 void test("display text includes descriptions for stable reverse lookup", () => {
     assert.equal(
         optionDisplayText({ value: "safe", label: "Safe", description: "Small" }),
@@ -164,22 +173,23 @@ void test("response formatting shares labels while preserving presentation polic
     const response = {
         kind: "multi" as const,
         values: [{ value: "a", note: "first\nnote" }, { value: "b" }],
+        writeIn: "another path",
     };
 
     assert.equal(
         formatQuestionResponse(multi, response),
-        "A — note: first\nnote, B",
+        "A — note: first\nnote, B, another path",
     );
     assert.equal(
         formatQuestionResponse(multi, response, {
             formatText: value => value.replace(/\n/g, " ⏎ "),
             formatResponseNote: value => ` — note: ${value.replace(/\n/g, " ⏎ ")}`,
         }),
-        "A — note: first ⏎ note, B",
+        "A — note: first ⏎ note, B, another path",
     );
     assert.equal(
-        formatQuestionResponse(questions[0], { kind: "unanswered", note: "try another way" }),
-        "Unanswered — note: try another way",
+        formatQuestionResponse(questions[0], { kind: "write-in", value: "try another way" }),
+        "try another way",
     );
 });
 
@@ -219,10 +229,10 @@ void test("responses normalize notes and multi values in option definition order
     );
     assert.deepEqual(
         normalizeQuestionResponse(questions[0], {
-            kind: "unanswered",
-            note: "none fit",
+            kind: "write-in",
+            value: "none fit",
         }),
-        { kind: "unanswered", note: "none fit" },
+        { kind: "write-in", value: "none fit" },
     );
 });
 
@@ -246,10 +256,10 @@ void test("normalization rejects empty or inconsistent pending responses", () =>
     assert.throws(
         () =>
             normalizeQuestionResponse(questions[0], {
-                kind: "unanswered",
-                note: "  ",
+                kind: "write-in",
+                value: "  ",
             }),
-        /non-blank note/,
+        /non-blank text/,
     );
     assert.throws(
         () =>
@@ -257,7 +267,7 @@ void test("normalization rejects empty or inconsistent pending responses", () =>
                 { ...questions[0], kind: "multi", options: [{ value: "a", label: "A" }, { value: "b", label: "B" }] },
                 { kind: "multi", values: [] },
             ),
-        /at least one selection/,
+        /at least one selection or a write-in/,
     );
     assert.throws(
         () =>
@@ -310,15 +320,13 @@ void test("progress supports movement, overwrite, cancellation contexts, and exp
     assert.throws(() => progress.moveTo(2), /out of range/);
 });
 
-void test("progress distinguishes answered, unanswered-with-note, and untouched", () => {
+void test("progress counts write-ins as answered and preserves untouched questions", () => {
     const progress = new QuestionProgress(questions);
-    progress.submit({ kind: "unanswered", note: "need more context" });
-    assert.equal(progress.isAnswered("approach"), false);
-    assert.equal(progress.isUnansweredWithNote("approach"), true);
+    progress.submit({ kind: "write-in", value: "need another path" });
+    assert.equal(progress.isAnswered("approach"), true);
     assert.equal(progress.isResponded("approach"), true);
     assert.equal(progress.isUntouched("details"), true);
-    assert.equal(progress.answeredCount, 0);
-    assert.equal(progress.unansweredWithNoteCount, 1);
+    assert.equal(progress.answeredCount, 1);
     assert.equal(progress.respondedCount, 1);
     assert.equal(progress.nextUntouched(), 1);
 });

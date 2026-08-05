@@ -3,27 +3,29 @@ import { matchesKey, type KeyId } from "@earendil-works/pi-tui";
 import { canonicalKeyId, isValidKeyId } from "./private_key_id.ts";
 import { keyLabel, loadFeatureKeybindings } from "./extension_keybindings.ts";
 
-export const questionContexts = ["question.single", "question.multi", "question.text", "question.note", "question.review", "question.common"] as const;
+export const questionContexts = ["question.single", "question.multi", "question.text", "question.note", "question.write-in", "question.review", "question.common"] as const;
 export type QuestionContext = (typeof questionContexts)[number];
-export const uiActions = ["accept", "newline", "next-question", "previous-question", "back", "cancel", "move-up", "move-down", "toggle", "edit-note"] as const;
+export const uiActions = ["accept", "newline", "next-question", "previous-question", "back", "cancel", "clear", "move-up", "move-down", "toggle", "select-and-note", "write-in"] as const;
 export type UiAction = (typeof uiActions)[number];
 export type QuestionKeymapConfig = Partial<Record<QuestionContext, Partial<Record<UiAction, string[]>>>>;
 export type ResolvedQuestionKeymap = Record<QuestionContext, Partial<Record<UiAction, KeyId[]>>>;
 
 const DEFAULT_CONFIG: QuestionKeymapConfig = {
     "question.common": { "next-question": ["ctrl+f"], "previous-question": ["ctrl+b"], back: ["escape"], cancel: ["ctrl+c"] },
-    "question.single": { accept: ["enter"], "move-up": ["ctrl+p"], "move-down": ["ctrl+n"], toggle: ["space"], "edit-note": ["e"] },
-    "question.multi": { accept: ["enter"], "move-up": ["ctrl+p"], "move-down": ["ctrl+n"], toggle: ["space"], "edit-note": ["e"] },
+    "question.single": { accept: ["enter"], "move-up": ["ctrl+p"], "move-down": ["ctrl+n"], toggle: ["space"], "select-and-note": ["e"], "write-in": ["shift+enter"] },
+    "question.multi": { accept: ["enter"], "move-up": ["ctrl+p"], "move-down": ["ctrl+n"], toggle: ["space"], "select-and-note": ["e"], "write-in": ["shift+enter"] },
     "question.review": { accept: ["enter"], "move-up": ["ctrl+p"], "move-down": ["ctrl+n"] },
     "question.text": { accept: ["enter"], newline: ["shift+enter"] },
-    "question.note": { accept: ["enter"], newline: ["shift+enter"] },
+    "question.note": { accept: ["enter"], newline: ["shift+enter"], clear: ["ctrl+c"], cancel: [] },
+    "question.write-in": { accept: ["enter"], newline: ["shift+enter"], clear: ["ctrl+c"], cancel: [] },
 };
 
 const required: Partial<Record<QuestionContext, UiAction[][]>> = {
     "question.single": [["accept"], ["move-up"], ["move-down"], ["back", "cancel"]],
     "question.multi": [["accept"], ["move-up"], ["move-down"], ["back", "cancel"]],
     "question.text": [["accept"], ["newline"], ["back", "cancel"]],
-    "question.note": [["accept"], ["newline"], ["back", "cancel"]],
+    "question.note": [["accept"], ["newline"], ["back"], ["clear"]],
+    "question.write-in": [["accept"], ["newline"], ["back"], ["clear"]],
     "question.review": [["accept"], ["move-up"], ["move-down"], ["next-question", "previous-question"], ["back", "cancel"]],
 };
 
@@ -44,13 +46,14 @@ export function validateQuestionKeymapConfig(config: unknown, path = "extension-
 export function loadQuestionKeymapConfig(agentDir?: string): { config: QuestionKeymapConfig; path: string } {
     const loaded = loadFeatureKeybindings("question", agentDir);
     const get = (name: string): KeyId[] => loaded.actions[name] ?? [];
-    const choice = { accept: get("choice.accept"), "move-up": get("choice.move-up"), "move-down": get("choice.move-down"), toggle: get("choice.toggle"), "edit-note": get("choice.edit-note") };
+    const choice = { accept: get("choice.accept"), "move-up": get("choice.move-up"), "move-down": get("choice.move-down"), toggle: get("choice.toggle"), "select-and-note": get("choice.select-and-note"), "write-in": get("choice.write-in") };
     return { path: loaded.path, config: {
         "question.common": { "next-question": get("common.next-question"), "previous-question": get("common.previous-question"), back: get("common.back"), cancel: get("common.cancel") },
         "question.single": choice, "question.multi": choice,
         "question.review": { accept: get("review.accept"), "move-up": get("review.move-up"), "move-down": get("review.move-down") },
         "question.text": { accept: get("text.accept"), newline: get("text.newline") },
-        "question.note": { accept: get("text.accept"), newline: get("text.newline") },
+        "question.note": { accept: get("text.accept"), newline: get("text.newline"), clear: get("editor.clear"), cancel: [] },
+        "question.write-in": { accept: get("text.accept"), newline: get("text.newline"), clear: get("editor.clear"), cancel: [] },
     } };
 }
 
@@ -75,6 +78,6 @@ export function resolveUiAction(data: string, context: QuestionContext, keymap: 
     for (const [action, keys] of Object.entries(effectiveMap(keymap, context)) as Array<[UiAction, KeyId[]]>) for (const key of keys) if (matchesKey(data, key)) matches.push({ action, specificity: key.split("+").length - 1 });
     matches.sort((left, right) => right.specificity - left.specificity); return matches[0]?.action;
 }
-const actionLabels: Record<UiAction, string> = { accept: "confirm", newline: "newline", "next-question": "next", "previous-question": "previous", back: "back", cancel: "cancel", "move-up": "up", "move-down": "down", toggle: "toggle", "edit-note": "edit note" };
+const actionLabels: Record<UiAction, string> = { accept: "confirm", newline: "newline", "next-question": "next", "previous-question": "previous", back: "back", cancel: "cancel", clear: "clear", "move-up": "up", "move-down": "down", toggle: "toggle", "select-and-note": "select and note", "write-in": "write response" };
 export function detailedQuestionHelp(context: QuestionContext, keymap: ResolvedQuestionKeymap): Array<{ action: UiAction; keys: string[]; label: string }> { return (Object.entries(effectiveMap(keymap, context)) as Array<[UiAction, KeyId[]]>).filter(([, keys]) => keys.length > 0).map(([action, keys]) => ({ action, keys: [...keys], label: actionLabels[action] })); }
-export function questionHelp(context: QuestionContext, keymap: ResolvedQuestionKeymap): string { return detailedQuestionHelp(context, keymap).map(item => `${keyLabel(item.keys[0]!)} ${item.label}`).join(" • "); }
+export function questionHelp(context: QuestionContext, keymap: ResolvedQuestionKeymap, excluded?: ReadonlySet<UiAction>): string { return detailedQuestionHelp(context, keymap).filter(item => !excluded?.has(item.action)).map(item => `${keyLabel(item.keys[0]!)} ${item.label}`).join(" • "); }

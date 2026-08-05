@@ -28,7 +28,7 @@ delib.module {
         };
         "common.cancel" = {
           defaultKeys = ["ctrl+c"];
-          contexts = ["question.common"];
+          contexts = ["question.choice" "question.text" "question.review"];
           required = true;
           target = "extension";
         };
@@ -56,10 +56,22 @@ delib.module {
           required = false;
           target = "extension";
         };
-        "choice.edit-note" = {
+        "choice.select-and-note" = {
           defaultKeys = ["e"];
           contexts = ["question.choice"];
           required = false;
+          target = "extension";
+        };
+        "choice.write-in" = {
+          defaultKeys = ["shift+enter"];
+          contexts = ["question.choice"];
+          required = true;
+          target = "extension";
+        };
+        "editor.clear" = {
+          defaultKeys = ["ctrl+c"];
+          contexts = ["question.note" "question.write-in"];
+          required = true;
           target = "extension";
         };
         "review.accept" = {

@@ -4,7 +4,6 @@ import test from "node:test";
 import type { Theme } from "@earendil-works/pi-coding-agent";
 import { visibleWidth, type TUI } from "@earendil-works/pi-tui";
 import { DecisionComponent, runTuiDecisionFlow } from "../extensions_src/utilities/decision_tui.ts";
-import { SYNTHETIC_UNANSWERED_LABEL } from "../extensions_src/utilities/decision_core.ts";
 import type { DecisionFlowPolicy, QuestionItem, QuestionResultDetails } from "../extensions_src/utilities/decision_core.ts";
 
 const theme = {
@@ -19,11 +18,12 @@ const manager = { getKeys(action: string) { return ({
 const keys = { down: "\u001b[B", up: "\u001b[A", tab: "\t", shiftTab: "\u001b[Z", enter: "\r", escape: "\u001b", space: " ", ctrlJ: "\n", ctrlC: "\u0003" };
 const testKeymapConfig = {
     "question.common": { "next-question": ["tab"], "previous-question": ["shift+tab"], back: ["escape"], cancel: ["ctrl+c"] },
-    "question.single": { "move-up": ["up", "k"], "move-down": ["down", "j"], toggle: ["space"], "edit-note": ["e"] },
-    "question.multi": { "move-up": ["up", "k"], "move-down": ["down", "j"], toggle: ["space"], "edit-note": ["e"] },
+    "question.single": { "move-up": ["up", "k"], "move-down": ["down", "j"], toggle: ["space"], "select-and-note": ["e"], "write-in": ["w"] },
+    "question.multi": { "move-up": ["up", "k"], "move-down": ["down", "j"], toggle: ["space"], "select-and-note": ["e"], "write-in": ["w"] },
     "question.review": { "move-up": ["up", "k"], "move-down": ["down", "j"] },
     "question.text": { newline: ["ctrl+j"] },
-    "question.note": { newline: ["ctrl+j"] },
+    "question.note": { newline: ["ctrl+j"], clear: ["ctrl+c"], cancel: [] },
+    "question.write-in": { newline: ["ctrl+j"], clear: ["ctrl+c"], cancel: [] },
 };
 const single: QuestionItem = { id: "single", prompt: "Choose one", kind: "single", options: [{ value: "a", label: "Alpha", description: "First option" }, { value: "b", label: "Beta" }] };
 
@@ -50,11 +50,9 @@ void test("Enter confirms text while Ctrl-J inserts a newline", () => {
     assert.deepEqual(h.results[0]?.responses.text, { kind: "text", value: "a\nb" });
 });
 
-void test("the configured edit key changes a response note without changing the focused answer", () => {
+void test("the configured select-and-note key commits a single response after save", () => {
     const h = harness([single]);
     h.component.handleInput(keys.down); h.component.handleInput("e"); h.component.handleInput("why"); h.component.handleInput(keys.enter);
-    assert.match(h.component.render(80).join("\n"), /Note: why/);
-    h.component.handleInput(keys.enter); h.component.handleInput(keys.enter);
     assert.deepEqual(h.results[0]?.responses.single, { kind: "single", value: "b", note: "why" });
 });
 
@@ -92,52 +90,41 @@ void test("single Space draft commits on Tab navigation", () => {
     h.component.handleInput(keys.space); h.component.handleInput(keys.tab); h.component.handleInput(keys.shiftTab);
     assert.match(h.component.render(80).join("\n"), /> \(●\) Alpha/);
     h.component.handleInput(keys.tab); h.component.handleInput(keys.tab);
-    assert.match(h.component.render(80).join("\n"), /1 answered, 0 unanswered with note, 1 untouched/);
+    assert.match(h.component.render(80).join("\n"), /1 answered, 1 untouched/);
 });
 
-void test("synthetic row opens note editor and creates unanswered response", () => {
+void test("write-in action creates an answered single response", () => {
     const h = harness([single]);
-    h.component.handleInput(keys.down);
-    h.component.handleInput(keys.down);
-    h.component.handleInput(keys.space);
-    h.component.handleInput(keys.enter);
+    assert.match(h.component.render(80).join("\n"), /W write response/);
+    h.component.handleInput("w");
     h.component.handleInput("none fit");
     h.component.handleInput(keys.enter);
-    h.component.handleInput(keys.enter);
-    assert.deepEqual(h.results[0]?.responses.single, { kind: "unanswered", note: "none fit" });
+    assert.deepEqual(h.results[0]?.responses.single, { kind: "write-in", value: "none fit" });
 });
 
-void test("synthetic row cancel preserves the complete existing draft", () => {
+void test("write-in cancel preserves the complete existing draft", () => {
     const h = harness([single]);
     h.component.handleInput(keys.space);
-    h.component.handleInput(keys.down);
-    h.component.handleInput(keys.down);
-    assert.match(h.component.render(80).join("\n"), new RegExp(`> \\( \\) ${SYNTHETIC_UNANSWERED_LABEL}`));
-    h.component.handleInput(keys.space);
-    h.component.handleInput(keys.enter);
+    h.component.handleInput("w");
     h.component.handleInput("discard");
     h.component.handleInput(keys.escape);
     const restored = h.component.render(80).join("\n");
     assert.match(restored, /\(●\) Alpha/);
-    assert.match(restored, new RegExp(`> \\( \\) ${SYNTHETIC_UNANSWERED_LABEL}`));
     assert.doesNotMatch(restored, /discard/);
 });
 
-void test("editing an unselected regular option selects it and previews its note", () => {
+void test("editing an unselected regular option selects it and advances", () => {
     const h = harness([single, { ...single, id: "other", prompt: "Other" }]);
     h.component.handleInput("e");
     h.component.handleInput("because Alpha");
     h.component.handleInput(keys.enter);
-    assert.match(h.component.render(80).join("\n"), /> \(●\) Alpha/);
-    assert.match(h.component.render(80).join("\n"), /Alpha[\s\S]*Note: because Alpha/);
-    h.component.handleInput(keys.tab);
     assert.match(h.component.render(80).join("\n"), /\[1 ✓\].*\[2 ●\]/);
     h.component.handleInput(keys.tab);
     h.component.handleInput(keys.enter);
     assert.deepEqual(h.results[0]?.responses.single, { kind: "single", value: "a", note: "because Alpha" });
 });
 
-void test("blank or cancelled regular note edits do not select an option", () => {
+void test("cancelled note edits restore state while blank optional notes select", () => {
     const cancelled = harness([single]);
     cancelled.component.handleInput("e");
     cancelled.component.handleInput("discard");
@@ -149,7 +136,7 @@ void test("blank or cancelled regular note edits do not select an option", () =>
     blank.component.handleInput("e");
     blank.component.handleInput("   ");
     blank.component.handleInput(keys.enter);
-    assert.match(blank.component.render(80).join("\n"), /> \( \) Alpha/);
+    assert.deepEqual(blank.results[0]?.responses.single, { kind: "single", value: "a" });
 });
 
 void test("required and blank notes follow decision policy", () => {
@@ -172,6 +159,51 @@ void test("required and blank notes follow decision policy", () => {
     assert.deepEqual(disabled.results[0]?.responses.single, { kind: "single", value: "a" });
 });
 
+void test("public noteRequired drives contextual accept and generated semantic hints", () => {
+    const question: QuestionItem = { id: "required", prompt: "Choose", kind: "single", options: [{ value: "a", label: "A", noteRequired: true }, { value: "b", label: "B" }] };
+    const h = harness([question]);
+    assert.match(h.component.render(80).join("\n"), /note required; E select and note/);
+    h.component.handleInput(keys.enter);
+    h.component.handleInput("   ");
+    h.component.handleInput(keys.enter);
+    assert.match(h.component.render(80).join("\n"), /Error: Note must contain non-whitespace text/);
+    h.component.handleInput(keys.ctrlC);
+    h.component.handleInput("why");
+    h.component.handleInput(keys.enter);
+    assert.deepEqual(h.results[0]?.responses.required, { kind: "single", value: "a", note: "why" });
+});
+
+void test("multi contextual accept selects a required-note option before commit", () => {
+    const question: QuestionItem = { id: "multi-required", prompt: "Many", kind: "multi", options: [{ value: "a", label: "A", noteRequired: true }, { value: "b", label: "B" }] };
+    const h = harness([question]);
+    h.component.handleInput(keys.enter);
+    assert.match(h.component.render(80).join("\n"), /Required note/);
+    h.component.handleInput("why");
+    h.component.handleInput(keys.enter);
+    assert.match(h.component.render(80).join("\n"), /\[x\] A/);
+    assert.equal(h.results.length, 0);
+    h.component.handleInput(keys.enter);
+    assert.deepEqual(h.results[0]?.responses["multi-required"], { kind: "multi", values: [{ value: "a", note: "why" }] });
+});
+
+void test("multi write-in preserves selections, supports deletion, and Ctrl-C clears", () => {
+    const question: QuestionItem = { id: "multi-write", prompt: "Many", kind: "multi", options: [{ value: "a", label: "A" }, { value: "b", label: "B" }] };
+    const h = harness([question]);
+    h.component.handleInput(keys.space);
+    h.component.handleInput("w");
+    h.component.handleInput("extra");
+    h.component.handleInput(keys.ctrlC);
+    assert.match(h.component.render(80).join("\n"), /Ctrl\+C clear/);
+    h.component.handleInput("replacement");
+    h.component.handleInput(keys.enter);
+    assert.match(h.component.render(80).join("\n"), /\[x\] A/);
+    h.component.handleInput("w");
+    h.component.handleInput(keys.ctrlC);
+    h.component.handleInput(keys.enter);
+    h.component.handleInput(keys.enter);
+    assert.deepEqual(h.results[0]?.responses["multi-write"], { kind: "multi", values: [{ value: "a" }] });
+});
+
 void test("multi uses Space and stores notes on selected options", () => {
     const question: QuestionItem = { id: "multi", prompt: "Many", kind: "multi", options: [{ value: "a", label: "A" }, { value: "b", label: "B" }] };
     const h = harness([question]);
@@ -185,7 +217,7 @@ void test("multi uses Space and stores notes on selected options", () => {
     assert.deepEqual(h.results[0]?.responses.multi, { kind: "multi", values: [{ value: "a", note: "note A\nmore detail" }, { value: "b" }] });
 });
 
-void test("multi keeps a deselected option note for a later re-selection", () => {
+void test("multi clears a deselected option note before later re-selection", () => {
     const question: QuestionItem = { id: "multi", prompt: "Many", kind: "multi", options: [{ value: "a", label: "A" }, { value: "b", label: "B" }] };
     const h = harness([question]);
     h.component.handleInput(keys.space);
@@ -197,7 +229,7 @@ void test("multi keeps a deselected option note for a later re-selection", () =>
     h.component.handleInput(keys.up);
     h.component.handleInput(keys.space);
     h.component.handleInput(keys.enter);
-    assert.deepEqual(h.results[0]?.responses.multi, { kind: "multi", values: [{ value: "a", note: "note A" }] });
+    assert.deepEqual(h.results[0]?.responses.multi, { kind: "multi", values: [{ value: "a" }] });
 });
 
 void test("configured alternate navigation keys move selection like Down and Up", () => {
@@ -214,7 +246,7 @@ void test("last-question Tab opens review and submits untouched questions", () =
     const h = harness([single, { id: "text", prompt: "Details", kind: "text" }]);
     h.component.handleInput(keys.tab); h.component.handleInput("draft"); h.component.handleInput(keys.tab);
     const review = h.component.render(80).join("\n");
-    assert.match(review, /1 answered, 0 unanswered with note, 1 untouched/);
+    assert.match(review, /1 answered, 1 untouched/);
     assert.match(review, /Q1 ○ Unanswered: Choose one/);
     assert.match(review, /Q2 ✓ Answered: Details/);
     h.component.handleInput(keys.down); h.component.handleInput(keys.down); h.component.handleInput(keys.enter);
@@ -278,7 +310,7 @@ void test("Esc backs out without cancelling; Ctrl-C cancels the entire call", ()
     assert.deepEqual(h.results, [{ status: "cancelled", responses: {}, currentQuestionId: "single" }]);
 });
 
-void test("artifact policy hides synthetic unanswered row and blocks no-selection note editing", () => {
+void test("artifact policy hides write-in while preserving option note policy", () => {
     const approval: QuestionItem = {
         id: "artifact-action",
         prompt: "Review",
@@ -289,15 +321,14 @@ void test("artifact policy hides synthetic unanswered row and blocks no-selectio
         ],
     };
     const h = harness([approval], undefined, {
-        allowUnansweredNote: false,
+        allowWriteIn: false,
         noteRequirement: (_item, option) => option?.value === "reject" ? "none" : "optional",
     });
-    assert.doesNotMatch(h.component.render(80).join("\n"), new RegExp(SYNTHETIC_UNANSWERED_LABEL));
+    assert.doesNotMatch(h.component.render(80).join("\n"), /write response/);
     h.component.handleInput("e");
     assert.match(h.component.render(80).join("\n"), /Optional note for this option/);
     h.component.handleInput(keys.escape);
     h.component.handleInput(keys.down);
-    h.component.handleInput(keys.space);
     h.component.handleInput("e");
     assert.doesNotMatch(h.component.render(80).join("\n"), /Optional note|Add a note/);
 });

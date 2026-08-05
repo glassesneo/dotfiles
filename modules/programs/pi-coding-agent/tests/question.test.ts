@@ -37,14 +37,16 @@ void test("extension registers sequential question metadata and model guidance",
   assert.equal(registered?.executionMode, "sequential");
   assert.match(registered?.description ?? "", /user-owned decisions/);
   assert.match(registered?.description ?? "", /affects the current task/);
-  assert.match(registered?.description ?? "", /optional note/);
+  assert.match(registered?.description ?? "", /noteRequired/);
+  assert.match(registered?.description ?? "", /write-in/);
   assert.match(registered?.promptSnippet ?? "", /user-owned decisions/);
   assert.match(registered?.promptSnippet ?? "", /affects the current task/);
   assert.doesNotMatch(registered?.promptSnippet ?? "", /required to continue|blocker/i);
-  assert.ok(questionPromptGuidelines.every(line => /`question` tool/.test(line)));
+  assert.ok(questionPromptGuidelines.some(line => /`question` tool/.test(line)));
   assert.ok(questionPromptGuidelines.some(line => /repository/.test(line)));
-  assert.ok(questionPromptGuidelines.some(line => /unanswered note/.test(line)));
-  assert.ok(questionPromptGuidelines.some(line => /Treat each note/.test(line)));
+  assert.ok(questionPromptGuidelines.some(line => /write-in.*answered/.test(line)));
+  assert.ok(questionPromptGuidelines.some(line => /noteRequired/.test(line)));
+  assert.ok(questionPromptGuidelines.some(line => /generic 'Other'/.test(line)));
   assert.ok(questionPromptGuidelines.some(line => /yes\/no.*kind='single'.*Yes and No/.test(line)));
 });
 
@@ -148,7 +150,7 @@ void test("tool renderers show question prompts, responses, notes, and untouched
   const args = {
     questions: [
       params.questions[0],
-      { id: "details", prompt: "Explain", kind: "text" as const },
+      { id: "details", prompt: "Explain", kind: "single" as const, options: [{ value: "x", label: "X" }, { value: "y", label: "Y" }] },
     ],
   };
   const call = tool.renderCall?.(args, renderTheme, {} as never);
@@ -161,15 +163,15 @@ void test("tool renderers show question prompts, responses, notes, and untouched
       status: "submitted",
       responses: {
         choice: { kind: "single", value: "b", note: "because" },
-        details: { kind: "unanswered", note: "need another path" },
+        details: { kind: "write-in", value: "need another path" },
       },
     },
   } as never;
   const collapsed = tool.renderResult?.(result, { expanded: false } as never, renderTheme, { args } as never);
   const collapsedText = collapsed?.render(160).join("\n") ?? "";
-  assert.match(collapsedText, /1 answered, 1 unanswered with note, 0 untouched/);
+  assert.match(collapsedText, /2 answered, 0 untouched/);
   assert.match(collapsedText, /Choose — B — note: because/);
-  assert.match(collapsedText, /Explain — Unanswered — note: need another path/);
+  assert.match(collapsedText, /Explain — need another path/);
 });
 
 void test("multi tool results keep each option note paired in collapsed and expanded output", () => {
@@ -187,11 +189,11 @@ void test("multi tool results keep each option note paired in collapsed and expa
     content: [{ type: "text", text: "" }],
     details: {
       status: "submitted",
-      responses: { targets: { kind: "multi", values: [{ value: "a", note: "first\nline" }, { value: "b", note: "second" }] } },
+      responses: { targets: { kind: "multi", values: [{ value: "a", note: "first\nline" }, { value: "b", note: "second" }], writeIn: "another" } },
     },
   } as never;
   const collapsed = tool.renderResult?.(result, { expanded: false } as never, renderTheme, { args } as never)?.render(160).join("\n") ?? "";
-  assert.match(collapsed, /Targets — A — note: first ⏎ line, B — note: second/);
+  assert.match(collapsed, /Targets — A — note: first ⏎ line, B — note: second, another/);
   const expanded = tool.renderResult?.(result, { expanded: true } as never, renderTheme, { args } as never)?.render(160).join("\n") ?? "";
   assert.match(expanded, /Q1: Targets[\s\S]*A — note: first[\s\S]*line[\s\S]*B — note: second/);
 });

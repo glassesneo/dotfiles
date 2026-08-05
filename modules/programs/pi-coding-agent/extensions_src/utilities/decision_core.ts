@@ -4,12 +4,11 @@ import { Type, type Static } from "typebox";
 export const questionKinds = ["single", "multi", "text"] as const;
 export type QuestionKind = (typeof questionKinds)[number];
 
-export const SYNTHETIC_UNANSWERED_LABEL = "None of these — add a note";
-
 export interface QuestionOption {
     value: string;
     label: string;
     description?: string;
+    noteRequired?: boolean;
 }
 
 export interface QuestionItem {
@@ -23,9 +22,9 @@ export interface QuestionParameters { questions: QuestionItem[]; }
 
 export type QuestionResponse =
     | { kind: "single"; value: string; note?: string }
-    | { kind: "multi"; values: Array<{ value: string; note?: string }> }
+    | { kind: "multi"; values: Array<{ value: string; note?: string }>; writeIn?: string }
     | { kind: "text"; value: string }
-    | { kind: "unanswered"; note: string };
+    | { kind: "write-in"; value: string };
 
 export interface QuestionResultDetails {
     status: "submitted" | "cancelled" | "unavailable";
@@ -37,6 +36,7 @@ const questionOptionSchema = Type.Object({
     value: Type.String(),
     label: Type.String(),
     description: Type.Optional(Type.String()),
+    noteRequired: Type.Optional(Type.Boolean()),
 }, { additionalProperties: false });
 
 const questionItemSchema = Type.Object({
@@ -67,21 +67,21 @@ export interface DecisionNotePresentation {
 }
 export interface DecisionFlowPolicy {
     autoSubmitSingle?: boolean;
-    allowUnansweredNote?: boolean;
+    allowWriteIn?: boolean;
     noteRequirement?: (
         item: QuestionItem,
         option?: QuestionOption,
     ) => DecisionNoteRequirement;
     notePresentation?: (
         item: QuestionItem,
-        context: "response" | "unanswered",
+        context: "response" | "write-in",
     ) => DecisionNotePresentation;
 }
 
-export function shouldAllowUnansweredNote(
+export function shouldAllowWriteIn(
     policy: DecisionFlowPolicy | undefined,
 ): boolean {
-    return policy?.allowUnansweredNote ?? true;
+    return policy?.allowWriteIn ?? true;
 }
 
 export function decisionNoteRequirement(
@@ -89,7 +89,7 @@ export function decisionNoteRequirement(
     item: QuestionItem,
     option?: QuestionOption,
 ): DecisionNoteRequirement {
-    return policy?.noteRequirement?.(item, option) ?? "optional";
+    return policy?.noteRequirement?.(item, option) ?? (option?.noteRequired === true ? "required" : "optional");
 }
 
 export function shouldAutoSubmitSingle(
@@ -101,7 +101,7 @@ export function shouldAutoSubmitSingle(
 export function notePresentation(
     policy: DecisionFlowPolicy | undefined,
     item: QuestionItem,
-    context: "response" | "unanswered",
+    context: "response" | "write-in",
 ): DecisionNotePresentation {
     return policy?.notePresentation?.(item, context) ?? {};
 }
@@ -127,14 +127,14 @@ export function formatQuestionResponse(
     const optionLabel = (value: string): string =>
         question.options?.find(option => option.value === value)?.label ?? value;
 
-    if (response.kind === "text") return formatText(response.value);
-    if (response.kind === "unanswered") return `Unanswered${noteSuffix(response.note)}`;
+    if (response.kind === "text" || response.kind === "write-in") return formatText(response.value);
     if (response.kind === "single") {
         return `${optionLabel(response.value)}${noteSuffix(response.note)}`;
     }
-    return response.values
-        .map(selected => `${optionLabel(selected.value)}${noteSuffix(selected.note)}`)
-        .join(", ");
+    return [
+        ...response.values.map(selected => `${optionLabel(selected.value)}${noteSuffix(selected.note)}`),
+        ...(response.writeIn === undefined ? [] : [formatText(response.writeIn)]),
+    ].join(", ");
 }
 
 function requireNonBlank(value: string, message: string): void {
@@ -188,9 +188,10 @@ function optionValues(question: QuestionItem): Set<string> {
 }
 
 export function normalizeQuestionResponse(question: QuestionItem, pending: PendingQuestionResponse): QuestionResponse {
-    if (pending.kind === "unanswered") {
-        requireNonBlank(pending.note, `unanswered response for question ${question.id} requires a non-blank note`);
-        return { kind: "unanswered", note: pending.note.trim() === pending.note ? pending.note : pending.note.trim() };
+    if (pending.kind === "write-in") {
+        if (question.kind !== "single") throw new Error(`write-in response does not match question ${question.id} (${question.kind})`);
+        requireNonBlank(pending.value, `write-in response for question ${question.id} requires non-blank text`);
+        return { kind: "write-in", value: pending.value.trim() === pending.value ? pending.value : pending.value.trim() };
     }
     if (pending.kind !== question.kind) {
         throw new Error(`Response kind ${pending.kind} does not match question ${question.id} (${question.kind})`);
@@ -202,7 +203,8 @@ export function normalizeQuestionResponse(question: QuestionItem, pending: Pendi
             return note === undefined ? { kind: "single", value: pending.value } : { kind: "single", value: pending.value, note };
         }
         case "multi": {
-            if (pending.values.length === 0) throw new Error(`multi question ${question.id} requires at least one selection`);
+            const writeIn = normalizeNote(pending.writeIn);
+            if (pending.values.length === 0 && writeIn === undefined) throw new Error(`multi question ${question.id} requires at least one selection or a write-in`);
             const allowed = optionValues(question);
             const selected = new Map<string, string | undefined>();
             for (const item of pending.values) {
@@ -216,7 +218,7 @@ export function normalizeQuestionResponse(question: QuestionItem, pending: Pendi
                     const note = selected.get(option.value);
                     return note === undefined ? { value: option.value } : { value: option.value, note };
                 });
-            return { kind: "multi", values };
+            return writeIn === undefined ? { kind: "multi", values } : { kind: "multi", values, writeIn };
         }
         case "text":
             requireNonBlank(pending.value, `text question ${question.id} requires a non-blank answer`);
@@ -225,11 +227,7 @@ export function normalizeQuestionResponse(question: QuestionItem, pending: Pendi
 }
 
 function isAnsweredResponse(response: QuestionResponse): boolean {
-    return response.kind === "single" || response.kind === "multi" || response.kind === "text";
-}
-
-function isUnansweredWithNote(response: QuestionResponse): boolean {
-    return response.kind === "unanswered";
+    return response.kind === "single" || response.kind === "multi" || response.kind === "text" || response.kind === "write-in";
 }
 
 export class QuestionProgress {
@@ -261,10 +259,6 @@ export class QuestionProgress {
         const response = this.responseFor(questionOrId);
         return response !== undefined && isAnsweredResponse(response);
     }
-    isUnansweredWithNote(questionOrId: QuestionItem | string): boolean {
-        const response = this.responseFor(questionOrId);
-        return response !== undefined && isUnansweredWithNote(response);
-    }
     isUntouched(questionOrId: QuestionItem | string): boolean {
         return this.responseFor(questionOrId) === undefined;
     }
@@ -276,12 +270,7 @@ export class QuestionProgress {
         for (const question of this.#questions) if (this.isAnswered(question)) count += 1;
         return count;
     }
-    get unansweredWithNoteCount(): number {
-        let count = 0;
-        for (const question of this.#questions) if (this.isUnansweredWithNote(question)) count += 1;
-        return count;
-    }
-    get respondedCount(): number { return this.answeredCount + this.unansweredWithNoteCount; }
+    get respondedCount(): number { return this.answeredCount; }
     get untouchedCount(): number { return this.total - this.respondedCount; }
     get allAnswered(): boolean { return this.answeredCount === this.total; }
     get allResponded(): boolean { return this.untouchedCount === 0; }

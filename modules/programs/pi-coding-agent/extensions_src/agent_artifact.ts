@@ -116,7 +116,7 @@ type ApprovalAction = "approve" | "revise" | "reject" | "view";
 
 const approvalDecisionPolicy: DecisionFlowPolicy = {
     autoSubmitSingle: true,
-    allowUnansweredNote: false,
+    allowWriteIn: false,
     noteRequirement(_item, option) {
         if (option?.value === "view") return "none";
         if (option?.value === "revise") return "required";
