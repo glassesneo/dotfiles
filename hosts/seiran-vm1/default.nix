@@ -14,7 +14,7 @@ delib.host {
     darwin.window-manager.enable = false;
     # Bootstrap without an Age key. Install the key before re-enabling.
     toplevel.secrets = {
-      enable = false;
+      enable = true;
       names = ["brave-api-key"];
     };
     nix-darwin.preferences = {
