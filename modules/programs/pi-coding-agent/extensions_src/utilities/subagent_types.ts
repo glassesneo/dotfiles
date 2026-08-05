@@ -12,7 +12,7 @@ export interface TmuxAgentReference { socket: string; serverPid: string; session
 export interface NativeCapabilities { nativeScreen: boolean; taskDelivery: boolean; taskCompletion: boolean; taskCancellation?: boolean; usage: boolean; interactiveInterventions: boolean; terminalHistory?: boolean }
 export type HarnessAdapterKind = "pi-native" | "cursor-acp";
 export interface HarnessRuntimeConfig { adapter: HarnessAdapterKind; command: string; workerCommand?: string; workerEntrypoint?: string; bridgeReadyTimeoutMs?: number }
-export interface SubagentRuntimeConfig { schemaVersion: 7; stateRoot: string; tmux: string; historyViewerExtension: string; childExtensions: string[]; harnesses: Record<string, HarnessRuntimeConfig> & { pi: HarnessRuntimeConfig }; maxDepth: number; childExcludedTools: string[]; natureHandleWords: string[]; bridgeReadyTimeoutMs?: number }
+export interface SubagentRuntimeConfig { schemaVersion: 8; stateRoot: string; tmux: string; returnParentCommand: string; parentNavigationHint: string; historyViewerExtension: string; childExtensions: string[]; harnesses: Record<string, HarnessRuntimeConfig> & { pi: HarnessRuntimeConfig }; maxDepth: number; childExcludedTools: string[]; natureHandleWords: string[]; bridgeReadyTimeoutMs?: number }
 export interface SubagentFacet { allowedTargets: string[]; harness?: string; harnessOptions?: Record<string, unknown> }
 export interface AgentLineage { callerProfile: string; targetProfile: string; depth: number; parentAgentId?: string; originSessionId: string; originSessionFile?: string }
 export interface AgentRecord extends AgentLineage { schemaVersion: 1; agentId: string; profile: string; purpose: string; harness: string; cwd: string; createdAt: string; profileSnapshot: AgentProfile; tmux: TmuxAgentReference; tmuxOwnership?: TmuxOwnership; capabilities: NativeCapabilities }
@@ -40,7 +40,9 @@ export function validateNatureHandleWords(value: unknown): string[] {
 }
 export function validateSubagentRuntimeConfig(value: unknown): SubagentRuntimeConfig {
     const root = object(value, "subagent config");
-    if (root.schemaVersion !== 7) throw new Error("Unsupported subagent config schemaVersion");
+    const unknown = Object.keys(root).filter(key => !["schemaVersion", "stateRoot", "tmux", "returnParentCommand", "parentNavigationHint", "historyViewerExtension", "childExtensions", "harnesses", "maxDepth", "childExcludedTools", "natureHandleWords", "bridgeReadyTimeoutMs"].includes(key));
+    if (unknown.length) throw new Error(`subagent config contains unknown keys: ${unknown.join(", ")}`);
+    if (root.schemaVersion !== 8) throw new Error("Unsupported subagent config schemaVersion");
     const harnesses = object(root.harnesses, "harnesses");
     const parsed: Record<string, HarnessRuntimeConfig> = {};
     for (const [id, raw] of Object.entries(harnesses)) {
@@ -70,9 +72,11 @@ export function validateSubagentRuntimeConfig(value: unknown): SubagentRuntimeCo
     if (new Set(childExcludedTools).size !== childExcludedTools.length) throw new Error("childExcludedTools must not contain duplicates");
     const natureHandleWords = validateNatureHandleWords(root.natureHandleWords);
     return {
-        schemaVersion: 7,
+        schemaVersion: 8,
         stateRoot: nonBlank(root.stateRoot, "stateRoot"),
         tmux: nonBlank(root.tmux, "tmux"),
+        returnParentCommand: nonBlank(root.returnParentCommand, "returnParentCommand"),
+        parentNavigationHint: nonBlank(root.parentNavigationHint, "parentNavigationHint"),
         historyViewerExtension: nonBlank(root.historyViewerExtension, "historyViewerExtension"),
         childExtensions: strings(root.childExtensions, "childExtensions"),
         harnesses: parsed as SubagentRuntimeConfig["harnesses"],

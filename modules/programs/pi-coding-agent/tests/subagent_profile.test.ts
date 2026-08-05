@@ -58,9 +58,11 @@ async function fixture() {
     const root = await mkdtemp(join(tmpdir(), "agent-profile-"));
     const profileConfig = profiles();
     const subagentConfig: SubagentRuntimeConfig = {
-        schemaVersion: 7,
+        schemaVersion: 8,
         stateRoot: join(root, "state"),
         tmux: "/tmux",
+        returnParentCommand: "/return-parent",
+        parentNavigationHint: "F12 U: parent · /parent",
         historyViewerExtension: "/history-viewer.ts",
         childExtensions: ["/profile.ts", "/subagent.ts", "/bridge.ts"],
         harnesses: { pi: { adapter: "pi-native", command: "/pi" } },
@@ -84,6 +86,7 @@ function fakeControllerPi(flag = "scout") {
     const paletteContributions: any[] = [];
     const eventHandlers: Record<string, Array<(value: unknown) => void>> = {};
     const notifications: string[] = [];
+    const statuses: Array<{ key: string; text: string }> = [];
     let activeTools: string[] = [];
     let aborts = 0;
     let thinking = "off";
@@ -123,11 +126,11 @@ function fakeControllerPi(flag = "scout") {
         cwd: "/work", hasUI: true, isIdle: () => true,
         modelRegistry: { find: () => ({ provider: "provider", id: "model" }) },
         sessionManager: { getBranch: () => entries, getEntries: () => entries, getSessionId: () => "session", getSessionFile: () => "/session.jsonl" },
-        ui: { notify(message: string) { notifications.push(message); }, setStatus() {}, select: async () => undefined },
+        ui: { notify(message: string) { notifications.push(message); }, setStatus(key: string, text: string) { statuses.push({ key, text }); }, select: async () => undefined },
         abort() { aborts += 1; },
     } as unknown as ExtensionContext;
     return {
-        pi, ctx, handlers, commands, shortcuts, entries, events, paletteContributions, notifications,
+        pi, ctx, handlers, commands, shortcuts, entries, events, paletteContributions, notifications, statuses,
         activeTools: () => activeTools, activeToolApplications: () => activeToolApplications, aborts: () => aborts, thinking: () => thinking,
         forceActiveTools: (names: string[]) => { activeTools = [...names]; },
         forceAllTools: (names: string[]) => { allTools = [...names]; },
@@ -148,6 +151,7 @@ void test("profile extension applies CLI, guards tools, restores branches, and e
     assert.equal(fake.events.length, 1);
     assert.deepEqual((fake.events[0]!.payload as any).profile.extensions.subagent.allowedTargets, ["scout"]);
     assert.equal((fake.events[0]!.payload as any).reason, "startup");
+    assert.deepEqual(fake.statuses.at(-1), { key: "agent-profile-identity", text: "PARENT · profile:scout" });
     assert.deepEqual(fake.commands.profile!.getArgumentCompletions?.("sc"), [
         { value: "scout", label: "scout", description: "Read-only exploration." },
     ]);
@@ -348,11 +352,13 @@ void test("exact raw prompt commands route transactionally before expansion", as
     assert.deepEqual(await fake.handlers.input![0]!({ text: "/impl approved.md", source: "interactive" }, fake.ctx), { action: "continue" });
     assert.equal((fake.events.at(-1)!.payload as any).reason, "route");
     assert.equal(fake.entries.at(-1)?.data.profileId, profileConfig.profiles.full!.id);
+    assert.equal(fake.statuses.at(-1)?.text, "PARENT · profile:full");
 
     fake.failModel();
     assert.deepEqual(await fake.handlers.input![0]!({ text: "/review report.md", source: "interactive" }, fake.ctx), { action: "handled" });
     assert.match(fake.notifications.at(-1) ?? "", /no authentication/);
     assert.equal(fake.entries.at(-1)?.data.profileId, profileConfig.profiles.full!.id);
+    assert.equal(fake.statuses.at(-1)?.text, "PARENT · profile:full");
 
     fake.passModel();
     fake.failNextToolApplication();
@@ -503,7 +509,7 @@ void test("subagent_submit schema enum follows active allowed targets without a 
             emit(name: string, value: unknown) { for (const handler of eventHandlers[name] ?? []) handler(value); },
         },
         getActiveTools: () => ["subagent_run", "subagent_submit"],
-        async exec() { return { stdout: "123\t$0\tmain\t%1\n", stderr: "", code: 0, killed: false }; },
+        async exec() { return { stdout: "123\t$0\tmain\t@1\t%1\t/dev/ttys001\n", stderr: "", code: 0, killed: false }; },
     } as unknown as ExtensionAPI;
     assert.equal(await registerSubagent(pi, { configPath: value.subagentPath, profileConfigPath: value.profilePath, env: { TMUX: "yes" } }), true);
     assert.deepEqual(tools.map(tool => tool.name).sort(), ["subagent_get", "subagent_run", "subagent_stop", "subagent_submit", "subagent_wait"]);
@@ -530,6 +536,36 @@ void test("subagent_submit schema enum follows active allowed targets without a 
     assert.deepEqual(submit?.parameters.properties?.profile?.enum, ["focused-reviewer", "dissent-reviewer"]);
     assert.match(submit?.parameters.properties?.profile?.description ?? "", /focused-reviewer, dissent-reviewer/);
     assert.equal(handlers.before_agent_start, undefined);
+});
+
+void test("only Pi-native children register /parent and expose the configured navigation hint", async () => {
+    const value = await fixture();
+    const commands: Record<string, { handler: (args: string, ctx: ExtensionContext) => Promise<void> }> = {};
+    const handlers: Record<string, Array<(event: any, ctx: any) => any>> = {};
+    const calls: Array<{ command: string; args: string[] }> = [];
+    const statuses: Array<{ key: string; text: string }> = [];
+    const pi = {
+        registerCommand(name: string, command: any) { commands[name] = command; }, registerTool() {}, getActiveTools: () => [],
+        on(name: string, handler: any) { (handlers[name] ??= []).push(handler); },
+        events: { on() { return () => {}; }, emit() {} },
+        async exec(command: string, args: string[]) { calls.push({ command, args }); return { stdout: "", stderr: "", code: 0, killed: false }; },
+    } as unknown as ExtensionAPI;
+    const env = { PI_SUBAGENT_AGENT_ID: "child", PI_SUBAGENT_DEPTH: "1", PI_SUBAGENT_ORIGIN_SESSION_ID: "origin" };
+    await registerSubagent(pi, { configPath: value.subagentPath, profileConfigPath: value.profilePath, env });
+    const ctx = {
+        ui: { setStatus(key: string, text: string) { statuses.push({ key, text }); }, notify() {} },
+        sessionManager: { getSessionId: () => "child-session", getSessionFile: () => undefined },
+    } as unknown as ExtensionContext;
+    await handlers.session_start![0]!({}, ctx);
+    assert.deepEqual(statuses, [{ key: "subagent-parent-navigation", text: "F12 U: parent · /parent" }]);
+    assert.ok(commands.parent);
+    await commands.parent!.handler("", ctx);
+    assert.deepEqual(calls, [{ command: "/return-parent", args: [] }]);
+
+    const parentCommands: string[] = [];
+    const parentPi = { ...pi, registerCommand(name: string) { parentCommands.push(name); } } as unknown as ExtensionAPI;
+    await registerSubagent(parentPi, { configPath: value.subagentPath, profileConfigPath: value.profilePath, env: {} });
+    assert.ok(!parentCommands.includes("parent"));
 });
 
 void test("delegation fails closed and rejects policy or depth before resource allocation", async () => {
@@ -572,9 +608,11 @@ void test("child effective profile drops excluded tools from snapshot and launch
     const invalidSplit = projectChildEffectiveProfile(profile, ["subagent_run"]);
     assert.deepEqual(invalidSplit.tools, ["read", "question", "subagent_submit", "subagent_get"]);
     const launch = piLaunchDescriptor({
-        schemaVersion: 7,
+        schemaVersion: 8,
         stateRoot: "/state",
         tmux: "/tmux",
+        returnParentCommand: "/return-parent",
+        parentNavigationHint: "F12 U: parent · /parent",
         historyViewerExtension: "/history.ts",
         childExtensions: ["/profile.ts"],
         harnesses: { pi: { adapter: "pi-native", command: "/pi" } },

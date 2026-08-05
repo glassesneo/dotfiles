@@ -16,7 +16,7 @@ import type { AgentSnapshot, TmuxAgentReference } from "../extensions_src/utilit
 
 const profile = { id: "99999999-9999-4999-8999-999999999999", model: "provider/model", availability: ["top-level", "subagent"] as ("top-level" | "subagent")[], description: "Tester", allowAllTools: false, tools: [], hiddenSkillOptIns: [], extensions: { subagent: { allowedTargets: [] } } };
 const capabilities = { nativeScreen: true, taskDelivery: true, taskCompletion: true, usage: true, interactiveInterventions: true };
-const context: TmuxContext = { socket: "/tmp/tmux", serverPid: "10", sessionId: "$parent", sessionName: "parent", paneId: "%parent" };
+const context: TmuxContext = { socket: "/tmp/tmux", serverPid: "10", sessionId: "$parent", sessionName: "parent", windowId: "@parent", paneId: "%parent" };
 async function agent(root: string, windowId: string, paneId: string, ownership: "origin-hub" | "dedicated" = "origin-hub") {
     const prepared = await prepareAgent(root, { profile: "tester", purpose: "work", harness: "pi", cwd: "/work", profileSnapshot: profile, lineage: { callerProfile: "taskmaster", targetProfile: "tester", depth: 1, originSessionId: "origin" }, capabilities });
     const tmux: TmuxAgentReference = { socket: "/tmp/tmux", serverPid: "10", sessionId: ownership === "origin-hub" ? "$hub" : `$${windowId}`, sessionName: ownership === "origin-hub" ? originHubName("origin") : `legacy-${windowId}`, windowId, paneId, windowName: `sa-${windowId}` };
@@ -168,7 +168,7 @@ void test("palette Enter is disabled for terminal legacy history without probing
 void test("registered parent lifecycle cleans replacement reasons while reload and child depth preserve the hub", async () => {
     const root = await mkdtemp(join(tmpdir(), "subagent-lifecycle-wiring-"));
     const configPath = join(root, "subagent.json");
-    await writeFile(configPath, JSON.stringify({ schemaVersion: 7, stateRoot: join(root, "state"), tmux: "/tmux", historyViewerExtension: "/history.ts", childExtensions: ["/bridge.ts"], harnesses: { pi: { adapter: "pi-native", command: "/pi" } }, maxDepth: 3, childExcludedTools: ["question"], natureHandleWords: ["Maple", "Cedar"] }));
+    await writeFile(configPath, JSON.stringify({ schemaVersion: 8, stateRoot: join(root, "state"), tmux: "/tmux", returnParentCommand: "/return-parent", parentNavigationHint: "F12 U: parent · /parent", historyViewerExtension: "/history.ts", childExtensions: ["/bridge.ts"], harnesses: { pi: { adapter: "pi-native", command: "/pi" } }, maxDepth: 3, childExcludedTools: ["question"], natureHandleWords: ["Maple", "Cedar"] }));
     const run = async (reason: "quit" | "reload" | "new" | "resume" | "fork", depth = "0") => {
         const handlers = new Map<string, Array<(...args: any[]) => any>>();
         const eventHandlers = new Map<string, Array<(value: unknown) => void>>();
@@ -178,7 +178,7 @@ void test("registered parent lifecycle cleans replacement reasons while reload a
             events: { on(name: string, handler: (value: unknown) => void) { const values = eventHandlers.get(name) ?? []; values.push(handler); eventHandlers.set(name, values); return () => {}; }, emit() {} },
             registerCommand() {}, registerTool() {}, getActiveTools: () => [],
             async exec(_command: string, args: string[]) {
-                if (args[2] === "display-message" && args.at(-1) === "#{pid}\t#{session_id}\t#{session_name}\t#{pane_id}\t#{client_name}") return { stdout: "10\t$parent\tmain\t%parent\t/dev/ttys001\n", stderr: "", code: 0, killed: false };
+                if (args[2] === "display-message" && args.at(-1) === "#{pid}\t#{session_id}\t#{session_name}\t#{window_id}\t#{pane_id}\t#{client_name}") return { stdout: "10\t$parent\tmain\t@parent\t%parent\t/dev/ttys001\n", stderr: "", code: 0, killed: false };
                 if (args[2] === "display-message") return { stdout: "10\n", stderr: "", code: 0, killed: false };
                 if (args[2] === "kill-session") { killed += 1; return { stdout: "", stderr: "", code: 0, killed: false }; }
                 return { stdout: "", stderr: "", code: 0, killed: false };

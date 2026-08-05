@@ -19,7 +19,7 @@ const cursorProfile: AgentProfile = {
     extensions: { subagent: { allowedTargets: [], harness: "cursor-agent", harnessOptions: options } },
 };
 const config = (root: string): SubagentRuntimeConfig => ({
-    schemaVersion: 7, stateRoot: root, tmux: "/tmux", historyViewerExtension: "/history.ts", childExtensions: [],
+    schemaVersion: 8, stateRoot: root, tmux: "/tmux", returnParentCommand: "/return-parent", parentNavigationHint: "F12 U: parent · /parent", historyViewerExtension: "/history.ts", childExtensions: [],
     harnesses: {
         pi: { adapter: "pi-native", command: "/pi" },
         "cursor-agent": { adapter: "cursor-acp", command: "/cursor-agent", workerCommand: "/node", workerEntrypoint: "/worker.ts" },
@@ -82,7 +82,7 @@ void test("Cursor ACP cold start readiness past 5000 ms succeeds within the harn
     let hubSession = false;
     const exec = async (_command: string, args: string[]) => {
         if (args.includes("display-message") && args.at(-1)?.includes("#{pid}\t#{session_id}")) {
-            return { stdout: "10\t$1\tmain\t%1\t/dev/ttys001\n", stderr: "", code: 0 };
+            return { stdout: "10\t$1\tmain\t@1\t%1\t/dev/ttys001\n", stderr: "", code: 0 };
         }
         if (args.includes("display-message") && args.at(-1) === "#{pid}") return { stdout: "10\n", stderr: "", code: 0 };
         if (args.includes("has-session")) return hubSession ? { stdout: "", stderr: "", code: 0 } : { stdout: "", stderr: "missing", code: 1 };

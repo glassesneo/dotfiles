@@ -10,12 +10,18 @@ delib.module {
 
   options.programs.tmux = with delib; {
     enable = boolOption host.devCoreFeatured;
+    prefix = strOption "F12";
+    extraConfigFragments = attrsOfOption lib.types.str {};
     # Rice-aware theming configuration
     theme = {
       plugin = strOption ""; # e.g., "catppuccin" - plugin name from tmuxPlugins
       pluginConfig = strOption ""; # Extra config for the plugin (set before plugin loads)
       extraConfig = strOption ""; # Custom tmux config (for non-plugin themes like monochrome)
     };
+  };
+
+  myconfig.always = {cfg, ...}: {
+    args.shared.tmux.prefix = cfg.prefix;
   };
 
   home.ifEnabled = {cfg, ...}: let
@@ -37,14 +43,17 @@ delib.module {
   in {
     programs.tmux = {
       enable = true;
-      prefix = "F12";
+      prefix = cfg.prefix;
 
       # Add theme plugin if specified
       plugins = themePlugins;
 
       extraConfig =
         builtins.readFile ./tmux.conf
+        + "\n"
+        + lib.concatMapStringsSep "\n" (name: cfg.extraConfigFragments.${name}) (builtins.attrNames cfg.extraConfigFragments)
         + ''
+
           # Rice-specific configuration
           ${cfg.theme.extraConfig}
         '';

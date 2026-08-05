@@ -234,7 +234,7 @@ void test("v dismissal refreshes and retains the selected live agent", async () 
     const palette = component(() => {}, {
         env: { TMUX: "/tmp/tmux,1,0" },
         exec: async (_command, args) => args.join(" ").includes("#{pid}\t#{session_id}")
-            ? { stdout: "10\t$parent\tmain\t%parent\t/dev/ttys001\n", stderr: "", code: 0 }
+            ? { stdout: "10\t$parent\tmain\t@parent\t%parent\t/dev/ttys001\n", stderr: "", code: 0 }
             : { stdout: "", stderr: "", code: 0 },
         previewLive: async () => { previews += 1; return "dismissed"; },
         discover: async () => ({ agents: [live], malformedCount: 0 }),
@@ -258,7 +258,7 @@ void test("preview Enter promotion uses the existing full-window open path", asy
         exec: async (_command, args) => {
             if (args.join(" ").includes("#{pid}\t#{session_id}")) {
                 probes += 1;
-                return { stdout: "10\t$parent\tmain\t%parent\t/dev/ttys001\n", stderr: "", code: 0 };
+                return { stdout: "10\t$parent\tmain\t@parent\t%parent\t/dev/ttys001\n", stderr: "", code: 0 };
             }
             return { stdout: "", stderr: "", code: 0 };
         },
@@ -278,7 +278,7 @@ void test("preview promotion failure retains the palette with an error", async (
     const palette = component(value => { disposition = value; }, {
         env: { TMUX: "/tmp/tmux,1,0" },
         exec: async (_command, args) => args.join(" ").includes("#{pid}\t#{session_id}")
-            ? { stdout: "10\t$parent\tmain\t%parent\t/dev/ttys001\n", stderr: "", code: 0 }
+            ? { stdout: "10\t$parent\tmain\t@parent\t%parent\t/dev/ttys001\n", stderr: "", code: 0 }
             : { stdout: "", stderr: "", code: 0 },
         previewLive: async () => "open-full",
         openLiveWindow: async () => { throw new Error("promotion rejected"); },
@@ -305,8 +305,8 @@ void test("live open closes the palette stack with close disposition", async () 
             env: { TMUX: "/tmp/tmux,1,0" },
             exec: async (_command, args) => {
                 const joined = args.join(" ");
-                if (joined.includes("#{pid}\t#{session_id}\t#{session_name}\t#{pane_id}\t#{client_name}")) {
-                    return { stdout: "10\t$parent\tmain\t%parent\t/dev/ttys001\n", stderr: "", code: 0 };
+                if (joined.includes("#{pid}\t#{session_id}\t#{session_name}\t#{window_id}\t#{pane_id}\t#{client_name}")) {
+                    return { stdout: "10\t$parent\tmain\t@parent\t%parent\t/dev/ttys001\n", stderr: "", code: 0 };
                 }
                 if (joined.includes("#{pid}")) return { stdout: "10\n", stderr: "", code: 0 };
                 if (joined.includes("list-panes")) return { stdout: "%aaaa\t0\n", stderr: "", code: 0 };
@@ -340,8 +340,8 @@ void test("terminal history open returns to root instead of closing the stack", 
             env: { TMUX: "/tmp/tmux,1,0" },
             exec: async (_command, args) => {
                 const joined = args.join(" ");
-                if (joined.includes("#{pid}\t#{session_id}\t#{session_name}\t#{pane_id}\t#{client_name}")) {
-                    return { stdout: "10\t$parent\tmain\t%parent\t/dev/ttys001\n", stderr: "", code: 0 };
+                if (joined.includes("#{pid}\t#{session_id}\t#{session_name}\t#{window_id}\t#{pane_id}\t#{client_name}")) {
+                    return { stdout: "10\t$parent\tmain\t@parent\t%parent\t/dev/ttys001\n", stderr: "", code: 0 };
                 }
                 return { stdout: "", stderr: "", code: 0 };
             },
@@ -376,8 +376,8 @@ void test("delayed live open still closes with close after cancel during WORKING
             env: { TMUX: "/tmp/tmux,1,0" },
             exec: async (_command, args) => {
                 const joined = args.join(" ");
-                if (joined.includes("#{pid}\t#{session_id}\t#{session_name}\t#{pane_id}\t#{client_name}")) {
-                    return { stdout: "10\t$parent\tmain\t%parent\t/dev/ttys001\n", stderr: "", code: 0 };
+                if (joined.includes("#{pid}\t#{session_id}\t#{session_name}\t#{window_id}\t#{pane_id}\t#{client_name}")) {
+                    return { stdout: "10\t$parent\tmain\t@parent\t%parent\t/dev/ttys001\n", stderr: "", code: 0 };
                 }
                 return { stdout: "", stderr: "", code: 0 };
             },

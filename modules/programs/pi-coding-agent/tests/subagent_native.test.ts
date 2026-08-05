@@ -17,7 +17,7 @@ import { failStartedSubagentAgent, readReconciledAgentSnapshot, stopSubagentAgen
 import { inspectAgentTmux, launchAgentSession, openAgentWindow, probeTmux, stopAgentSession, unlinkAgentWindow, type CommandResult } from "../extensions_src/utilities/subagent_tmux.ts";
 import { emptyUsage, type AgentSnapshot, type SubagentRuntimeConfig, type TmuxAgentReference } from "../extensions_src/utilities/subagent_types.ts";
 const profile = { id: "99999999-9999-4999-8999-999999999999", model: "provider/model", availability: ["top-level", "subagent"] as ("top-level" | "subagent")[], description: "Tester", allowAllTools: false, tools: ["read"], hiddenSkillOptIns: [], extensions: { subagent: { allowedTargets: [] } } };
-const config = (root: string): SubagentRuntimeConfig => ({ schemaVersion: 7, stateRoot: root, tmux: "/tmux", historyViewerExtension: "/history-viewer.ts", childExtensions: ["/profile.ts", "/bridge.ts"], harnesses: { pi: { adapter: "pi-native", command: "/pi" } }, maxDepth: 3, childExcludedTools: ["question"], natureHandleWords: ["Maple", "Cedar"] });
+const config = (root: string): SubagentRuntimeConfig => ({ schemaVersion: 8, stateRoot: root, tmux: "/tmux", returnParentCommand: "/return-parent", parentNavigationHint: "F12 U: parent · /parent", historyViewerExtension: "/history-viewer.ts", childExtensions: ["/profile.ts", "/bridge.ts"], harnesses: { pi: { adapter: "pi-native", command: "/pi" } }, maxDepth: 3, childExcludedTools: ["question"], natureHandleWords: ["Maple", "Cedar"] });
 const tmux: TmuxAgentReference = { socket: "/tmp/tmux", serverPid: "10", sessionId: "$2", sessionName: "pi-sa-test", windowId: "@2", paneId: "%2", windowName: "sa-test" };
 void test("bounded concurrency preserves order without exceeding its worker limit", async () => {
     let active = 0;
@@ -64,7 +64,7 @@ void test("tmux launch owns a dedicated session while open links and unlink only
         calls.push(args);
         const command = args[0] === "-S" ? args[2] : args[0];
         if (command === "display-message" && args.at(-1) === "#{pid}") return { stdout: "10\n", stderr: "", code: 0 };
-        if (command === "display-message" && !args.includes("-t")) return { stdout: "10\t$1\tmain\t%1\t/dev/ttys001\n", stderr: "", code: 0 };
+        if (command === "display-message" && !args.includes("-t")) return { stdout: "10\t$1\tmain\t@1\t%1\t/dev/ttys001\n", stderr: "", code: 0 };
         if (command === "has-session") return { stdout: "", stderr: "missing", code: 1 };
         if (command === "new-session") return { stdout: "$2\t@2\t%2\n", stderr: "", code: 0 };
         if (command === "display-message") return { stdout: "0\n", stderr: "", code: 0 };
@@ -85,6 +85,13 @@ void test("tmux launch owns a dedicated session while open links and unlink only
     await unlinkAgentWindow(exec, "/tmux", context!, launched);
     await unlinkAgentWindow(exec, "/tmux", context!, launched);
     assert.ok(calls.some(args => args.includes("new-session")));
+    for (const [name, value] of [
+        ["@pi_subagent_parent_server_pid", "10"],
+        ["@pi_subagent_parent_session_id", "$1"],
+        ["@pi_subagent_parent_window_id", "@1"],
+        ["@pi_subagent_hub_session_id", "$2"],
+        ["@pi_subagent_schema", "1"],
+    ]) assert.ok(calls.some(args => args.includes("set-option") && args.includes(name!) && args.includes(value!)), `${name} metadata`);
     assert.ok(calls.some(args => args.includes("link-window")));
     const selectIndex = calls.findIndex(args => args.includes("select-window") && args.includes("@2"));
     const resizeIndex = calls.findIndex(args => args.includes("resize-window") && args.includes("-A") && args.includes("@2"));
@@ -92,6 +99,25 @@ void test("tmux launch owns a dedicated session while open links and unlink only
     assert.ok(resizeIndex > selectIndex, "openAgentWindow issues resize-window -A after select/link");
     assert.equal(calls.filter(args => args.includes("unlink-window") && !args.includes("-k")).length, 1);
     assert.ok(!calls.some(args => args.includes("kill-window")));
+});
+void test("tmux metadata failure kills the unpublished child window", async () => {
+    const calls: string[][] = [];
+    let alive = true;
+    const exec = async (_command: string, args: string[]): Promise<CommandResult> => {
+        calls.push(args);
+        if (args.at(-1) === "#{pid}") return { stdout: "10\n", stderr: "", code: 0 };
+        if (args.includes("has-session")) return { stdout: "", stderr: "missing", code: 1 };
+        if (args.includes("new-session")) return { stdout: "$hub\t@child\t%child\n", stderr: "", code: 0 };
+        if (args.includes("set-option") && args.includes("@pi_subagent_parent_window_id")) return { stdout: "", stderr: "metadata rejected", code: 1 };
+        if (args.includes("kill-window")) { alive = false; return { stdout: "", stderr: "", code: 0 }; }
+        if (args.includes("list-panes")) return { stdout: alive ? "%child\t0\n" : "", stderr: "", code: 0 };
+        return { stdout: "", stderr: "", code: 0 };
+    };
+    await assert.rejects(launchAgentSession(exec, "/tmux", { socket: "/tmp/tmux", serverPid: "10", sessionId: "$parent", sessionName: "main", windowId: "@parent", paneId: "%parent" }, {
+        agentId: "550e8400-e29b-41d4-a716-446655440000", profile: "tester", originSessionId: "origin", cwd: "/work", launch: { command: "/pi", args: [], env: {} },
+    }), /metadata rejected/u);
+    assert.ok(calls.some(args => args.includes("kill-window") && args.includes("@child")));
+    assert.ok(!calls.some(args => args.includes("@pi_subagent_schema")));
 });
 void test("live preview isolates one target, uses a read-only 80% popup, and cleans every temporary layer", async () => {
     const calls: string[][] = [];
@@ -105,7 +131,7 @@ void test("live preview isolates one target, uses a read-only 80% popup, and cle
         if (args.includes("display-popup")) return { stdout: "", stderr: "", code: 129 };
         return { stdout: "", stderr: "", code: 0 };
     };
-    const context = { socket: "/tmp/tmux", serverPid: "10", sessionId: "$parent", sessionName: "main", paneId: "%parent", clientName: "/dev/ttys001" };
+    const context = { socket: "/tmp/tmux", serverPid: "10", sessionId: "$parent", sessionName: "main", windowId: "@parent", paneId: "%parent", clientName: "/dev/ttys001" };
     const disposition = await openLivePreview(exec, "/tmux", context, tmux, "Maple · Esc back · Enter open full", {
         makeTempDirectory: async () => "/tmp/pi-preview-test",
         removeTempDirectory: async path => { removed.push(path); },
@@ -144,7 +170,7 @@ void test("live preview returns open-full only after marker-present cleanup comp
         return { stdout: "", stderr: "", code: 0 };
     };
     const disposition = await openLivePreview(exec, "/tmux", {
-        socket: "/tmp/tmux", serverPid: "10", sessionId: "$parent", sessionName: "main", paneId: "%parent", clientName: "/dev/ttys001",
+        socket: "/tmp/tmux", serverPid: "10", sessionId: "$parent", sessionName: "main", windowId: "@parent", paneId: "%parent", clientName: "/dev/ttys001",
     }, tmux, "preview", {
         makeTempDirectory: async () => "/tmp/pi-preview-promote",
         removeTempDirectory: async path => { removed.push(path); },
@@ -171,7 +197,7 @@ void test("target death detaches the popup wrapper and completes preview cleanup
         return { stdout: "", stderr: "", code: 0 };
     };
     const disposition = await openLivePreview(exec, "/tmux", {
-        socket: "/tmp/tmux", serverPid: "10", sessionId: "$parent", sessionName: "main", paneId: "%parent", clientName: "/dev/ttys001",
+        socket: "/tmp/tmux", serverPid: "10", sessionId: "$parent", sessionName: "main", windowId: "@parent", paneId: "%parent", clientName: "/dev/ttys001",
     }, tmux, "preview", {
         makeTempDirectory: async () => "/tmp/pi-preview-target-exit",
         removeTempDirectory: async () => {},
@@ -188,7 +214,7 @@ void test("target death detaches the popup wrapper and completes preview cleanup
 void test("live preview rejects a mismatched server before allocating resources", async () => {
     const calls: string[][] = [];
     const exec = async (_command: string, args: string[]): Promise<CommandResult> => { calls.push(args); return { stdout: "", stderr: "", code: 0 }; };
-    await assert.rejects(openLivePreview(exec, "/tmux", { socket: "/tmp/other", serverPid: "99", sessionId: "$1", sessionName: "main", paneId: "%1", clientName: "/dev/ttys001" }, tmux, "preview", {
+    await assert.rejects(openLivePreview(exec, "/tmux", { socket: "/tmp/other", serverPid: "99", sessionId: "$1", sessionName: "main", windowId: "@1", paneId: "%1", clientName: "/dev/ttys001" }, tmux, "preview", {
         makeTempDirectory: async () => "/tmp/pi-preview-mismatch",
         removeTempDirectory: async () => {},
     }), /different tmux server/u);
@@ -207,7 +233,7 @@ void test("preview allocation refuses mutations after tmux server identity repla
         return { stdout: "", stderr: "", code: 0 };
     };
     await assert.rejects(openLivePreview(exec, "/tmux", {
-        socket: "/tmp/tmux", serverPid: "10", sessionId: "$parent", sessionName: "main", paneId: "%parent", clientName: "/dev/ttys001",
+        socket: "/tmp/tmux", serverPid: "10", sessionId: "$parent", sessionName: "main", windowId: "@parent", paneId: "%parent", clientName: "/dev/ttys001",
     }, tmux, "preview", {
         makeTempDirectory: async () => "/tmp/pi-preview-replaced-server",
         removeTempDirectory: async () => {},
@@ -225,7 +251,7 @@ void test("partial preview allocation removes its canonical view without killing
         if (args.some(arg => arg.includes("'link-window'"))) return { stdout: "", stderr: "link failed", code: 1 };
         return { stdout: "", stderr: "", code: 0 };
     };
-    await assert.rejects(openLivePreview(exec, "/tmux", { socket: "/tmp/tmux", serverPid: "10", sessionId: "$1", sessionName: "main", paneId: "%1", clientName: "/dev/ttys001" }, tmux, "preview", {
+    await assert.rejects(openLivePreview(exec, "/tmux", { socket: "/tmp/tmux", serverPid: "10", sessionId: "$1", sessionName: "main", windowId: "@1", paneId: "%1", clientName: "/dev/ttys001" }, tmux, "preview", {
         makeTempDirectory: async () => "/tmp/pi-preview-partial",
         removeTempDirectory: async () => {},
     }), /link failed/u);
@@ -392,7 +418,7 @@ void test("tmux cleanup and stop use the recorded socket and refuse a reused ser
         if (args.includes("has-session")) return { stdout: "", stderr: "missing", code: 1 };
         return { stdout: "", stderr: "", code: 0 };
     };
-    const context = { socket: "/tmp/tmux", serverPid: "10", sessionId: "$1", sessionName: "main", paneId: "%1" };
+    const context = { socket: "/tmp/tmux", serverPid: "10", sessionId: "$1", sessionName: "main", windowId: "@1", paneId: "%1" };
     await assert.rejects(launchAgentSession(malformed, "/tmux", context, { agentId: "550e8400-e29b-41d4-a716-446655440000", profile: "tester", originSessionId: "origin", cwd: "/work", launch: { command: "/pi", args: [], env: {} } }), /canonical IDs/u);
     assert.ok(calls.some(args => args.includes("kill-window") && args.includes("@2")));
     assert.ok(!calls.some(args => args.includes("kill-session")));

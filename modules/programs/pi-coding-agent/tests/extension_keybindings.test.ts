@@ -8,6 +8,7 @@ const valid = {
     features: {
         profile: { cycle: [] },
         historyViewer: { exit: ["ctrl+d"] },
+        subagentNavigation: { parent: ["u"] },
     },
 };
 
@@ -17,6 +18,7 @@ void test("extension keybinding schema rejects unknown, missing, and empty requi
     assert.throws(() => validateExtensionKeybindings({ schemaVersion: 1, features: { historyViewer: {} } }), /missing action.*exit/);
     assert.throws(() => validateExtensionKeybindings({ schemaVersion: 1, features: { historyViewer: { exit: [], typo: [] } } }), /unknown action.*typo/);
     assert.throws(() => validateExtensionKeybindings({ schemaVersion: 1, features: { historyViewer: { exit: [] } } }), /exit is required/);
+    assert.throws(() => validateExtensionKeybindings({ schemaVersion: 1, features: { subagentNavigation: { parent: [] } } }), /parent is required/);
 });
 
 void test("tmux key translation canonicalizes aliases and rejects unsupported keys", () => {

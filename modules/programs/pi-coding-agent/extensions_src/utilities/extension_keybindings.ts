@@ -25,6 +25,7 @@ const FEATURE_ACTIONS: Record<string, { actions: readonly string[]; required: re
         required: ["moveUp", "moveDown", "collapse", "expand", "confirm", "cancel"],
     },
     historyViewer: { actions: ["exit"], required: ["exit"] },
+    subagentNavigation: { actions: ["parent"], required: ["parent"] },
     tmuxPreview: { actions: ["openFull", "cancel"], required: ["openFull", "cancel"] },
 };
 

@@ -14,7 +14,7 @@ import { tmuxOwnership, type AgentSnapshot, type TmuxAgentReference } from "../e
 
 const profile = { id: "99999999-9999-4999-8999-999999999999", model: "provider/model", availability: ["top-level", "subagent"] as ("top-level" | "subagent")[], description: "Tester", allowAllTools: false, tools: [], hiddenSkillOptIns: [], extensions: { subagent: { allowedTargets: [] } } };
 const capabilities = { nativeScreen: true, taskDelivery: true, taskCompletion: true, usage: true, interactiveInterventions: true };
-const context: TmuxContext = { socket: "/tmp/tmux", serverPid: "10", sessionId: "$parent", sessionName: "parent", paneId: "%parent" };
+const context: TmuxContext = { socket: "/tmp/tmux", serverPid: "10", sessionId: "$parent", sessionName: "parent", windowId: "@parent", paneId: "%parent" };
 const launch = { command: "/pi", args: [], env: {} };
 
 void test("origin hubs reuse one session, isolate origins, and stopping one window preserves its sibling", async () => {
@@ -38,9 +38,9 @@ void test("origin hubs reuse one session, isolate origins, and stopping one wind
     assert.notEqual(first.windowId, sibling.windowId);
     assert.notEqual(first.paneId, sibling.paneId);
     assert.notEqual(first.sessionId, other.sessionId);
-    const nestedContext: TmuxContext = { socket: first.socket, serverPid: first.serverPid, sessionId: first.sessionId, sessionName: first.sessionName, paneId: first.paneId };
+    const nestedContext: TmuxContext = { socket: first.socket, serverPid: first.serverPid, sessionId: first.sessionId, sessionName: first.sessionName, windowId: first.windowId, paneId: first.paneId };
     const depth2 = await launchAgentSession(exec, "/tmux", nestedContext, { agentId: "550e8400-e29b-41d4-a716-446655440003", profile: "focused-reviewer", originSessionId: "origin-a", cwd: "/work", launch });
-    const depth3 = await launchAgentSession(exec, "/tmux", { ...nestedContext, sessionId: depth2.sessionId, sessionName: depth2.sessionName, paneId: depth2.paneId }, { agentId: "550e8400-e29b-41d4-a716-446655440004", profile: "dissent-reviewer", originSessionId: "origin-a", cwd: "/work", launch });
+    const depth3 = await launchAgentSession(exec, "/tmux", { ...nestedContext, sessionId: depth2.sessionId, sessionName: depth2.sessionName, windowId: depth2.windowId, paneId: depth2.paneId }, { agentId: "550e8400-e29b-41d4-a716-446655440004", profile: "dissent-reviewer", originSessionId: "origin-a", cwd: "/work", launch });
     assert.equal(depth2.sessionId, first.sessionId);
     assert.equal(depth3.sessionId, first.sessionId);
     assert.notEqual(depth2.windowId, first.windowId);

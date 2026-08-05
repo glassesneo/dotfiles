@@ -3,7 +3,9 @@
   homeConfig,
   lib,
   llm-agents,
+  piKeybindings,
   pkgs,
+  tmux,
   ...
 }: let
   moduleName = "programs.pi-coding-agent.subagent";
@@ -13,6 +15,17 @@
   childBridgeExtension = "${./../../extensions_src}/subagent_child_bridge.ts";
   historyViewerExtension = "${./../../extensions_src}/subagent_history_viewer.ts";
   externalWorkerEntrypoint = "${./../../extensions_src}/subagent_external_worker.ts";
+  parentKeys = piKeybindings.keysFor "subagentNavigation" "parent";
+  parentTmuxKeys = map piKeybindings.toTmuxKey parentKeys;
+  returnParentCommand = pkgs.writeShellApplication {
+    name = "pi-subagent-return-parent";
+    runtimeInputs = [pkgs.tmux pkgs.gnugrep];
+    text = builtins.readFile ./return-parent.sh;
+  };
+  parentNavigationHint = "${tmux.prefix} ${lib.concatStringsSep "/" (map lib.toUpper parentTmuxKeys)}: parent · /parent";
+  parentBinding = key: ''
+    bind-key ${key} if-shell -F '#{==:#{@pi_subagent_schema},1}' 'run-shell "${lib.getExe returnParentCommand} --binding #{q:client_name} #{q:session_id} #{q:window_id}"' 'display-message "No subagent parent for this window"'
+  '';
 in
   delib.module {
     name = moduleName;
@@ -122,6 +135,15 @@ in
             nativeAction = "app.exit";
           };
         };
+        subagentNavigation = {
+          enabled = cfg.enable;
+          actions.parent = {
+            defaultKeys = ["u"];
+            contexts = ["app.global"];
+            required = true;
+            target = "tmux";
+          };
+        };
         tmuxPreview = {
           enabled = cfg.enable;
           actions = {
@@ -142,72 +164,75 @@ in
       };
     };
 
-    myconfig.ifEnabled.programs.pi-coding-agent.profile.profiles = {
-      full.extensions.subagent = {
-        allowedTargets = ["scout" "taskmaster" "operator" "focused-reviewer" "tester" "reviewer" "explorer"];
-        harness = "pi";
-      };
-      taskmaster = {
-        tools = ["subagent_run" "subagent_submit" "subagent_get" "subagent_wait" "subagent_stop"];
-        extensions.subagent = {
-          allowedTargets = ["tester" "reviewer" "focused-reviewer"];
+    myconfig.ifEnabled = {
+      programs.tmux.extraConfigFragments.piSubagentParent = lib.concatMapStrings parentBinding parentTmuxKeys;
+      programs.pi-coding-agent.profile.profiles = {
+        full.extensions.subagent = {
+          allowedTargets = ["scout" "taskmaster" "operator" "focused-reviewer" "tester" "reviewer" "explorer"];
           harness = "pi";
         };
-      };
-      artisan = {
-        tools = ["subagent_run" "subagent_submit" "subagent_get" "subagent_wait" "subagent_stop"];
-        extensions.subagent = {
-          allowedTargets = ["reviewer"];
+        taskmaster = {
+          tools = ["subagent_run" "subagent_submit" "subagent_get" "subagent_wait" "subagent_stop"];
+          extensions.subagent = {
+            allowedTargets = ["tester" "reviewer" "focused-reviewer"];
+            harness = "pi";
+          };
+        };
+        artisan = {
+          tools = ["subagent_run" "subagent_submit" "subagent_get" "subagent_wait" "subagent_stop"];
+          extensions.subagent = {
+            allowedTargets = ["reviewer"];
+            harness = "pi";
+          };
+        };
+        operator = {
+          tools = ["subagent_run" "subagent_submit" "subagent_get" "subagent_wait" "subagent_stop"];
+          extensions.subagent = {
+            allowedTargets = ["explorer" "taskmaster" "cursor-implementer" "tester" "reviewer" "focused-reviewer"];
+            harness = "pi";
+          };
+        };
+        cursor-implementer.extensions.subagent = {
+          allowedTargets = [];
+          harness = "cursor-agent";
+          harnessOptions = {
+            mode = "agent";
+            permissionPolicy = "allow-always";
+            sandbox = "disabled";
+            trustWorkspace = true;
+            worktree = false;
+          };
+        };
+        tester.extensions.subagent = {
+          allowedTargets = [];
           harness = "pi";
         };
-      };
-      operator = {
-        tools = ["subagent_run" "subagent_submit" "subagent_get" "subagent_wait" "subagent_stop"];
-        extensions.subagent = {
-          allowedTargets = ["explorer" "taskmaster" "cursor-implementer" "tester" "reviewer" "focused-reviewer"];
+        reviewer = {
+          tools = ["subagent_run" "subagent_submit" "subagent_get" "subagent_wait" "subagent_stop"];
+          extensions.subagent = {
+            allowedTargets = ["focused-reviewer" "dissent-reviewer"];
+            harness = "pi";
+          };
+        };
+        scout = {
+          tools = ["subagent_run" "subagent_submit" "subagent_get" "subagent_wait" "subagent_stop"];
+          extensions.subagent = {
+            allowedTargets = ["reviewer" "focused-reviewer" "explorer"];
+            harness = "pi";
+          };
+        };
+        focused-reviewer.extensions.subagent = {
+          allowedTargets = [];
           harness = "pi";
         };
-      };
-      cursor-implementer.extensions.subagent = {
-        allowedTargets = [];
-        harness = "cursor-agent";
-        harnessOptions = {
-          mode = "agent";
-          permissionPolicy = "allow-always";
-          sandbox = "disabled";
-          trustWorkspace = true;
-          worktree = false;
-        };
-      };
-      tester.extensions.subagent = {
-        allowedTargets = [];
-        harness = "pi";
-      };
-      reviewer = {
-        tools = ["subagent_run" "subagent_submit" "subagent_get" "subagent_wait" "subagent_stop"];
-        extensions.subagent = {
-          allowedTargets = ["focused-reviewer" "dissent-reviewer"];
+        dissent-reviewer.extensions.subagent = {
+          allowedTargets = [];
           harness = "pi";
         };
-      };
-      scout = {
-        tools = ["subagent_run" "subagent_submit" "subagent_get" "subagent_wait" "subagent_stop"];
-        extensions.subagent = {
-          allowedTargets = ["reviewer" "focused-reviewer" "explorer"];
+        explorer.extensions.subagent = {
+          allowedTargets = [];
           harness = "pi";
         };
-      };
-      focused-reviewer.extensions.subagent = {
-        allowedTargets = [];
-        harness = "pi";
-      };
-      dissent-reviewer.extensions.subagent = {
-        allowedTargets = [];
-        harness = "pi";
-      };
-      explorer.extensions.subagent = {
-        allowedTargets = [];
-        harness = "pi";
       };
     };
 
@@ -370,10 +395,11 @@ in
       ];
 
       home.file."${myconfig.programs.pi-coding-agent.configDir}/subagent.json".text = builtins.toJSON {
-        schemaVersion = 7;
+        schemaVersion = 8;
         stateRoot = "${homeConfig.xdg.stateHome}/pi/subagents";
         tmux = lib.getExe pkgs.tmux;
-        inherit historyViewerExtension;
+        returnParentCommand = lib.getExe returnParentCommand;
+        inherit parentNavigationHint historyViewerExtension;
         childExtensions = [profileExtension subagentExtension agentArtifactExtension childBridgeExtension];
         harnesses = {
           pi = {

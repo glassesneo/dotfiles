@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
-repo_root=${PI_FLAKE_ROOT:-"$(cd "$(dirname "$0")/../../../.." && pwd)"}
+package_root=$(cd "$(dirname "$0")/.." && pwd)
+repo_root=${PI_FLAKE_ROOT:-"$(cd "$package_root/../../.." && pwd)"}
 cd "$repo_root"
 
 flake="builtins.getFlake $(jq -Rn --arg path "$repo_root" '$path')"
@@ -47,5 +48,33 @@ if [[ $(jq -r '.features.historyViewer.exit[0]' <<<"$resolved") != f12 ]]; then
   echo 'direct-native-alias: extension map did not follow pi.app.exit' >&2
   exit 1
 fi
+PACKAGE_ROOT="$package_root" GENERATED_EXTENSION_KEYBINDINGS="$resolved" node --input-type=module -e '
+  import { pathToFileURL } from "node:url";
+  const moduleUrl = pathToFileURL(`${process.env.PACKAGE_ROOT}/extensions_src/utilities/extension_keybindings.ts`);
+  const { validateExtensionKeybindings } = await import(moduleUrl.href);
+  validateExtensionKeybindings(JSON.parse(process.env.GENERATED_EXTENSION_KEYBINDINGS), "generated extension-keybindings.json");
+'
+printf 'generated extension schema: passed\n'
 printf 'alias propagation: passed\n'
-printf 'Nix keybinding failure and alias fixtures passed (2 nix eval invocations)\n'
+
+navigation_module='myconfig.programs.tmux.prefix = "F11";
+  myconfig.programs.pi-coding-agent.keybindings.overrides.subagentNavigation.parent = ["f10"];'
+navigation_runtime=$(nix eval --impure --raw --expr "$base $navigation_module }]; }; in x.config.home.file.\"/Users/neo/.pi/agent/subagent.json\".text")
+if [[ $(jq -r '.parentNavigationHint' <<<"$navigation_runtime") != 'F11 F10: parent · /parent' ]]; then
+  echo 'subagent navigation: runtime hint did not follow prefix/key override' >&2
+  exit 1
+fi
+navigation_tmux=$(nix eval --impure --raw --expr "$base $navigation_module }]; }; in x.config.programs.tmux.extraConfig")
+if [[ $navigation_tmux != *'bind-key f10'* || $navigation_tmux != *'pi-subagent-return-parent --binding #{q:client_name} #{q:session_id} #{q:window_id}'* ]]; then
+  echo 'subagent navigation: tmux binding did not follow key override' >&2
+  exit 1
+fi
+printf 'subagent navigation propagation: passed\n'
+
+darwin_tmux=$(nix eval --impure --raw --expr "let f = $flake; in f.darwinConfigurations.seiran.config.home-manager.users.neo.programs.tmux.extraConfig")
+if [[ $darwin_tmux != *'pi-subagent-return-parent --binding'* ]]; then
+  echo 'nix-darwin placement: Home Manager tmux config omitted the subagent binding' >&2
+  exit 1
+fi
+printf 'nix-darwin contribution placement: passed\n'
+printf 'Nix keybinding failure and propagation fixtures passed (5 nix eval invocations)\n'

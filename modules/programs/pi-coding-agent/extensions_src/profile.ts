@@ -1,14 +1,11 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
-    CustomEditor,
     formatSkillsForPrompt,
     getAgentDir,
     type ExtensionAPI,
     type ExtensionContext,
-    type KeybindingsManager,
 } from "@earendil-works/pi-coding-agent";
-import { truncateToWidth, visibleWidth, type EditorTheme, type TUI } from "@earendil-works/pi-tui";
 import { provideCommandPaletteContribution } from "./utilities/command_palette_contributions.ts";
 import { loadFeatureKeybindings } from "./utilities/extension_keybindings.ts";
 import { emitActiveProfile, type ActiveProfileReason } from "./utilities/profile_events.ts";
@@ -21,6 +18,7 @@ import {
 
 const DEFAULT_CONFIG_PATH = join(getAgentDir(), "agent-profiles.json");
 const PROFILE_STATE = "agent-profile-state";
+const PROFILE_IDENTITY_STATUS = "agent-profile-identity";
 
 export async function loadAgentProfileConfig(path: string, env: NodeJS.ProcessEnv = {}): Promise<AgentProfileConfig> {
     let value: unknown;
@@ -49,25 +47,11 @@ function latestProfileId(ctx: ExtensionContext): string | undefined {
     return data.schemaVersion === 2 && typeof data.profileId === "string" ? data.profileId : undefined;
 }
 
-export class ProfileBadgeEditor extends CustomEditor {
-    #profileName: string | undefined;
-    readonly #theme: EditorTheme;
-    readonly #tui: Pick<TUI, "requestRender">;
-
-    constructor(tui: TUI, theme: EditorTheme, keybindings: KeybindingsManager, profileName?: string) {
-        super(tui, theme, keybindings);
-        this.#tui = tui; this.#theme = theme; this.#profileName = profileName;
-    }
-    setProfileName(name: string): void { this.#profileName = name; this.invalidate(); this.#tui.requestRender(); }
-    override handleInput(data: string): void { super.handleInput(data); }
-    override render(width: number): string[] {
-        const lines = super.render(width);
-        const label = this.#profileName ? ` profile:${this.#profileName} ` : "";
-        if (lines.length === 0 || !label || width < visibleWidth(label) + 8) return lines;
-        const last = lines.at(-1)!;
-        lines[lines.length - 1] = truncateToWidth(last, width - visibleWidth(label), "") + this.#theme.selectList.selectedText(label);
-        return lines;
-    }
+export function profileIdentityText(name: string, env: NodeJS.ProcessEnv): string {
+    if (!env.PI_SUBAGENT_AGENT_ID) return `PARENT · profile:${name}`;
+    const parsedDepth = Number.parseInt(env.PI_SUBAGENT_DEPTH ?? "0", 10);
+    const depth = Number.isInteger(parsedDepth) && parsedDepth >= 0 ? parsedDepth : 0;
+    return `SUBAGENT d${depth} · profile:${name}`;
 }
 
 export function routedProfileForInput(config: AgentProfileConfig, text: string): string | undefined {
@@ -84,7 +68,6 @@ export function registerProfileController(
     let config: AgentProfileConfig | undefined;
     let activeName: string | undefined;
     let activeProfile: AgentProfile | undefined;
-    let badgeEditor: ProfileBadgeEditor | undefined;
     let abortBeforeProviderRequest = false;
 
     const nameForId = (id: string | undefined): string | undefined => id === undefined || !config ? undefined : Object.entries(config.profiles).find(([, profile]) => profile.id === id)?.[0];
@@ -152,7 +135,7 @@ export function registerProfileController(
         }
         activeName = name;
         activeProfile = structuredClone(profile);
-        badgeEditor?.setProfileName(name);
+        ctx.ui.setStatus(PROFILE_IDENTITY_STATUS, profileIdentityText(name, env));
         if (persist) pi.appendEntry(PROFILE_STATE, { schemaVersion: 2, profileId: profile.id } satisfies ProfileStateV2);
         emitActiveProfile(pi, name, activeProfile, reason);
         return true;
@@ -205,12 +188,6 @@ export function registerProfileController(
 
     pi.on("session_start", async (_event, ctx) => {
         config = await loadAgentProfileConfig(configPath, env);
-        if (ctx.mode === "tui") {
-            ctx.ui.setEditorComponent((tui, theme, keybindings) => {
-                badgeEditor = new ProfileBadgeEditor(tui, theme, keybindings, activeName);
-                return badgeEditor;
-            });
-        }
         const flag = pi.getFlag("profile");
         const requested = typeof flag === "string" && flag.trim() ? flag.trim() : nameForId(latestProfileId(ctx)) ?? config.defaultProfile;
         if (!await apply(requested, ctx, true, "startup") && requested !== config.defaultProfile) {

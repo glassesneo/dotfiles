@@ -40,6 +40,7 @@ import { loadFeatureKeybindings } from "./utilities/extension_keybindings.ts";
 import { provideCommandPaletteContribution } from "./utilities/command_palette_contributions.ts";
 
 const CONFIG = join(getAgentDir(), "subagent.json"); const PROFILES = join(getAgentDir(), "agent-profiles.json");
+const PARENT_NAVIGATION_STATUS = "subagent-parent-navigation";
 const taskPromptGuideline = "For `subagent_run` and `subagent_submit`, treat the selected target profile as a stable capability contract. Include the local objective and task-specific input or context in `prompt`; add task-specific constraints, output requirements, or stop conditions only when the target profile or its discoverable receiver skill does not already own them. Omit invocation instructions, skill paths, procedures, default constraints, and default output contracts already owned by the target profile or discoverable skill. To intentionally override the profile's normal skill, name the different skill; provide a skill path only for a task-specific resource that cannot be discovered by name. If the profile does not fit and no override is intended, choose a suitable profile or stop and report the gap.";
 const runPromptGuidelines = [
     taskPromptGuideline,
@@ -544,9 +545,20 @@ export async function registerSubagent(pi: ExtensionAPI, options: Partial<Pick<S
         current = { name: "unknown", error: error.message };
         registerDispatch([]);
     });
+    if (env.PI_SUBAGENT_AGENT_ID) {
+        pi.registerCommand("parent", {
+            description: "Return to this subagent's parent tmux window",
+            async handler(_args, ctx) {
+                const config = await loadSubagentConfig(configPath);
+                const result = await exec(config.returnParentCommand, []);
+                if (result.code !== 0) ctx.ui.notify(result.stderr.trim() || "Could not return to the parent window", "error");
+            },
+        });
+    }
     pi.on("session_start", async (_event, ctx) => {
         const config = await loadSubagentConfig(configPath);
         natureHandleWords = config.natureHandleWords;
+        if (env.PI_SUBAGENT_AGENT_ID) ctx.ui.setStatus(PARENT_NAVIGATION_STATUS, config.parentNavigationHint);
         const lineage = origin(ctx, env);
         await reconcileOriginUsageClaims(config.stateRoot, lineage.originSessionId, lineage.originSessionFile);
     });

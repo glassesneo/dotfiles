@@ -333,6 +333,75 @@
       })
     nativeActions;
   };
+  keysFor = cfg: let
+    contributions = {pi = nativeContribution;} // cfg.contributions;
+    overrideFor = feature: action:
+      if cfg.overrides ? ${feature} && cfg.overrides.${feature} ? ${action}
+      then cfg.overrides.${feature}.${action}
+      else null;
+    resolve = feature: action: let
+      spec = contributions.${feature}.actions.${action};
+      directOverride = overrideFor feature action;
+      nativeAliases = lib.concatLists (lib.mapAttrsToList (
+          aliasFeature: contribution:
+            lib.mapAttrsToList (
+              aliasAction: aliasSpec:
+                if aliasSpec ? nativeAction && aliasSpec.nativeAction == action && overrideFor aliasFeature aliasAction != null
+                then overrideFor aliasFeature aliasAction
+                else []
+            )
+            contribution.actions
+        )
+        (lib.filterAttrs (name: _: name != "pi") contributions));
+      override =
+        if directOverride != null
+        then directOverride
+        else if feature == "pi" && nativeAliases != []
+        then builtins.head nativeAliases
+        else null;
+    in
+      if spec ? nativeAction
+      then resolve "pi" spec.nativeAction
+      else if override != null
+      then override
+      else if spec ? role
+      then cfg.roles.${spec.role}
+      else spec.defaultKeys;
+  in
+    resolve;
+  toTmuxKey = key: let
+    parts = lib.splitString "+" key;
+    modifiers = lib.init parts;
+    rawBase = lib.last parts;
+    baseNames = {
+      escape = "Escape";
+      esc = "Escape";
+      enter = "Enter";
+      return = "Enter";
+      tab = "Tab";
+      space = "Space";
+      backspace = "BSpace";
+      delete = "DC";
+      home = "Home";
+      end = "End";
+      pageUp = "PPage";
+      pageDown = "NPage";
+      up = "Up";
+      down = "Down";
+      left = "Left";
+      right = "Right";
+    };
+    base = baseNames.${rawBase} or rawBase;
+    prefixes = map (modifier:
+      {
+        ctrl = "C-";
+        shift = "S-";
+      }.${
+        modifier
+      })
+    modifiers;
+  in
+    lib.concatStrings prefixes + base;
 in
   delib.module {
     name = "programs.pi-coding-agent.keybindings";
@@ -344,6 +413,13 @@ in
         overrides = attrsOfOption (lib.types.attrsOf (lib.types.listOf lib.types.str)) {};
         contributions = attrsOfOption lib.types.attrs {};
       });
+
+    myconfig.always = {cfg, ...}: {
+      args.shared.piKeybindings = {
+        keysFor = keysFor cfg;
+        inherit toTmuxKey;
+      };
+    };
 
     home.ifEnabled = {
       cfg,

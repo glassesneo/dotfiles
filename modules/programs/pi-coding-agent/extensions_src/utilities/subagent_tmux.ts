@@ -4,8 +4,8 @@ import type { TmuxAgentReference } from "./subagent_types.ts";
 
 export interface CommandResult { stdout: string; stderr: string; code: number }
 export type CommandExecutor = (command: string, args: string[]) => Promise<CommandResult>;
-export interface TmuxContext { socket: string; serverPid: string; sessionId: string; sessionName: string; paneId: string; clientName?: string }
-const FORMAT = "#{pid}\t#{session_id}\t#{session_name}\t#{pane_id}\t#{client_name}";
+export interface TmuxContext { socket: string; serverPid: string; sessionId: string; sessionName: string; windowId: string; paneId: string; clientName?: string }
+const FORMAT = "#{pid}\t#{session_id}\t#{session_name}\t#{window_id}\t#{pane_id}\t#{client_name}";
 const at = (socket: string, args: string[]): string[] => ["-S", socket, ...args];
 
 export async function probeTmux(exec: CommandExecutor, tmux: string, env: NodeJS.ProcessEnv = process.env): Promise<TmuxContext | null> {
@@ -13,8 +13,8 @@ export async function probeTmux(exec: CommandExecutor, tmux: string, env: NodeJS
     if (!socket) return null;
     const result = await exec(tmux, at(socket, ["display-message", "-p", FORMAT]));
     if (result.code !== 0) return null;
-    const [serverPid, sessionId, sessionName, paneId, clientName] = result.stdout.trim().split("\t");
-    return serverPid && sessionId && sessionName && paneId && clientName ? { socket, serverPid, sessionId, sessionName, paneId, clientName } : null;
+    const [serverPid, sessionId, sessionName, windowId, paneId, clientName] = result.stdout.trim().split("\t");
+    return serverPid && sessionId && sessionName && windowId && paneId && clientName ? { socket, serverPid, sessionId, sessionName, windowId, paneId, clientName } : null;
 }
 function quote(value: string): string { return `'${value.replaceAll("'", `'"'"'`)}'`; }
 const SERVER_IDENTITY_CHANGED = "__pi_tmux_server_identity_changed__";
@@ -70,7 +70,25 @@ export async function launchAgentSession(exec: CommandExecutor, tmux: string, co
     const short = input.agentId.slice(0, 8);
     const safeProfile = input.profile.replace(/[^a-zA-Z0-9_-]/gu, "-").slice(0, 24);
     const command = ["env", ...Object.entries(input.launch.env).map(([key, value]) => `${key}=${value}`), input.launch.command, ...input.launch.args].map(quote).join(" ");
-    return launchHubWindow(exec, tmux, context, { originSessionId: input.originSessionId, windowName: `sa-${safeProfile}-${short}-${input.agentId}`, cwd: input.cwd, command });
+    const target = await launchHubWindow(exec, tmux, context, { originSessionId: input.originSessionId, windowName: `sa-${safeProfile}-${short}-${input.agentId}`, cwd: input.cwd, command });
+    const metadata = [
+        ["@pi_subagent_parent_server_pid", context.serverPid],
+        ["@pi_subagent_parent_session_id", context.sessionId],
+        ["@pi_subagent_parent_window_id", context.windowId],
+        ["@pi_subagent_hub_session_id", target.sessionId],
+        ["@pi_subagent_schema", "1"],
+    ] as const;
+    try {
+        for (const [name, value] of metadata) {
+            const result = await exec(tmux, at(target.socket, ["set-option", "-w", "-t", target.windowId, name, value]));
+            if (result.code !== 0) throw new Error(result.stderr.trim() || `Could not set tmux subagent metadata ${name}`);
+        }
+    } catch (error) {
+        try { await stopAgentSession(exec, tmux, target); }
+        catch (cleanupError) { throw new AggregateError([error, cleanupError], "Subagent metadata setup and cleanup failed"); }
+        throw error;
+    }
+    return target;
 }
 export async function stopOriginHub(exec: CommandExecutor, tmux: string, target: Pick<TmuxAgentReference, "socket" | "serverPid" | "sessionName">): Promise<boolean> {
     if (await serverState(exec, tmux, target) !== "match") return false;
