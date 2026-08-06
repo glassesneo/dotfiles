@@ -3,9 +3,16 @@
   homeConfig,
   lib,
   llm-agents,
+  pkgs,
   ...
 }: let
   configDir = "${homeConfig.home.homeDirectory}/.pi/agent";
+  emergencyConfigDir = "${homeConfig.home.homeDirectory}/.pi/emergency-agent";
+  modelDefaults = {
+    defaultProvider = "openai-codex";
+    defaultModel = "gpt-5.6-sol";
+    defaultThinkingLevel = "medium";
+  };
 in
   delib.module {
     name = "programs.pi-coding-agent";
@@ -14,6 +21,9 @@ in
       moduleOptions {
         enable = boolOption true;
         configDir = readOnly (strOption configDir);
+        emergency = submoduleOption {
+          options.enable = boolOption true;
+        } {};
         defaultExtensions = readOnly (listOfOption str [
           "profile"
           "command_palette"
@@ -51,6 +61,47 @@ in
       disabledNames = map (item: item.name) (builtins.filter (item: item.module != null && !(item.module ? enable && item.module.enable)) selected);
       emptyPathNames = map (item: item.name) (builtins.filter (item: item.module != null && !(item.module ? extensionPaths && item.module.extensionPaths != [])) selected);
       names = values: lib.concatStringsSep ", " values;
+      emergencySettings =
+        modelDefaults
+        // {
+          extensions = extensionPaths;
+          prompts = [
+            "${./prompts}"
+          ];
+          theme = "dark";
+        };
+      emergencyLauncher = pkgs.writeShellApplication {
+        name = "pi-emergency";
+        text = ''
+          export PI_CODING_AGENT_DIR=${lib.escapeShellArg emergencyConfigDir}
+          export PI_CODING_AGENT_SESSION_DIR=${lib.escapeShellArg "${cfg.configDir}/sessions"}
+          exec ${lib.getExe llm-agents.pi} \
+            --no-extensions \
+            --no-skills \
+            --no-prompt-templates \
+            --no-themes \
+            --no-approve \
+            "$@"
+        '';
+      };
+      emergencyFullLauncher = pkgs.writeShellApplication {
+        name = "pi-emergency-full";
+        text = ''
+          export PI_CODING_AGENT_DIR=${lib.escapeShellArg emergencyConfigDir}
+          export PI_CODING_AGENT_SESSION_DIR=${lib.escapeShellArg "${cfg.configDir}/sessions"}
+          exec ${lib.getExe llm-agents.pi} --no-approve "$@"
+        '';
+      };
+      sharedEmergencyFiles = builtins.listToAttrs (map (name: {
+          name = "${emergencyConfigDir}/${name}";
+          value.source = homeConfig.lib.file.mkOutOfStoreSymlink "${cfg.configDir}/${name}";
+        }) [
+          "auth.json"
+          "agent-profiles.json"
+          "subagent.json"
+          "web-search.json"
+          "extension-keybindings.json"
+        ]);
     in {
       assertions = [
         {
@@ -75,17 +126,24 @@ in
         enable = true;
         package = llm-agents.pi;
         inherit (cfg) configDir;
-        settings = {
-          extensions = lib.mkBefore extensionPaths;
-          prompts = [
-            "${./prompts}"
-          ];
-          defaultModel = "gpt-5.6-sol";
-          defaultProvider = "openai-codex";
-          defaultThinkingLevel = "medium";
-
-          theme = "dark";
-        };
+        settings =
+          modelDefaults
+          // {
+            extensions = lib.mkBefore extensionPaths;
+            prompts = [
+              "${./prompts}"
+            ];
+            theme = "dark";
+          };
       };
+
+      home.packages = lib.mkIf cfg.emergency.enable [
+        emergencyLauncher
+        emergencyFullLauncher
+      ];
+      home.file = lib.mkIf cfg.emergency.enable (sharedEmergencyFiles
+        // {
+          "${emergencyConfigDir}/settings.json".text = builtins.toJSON emergencySettings;
+        });
     };
   }
