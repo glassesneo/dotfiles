@@ -10,6 +10,7 @@
     "gemini-api-key"
     "ai-mop-api-key"
     "brave-api-key"
+    "brave-free-api-key"
     "parallel-api-key"
     "exa-api-key"
     "openrouter-api-key"
