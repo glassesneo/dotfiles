@@ -10,6 +10,8 @@
     "gemini-api-key"
     "ai-mop-api-key"
     "brave-api-key"
+    "parallel-api-key"
+    "exa-api-key"
     "openrouter-api-key"
     "cerebras-api-key"
     "google-cloud-api-key"
