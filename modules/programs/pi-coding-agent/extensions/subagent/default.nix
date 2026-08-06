@@ -169,7 +169,7 @@ in
       programs.tmux.extraConfigFragments.piSubagentParent = lib.concatMapStrings parentBinding parentTmuxKeys;
       programs.pi-coding-agent.profile.profiles = {
         full.extensions.subagent = {
-          allowedTargets = ["scout" "taskmaster" "operator" "focused-reviewer" "tester" "reviewer" "explorer" "librarian"];
+          allowedTargets = ["scout" "taskmaster" "operator" "focused-reviewer" "tester" "reviewer" "explorer"];
           harness = "pi";
         };
         taskmaster = {
@@ -189,7 +189,7 @@ in
         operator = {
           tools = ["subagent_run" "subagent_submit" "subagent_get" "subagent_wait" "subagent_stop"];
           extensions.subagent = {
-            allowedTargets = ["explorer" "taskmaster" "cursor-implementer" "tester" "reviewer" "focused-reviewer" "librarian"];
+            allowedTargets = ["explorer" "taskmaster" "cursor-implementer" "tester" "reviewer" "focused-reviewer"];
             harness = "pi";
           };
         };
@@ -218,7 +218,7 @@ in
         scout = {
           tools = ["subagent_run" "subagent_submit" "subagent_get" "subagent_wait" "subagent_stop"];
           extensions.subagent = {
-            allowedTargets = ["reviewer" "focused-reviewer" "explorer" "librarian"];
+            allowedTargets = ["reviewer" "focused-reviewer" "explorer"];
             harness = "pi";
           };
         };
