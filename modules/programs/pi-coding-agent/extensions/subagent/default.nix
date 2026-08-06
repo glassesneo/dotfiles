@@ -55,6 +55,7 @@ in
           "Robbie"
           "Mace"
         ];
+        childExtensionContributions = attrsOfOption (lib.types.listOf lib.types.str) {};
       });
 
     myconfig.always = {cfg, ...}: {
@@ -168,7 +169,7 @@ in
       programs.tmux.extraConfigFragments.piSubagentParent = lib.concatMapStrings parentBinding parentTmuxKeys;
       programs.pi-coding-agent.profile.profiles = {
         full.extensions.subagent = {
-          allowedTargets = ["scout" "taskmaster" "operator" "focused-reviewer" "tester" "reviewer" "explorer"];
+          allowedTargets = ["scout" "taskmaster" "operator" "focused-reviewer" "tester" "reviewer" "explorer" "librarian"];
           harness = "pi";
         };
         taskmaster = {
@@ -188,7 +189,7 @@ in
         operator = {
           tools = ["subagent_run" "subagent_submit" "subagent_get" "subagent_wait" "subagent_stop"];
           extensions.subagent = {
-            allowedTargets = ["explorer" "taskmaster" "cursor-implementer" "tester" "reviewer" "focused-reviewer"];
+            allowedTargets = ["explorer" "taskmaster" "cursor-implementer" "tester" "reviewer" "focused-reviewer" "librarian"];
             harness = "pi";
           };
         };
@@ -217,7 +218,7 @@ in
         scout = {
           tools = ["subagent_run" "subagent_submit" "subagent_get" "subagent_wait" "subagent_stop"];
           extensions.subagent = {
-            allowedTargets = ["reviewer" "focused-reviewer" "explorer"];
+            allowedTargets = ["reviewer" "focused-reviewer" "explorer" "librarian"];
             harness = "pi";
           };
         };
@@ -230,6 +231,10 @@ in
           harness = "pi";
         };
         explorer.extensions.subagent = {
+          allowedTargets = [];
+          harness = "pi";
+        };
+        librarian.extensions.subagent = {
           allowedTargets = [];
           harness = "pi";
         };
@@ -374,6 +379,14 @@ in
       childExcludedTools = lib.unique cfg.childExcludedTools;
       natureHandleWords = lib.unique cfg.natureHandleWords;
       validNatureHandleWord = value: nonBlank value && !(lib.hasInfix "-" value);
+      builtInChildExtensions = [profileExtension subagentExtension agentArtifactExtension childBridgeExtension];
+      contributionOwners = lib.sort (a: b: a < b) (builtins.attrNames cfg.childExtensionContributions);
+      contributedChildExtensions = lib.concatMap (owner: cfg.childExtensionContributions.${owner}) contributionOwners;
+      childExtensions = builtInChildExtensions ++ contributedChildExtensions;
+      contributionPathsValid =
+        builtins.all nonBlank contributedChildExtensions
+        && lib.length contributedChildExtensions == lib.length (lib.unique contributedChildExtensions)
+        && builtins.all (path: !(builtins.elem path builtInChildExtensions)) contributedChildExtensions;
     in {
       assertions = [
         {
@@ -392,6 +405,10 @@ in
             && lib.length cfg.natureHandleWords == lib.length natureHandleWords;
           message = "Pi subagent natureHandleWords must be a non-empty list of unique non-blank words without '-'.";
         }
+        {
+          assertion = contributionPathsValid;
+          message = "Pi subagent childExtensionContributions must be unique non-blank paths that do not duplicate built-in child extensions.";
+        }
       ];
 
       home.file."${myconfig.programs.pi-coding-agent.configDir}/subagent.json".text = builtins.toJSON {
@@ -400,7 +417,7 @@ in
         tmux = lib.getExe pkgs.tmux;
         returnParentCommand = lib.getExe returnParentCommand;
         inherit parentNavigationHint historyViewerExtension;
-        childExtensions = [profileExtension subagentExtension agentArtifactExtension childBridgeExtension];
+        inherit childExtensions;
         harnesses = {
           pi = {
             adapter = "pi-native";

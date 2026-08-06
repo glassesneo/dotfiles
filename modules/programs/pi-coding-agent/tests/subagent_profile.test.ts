@@ -329,6 +329,42 @@ void test("artisan profile wiring is top-level-only and delegates only adaptive 
     assert.match(artifactNix, /artisan\.tools = \["save_agent_artifact"\]/);
 });
 
+void test("librarian is subagent-only and dispatchable from scout operator full via child contribution", async () => {
+    const [profileNix, subagentNix, webSearchNix, defaultNix] = await Promise.all([
+        readFile(join(import.meta.dirname, "..", "extensions", "profile", "default.nix"), "utf8"),
+        readFile(join(import.meta.dirname, "..", "extensions", "subagent", "default.nix"), "utf8"),
+        readFile(join(import.meta.dirname, "..", "extensions", "web_search", "default.nix"), "utf8"),
+        readFile(join(import.meta.dirname, "..", "default.nix"), "utf8"),
+    ]);
+    const librarianStart = profileNix.indexOf("          librarian = {");
+    const librarian = profileNix.slice(librarianStart, profileNix.indexOf("          };", librarianStart) + 12);
+    assert.match(profileNix, /librarian = "f8e9225a-a129-4f74-9962-7800aab70dab"/);
+    assert.match(librarian, /availability = \["subagent"\]/);
+    assert.match(librarian, /model = "openai-codex\/gpt-5\.6-luna"/);
+    assert.match(librarian, /thinkingLevel = "high"/);
+    assert.match(librarian, /evidence brief/);
+
+    assert.match(subagentNix, /childExtensionContributions = attrsOfOption/);
+    assert.match(subagentNix, /full\.extensions\.subagent = \{[\s\S]*allowedTargets = \[[^\]]*librarian[^\]]*\]/);
+    assert.match(subagentNix, /operator = \{[\s\S]*allowedTargets = \[[^\]]*librarian[^\]]*\]/);
+    assert.match(subagentNix, /scout = \{[\s\S]*allowedTargets = \[[^\]]*librarian[^\]]*\]/);
+    assert.match(subagentNix, /librarian\.extensions\.subagent = \{\s*allowedTargets = \[\];/);
+    const taskmasterStart = subagentNix.indexOf("      taskmaster = {");
+    const taskmaster = subagentNix.slice(taskmasterStart, subagentNix.indexOf("      artisan = {", taskmasterStart));
+    const artisanStart = subagentNix.indexOf("      artisan = {");
+    const artisan = subagentNix.slice(artisanStart, subagentNix.indexOf("      operator = {", artisanStart));
+    const reviewerStart = subagentNix.indexOf("      reviewer = {");
+    const reviewer = subagentNix.slice(reviewerStart, subagentNix.indexOf("      scout = {", reviewerStart));
+    assert.doesNotMatch(taskmaster, /librarian/);
+    assert.doesNotMatch(artisan, /librarian/);
+    assert.doesNotMatch(reviewer, /librarian/);
+
+    assert.match(webSearchNix, /childExtensionContributions\.web_search/);
+    assert.match(webSearchNix, /librarian\.tools = \["web_search"\]/);
+    assert.match(webSearchNix, /sopsSecretPaths\."brave-api-key" or null/);
+    assert.match(defaultNix, /"web_search"/);
+});
+
 void test("exact raw prompt commands route transactionally before expansion", async () => {
     const { profilePath, profileConfig } = await fixture();
     const fake = fakeControllerPi("scout");

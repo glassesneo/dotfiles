@@ -19,6 +19,7 @@ in
           "command_palette"
           "subagent"
           "performance"
+          "web_search"
         ]);
       };
 

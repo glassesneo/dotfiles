@@ -293,6 +293,7 @@ void test("profiles expose command-independent implementation, validation, revie
         ["reviewer", ["agent-artifact", "adaptive-review"]],
         ["focused-reviewer", []],
         ["dissent-reviewer", []],
+        ["librarian", []],
     ]);
     for (const [profileName, expected] of hiddenOptIns) {
         const marker = `          ${profileName} = {`;
@@ -347,4 +348,13 @@ void test("profiles expose command-independent implementation, validation, revie
     assert.match(operatorBlock, /selecting taskmaster or cursor-implementer/);
     assert.match(operatorBlock, /required input is unavailable.*stop/);
     assert.doesNotMatch(operatorBlock, /same implementation agent ID|persist the artifact chain|independently inspect every diff/);
+
+    const librarianStart = profile.indexOf("        librarian = {");
+    const librarianBlock = profile.slice(librarianStart, profile.indexOf("        };", librarianStart) + 10);
+    assert.match(librarianBlock, /model = "openai-codex\/gpt-5\.6-luna"/);
+    assert.match(librarianBlock, /availability = \["subagent"\]/);
+    assert.match(librarianBlock, /thinkingLevel = "high"/);
+    assert.match(librarianBlock, /untrusted evidence/);
+    assert.match(librarianBlock, /evidence brief/);
+    assert.match(profile, /librarian = "f8e9225a-a129-4f74-9962-7800aab70dab"/);
 });
