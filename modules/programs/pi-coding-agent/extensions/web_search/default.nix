@@ -20,10 +20,7 @@ in
       programs.pi-coding-agent.profile.profiles.librarian.tools = ["web_search"];
     };
 
-    home.ifEnabled = {
-      myconfig,
-      ...
-    }: {
+    home.ifEnabled = {myconfig, ...}: {
       home.file."${myconfig.programs.pi-coding-agent.configDir}/web-search.json".text = builtins.toJSON {
         schemaVersion = 1;
         providers = [

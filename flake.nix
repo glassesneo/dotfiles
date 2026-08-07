@@ -109,9 +109,9 @@
           };
         };
 
-        apps.sync-pi-extension-versions = let
-          system = pkgs.stdenv.hostPlatform.system;
-          piPackage = inputs.llm-agents.packages.${system}.pi;
+        apps = let
+          currentSystem = pkgs.stdenv.hostPlatform.system;
+          piPackage = inputs.llm-agents.packages.${currentSystem}.pi;
           piVersion = piPackage.version;
           syncPiExtensionVersions = pkgs.writeShellApplication {
             name = "sync-pi-extension-versions";
@@ -131,21 +131,65 @@
                 "@earendil-works/pi-tui@${piVersion}"
             '';
           };
+          fullValidation = pkgs.writeShellApplication {
+            name = "check-full";
+            runtimeInputs = [pkgs.nix];
+            text = builtins.replaceStrings ["@system@"] [system] (builtins.readFile ./checks/full-validation.sh);
+          };
         in {
-          type = "app";
-          program = lib.getExe syncPiExtensionVersions;
-          meta.description = "Synchronize Pi extension package versions with the flake-provided Pi package.";
+          sync-pi-extension-versions = {
+            type = "app";
+            program = lib.getExe syncPiExtensionVersions;
+            meta.description = "Synchronize Pi extension package versions with the flake-provided Pi package.";
+          };
+          check-full = {
+            type = "app";
+            program = lib.getExe fullValidation;
+            meta.description = "Run applicable checks, configuration contracts, and representative builds.";
+          };
         };
 
         checks = let
+          fileset = pkgs.lib.fileset;
+          configurationSource = fileset.toSource {
+            root = ./.;
+            fileset = fileset.unions [
+              ./flake.nix
+              ./flake.lock
+              ./.sops.yaml
+              ./hosts
+              ./modules
+              ./rices
+              ./secrets
+            ];
+          };
+          skillsDeployerSource = fileset.toSource {
+            root = ./modules/programs/skills-deployer;
+            fileset = ./modules/programs/skills-deployer;
+          };
+          workspaceTestSource = fileset.toSource {
+            root = ./modules/services/sketchybar/widgets/workspace;
+            fileset = fileset.unions [
+              ./modules/services/sketchybar/widgets/workspace/tests
+              ./modules/services/sketchybar/widgets/workspace/providers/aerospace.nu
+              ./modules/services/sketchybar/widgets/workspace/providers/rift.nu
+            ];
+          };
+          mediaTestSource = fileset.toSource {
+            root = ./modules/services/sketchybar;
+            fileset = fileset.unions [
+              ./modules/services/sketchybar/colors.nu
+              ./modules/services/sketchybar/widgets/media/handler.nu
+              ./modules/services/sketchybar/widgets/media/widget.nu
+              ./modules/services/sketchybar/widgets/media/tests
+            ];
+          };
           piCustomizations = {
             pi-customizations = pkgs.buildNpmPackage {
               pname = "pi-customizations-check";
               version = "0";
               src = ./modules/programs/pi-coding-agent;
-              SKILLS_DEPLOYER_ROOT = ./modules/programs/skills-deployer;
-              PI_FLAKE_ROOT = ./.;
-              nativeBuildInputs = [pkgs.nix pkgs.jq];
+              SKILLS_DEPLOYER_ROOT = skillsDeployerSource;
 
               npmDepsHash = "sha256-Qw6kEXFEofwWUVieD4Fhf7XhRESbSodTjHxLI1ZPmCI=";
               npmDepsFetcherVersion = 2;
@@ -154,7 +198,7 @@
               doCheck = true;
               checkPhase = ''
                 runHook preCheck
-                npm run check:full
+                npm run check
                 runHook postCheck
               '';
               installPhase = ''
@@ -180,72 +224,60 @@
         in
           piCustomizations
           // repositoryConsistency
-          // lib.optionalAttrs (system == "aarch64-darwin") (let
-            homeConfigs = inputs.self.homeConfigurations;
-            darwinConfigs = inputs.self.darwinConfigurations;
+          // lib.optionalAttrs (system == "aarch64-darwin") {
+            configuration-contracts = pkgs.buildNpmPackage {
+              pname = "configuration-contracts";
+              version = "0";
+              src = ./modules/programs/pi-coding-agent;
+              nativeBuildInputs = [pkgs.nix pkgs.jq];
+              CONFIGURATION_SOURCE = configurationSource;
 
-            hmChecks =
-              pkgs.lib.mapAttrs' (name: config: {
-                name = "hm-" + builtins.replaceStrings ["@"] ["_at_"] name;
-                value = config.activationPackage;
-              })
-              homeConfigs;
+              npmDepsHash = "sha256-Qw6kEXFEofwWUVieD4Fhf7XhRESbSodTjHxLI1ZPmCI=";
+              npmDepsFetcherVersion = 2;
 
-            darwinEvaluationCheck = {
-              darwin-configurations-evaluate = pkgs.writeText "darwin-configurations-evaluated.json" (builtins.toJSON (
-                lib.mapAttrsToList (name: config: {
-                  inherit name;
-                  drvPath = builtins.unsafeDiscardStringContext config.system.drvPath;
-                })
-                darwinConfigs
-              ));
+              dontNpmBuild = true;
+              doCheck = true;
+              checkPhase = ''
+                runHook preCheck
+                export HOME="$TMPDIR/home"
+                mkdir -p "$HOME/.cache/nix"
+                PACKAGE_ROOT="$PWD" bash ${./checks/configuration-contracts.sh}
+                runHook postCheck
+              '';
+              installPhase = ''
+                test -s "$out/inventory.json"
+              '';
             };
 
-            darwinRepresentativeChecks = {
-              darwin-seiran = darwinConfigs.seiran.system;
-              darwin-seiran-vm1 = darwinConfigs.seiran-vm1.system;
-            };
+            sketchybar-workspace-adapter-tests =
+              pkgs.runCommand "sketchybar-workspace-adapter-tests" {
+                nativeBuildInputs = [pkgs.nushell];
+                src = workspaceTestSource;
+              } ''
+                cp -r "$src" workspace
+                chmod -R u+w workspace
+                cd workspace/tests
+                nu default.nu
+                touch $out
+              '';
 
-            nvfChecks = {
-              nvf-neo_at_seiran =
-                homeConfigs."neo@seiran".config.programs.nvf.settings.vim.build.finalPackage;
-            };
-
-            sketchybarWorkspaceAdapterTests = {
-              sketchybar-workspace-adapter-tests =
-                pkgs.runCommand "sketchybar-workspace-adapter-tests" {
-                  nativeBuildInputs = [pkgs.nushell];
-                } ''
-                  cp -r ${./modules/services/sketchybar/widgets/workspace} workspace
-                  cd workspace/tests
-                  nu default.nu
-                  touch $out
-                '';
-            };
-
-            sketchybarMediaHoverTests = {
-              sketchybar-media-hover-tests =
-                pkgs.runCommand "sketchybar-media-hover-tests" {
-                  nativeBuildInputs = [pkgs.nushell];
-                } ''
-                  cp -r ${./modules/services/sketchybar} sketchybar
-                  cd sketchybar/widgets/media/tests
-                  bash default.sh
-                  touch $out
-                '';
-            };
-          in
-            hmChecks
-            // darwinEvaluationCheck
-            // darwinRepresentativeChecks
-            // nvfChecks
-            // sketchybarWorkspaceAdapterTests
-            // sketchybarMediaHoverTests)
+            sketchybar-media-hover-tests =
+              pkgs.runCommand "sketchybar-media-hover-tests" {
+                nativeBuildInputs = [pkgs.nushell];
+                src = mediaTestSource;
+              } ''
+                cp -r "$src" sketchybar
+                chmod -R u+w sketchybar
+                cd sketchybar/widgets/media/tests
+                bash default.sh
+                touch $out
+              '';
+          }
           // lib.optionalAttrs (system == "aarch64-linux") (let
             nixosConfigs = filterConfigurationsByHostNames ["seiran-vm0"] (mkConfigurations "nixos");
           in {
             # On the VM, `nix flake check` builds the NixOS system closure.
-            # On Darwin, this check is omitted as an incompatible system.
+            # On incompatible systems, configuration-contracts records evaluation only.
             nixos-seiran-vm0 = nixosConfigs.seiran-vm0.config.system.build.toplevel;
           });
 

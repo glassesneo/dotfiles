@@ -37,8 +37,14 @@ Both commands activate the nix-darwin system and its integrated Home Manager con
 - =docs/= contains stable cross-cutting policy and runbooks.
 - =packages/= contains repository-owned package derivations.
 
+* Validation
+
+Use =nix flake check --no-build --no-update-lock-file= for fast evaluation, build a named =checks.<system>.<name>= output for focused validation, and run =nix run .#check-full= before completion.
+The staging rule, system-specific behavior, and check ownership map are in =docs/nix-validation.md=.
+
 * Notes and Runbooks
 
+- Nix validation: =docs/nix-validation.md=
 - Architecture and ownership: =docs/denix-architecture.md=
 - Documentation policy: =docs/documentation-policy.md=
 - Host performance tiers: =docs/host-tiers.md=

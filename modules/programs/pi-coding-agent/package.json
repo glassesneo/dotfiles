@@ -15,10 +15,7 @@
     "test:subagent": "PI_EXTENSION_KEYBINDINGS_PATH=tests/fixtures/extension-keybindings.json node --test \"tests/subagent*.test.ts\"",
     "test:agent-artifact": "PI_EXTENSION_KEYBINDINGS_PATH=tests/fixtures/extension-keybindings.json node --test tests/agent_artifact.test.ts",
     "test:web-search": "PI_EXTENSION_KEYBINDINGS_PATH=tests/fixtures/extension-keybindings.json node --test tests/web_search.test.ts",
-    "test:nix-keybindings": "bash tests/keybindings_nix_fixtures.sh",
-    "test:nix-emergency": "bash tests/emergency_nix_fixtures.sh",
-    "check": "node scripts/run-check.mts",
-    "check:full": "npm run check && npm run test:nix-keybindings && npm run test:nix-emergency"
+    "check": "node scripts/run-check.mts"
   },
   "devDependencies": {
     "@earendil-works/pi-ai": "0.82.0",
