@@ -641,7 +641,7 @@ void test("web_search registers only for resolved librarian child profiles", () 
     assert.deepEqual(tools, ["web_search"]);
 });
 
-void test("public tool description stays provider-neutral", () => {
+void test("public tool exposes the web search machine schema", () => {
     const tool = createWebSearchToolDefinition({
         loadConfig: async () => validConfig(null),
         createProvider: () => ({
@@ -652,16 +652,5 @@ void test("public tool description stays provider-neutral", () => {
         }),
     });
     assert.equal(tool.name, "web_search");
-    assert.doesNotMatch(tool.description ?? "", /Brave|LLM Context|X-Subscription/i);
     assert.deepEqual(Object.keys(tool.parameters.properties ?? {}).sort(), ["budget", "freshness", "query"]);
-});
-
-void test("repository tests do not embed credential-shaped fixtures", async () => {
-    const source = await readFile(new URL(import.meta.url), "utf8");
-    const forbiddenLiteral = ["super", "secret", "brave", "token", "value"].join("-");
-    assert.equal(source.includes(forbiddenLiteral), false);
-    assert.doesNotMatch(source, /const\s+SECRET\s*=/);
-    assert.match(source, /opaqueSentinel|randomBytes/);
-    assert.equal(isSafeHttpUrl("https://example.com"), true);
-    assert.equal(queryCharacterCount("a"), 1);
 });

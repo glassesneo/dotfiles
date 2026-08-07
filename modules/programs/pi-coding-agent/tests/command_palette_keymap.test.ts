@@ -1,16 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { loadPaletteKeymap, paletteActions, resolvePaletteKeymap, validatePaletteKeymapConfig } from "../extensions_src/utilities/command_palette_keymap.ts";
+import { resolvePaletteKeymap, validatePaletteKeymapConfig } from "../extensions_src/utilities/command_palette_keymap.ts";
 import { invalidKeyIds, validKeyIds } from "./key_grammar_cases.ts";
 
-void test("generated palette keymap satisfies the action contract", () => {
-    const resolved = loadPaletteKeymap().keymap;
-    assert.equal(paletteActions.length, 11);
-    assert.deepEqual(resolved.moveUp, ["ctrl+p"]);
-    assert.deepEqual(resolved.moveDown, ["ctrl+n"]);
-    assert.deepEqual(resolved.collapse, ["left"]);
-    assert.deepEqual(resolved.expand, ["right"]);
-    assert.deepEqual(resolved.refresh, []);
+void test("synthetic palette overrides are projected into the resolved keymap", () => {
+    const resolved = resolvePaletteKeymap({ moveUp: ["f10"], refresh: ["ctrl+r"] });
+    assert.deepEqual(resolved.moveUp, ["f10"]);
+    assert.deepEqual(resolved.refresh, ["ctrl+r"]);
 });
 
 void test("palette key validation preserves the shared key ID grammar", () => {

@@ -131,9 +131,9 @@ void test("collapse hides descendants while retainSelection keeps agentId across
     assert.equal(retainSelection(b.agent.agentId, [refreshed[0]!], [a.agent.agentId, b.agent.agentId]), a.agent.agentId);
 });
 
-void test("state badges and profile roles stay textual and separated", () => {
-    assert.equal(formatStateBadge("busy"), "● BUSY");
-    assert.equal(formatStateBadge("failed"), "! FAILED");
+void test("state badges expose the synthetic state in text", () => {
+    assert.match(formatStateBadge("busy"), /BUSY/i);
+    assert.match(formatStateBadge("failed"), /FAILED/i);
     assert.notEqual(profileColorRole("tester"), "success");
     assert.notEqual(profileColorRole("tester"), "error");
     assert.equal(profileColorRole("tester"), profileColorRole("tester"));

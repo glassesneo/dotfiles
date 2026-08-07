@@ -39,7 +39,7 @@ From the repository root, run:
 nix run .#check-full
 ```
 
-The app builds all checks applicable to the current system. On Darwin it then builds `seiran`, `seiran-vm1`, and the standalone `neo@seiran-everforest` Home Manager configuration and confirms the complete configuration inventory. On aarch64 Linux, the applicable flake check builds `nixos-seiran-vm0`; other systems do not claim that incompatible build passed.
+The app builds all checks applicable to the current system once. On Darwin it then builds `seiran`, `seiran-vm1`, and the standalone `neo@seiran-everforest` Home Manager configuration. On aarch64 Linux, the applicable flake check builds `nixos-seiran-vm0`; other systems evaluate that incompatible derivation without claiming its build passed.
 
 ## Flake source visibility
 

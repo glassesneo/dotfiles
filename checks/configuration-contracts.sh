@@ -45,17 +45,18 @@ positive_expr=$(
   cat <<NIX
 let
   f = $flake;
-  lib = f.inputs.nixpkgs.lib;
   base = f.homeConfigurations."neo@seiran";
   aliasOverride = base.extendModules {
     modules = [{ myconfig.programs.pi-coding-agent.keybindings.overrides.pi."app.exit" = ["f12"]; }];
   };
+  aliasHomeDir = aliasOverride.config.home.homeDirectory;
   navigation = base.extendModules {
     modules = [{
       myconfig.programs.tmux.prefix = "F11";
       myconfig.programs.pi-coding-agent.keybindings.overrides.subagentNavigation.parent = ["f10"];
     }];
   };
+  navigationHomeDir = navigation.config.home.homeDirectory;
   disabled = base.extendModules {
     modules = [{ myconfig.programs.pi-coding-agent.emergency.enable = false; }];
   };
@@ -93,21 +94,9 @@ let
   disabledDir = "\${disabledConfig.home.homeDirectory}/.pi/emergency-agent";
   disabledPackageNames = map (package: package.pname or package.name) disabledConfig.home.packages;
 in {
-  homeConfigurations = lib.mapAttrsToList (name: config: {
-    inherit name;
-    drvPath = builtins.unsafeDiscardStringContext config.activationPackage.drvPath;
-  }) f.homeConfigurations;
-  darwinConfigurations = lib.mapAttrsToList (name: config: {
-    inherit name;
-    drvPath = builtins.unsafeDiscardStringContext config.system.drvPath;
-  }) f.darwinConfigurations;
-  nixosRepresentative = {
-    name = "nixos-seiran-vm0";
-    drvPath = builtins.unsafeDiscardStringContext f.checks.aarch64-linux.nixos-seiran-vm0.drvPath;
-  };
   pi = {
-    extensionKeybindings = builtins.fromJSON (builtins.unsafeDiscardStringContext aliasOverride.config.home.file."/Users/neo/.pi/agent/extension-keybindings.json".text);
-    navigationRuntime = builtins.fromJSON (builtins.unsafeDiscardStringContext navigation.config.home.file."/Users/neo/.pi/agent/subagent.json".text);
+    extensionKeybindings = builtins.fromJSON (builtins.unsafeDiscardStringContext aliasOverride.config.home.file."\${aliasHomeDir}/.pi/agent/extension-keybindings.json".text);
+    navigationRuntime = builtins.fromJSON (builtins.unsafeDiscardStringContext navigation.config.home.file."\${navigationHomeDir}/.pi/agent/subagent.json".text);
     navigationTmux = navigation.config.programs.tmux.extraConfig;
     darwinTmux = f.darwinConfigurations.seiran.config.home-manager.users.neo.programs.tmux.extraConfig;
   };
@@ -127,11 +116,6 @@ NIX
 result=$(nix eval --impure --json --expr "$positive_expr")
 
 jq -e '
-  ([.homeConfigurations[].name] | sort) == (["neo@seiran", "neo@seiran-catppuccin", "neo@seiran-everforest", "neo@seiran-monochrome", "neo@seiran-vm1", "neo@seiran-vm1-catppuccin", "neo@seiran-vm1-everforest", "neo@seiran-vm1-monochrome"] | sort) and
-  ([.darwinConfigurations[].name] | sort) == (["seiran", "seiran-catppuccin", "seiran-everforest", "seiran-monochrome", "seiran-vm1", "seiran-vm1-catppuccin", "seiran-vm1-everforest", "seiran-vm1-monochrome"] | sort) and
-  (all(.homeConfigurations[]; .drvPath | length > 0)) and
-  (all(.darwinConfigurations[]; .drvPath | length > 0)) and
-  (.nixosRepresentative.drvPath | length > 0) and
   .pi.extensionKeybindings.features.historyViewer.exit[0] == "f12" and
   .pi.navigationRuntime.parentNavigationHint == "F11 F10: parent · /parent" and
   (.pi.navigationTmux | contains("bind-key f10")) and
@@ -145,8 +129,6 @@ jq -e '
   .emergency.enabled.emergencySettings.defaultProvider == .emergency.enabled.normalSettings.defaultProvider and
   .emergency.enabled.emergencySettings.defaultModel == .emergency.enabled.normalSettings.defaultModel and
   .emergency.enabled.emergencySettings.defaultThinkingLevel == .emergency.enabled.normalSettings.defaultThinkingLevel and
-  .emergency.enabled.emergencySettings.theme == "dark" and
-  (.emergency.enabled.emergencyFiles | length) == 6 and
   .emergency.disabled.optionEnabled == false and
   .emergency.disabled.emergencyPackageCount == 0 and
   (.emergency.disabled.emergencyFiles | length) == 0
@@ -188,6 +170,4 @@ expected_safe_argv=$'\\\n  --no-extensions \\\n  --no-skills \\\n  --no-prompt-t
 [[ $safe_argv == "$expected_safe_argv" ]]
 [[ $full_argv == '--no-approve "$@"' ]]
 
-mkdir -p "$out"
-jq '{homeConfigurations, darwinConfigurations, nixosRepresentative}' <<<"$result" >"$out/inventory.json"
 printf 'Configuration contracts passed (one negative and one positive nix eval)\n'

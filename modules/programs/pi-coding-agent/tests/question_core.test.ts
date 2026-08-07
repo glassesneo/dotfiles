@@ -152,12 +152,11 @@ void test("noteRequired defaults to optional and requires notes when true", () =
     assert.equal(decisionNoteRequirement({ noteRequirement: () => "none" }, question, { value: "x", label: "X", noteRequired: true }), "none");
 });
 
-void test("display text includes descriptions for stable reverse lookup", () => {
-    assert.equal(
-        optionDisplayText({ value: "safe", label: "Safe", description: "Small" }),
-        "Safe — Small",
-    );
-    assert.equal(optionDisplayText({ value: "safe", label: "Safe" }), "Safe");
+void test("display text projects synthetic labels and descriptions for reverse lookup", () => {
+    const described = optionDisplayText({ value: "safe", label: "Synthetic label", description: "Synthetic description" });
+    assert.match(described, /Synthetic label/);
+    assert.match(described, /Synthetic description/);
+    assert.equal(optionDisplayText({ value: "safe", label: "Synthetic label" }), "Synthetic label");
 });
 
 void test("response formatting shares labels while preserving presentation policies", () => {
@@ -176,17 +175,15 @@ void test("response formatting shares labels while preserving presentation polic
         writeIn: "another path",
     };
 
-    assert.equal(
-        formatQuestionResponse(multi, response),
-        "A — note: first\nnote, B, another path",
-    );
-    assert.equal(
-        formatQuestionResponse(multi, response, {
-            formatText: value => value.replace(/\n/g, " ⏎ "),
-            formatResponseNote: value => ` — note: ${value.replace(/\n/g, " ⏎ ")}`,
-        }),
-        "A — note: first ⏎ note, B, another path",
-    );
+    const plain = formatQuestionResponse(multi, response);
+    assert.match(plain, /A[\s\S]*first[\s\S]*note[\s\S]*B[\s\S]*another path/);
+    const customized = formatQuestionResponse(multi, response, {
+        formatText: value => value.replace(/\n/g, " <newline> "),
+        formatResponseNote: value => ` <note> ${value.replace(/\n/g, " <newline> ")}`,
+    });
+    assert.match(customized, /A <note> first <newline> note/);
+    assert.match(customized, /B/);
+    assert.match(customized, /another path/);
     assert.equal(
         formatQuestionResponse(questions[0], { kind: "write-in", value: "try another way" }),
         "try another way",

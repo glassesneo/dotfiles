@@ -15,7 +15,9 @@
 
 ## Guidance Policy
 
-- For repository-wide test/check changes, preserve the smallest behavioral contract that covers each concern's normal path and material edge cases; avoid duplicate assertions and implementation-detail guarantees. Use narrow checks while iterating and the applicable full gate before completion.
+- Tests define how variable input crossing an execution boundary changes the result observed by the nearest consumer; preserve the smallest contract covering the normal path and material edge cases, without duplicate assertions or implementation-detail guarantees.
+- Use the `behavioral-test-design` Skill whenever designing, adding, changing, reviewing, or auditing tests or automated checks. Running already-defined validation commands and reporting their results does not require it.
+- Use narrow checks while iterating and the applicable full gate before completion.
 - Keep local guidance to durable ownership, invariants, and decision rules not already owned by an ancestor or canonical document.
 - Do not use guidance files as directory inventories or duplicate human-facing documentation.
 - Follow `docs/documentation-policy.md` when deciding where durable documentation belongs.

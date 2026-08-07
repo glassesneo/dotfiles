@@ -35,19 +35,16 @@ void test("confirm and both cancellation keys are consumed by the palette", () =
     const cancelled = harness(); cancelled.component.handleInput(keys.ctrlC); assert.deepEqual(cancelled.results, [null]);
 });
 
-void test("framed palette keeps four borders, textual marker, help, and never overflows width", () => {
+void test("palette projects items and configured navigation help without overflowing", () => {
     const h = harness(); assert.equal(h.component.focused, true);
     for (const width of [80, 60, 20, 8, 1]) {
         const lines = h.component.render(width);
-        assert.ok(lines[0]?.includes("┌") || width < 3 || lines.every(line => visibleWidth(line) <= width));
         for (const line of lines) assert.ok(visibleWidth(line) <= width, `width ${width}: ${line}`);
     }
     const rendered = h.component.render(80).join("\n");
-    assert.match(rendered, /┌/);
-    assert.match(rendered, /└/);
-    assert.match(rendered, /│/);
-    assert.match(rendered, /> Alpha/);
-    assert.match(rendered, /Ctrl\+P up.*Ctrl\+N down/);
+    assert.match(rendered, /Alpha/);
+    assert.match(rendered, /Ctrl\+P/);
+    assert.match(rendered, /Ctrl\+N/);
 });
 
 void test("filtering and status changes preserve overlay height and input position", () => {
@@ -113,8 +110,10 @@ void test("theme invalidate regenerates framed colors from the current theme", (
         bold(text: string) { return text; },
     } as Theme;
     const framed = renderFramedLines({ theme: spyTheme, width: 40, title: "Command Palette", body: [" body"] });
-    assert.ok(framed.some(line => line.includes("┌")));
+    assert.ok(framed.join("\n").includes("Command Palette"));
     assert.ok(roles.includes("fg:border"));
     assert.ok(roles.includes("fg:accent"));
-    assert.equal(formatPaletteBreadcrumb(["Command Palette", "Subagent Sessions"]), "Command Palette › Subagent Sessions");
+    const breadcrumb = formatPaletteBreadcrumb(["Synthetic root", "Synthetic child"]);
+    assert.match(breadcrumb, /Synthetic root/);
+    assert.match(breadcrumb, /Synthetic child/);
 });

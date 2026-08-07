@@ -163,8 +163,8 @@ void test("subagent palette renders framed one-row tree with handles, profile ro
         snapshot({ agentId: c, purpose: "leaf task", state: "busy", parentAgentId: b, createdAt: "2026-01-01T00:02:00.000Z", profile: "tester" }),
     ]);
     const rendered = palette.render(100).join("\n");
-    assert.match(rendered, /Command Palette › Subagent Sessions/);
-    assert.match(rendered, /┌/);
+    assert.match(rendered, /Command Palette/);
+    assert.match(rendered, /Subagent Sessions/);
     assert.match(rendered, /STOPPED/);
     assert.match(rendered, /BUSY/);
     assert.doesNotMatch(rendered, /via /);

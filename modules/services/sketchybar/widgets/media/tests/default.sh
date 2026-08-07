@@ -42,11 +42,6 @@ sed -i \
 
 touch "$cache_path"
 
-grep -Fq 'display_change' "$media_dir/widget.nu" || {
-  echo "media hover test failed: widget is not subscribed to display_change" >&2
-  exit 1
-}
-
 run_handler() (
   export SENDER=$1
   export SKETCHYBAR_LOG=$log

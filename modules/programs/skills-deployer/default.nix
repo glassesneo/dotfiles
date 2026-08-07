@@ -123,6 +123,13 @@ delib.module {
           ".cursor/skills"
         ];
       };
+      behavioral-test-design = {
+        source = ./skills/behavioral-test-design;
+        targetDirs = [
+          ".agents/skills"
+          ".cursor/skills"
+        ];
+      };
     };
   in {
     assertions = [

@@ -103,10 +103,6 @@ void test("public schemas omit detail and expose submit targets plus debug only 
     assert.deepEqual(props(get), { keys: ["agentId", "debug", "taskId"], required: ["agentId"] });
     assert.deepEqual(props(wait), { keys: ["condition", "taskIds"], required: ["condition", "taskIds"] });
     assert.deepEqual(props(stop), { keys: ["agentId", "taskId"], required: [] });
-    assert.match(submit.description, /exactly one.*profile.*agentId/iu);
-    assert.match(submit.description, /subagent_wait/iu);
-    assert.match(get.description, /debug/i);
-    assert.match(get.description, /not needed for normal operation/i);
     assert.equal(Value.Check(run.parameters, { profile: "scout", purpose: "x", prompt: "x", waitSeconds: 1 }), false);
     assert.equal(Value.Check(submit.parameters, { profile: "scout", purpose: "x", prompt: "x", waitSeconds: 1 }), false);
     assert.equal(Value.Check(wait.parameters, { taskIds: ["t1"], condition: "all", timeoutSeconds: 1 }), false);

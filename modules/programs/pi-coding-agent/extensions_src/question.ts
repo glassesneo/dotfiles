@@ -38,7 +38,7 @@ function responseDisplay(question: QuestionItem, response: QuestionResponse, exp
     ].join(expanded ? "\n" : ", ");
 }
 
-export const questionPromptGuidelines = [
+const questionPromptGuidelines = [
     "Use the `question` tool only for user-owned decisions or missing information that affects the current task; do not use it for facts available from the repository or provided materials.",
     "In a `question` tool call, group related questions when useful, but ask the minimum number needed.",
     "For yes/no questions in the `question` tool, use kind='single' with Yes and No options and stable string values.",

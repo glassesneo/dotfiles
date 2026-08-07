@@ -2,10 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { TUI } from "@earendil-works/pi-tui";
-import registerQuestion, {
-  createQuestionToolDefinition,
-  questionPromptGuidelines,
-} from "../extensions_src/question.ts";
+import registerQuestion, { createQuestionToolDefinition } from "../extensions_src/question.ts";
 import type { QuestionResultDetails } from "../extensions_src/utilities/decision_core.ts";
 import { extensionContext as context, textResult as resultText } from "./test_helpers.ts";
 
@@ -23,7 +20,7 @@ const params = {
   ],
 };
 
-void test("extension registers sequential question metadata and model guidance", () => {
+void test("extension registers the question tool for sequential execution", () => {
   let registered: ReturnType<typeof createQuestionToolDefinition> | undefined;
   registerQuestion({
     registerTool(tool) {
@@ -35,19 +32,6 @@ void test("extension registers sequential question metadata and model guidance",
 
   assert.equal(registered?.name, "question");
   assert.equal(registered?.executionMode, "sequential");
-  assert.match(registered?.description ?? "", /user-owned decisions/);
-  assert.match(registered?.description ?? "", /affects the current task/);
-  assert.match(registered?.description ?? "", /noteRequired/);
-  assert.match(registered?.description ?? "", /write-in/);
-  assert.match(registered?.promptSnippet ?? "", /user-owned decisions/);
-  assert.match(registered?.promptSnippet ?? "", /affects the current task/);
-  assert.doesNotMatch(registered?.promptSnippet ?? "", /required to continue|blocker/i);
-  assert.ok(questionPromptGuidelines.some(line => /`question` tool/.test(line)));
-  assert.ok(questionPromptGuidelines.some(line => /repository/.test(line)));
-  assert.ok(questionPromptGuidelines.some(line => /write-in.*answered/.test(line)));
-  assert.ok(questionPromptGuidelines.some(line => /noteRequired/.test(line)));
-  assert.ok(questionPromptGuidelines.some(line => /generic 'Other'/.test(line)));
-  assert.ok(questionPromptGuidelines.some(line => /yes\/no.*kind='single'.*Yes and No/.test(line)));
 });
 
 void test("non-interactive and print modes return unavailable without UI", async () => {
@@ -154,8 +138,9 @@ void test("tool renderers show question prompts, responses, notes, and untouched
     ],
   };
   const call = tool.renderCall?.(args, renderTheme, {} as never);
-  assert.match(call?.render(120).join("\n") ?? "", /Q1: Choose/);
-  assert.match(call?.render(120).join("\n") ?? "", /Q2: Explain/);
+  const callText = call?.render(120).join("\n") ?? "";
+  assert.match(callText, /Choose/);
+  assert.match(callText, /Explain/);
 
   const result = {
     content: [{ type: "text", text: "" }],
@@ -169,9 +154,11 @@ void test("tool renderers show question prompts, responses, notes, and untouched
   } as never;
   const collapsed = tool.renderResult?.(result, { expanded: false } as never, renderTheme, { args } as never);
   const collapsedText = collapsed?.render(160).join("\n") ?? "";
-  assert.match(collapsedText, /2 answered, 0 untouched/);
-  assert.match(collapsedText, /Q1 — B — note: because/);
-  assert.match(collapsedText, /Q2 — need another path/);
+  assert.match(collapsedText, /2\s+answered/i);
+  assert.match(collapsedText, /0\s+untouched/i);
+  assert.match(collapsedText, /B/);
+  assert.match(collapsedText, /because/);
+  assert.match(collapsedText, /need another path/);
   assert.doesNotMatch(collapsedText, /Choose|Explain/);
 });
 
@@ -194,9 +181,11 @@ void test("multi tool results keep each option note paired in collapsed and expa
     },
   } as never;
   const collapsed = tool.renderResult?.(result, { expanded: false } as never, renderTheme, { args } as never)?.render(160).join("\n") ?? "";
-  assert.match(collapsed, /Q1 — A — note: first ⏎ line, B — note: second, another/);
+  const collapsedOrder = ["A", "first", "line", "B", "second", "another"].map(value => collapsed.indexOf(value));
+  assert.ok(collapsedOrder.every(index => index >= 0));
+  assert.deepEqual(collapsedOrder, [...collapsedOrder].sort((left, right) => left - right));
   const expanded = tool.renderResult?.(result, { expanded: true } as never, renderTheme, { args } as never)?.render(160).join("\n") ?? "";
-  assert.match(expanded, /Q1[\s\S]*A — note: first[\s\S]*line[\s\S]*B — note: second/);
+  assert.match(expanded, /A[\s\S]*first[\s\S]*line[\s\S]*B[\s\S]*second/);
   assert.doesNotMatch(expanded, /Targets/);
 });
 

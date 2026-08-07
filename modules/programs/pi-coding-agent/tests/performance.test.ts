@@ -63,5 +63,9 @@ void test("slash command and command palette contribution invoke the same perfor
     const pi = { on(name: string, handler: (...args: any[]) => unknown) { handlers.set(name, handler); }, appendEntry() {}, registerCommand(name: string, value: { handler: (...args: any[]) => unknown }) { assert.equal(name, "performance"); handlers.set("command", value.handler); }, events: { on(name: string, handler: (value: any) => void) { listeners.set(name, [...(listeners.get(name) ?? []), handler]); return () => {}; }, emit(name: string, value: any) { if (name === "command-palette:register") contribution = value; for (const listener of listeners.get(name) ?? []) listener(value); } } } as unknown as ExtensionAPI;
     const configPath = join(await mkdtemp(join(tmpdir(), "performance-extension-")), "missing.json"); performanceExtension(pi, { configPath }); assert.ok(contribution);
     const ctx = { cwd: process.cwd(), sessionManager: { getEntries: () => [], getSessionId: () => "origin" }, ui: { notify: (text: string) => notifications.push(text) } } as unknown as ExtensionContext;
-    await handlers.get("command")!("", ctx); await contribution!.run(ctx); assert.equal(notifications.length, 2); for (const message of notifications) assert.match(message, /^Performance — current session\nSettled runs: 0;/u);
+    await handlers.get("command")!("", ctx); await contribution!.run(ctx); assert.equal(notifications.length, 2);
+    for (const message of notifications) {
+        assert.match(message, /current session/i);
+        assert.match(message, /settled runs[^0-9]*0/i);
+    }
 });

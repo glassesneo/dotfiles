@@ -163,10 +163,6 @@
               ./secrets
             ];
           };
-          skillsDeployerSource = fileset.toSource {
-            root = ./modules/programs/skills-deployer;
-            fileset = ./modules/programs/skills-deployer;
-          };
           workspaceTestSource = fileset.toSource {
             root = ./modules/services/sketchybar/widgets/workspace;
             fileset = fileset.unions [
@@ -180,7 +176,6 @@
             fileset = fileset.unions [
               ./modules/services/sketchybar/colors.nu
               ./modules/services/sketchybar/widgets/media/handler.nu
-              ./modules/services/sketchybar/widgets/media/widget.nu
               ./modules/services/sketchybar/widgets/media/tests
             ];
           };
@@ -189,7 +184,6 @@
               pname = "pi-customizations-check";
               version = "0";
               src = ./modules/programs/pi-coding-agent;
-              SKILLS_DEPLOYER_ROOT = skillsDeployerSource;
 
               npmDepsHash = "sha256-Qw6kEXFEofwWUVieD4Fhf7XhRESbSodTjHxLI1ZPmCI=";
               npmDepsFetcherVersion = 2;
@@ -245,7 +239,10 @@
                 runHook postCheck
               '';
               installPhase = ''
-                test -s "$out/inventory.json"
+                runHook preInstall
+                mkdir -p "$out"
+                touch "$out/success"
+                runHook postInstall
               '';
             };
 
@@ -277,7 +274,7 @@
             nixosConfigs = filterConfigurationsByHostNames ["seiran-vm0"] (mkConfigurations "nixos");
           in {
             # On the VM, `nix flake check` builds the NixOS system closure.
-            # On incompatible systems, configuration-contracts records evaluation only.
+            # On incompatible systems, full validation performs evaluation only.
             nixos-seiran-vm0 = nixosConfigs.seiran-vm0.config.system.build.toplevel;
           });
 

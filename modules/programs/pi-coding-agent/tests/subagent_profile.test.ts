@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { access, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { access, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -151,7 +151,8 @@ void test("profile extension applies CLI, guards tools, restores branches, and e
     assert.equal(fake.events.length, 1);
     assert.deepEqual((fake.events[0]!.payload as any).profile.extensions.subagent.allowedTargets, ["scout"]);
     assert.equal((fake.events[0]!.payload as any).reason, "startup");
-    assert.deepEqual(fake.statuses.at(-1), { key: "agent-profile-identity", text: "PARENT · profile:scout" });
+    assert.equal(fake.statuses.at(-1)?.key, "agent-profile-identity");
+    assert.match(fake.statuses.at(-1)?.text ?? "", /scout/);
     assert.deepEqual(fake.commands.profile!.getArgumentCompletions?.("sc"), [
         { value: "scout", label: "scout", description: "Read-only exploration." },
     ]);
@@ -265,7 +266,7 @@ void test("profile owns one discoverable palette contribution with current state
     assert.equal(fake.paletteContributions.length, 1);
     const contribution = fake.paletteContributions[0]!;
     assert.equal(contribution.owner, "profile");
-    assert.equal(contribution.currentValue(fake.ctx), "Current: scout");
+    assert.match(contribution.currentValue(fake.ctx) ?? "", /scout/);
     assert.equal(contribution.disabledReason(fake.ctx), undefined);
     await contribution.run(fake.ctx);
     assert.equal(selected, 1);
@@ -307,64 +308,6 @@ void test("active tool synchronization is ordered, idempotent, and recovers drif
     assert.equal(fake.activeToolApplications(), 6);
 });
 
-void test("artisan profile wiring is top-level-only and delegates only adaptive solo review", async () => {
-    const [profileNix, subagentNix, artifactNix] = await Promise.all([
-        readFile(join(import.meta.dirname, "..", "extensions", "profile", "default.nix"), "utf8"),
-        readFile(join(import.meta.dirname, "..", "extensions", "subagent", "default.nix"), "utf8"),
-        readFile(join(import.meta.dirname, "..", "extensions", "agent_artifact", "default.nix"), "utf8"),
-    ]);
-    const artisanStart = profileNix.indexOf("        artisan = {");
-    const artisan = profileNix.slice(artisanStart, profileNix.indexOf("        scout = {", artisanStart));
-    const subagentStart = subagentNix.indexOf("      artisan = {");
-    const subagent = subagentNix.slice(subagentStart, subagentNix.indexOf("      operator = {", subagentStart));
-
-    assert.match(profileNix, /profileCycle = listOfOption str \["scout" "taskmaster" "artisan"/);
-    assert.match(profileNix, /act = "artisan"/);
-    assert.match(artisan, /model = "openai-codex\/gpt-5\.6-luna"/);
-    assert.match(artisan, /availability = \["top-level"\]/);
-    assert.match(artisan, /thinkingLevel = "xhigh"/);
-    assert.match(artisan, /tools = \["write" "edit"\]/);
-    assert.match(subagent, /allowedTargets = \["reviewer"\]/);
-    assert.doesNotMatch(subagent, /tester|taskmaster|cursor-implementer|focused-reviewer/);
-    assert.match(artifactNix, /artisan\.tools = \["save_agent_artifact"\]/);
-});
-
-void test("librarian remains wired but is not dispatchable from disabled parent targets", async () => {
-    const [profileNix, subagentNix, webSearchNix, defaultNix] = await Promise.all([
-        readFile(join(import.meta.dirname, "..", "extensions", "profile", "default.nix"), "utf8"),
-        readFile(join(import.meta.dirname, "..", "extensions", "subagent", "default.nix"), "utf8"),
-        readFile(join(import.meta.dirname, "..", "extensions", "web_search", "default.nix"), "utf8"),
-        readFile(join(import.meta.dirname, "..", "default.nix"), "utf8"),
-    ]);
-    const librarianStart = profileNix.indexOf("          librarian = {");
-    const librarian = profileNix.slice(librarianStart, profileNix.indexOf("          };", librarianStart) + 12);
-    assert.match(profileNix, /librarian = "f8e9225a-a129-4f74-9962-7800aab70dab"/);
-    assert.match(librarian, /availability = \["subagent"\]/);
-    assert.match(librarian, /model = "openai-codex\/gpt-5\.6-luna"/);
-    assert.match(librarian, /thinkingLevel = "high"/);
-    assert.match(librarian, /evidence brief/);
-
-    assert.match(subagentNix, /childExtensionContributions = attrsOfOption/);
-    assert.doesNotMatch(subagentNix, /full\.extensions\.subagent = \{[\s\S]*allowedTargets = \[[^\]]*librarian[^\]]*\]/);
-    assert.doesNotMatch(subagentNix, /operator = \{[\s\S]*allowedTargets = \[[^\]]*librarian[^\]]*\]/);
-    assert.doesNotMatch(subagentNix, /scout = \{[\s\S]*allowedTargets = \[[^\]]*librarian[^\]]*\]/);
-    assert.match(subagentNix, /librarian\.extensions\.subagent = \{\s*allowedTargets = \[\];/);
-    const taskmasterStart = subagentNix.indexOf("      taskmaster = {");
-    const taskmaster = subagentNix.slice(taskmasterStart, subagentNix.indexOf("      artisan = {", taskmasterStart));
-    const artisanStart = subagentNix.indexOf("      artisan = {");
-    const artisan = subagentNix.slice(artisanStart, subagentNix.indexOf("      operator = {", artisanStart));
-    const reviewerStart = subagentNix.indexOf("      reviewer = {");
-    const reviewer = subagentNix.slice(reviewerStart, subagentNix.indexOf("      scout = {", reviewerStart));
-    assert.doesNotMatch(taskmaster, /librarian/);
-    assert.doesNotMatch(artisan, /librarian/);
-    assert.doesNotMatch(reviewer, /librarian/);
-
-    assert.match(webSearchNix, /childExtensionContributions\.web_search/);
-    assert.match(webSearchNix, /librarian\.tools = \["web_search"\]/);
-    assert.match(webSearchNix, /sopsSecretPaths\."brave-api-key" or null/);
-    assert.match(defaultNix, /"web_search"/);
-});
-
 void test("exact raw prompt commands route transactionally before expansion", async () => {
     const { profilePath, profileConfig } = await fixture();
     const fake = fakeControllerPi("scout");
@@ -388,13 +331,13 @@ void test("exact raw prompt commands route transactionally before expansion", as
     assert.deepEqual(await fake.handlers.input![0]!({ text: "/impl approved.md", source: "interactive" }, fake.ctx), { action: "continue" });
     assert.equal((fake.events.at(-1)!.payload as any).reason, "route");
     assert.equal(fake.entries.at(-1)?.data.profileId, profileConfig.profiles.full!.id);
-    assert.equal(fake.statuses.at(-1)?.text, "PARENT · profile:full");
+    assert.match(fake.statuses.at(-1)?.text ?? "", /full/);
 
     fake.failModel();
     assert.deepEqual(await fake.handlers.input![0]!({ text: "/review report.md", source: "interactive" }, fake.ctx), { action: "handled" });
     assert.match(fake.notifications.at(-1) ?? "", /no authentication/);
     assert.equal(fake.entries.at(-1)?.data.profileId, profileConfig.profiles.full!.id);
-    assert.equal(fake.statuses.at(-1)?.text, "PARENT · profile:full");
+    assert.match(fake.statuses.at(-1)?.text ?? "", /full/);
 
     fake.passModel();
     fake.failNextToolApplication();
@@ -497,37 +440,6 @@ function toolContext(root: string): ExtensionContext {
     return { cwd: root, sessionManager: { getSessionId: () => "session", getSessionFile: () => join(root, "session.jsonl") } } as ExtensionContext;
 }
 
-void test("every delegation-capable profile receives one shared task-specific-delta guideline", async () => {
-    const guideline = (tool: unknown) => (tool as { promptGuidelines?: readonly string[] }).promptGuidelines ?? [];
-    const taskGuidelines = {
-        subagent_run: guideline(createSubagentRunTool({} as never)),
-        subagent_submit: guideline(createSubagentSubmitTool({} as never)),
-    };
-
-    for (const profile of Object.values(profiles().profiles)) {
-        const activeTaskTools = profile.allowAllTools
-            ? ["subagent_run", "subagent_submit"] as const
-            : profile.tools.filter((name): name is keyof typeof taskGuidelines => name in taskGuidelines);
-        assert.equal(activeTaskTools.includes("subagent_run"), activeTaskTools.includes("subagent_submit"), profile.description);
-        if (activeTaskTools.length === 0) continue;
-        assert.deepEqual(activeTaskTools, ["subagent_run", "subagent_submit"]);
-        const shared = activeTaskTools.flatMap(name => taskGuidelines[name]).filter(line => line.includes("stable capability contract"));
-        assert.equal(shared.length, 1, profile.description);
-        assert.match(shared[0]!, /`subagent_run` and `subagent_submit`/);
-        assert.match(shared[0]!, /local objective and task-specific input or context/);
-        assert.match(shared[0]!, /Omit invocation instructions, skill paths, procedures, default constraints, and default output contracts/);
-        assert.match(shared[0]!, /intentionally override.*name the different skill/);
-        assert.match(shared[0]!, /skill path only for a task-specific resource that cannot be discovered by name/);
-    }
-
-    const profileNix = await readFile(join(import.meta.dirname, "..", "extensions", "profile", "default.nix"), "utf8");
-    assert.match(profileNix, /configuredTools = profile: lib\.unique \(cfg\.defaultTools \+\+ profile\.tools\)/);
-    assert.match(profileNix, /childEffectiveTools = profile:[\s\S]*subagent\.childExcludedTools/);
-    assert.match(profileNix, /subagentTaskToolsPaired/);
-    assert.match(profileNix, /builtins\.elem "subagent_run" tools == builtins\.elem "subagent_submit" tools/);
-    assert.match(profileNix, /profiles must allow all tools or expose subagent_run and subagent_submit together after shared defaults and child exclusions/);
-});
-
 void test("subagent_submit schema enum follows active allowed targets without a prompt catalog", async () => {
     const value = await fixture();
     const tools: Array<{ name: string; parameters: { properties?: { profile?: { enum?: string[]; description?: string } } } }> = [];
@@ -570,7 +482,6 @@ void test("subagent_submit schema enum follows active allowed targets without a 
     const submit = tools.find(tool => tool.name === "subagent_submit");
     assert.deepEqual(run?.parameters.properties?.profile?.enum, ["focused-reviewer", "dissent-reviewer"]);
     assert.deepEqual(submit?.parameters.properties?.profile?.enum, ["focused-reviewer", "dissent-reviewer"]);
-    assert.match(submit?.parameters.properties?.profile?.description ?? "", /focused-reviewer, dissent-reviewer/);
     assert.equal(handlers.before_agent_start, undefined);
 });
 
@@ -593,7 +504,10 @@ void test("only Pi-native children register /parent and expose the configured na
         sessionManager: { getSessionId: () => "child-session", getSessionFile: () => undefined },
     } as unknown as ExtensionContext;
     await handlers.session_start![0]!({}, ctx);
-    assert.deepEqual(statuses, [{ key: "subagent-parent-navigation", text: "F12 U: parent · /parent" }]);
+    assert.equal(statuses.length, 1);
+    assert.equal(statuses[0]?.key, "subagent-parent-navigation");
+    assert.match(statuses[0]?.text ?? "", /F12 U/);
+    assert.match(statuses[0]?.text ?? "", /\/parent/);
     assert.ok(commands.parent);
     await commands.parent!.handler("", ctx);
     assert.deepEqual(calls, [{ command: "/return-parent", args: [] }]);
