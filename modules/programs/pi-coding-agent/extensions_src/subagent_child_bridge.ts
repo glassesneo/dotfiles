@@ -22,6 +22,8 @@ export interface SubagentChildBridgeDependencies {
     retryIntervalMs?: number;
     deliveryAckTimeoutMs?: number;
     now?: () => number;
+    setInterval?: (callback: () => void | Promise<void>, intervalMs: number) => unknown;
+    clearInterval?: (timer: unknown) => void;
 }
 
 function expectedResolvedProfileName(env: NodeJS.ProcessEnv): string | undefined {
@@ -57,7 +59,7 @@ export function registerSubagentChildBridge(pi: ExtensionAPI, env: NodeJS.Proces
     let settled = true;
     let pendingCompletion: { taskId: string; input: Parameters<typeof finishTask>[3] } | undefined;
     let awaitingDelivery: { taskId: string; prompt: string; deadline: number } | undefined;
-    let timer: NodeJS.Timeout | undefined;
+    let timer: unknown;
     let bridgeContext: ExtensionContext | undefined;
     let cancellationAbortedTaskId: string | undefined;
     const persistCompletion = async () => {
@@ -130,7 +132,8 @@ export function registerSubagentChildBridge(pi: ExtensionAPI, env: NodeJS.Proces
             return;
         }
         await markBridgeReady(paths);
-        timer = setInterval(() => { void tick().catch(() => {}); }, dependencies.retryIntervalMs ?? 100);
+        const schedule = dependencies.setInterval ?? ((callback, intervalMs) => setInterval(() => { void callback(); }, intervalMs));
+        timer = schedule(() => tick().catch(() => {}), dependencies.retryIntervalMs ?? 100);
         await tick();
     });
     pi.on("before_agent_start", event => { if (awaitingDelivery?.prompt === event.prompt) awaitingDelivery = undefined; });
@@ -162,7 +165,7 @@ export function registerSubagentChildBridge(pi: ExtensionAPI, env: NodeJS.Proces
         await tick();
     });
     pi.on("session_shutdown", async event => {
-        if (timer) clearInterval(timer);
+        if (timer !== undefined) (dependencies.clearInterval ?? (value => clearInterval(value as NodeJS.Timeout)))(timer);
         awaitingDelivery = undefined;
         if (pendingCompletion) await persistCompletion().catch(() => {});
         if (event.reason !== "quit") {

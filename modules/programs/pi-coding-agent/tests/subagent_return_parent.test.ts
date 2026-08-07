@@ -1,17 +1,18 @@
 import assert from "node:assert/strict";
-import { chmod, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
-import test from "node:test";
+import test, { after, before } from "node:test";
 
 const helper = join(import.meta.dirname, "..", "extensions", "subagent", "return-parent.sh");
 type Invocation = "binding-a" | "parent";
+let root: string;
+let tmux: string;
 
-async function run(scenario: string, invocation: Invocation = "binding-a", viewingSession = "$view-a", hubSession = "$hub") {
-    const root = await mkdtemp(join(tmpdir(), "return-parent-"));
-    const log = join(root, "tmux.log");
-    const tmux = join(root, "tmux");
+before(async () => {
+    root = await mkdtemp(join(tmpdir(), "return-parent-"));
+    tmux = join(root, "tmux");
     await writeFile(tmux, `#!/usr/bin/env bash
 printf '%s\\n' "$*" >>"$LOG"
 if [[ $1 == display-message && $2 == -p && $3 == -t ]]; then printf '@child\\n'; exit 0; fi
@@ -39,6 +40,13 @@ if [[ $1 == unlink-window ]]; then [[ $SCENARIO != unlink-failure ]] || { printf
 exit 0
 `);
     await chmod(tmux, 0o755);
+});
+
+after(async () => rm(root, { recursive: true, force: true }));
+
+async function run(scenario: string, invocation: Invocation = "binding-a", viewingSession = "$view-a", hubSession = "$hub") {
+    const log = join(root, `${scenario}-${invocation}.log`);
+    await writeFile(log, "");
     const args = invocation === "binding-a" ? [helper, "--binding", "/dev/ttys001", viewingSession, "@child"] : [helper];
     const result = spawnSync("bash", args, {
         encoding: "utf8",

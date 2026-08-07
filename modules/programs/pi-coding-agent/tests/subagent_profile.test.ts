@@ -329,7 +329,7 @@ void test("artisan profile wiring is top-level-only and delegates only adaptive 
     assert.match(artifactNix, /artisan\.tools = \["save_agent_artifact"\]/);
 });
 
-void test("librarian is subagent-only and dispatchable from scout operator full via child contribution", async () => {
+void test("librarian remains wired but is not dispatchable from disabled parent targets", async () => {
     const [profileNix, subagentNix, webSearchNix, defaultNix] = await Promise.all([
         readFile(join(import.meta.dirname, "..", "extensions", "profile", "default.nix"), "utf8"),
         readFile(join(import.meta.dirname, "..", "extensions", "subagent", "default.nix"), "utf8"),
@@ -345,9 +345,9 @@ void test("librarian is subagent-only and dispatchable from scout operator full 
     assert.match(librarian, /evidence brief/);
 
     assert.match(subagentNix, /childExtensionContributions = attrsOfOption/);
-    assert.match(subagentNix, /full\.extensions\.subagent = \{[\s\S]*allowedTargets = \[[^\]]*librarian[^\]]*\]/);
-    assert.match(subagentNix, /operator = \{[\s\S]*allowedTargets = \[[^\]]*librarian[^\]]*\]/);
-    assert.match(subagentNix, /scout = \{[\s\S]*allowedTargets = \[[^\]]*librarian[^\]]*\]/);
+    assert.doesNotMatch(subagentNix, /full\.extensions\.subagent = \{[\s\S]*allowedTargets = \[[^\]]*librarian[^\]]*\]/);
+    assert.doesNotMatch(subagentNix, /operator = \{[\s\S]*allowedTargets = \[[^\]]*librarian[^\]]*\]/);
+    assert.doesNotMatch(subagentNix, /scout = \{[\s\S]*allowedTargets = \[[^\]]*librarian[^\]]*\]/);
     assert.match(subagentNix, /librarian\.extensions\.subagent = \{\s*allowedTargets = \[\];/);
     const taskmasterStart = subagentNix.indexOf("      taskmaster = {");
     const taskmaster = subagentNix.slice(taskmasterStart, subagentNix.indexOf("      artisan = {", taskmasterStart));

@@ -8,11 +8,16 @@
   "packageManager": "npm@11.16.0",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "lint": "oxlint --deny-warnings --report-unused-disable-directives extensions_src tests",
+    "lint": "oxlint --deny-warnings --report-unused-disable-directives extensions_src scripts tests",
     "test": "PI_EXTENSION_KEYBINDINGS_PATH=tests/fixtures/extension-keybindings.json node --test \"tests/**/*.test.ts\"",
+    "test:question": "PI_EXTENSION_KEYBINDINGS_PATH=tests/fixtures/extension-keybindings.json node --test \"tests/question*.test.ts\"",
+    "test:command-palette": "PI_EXTENSION_KEYBINDINGS_PATH=tests/fixtures/extension-keybindings.json node --test \"tests/command_palette*.test.ts\"",
+    "test:subagent": "PI_EXTENSION_KEYBINDINGS_PATH=tests/fixtures/extension-keybindings.json node --test \"tests/subagent*.test.ts\"",
+    "test:agent-artifact": "PI_EXTENSION_KEYBINDINGS_PATH=tests/fixtures/extension-keybindings.json node --test tests/agent_artifact.test.ts",
+    "test:web-search": "PI_EXTENSION_KEYBINDINGS_PATH=tests/fixtures/extension-keybindings.json node --test tests/web_search.test.ts",
     "test:nix-keybindings": "bash tests/keybindings_nix_fixtures.sh",
     "test:nix-emergency": "bash tests/emergency_nix_fixtures.sh",
-    "check": "npm run typecheck && npm run lint && npm test",
+    "check": "node scripts/run-check.mts",
     "check:full": "npm run check && npm run test:nix-keybindings && npm run test:nix-emergency"
   },
   "devDependencies": {

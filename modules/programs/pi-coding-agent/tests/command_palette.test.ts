@@ -7,6 +7,7 @@ import { resolvePaletteKeymap } from "../extensions_src/utilities/command_palett
 import { PaletteListComponent } from "../extensions_src/utilities/command_palette_tui.ts";
 import type { Theme } from "@earendil-works/pi-coding-agent";
 import type { TUI } from "@earendil-works/pi-tui";
+import { eventually } from "./test_helpers.ts";
 
 const theme = { fg(_c: string, t: string) { return t; }, bg(_c: string, t: string) { return t; }, bold(t: string) { return t; } } as Theme;
 
@@ -146,7 +147,7 @@ void test("root palette stays open for nested children and restores query select
     root!.handleInput("model");
     assert.equal(root!.query, "model");
     root!.handleInput("\r");
-    await new Promise(resolve => setTimeout(resolve, 10));
+    await eventually(() => root!.busy === false);
     assert.equal(root!.query, "model");
     assert.equal(root!.busy, false);
     root!.handleInput("\u001b");

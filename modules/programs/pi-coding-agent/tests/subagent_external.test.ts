@@ -12,6 +12,7 @@ import { historyAvailability } from "../extensions_src/utilities/subagent_histor
 import { agentPaths, createTask, markAgentStopping, markBridgeReady, patchAgentStatus, prepareAgent, publishAgent, readAgentSnapshot, requestTaskCancellation } from "../extensions_src/utilities/subagent_store.ts";
 import type { AgentProfile } from "../extensions_src/utilities/profile_types.ts";
 import type { SubagentRuntimeConfig, TmuxAgentReference } from "../extensions_src/utilities/subagent_types.ts";
+import { eventually, yieldToIO } from "./test_helpers.ts";
 
 const options = { mode: "agent", permissionPolicy: "allow-always", sandbox: "disabled", trustWorkspace: true, worktree: false };
 const cursorProfile: AgentProfile = {
@@ -206,7 +207,7 @@ createInterface({input:process.stdin}).on("line",line=>{const m=JSON.parse(line)
     const dying = join(root, "dying.mjs");
     await writeFile(dying, `#!/usr/bin/env node
 import { createInterface } from "node:readline"; const send=value=>process.stdout.write(JSON.stringify(value)+"\\n");
-createInterface({input:process.stdin}).on("line",line=>{const m=JSON.parse(line); if(m.method==="initialize") send({jsonrpc:"2.0",id:m.id,result:{protocolVersion:1,authMethods:[]}}); else if(m.method==="session/new"){send({jsonrpc:"2.0",id:m.id,result:{sessionId:"session"}}); setTimeout(()=>process.exit(9),10);}});
+createInterface({input:process.stdin}).on("line",line=>{const m=JSON.parse(line); if(m.method==="initialize") send({jsonrpc:"2.0",id:m.id,result:{protocolVersion:1,authMethods:[]}}); else if(m.method==="session/new"){process.stdout.write(JSON.stringify({jsonrpc:"2.0",id:m.id,result:{sessionId:"session"}})+"\\n",()=>process.exit(9));}});
 `);
     await chmod(dying, 0o700);
     const dyingDriver = new CursorAcpDriver({ command: dying, cwd: root, model: "cursor-grok-4.5-high", permissionPolicy: "allow-always", event: () => {} });
@@ -223,7 +224,7 @@ void test("external worker terminalizes an idle agent when its driver process di
     await publishAgent(prepared.paths, { agentId: prepared.agentId, profile: "cursor-implementer", purpose: "idle", harness: "cursor-agent", cwd: root, profileSnapshot: cursorProfile, tmux, capabilities, callerProfile: "operator", targetProfile: "cursor-implementer", depth: 1, originSessionId: "origin" });
     const fatal = new Error("ACP process exited (9)");
     const driver: ExternalDriver = { async start() {}, async runTask() { return { output: "", stopReason: "end_turn" }; }, async cancel() {}, async shutdown() {}, waitForClose: async () => fatal, fatalError: () => fatal };
-    const worker = runExternalWorker({ PI_SUBAGENT_AGENT_ID: prepared.agentId, PI_SUBAGENT_STATE_ROOT: root, PI_SUBAGENT_EXTERNAL_CONFIG: JSON.stringify({ adapter: "cursor-acp", command: "/cursor", cwd: root, model: "cursor-grok-4.5-high", profile: "cursor-implementer", instructions: "contract", permissionPolicy: "allow-always" }) }, { createDriver: () => driver, sleep: ms => new Promise(resolve => setTimeout(resolve, Math.min(ms, 5))) });
+    const worker = runExternalWorker({ PI_SUBAGENT_AGENT_ID: prepared.agentId, PI_SUBAGENT_STATE_ROOT: root, PI_SUBAGENT_EXTERNAL_CONFIG: JSON.stringify({ adapter: "cursor-acp", command: "/cursor", cwd: root, model: "cursor-grok-4.5-high", profile: "cursor-implementer", instructions: "contract", permissionPolicy: "allow-always" }) }, { createDriver: () => driver, sleep: yieldToIO });
     await assert.rejects(worker, /exited/u);
     const snapshot = await readAgentSnapshot(root, prepared.agentId);
     assert.equal(snapshot.status.state, "failed");
@@ -239,8 +240,8 @@ void test("external worker terminalizes the agent when its driver dies during a 
     const fatal = new Error("ACP process exited (9)");
     let died = false;
     const driver: ExternalDriver = { async start() {}, async runTask() { died = true; throw fatal; }, async cancel() {}, async shutdown() {}, waitForClose: () => new Promise(() => {}), fatalError: () => died ? fatal : undefined };
-    const worker = runExternalWorker({ PI_SUBAGENT_AGENT_ID: prepared.agentId, PI_SUBAGENT_STATE_ROOT: root, PI_SUBAGENT_EXTERNAL_CONFIG: JSON.stringify({ adapter: "cursor-acp", command: "/cursor", cwd: root, model: "cursor-grok-4.5-high", profile: "cursor-implementer", instructions: "contract", permissionPolicy: "allow-always" }) }, { createDriver: () => driver, sleep: ms => new Promise(resolve => setTimeout(resolve, Math.min(ms, 5))) });
-    while (!(await readAgentSnapshot(root, prepared.agentId)).status.bridgeReady) await new Promise(resolve => setTimeout(resolve, 5));
+    const worker = runExternalWorker({ PI_SUBAGENT_AGENT_ID: prepared.agentId, PI_SUBAGENT_STATE_ROOT: root, PI_SUBAGENT_EXTERNAL_CONFIG: JSON.stringify({ adapter: "cursor-acp", command: "/cursor", cwd: root, model: "cursor-grok-4.5-high", profile: "cursor-implementer", instructions: "contract", permissionPolicy: "allow-always" }) }, { createDriver: () => driver, sleep: yieldToIO });
+    await eventually(async () => !(!(await readAgentSnapshot(root, prepared.agentId)).status.bridgeReady));
     const task = await createTask(root, prepared.agentId, "fatal", "trigger death");
     await worker;
     const snapshot = await readAgentSnapshot(root, prepared.agentId, task.request.taskId);
@@ -259,10 +260,10 @@ void test("external worker observes parent stopping during an active turn and ca
     let cancels = 0;
     const running = new Promise<never>((_resolve, reject) => { rejectTurn = reject; });
     const driver: ExternalDriver = { async start() {}, runTask: () => running, async cancel() { cancels += 1; rejectTurn(new Error("cancelled")); }, async shutdown() {}, waitForClose: () => new Promise(() => {}), fatalError: () => undefined };
-    const worker = runExternalWorker({ PI_SUBAGENT_AGENT_ID: prepared.agentId, PI_SUBAGENT_STATE_ROOT: root, PI_SUBAGENT_EXTERNAL_CONFIG: JSON.stringify({ adapter: "cursor-acp", command: "/cursor", cwd: root, model: "cursor-grok-4.5-high", profile: "cursor-implementer", instructions: "contract", permissionPolicy: "allow-always" }) }, { createDriver: () => driver, sleep: ms => new Promise(resolve => setTimeout(resolve, Math.min(ms, 5))) });
-    while (!(await readAgentSnapshot(root, prepared.agentId)).status.bridgeReady) await new Promise(resolve => setTimeout(resolve, 5));
+    const worker = runExternalWorker({ PI_SUBAGENT_AGENT_ID: prepared.agentId, PI_SUBAGENT_STATE_ROOT: root, PI_SUBAGENT_EXTERNAL_CONFIG: JSON.stringify({ adapter: "cursor-acp", command: "/cursor", cwd: root, model: "cursor-grok-4.5-high", profile: "cursor-implementer", instructions: "contract", permissionPolicy: "allow-always" }) }, { createDriver: () => driver, sleep: yieldToIO });
+    await eventually(async () => !(!(await readAgentSnapshot(root, prepared.agentId)).status.bridgeReady));
     const task = await createTask(root, prepared.agentId, "cancel", "long turn");
-    while ((await readAgentSnapshot(root, prepared.agentId, task.request.taskId)).task?.status.state !== "running") await new Promise(resolve => setTimeout(resolve, 5));
+    await eventually(async () => !((await readAgentSnapshot(root, prepared.agentId, task.request.taskId)).task?.status.state !== "running"));
     await markAgentStopping(prepared.paths);
     await worker;
     const snapshot = await readAgentSnapshot(root, prepared.agentId, task.request.taskId);
@@ -279,10 +280,10 @@ void test("external worker observes a direct terminal agent transition during a 
     await publishAgent(prepared.paths, { agentId: prepared.agentId, profile: "cursor-implementer", purpose: "direct stop", harness: "cursor-agent", cwd: root, profileSnapshot: cursorProfile, tmux, capabilities, callerProfile: "operator", targetProfile: "cursor-implementer", depth: 1, originSessionId: "origin" });
     let cancels = 0; let shutdowns = 0;
     const driver: ExternalDriver = { async start() {}, runTask: () => new Promise(() => {}), async cancel() { cancels += 1; }, async shutdown() { shutdowns += 1; }, waitForClose: () => new Promise(() => {}), fatalError: () => undefined };
-    const worker = runExternalWorker({ PI_SUBAGENT_AGENT_ID: prepared.agentId, PI_SUBAGENT_STATE_ROOT: root, PI_SUBAGENT_EXTERNAL_CONFIG: JSON.stringify({ adapter: "cursor-acp", command: "/cursor", cwd: root, model: "cursor-grok-4.5-high", profile: "cursor-implementer", instructions: "contract", permissionPolicy: "allow-always" }) }, { createDriver: () => driver, sleep: ms => new Promise(resolve => setTimeout(resolve, Math.min(ms, 5))) });
-    while (!(await readAgentSnapshot(root, prepared.agentId)).status.bridgeReady) await new Promise(resolve => setTimeout(resolve, 5));
+    const worker = runExternalWorker({ PI_SUBAGENT_AGENT_ID: prepared.agentId, PI_SUBAGENT_STATE_ROOT: root, PI_SUBAGENT_EXTERNAL_CONFIG: JSON.stringify({ adapter: "cursor-acp", command: "/cursor", cwd: root, model: "cursor-grok-4.5-high", profile: "cursor-implementer", instructions: "contract", permissionPolicy: "allow-always" }) }, { createDriver: () => driver, sleep: yieldToIO });
+    await eventually(async () => !(!(await readAgentSnapshot(root, prepared.agentId)).status.bridgeReady));
     const task = await createTask(root, prepared.agentId, "direct stop", "never resolves");
-    while ((await readAgentSnapshot(root, prepared.agentId, task.request.taskId)).task?.status.state !== "running") await new Promise(resolve => setTimeout(resolve, 5));
+    await eventually(async () => !((await readAgentSnapshot(root, prepared.agentId, task.request.taskId)).task?.status.state !== "running"));
     await patchAgentStatus(prepared.paths, { state: "stopped", exitReason: "direct terminal transition" });
     await worker;
     const snapshot = await readAgentSnapshot(root, prepared.agentId, task.request.taskId);
@@ -297,10 +298,10 @@ void test("external worker preserves a directly failed agent and reason while st
     await publishAgent(prepared.paths, { agentId: prepared.agentId, profile: "cursor-implementer", purpose: "direct failure", harness: "cursor-agent", cwd: root, profileSnapshot: cursorProfile, tmux, capabilities, callerProfile: "operator", targetProfile: "cursor-implementer", depth: 1, originSessionId: "origin" });
     let cancels = 0; let shutdowns = 0;
     const driver: ExternalDriver = { async start() {}, runTask: () => new Promise(() => {}), async cancel() { cancels += 1; }, async shutdown() { shutdowns += 1; }, waitForClose: () => new Promise(() => {}), fatalError: () => undefined };
-    const worker = runExternalWorker({ PI_SUBAGENT_AGENT_ID: prepared.agentId, PI_SUBAGENT_STATE_ROOT: root, PI_SUBAGENT_EXTERNAL_CONFIG: JSON.stringify({ adapter: "cursor-acp", command: "/cursor", cwd: root, model: "cursor-grok-4.5-high", profile: "cursor-implementer", instructions: "contract", permissionPolicy: "allow-always" }) }, { createDriver: () => driver, sleep: ms => new Promise(resolve => setTimeout(resolve, Math.min(ms, 5))) });
-    while (!(await readAgentSnapshot(root, prepared.agentId)).status.bridgeReady) await new Promise(resolve => setTimeout(resolve, 5));
+    const worker = runExternalWorker({ PI_SUBAGENT_AGENT_ID: prepared.agentId, PI_SUBAGENT_STATE_ROOT: root, PI_SUBAGENT_EXTERNAL_CONFIG: JSON.stringify({ adapter: "cursor-acp", command: "/cursor", cwd: root, model: "cursor-grok-4.5-high", profile: "cursor-implementer", instructions: "contract", permissionPolicy: "allow-always" }) }, { createDriver: () => driver, sleep: yieldToIO });
+    await eventually(async () => !(!(await readAgentSnapshot(root, prepared.agentId)).status.bridgeReady));
     const task = await createTask(root, prepared.agentId, "direct failure", "never resolves");
-    while ((await readAgentSnapshot(root, prepared.agentId, task.request.taskId)).task?.status.state !== "running") await new Promise(resolve => setTimeout(resolve, 5));
+    await eventually(async () => !((await readAgentSnapshot(root, prepared.agentId, task.request.taskId)).task?.status.state !== "running"));
     await patchAgentStatus(prepared.paths, { state: "failed", exitReason: "parent-owned failure" });
     await worker;
     const snapshot = await readAgentSnapshot(root, prepared.agentId, task.request.taskId);
@@ -315,10 +316,10 @@ void test("external worker races a never-resolving active task with driver close
     await publishAgent(prepared.paths, { agentId: prepared.agentId, profile: "cursor-implementer", purpose: "driver close", harness: "cursor-agent", cwd: root, profileSnapshot: cursorProfile, tmux, capabilities, callerProfile: "operator", targetProfile: "cursor-implementer", depth: 1, originSessionId: "origin" });
     let close!: (error: Error) => void; let didClose = false; const closed = new Promise<Error>(resolve => { close = error => { didClose = true; resolve(error); }; });
     const driver: ExternalDriver = { async start() {}, runTask: () => new Promise(() => {}), async cancel() {}, async shutdown() {}, waitForClose: () => closed, fatalError: () => didClose ? new Error("ACP driver closed") : undefined };
-    const worker = runExternalWorker({ PI_SUBAGENT_AGENT_ID: prepared.agentId, PI_SUBAGENT_STATE_ROOT: root, PI_SUBAGENT_EXTERNAL_CONFIG: JSON.stringify({ adapter: "cursor-acp", command: "/cursor", cwd: root, model: "cursor-grok-4.5-high", profile: "cursor-implementer", instructions: "contract", permissionPolicy: "allow-always" }) }, { createDriver: () => driver, sleep: ms => new Promise(resolve => setTimeout(resolve, Math.min(ms, 5))) });
-    while (!(await readAgentSnapshot(root, prepared.agentId)).status.bridgeReady) await new Promise(resolve => setTimeout(resolve, 5));
+    const worker = runExternalWorker({ PI_SUBAGENT_AGENT_ID: prepared.agentId, PI_SUBAGENT_STATE_ROOT: root, PI_SUBAGENT_EXTERNAL_CONFIG: JSON.stringify({ adapter: "cursor-acp", command: "/cursor", cwd: root, model: "cursor-grok-4.5-high", profile: "cursor-implementer", instructions: "contract", permissionPolicy: "allow-always" }) }, { createDriver: () => driver, sleep: yieldToIO });
+    await eventually(async () => !(!(await readAgentSnapshot(root, prepared.agentId)).status.bridgeReady));
     const task = await createTask(root, prepared.agentId, "driver close", "never resolves");
-    while ((await readAgentSnapshot(root, prepared.agentId, task.request.taskId)).task?.status.state !== "running") await new Promise(resolve => setTimeout(resolve, 5));
+    await eventually(async () => !((await readAgentSnapshot(root, prepared.agentId, task.request.taskId)).task?.status.state !== "running"));
     close(new Error("ACP process closed during task")); await worker;
     const snapshot = await readAgentSnapshot(root, prepared.agentId, task.request.taskId);
     assert.equal(snapshot.status.state, "failed"); assert.equal(snapshot.task?.status.state, "failed"); assert.match(snapshot.status.exitReason ?? "", /closed during task/u);
@@ -343,20 +344,20 @@ void test("external task cancellation waits for ACP settlement, preserves partia
         waitForClose: () => new Promise(() => {}),
         fatalError: () => undefined,
     };
-    const worker = runExternalWorker({ PI_SUBAGENT_AGENT_ID: prepared.agentId, PI_SUBAGENT_STATE_ROOT: root, PI_SUBAGENT_EXTERNAL_CONFIG: JSON.stringify({ adapter: "cursor-acp", command: "/cursor", cwd: root, model: "cursor-grok-4.5-high", profile: "cursor-implementer", instructions: "contract", permissionPolicy: "allow-always" }) }, { createDriver: () => driver, sleep: ms => new Promise(resolve => setTimeout(resolve, Math.min(ms, 5))) });
-    while (!(await readAgentSnapshot(root, prepared.agentId)).status.bridgeReady) await new Promise(resolve => setTimeout(resolve, 5));
+    const worker = runExternalWorker({ PI_SUBAGENT_AGENT_ID: prepared.agentId, PI_SUBAGENT_STATE_ROOT: root, PI_SUBAGENT_EXTERNAL_CONFIG: JSON.stringify({ adapter: "cursor-acp", command: "/cursor", cwd: root, model: "cursor-grok-4.5-high", profile: "cursor-implementer", instructions: "contract", permissionPolicy: "allow-always" }) }, { createDriver: () => driver, sleep: yieldToIO });
+    await eventually(async () => !(!(await readAgentSnapshot(root, prepared.agentId)).status.bridgeReady));
     const first = await createTask(root, prepared.agentId, "first", "long turn");
-    while ((await readAgentSnapshot(root, prepared.agentId, first.request.taskId)).task?.status.state !== "running") await new Promise(resolve => setTimeout(resolve, 5));
+    await eventually(async () => !((await readAgentSnapshot(root, prepared.agentId, first.request.taskId)).task?.status.state !== "running"));
     await requestTaskCancellation(root, prepared.agentId, first.request.taskId, "cancel first");
-    while (cancels === 0) await new Promise(resolve => setTimeout(resolve, 5));
+    await eventually(async () => !(cancels === 0));
     assert.equal((await readAgentSnapshot(root, prepared.agentId, first.request.taskId)).task?.status.state, "running");
     assert.equal(calls, 1);
     rejectFirst(new Error("cancelled by ACP"));
-    while ((await readAgentSnapshot(root, prepared.agentId, first.request.taskId)).task?.status.state !== "stopped") await new Promise(resolve => setTimeout(resolve, 5));
+    await eventually(async () => !((await readAgentSnapshot(root, prepared.agentId, first.request.taskId)).task?.status.state !== "stopped"));
     const stopped = await readAgentSnapshot(root, prepared.agentId, first.request.taskId);
     assert.equal(stopped.task?.result?.output, "partial before cancel");
     const second = await createTask(root, prepared.agentId, "second", "reuse");
-    while ((await readAgentSnapshot(root, prepared.agentId, second.request.taskId)).task?.status.state !== "succeeded") await new Promise(resolve => setTimeout(resolve, 5));
+    await eventually(async () => !((await readAgentSnapshot(root, prepared.agentId, second.request.taskId)).task?.status.state !== "succeeded"));
     assert.equal(calls, 2);
     await markAgentStopping(prepared.paths);
     await worker;
@@ -370,12 +371,12 @@ void test("external worker persists two sequential tasks through one driver inst
     await publishAgent(prepared.paths, { agentId: prepared.agentId, profile: "cursor-implementer", purpose: "first", harness: "cursor-agent", cwd: root, profileSnapshot: cursorProfile, tmux, capabilities, callerProfile: "operator", targetProfile: "cursor-implementer", depth: 1, originSessionId: "origin" });
     const prompts: string[] = [];
     const driver: ExternalDriver = { async start() {}, async runTask(prompt) { prompts.push(prompt); return { output: `done-${prompts.length}`, stopReason: "end_turn" }; }, async cancel() {}, async shutdown() {}, waitForClose: () => new Promise(() => {}), fatalError: () => undefined };
-    const worker = runExternalWorker({ PI_SUBAGENT_AGENT_ID: prepared.agentId, PI_SUBAGENT_STATE_ROOT: root, PI_SUBAGENT_EXTERNAL_CONFIG: JSON.stringify({ adapter: "cursor-acp", command: "/cursor", cwd: root, model: "cursor-grok-4.5-high", profile: "cursor-implementer", instructions: "contract", permissionPolicy: "allow-always" }) }, { createDriver: () => driver, sleep: ms => new Promise(resolve => setTimeout(resolve, Math.min(ms, 5))) });
-    while (!(await readAgentSnapshot(root, prepared.agentId)).status.bridgeReady) await new Promise(resolve => setTimeout(resolve, 5));
+    const worker = runExternalWorker({ PI_SUBAGENT_AGENT_ID: prepared.agentId, PI_SUBAGENT_STATE_ROOT: root, PI_SUBAGENT_EXTERNAL_CONFIG: JSON.stringify({ adapter: "cursor-acp", command: "/cursor", cwd: root, model: "cursor-grok-4.5-high", profile: "cursor-implementer", instructions: "contract", permissionPolicy: "allow-always" }) }, { createDriver: () => driver, sleep: yieldToIO });
+    await eventually(async () => !(!(await readAgentSnapshot(root, prepared.agentId)).status.bridgeReady));
     const first = await createTask(root, prepared.agentId, "first", "change one");
-    while ((await readAgentSnapshot(root, prepared.agentId, first.request.taskId)).task?.status.state !== "succeeded") await new Promise(resolve => setTimeout(resolve, 5));
+    await eventually(async () => !((await readAgentSnapshot(root, prepared.agentId, first.request.taskId)).task?.status.state !== "succeeded"));
     const second = await createTask(root, prepared.agentId, "second", "remediate");
-    while ((await readAgentSnapshot(root, prepared.agentId, second.request.taskId)).task?.status.state !== "succeeded") await new Promise(resolve => setTimeout(resolve, 5));
+    await eventually(async () => !((await readAgentSnapshot(root, prepared.agentId, second.request.taskId)).task?.status.state !== "succeeded"));
     await markAgentStopping(prepared.paths);
     await worker;
     const stopped = await readAgentSnapshot(root, prepared.agentId, second.request.taskId);

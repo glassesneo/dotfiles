@@ -5,6 +5,8 @@
     "moduleResolution": "NodeNext",
     "strict": true,
     "noEmit": true,
+    "incremental": true,
+    "tsBuildInfoFile": "./node_modules/.cache/typescript/pi-customizations.tsbuildinfo",
     "types": ["node"],
     "rootDir": ".",
     "allowImportingTsExtensions": true,
@@ -16,6 +18,7 @@
   },
   "include": [
     "extensions_src/**/*.ts",
+    "scripts/**/*.mts",
     "tests/**/*.ts"
   ]
 }
