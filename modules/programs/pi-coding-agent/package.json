@@ -12,7 +12,7 @@
     "test": "PI_EXTENSION_KEYBINDINGS_PATH=tests/fixtures/extension-keybindings.json node --test \"tests/**/*.test.ts\"",
     "test:question": "PI_EXTENSION_KEYBINDINGS_PATH=tests/fixtures/extension-keybindings.json node --test \"tests/question*.test.ts\"",
     "test:command-palette": "PI_EXTENSION_KEYBINDINGS_PATH=tests/fixtures/extension-keybindings.json node --test \"tests/command_palette*.test.ts\"",
-    "test:subagent": "PI_EXTENSION_KEYBINDINGS_PATH=tests/fixtures/extension-keybindings.json node --test \"tests/subagent*.test.ts\"",
+    "test:mesh": "PI_EXTENSION_KEYBINDINGS_PATH=tests/fixtures/extension-keybindings.json node --test \"tests/{orchestration,mesh}*.test.ts\"",
     "test:agent-artifact": "PI_EXTENSION_KEYBINDINGS_PATH=tests/fixtures/extension-keybindings.json node --test tests/agent_artifact.test.ts",
     "test:web-search": "PI_EXTENSION_KEYBINDINGS_PATH=tests/fixtures/extension-keybindings.json node --test tests/web_search.test.ts",
     "check": "node scripts/run-check.mts"

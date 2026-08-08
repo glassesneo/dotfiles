@@ -94,7 +94,7 @@ export function projectMinimalSubmitResult(
     rawSnapshot: AgentSnapshot,
 ): MinimalSubmitResult {
     const projected = projectMinimalAgentTask(rawSnapshot);
-    if (!projected.taskId || !projected.taskState) throw new Error(`Subagent ${projected.agentId} has no submitted task`);
+    if (!projected.taskId || !projected.taskState) throw new Error(`Mesh agent ${projected.agentId} has no submitted task`);
     return {
         agentId: projected.agentId,
         taskId: projected.taskId,

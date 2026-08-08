@@ -15,15 +15,15 @@
   artifactExtension = "${./../../extensions_src}/agent_artifact.ts";
   historyViewerExtension = "${./../../extensions_src}/orchestration_history_viewer.ts";
   externalWorkerEntrypoint = "${./../../extensions_src}/orchestration_external_worker.ts";
-  parentKeys = piKeybindings.keysFor "subagentNavigation" "parent";
+  parentKeys = piKeybindings.keysFor "meshNavigation" "parent";
   parentTmuxKeys = map piKeybindings.toTmuxKey parentKeys;
   returnParentCommand = pkgs.writeShellApplication {
-    name = "pi-subagent-return-parent";
+    name = "pi-mesh-return-parent";
     runtimeInputs = [pkgs.tmux pkgs.gnugrep];
     text = builtins.readFile ./return-parent.sh;
   };
   parentNavigationHint = "${tmux.prefix} ${lib.concatStringsSep "/" (map lib.toUpper parentTmuxKeys)}: parent · /parent";
-  parentBinding = key: ''bind-key ${key} if-shell -F '#{==:#{@pi_subagent_schema},1}' 'run-shell "${lib.getExe returnParentCommand} --binding #{q:client_name} #{q:session_id} #{q:window_id}"' 'display-message "No subagent parent for this window"' '';
+  parentBinding = key: ''bind-key ${key} if-shell -F '#{==:#{@pi_mesh_schema},1}' 'run-shell "${lib.getExe returnParentCommand} --binding #{q:client_name} #{q:session_id} #{q:window_id}"' 'display-message "No mesh parent for this window"' '';
   agentType = delib.submodule {
     options = with delib; {
       model = noDefault (strOption null);
@@ -75,7 +75,7 @@
       model = "openai-codex/gpt-5.6-sol";
       description = "Read-only adaptive review owner with optional critic delegation.";
       thinkingLevel = "high";
-      tools = ["read" "grep" "find" "ls" "bash" "subagent_run" "subagent_submit" "subagent_get" "subagent_wait" "subagent_stop" "save_agent_artifact"];
+      tools = ["read" "grep" "find" "ls" "bash" "mesh_enable" "mesh_run" "mesh_submit" "mesh_get" "mesh_wait" "mesh_stop" "mesh_route" "save_agent_artifact"];
       skillOptIns = ["adaptive-review" "task-orchestration" "agent-artifact"];
       instructions = "Review the defined target, delegate only a concrete independent critic lens when useful, and save one review report when requested.";
       harness = "pi";
@@ -133,81 +133,85 @@ in
       moduleOptions ({parent, ...}: {
         enable = readOnly (boolOption (parent.enable && builtins.elem "orchestration" parent.defaultExtensions));
         extensionPaths = readOnly (listOfOption str [orchestrationExtension]);
-        maxDepth = intOption 3;
         natureHandleWords = listOfOption str ["Coulson" "May" "Daisy" "Fitz" "Simmons" "Mack" "Elena" "Hunter" "Bobbi" "Deke" "Sousa" "Enoch"];
         agents = attrsOfOption agentType {};
-        delegation = attrsOfOption (lib.types.listOf lib.types.str) {};
+        roleSets = attrsOfOption (lib.types.listOf lib.types.str) {};
+        budgets = attrsOfOption lib.types.int {};
       });
     myconfig.always = {cfg, ...}: {
       programs.pi-coding-agent.orchestration = {
         agents = settledAgents;
-        delegation = {
-          "mode:recon" = ["explorer" "reviewer" "codex"];
-          "mode:ops" = ["explorer" "worker" "validator" "reviewer" "fast-worker" "codex"];
-          "agent:reviewer" = ["critic"];
+        roleSets = {
+          "mode:recon" = ["explorer" "reviewer" "critic" "codex"];
+          "mode:ops" = ["explorer" "worker" "validator" "reviewer" "critic" "fast-worker" "codex"];
+        };
+        budgets = {
+          maxLiveAgents = 12;
+          maxConcurrentTasks = 6;
+          maxTasksPerMesh = 256;
         };
       };
       programs.pi-coding-agent.keybindings.contributions = {
-        subagentPalette = {
+        meshPalette = {
           enabled = cfg.enable;
           actions = {
             moveUp = {
               role = "moveUp";
-              contexts = ["subagentPalette"];
+              contexts = ["meshPalette"];
               required = true;
               target = "extension";
             };
             moveDown = {
               role = "moveDown";
-              contexts = ["subagentPalette"];
+              contexts = ["meshPalette"];
               required = true;
               target = "extension";
             };
             collapse = {
               role = "collapse";
-              contexts = ["subagentPalette"];
+              contexts = ["meshPalette"];
               required = true;
               target = "extension";
             };
             expand = {
               role = "expand";
-              contexts = ["subagentPalette"];
+              contexts = ["meshPalette"];
               required = true;
               target = "extension";
             };
             confirm = {
               role = "confirm";
-              contexts = ["subagentPalette"];
+              contexts = ["meshPalette"];
               required = true;
               target = "extension";
             };
             cancel = {
               role = "cancel";
-              contexts = ["subagentPalette"];
+              contexts = ["meshPalette"];
               required = true;
               target = "extension";
             };
             refresh = {
               defaultKeys = [];
-              contexts = ["subagentPalette"];
+              contexts = ["meshPalette"];
               required = false;
               target = "extension";
             };
             stop = {
               defaultKeys = ["x"];
-              contexts = ["subagentPalette"];
+              contexts = ["meshPalette"];
               required = false;
               target = "extension";
             };
             preview = {
               defaultKeys = ["space"];
-              contexts = ["subagentPalette"];
+              contexts = ["meshPalette"];
               required = false;
               target = "extension";
             };
             unlink = {
               defaultKeys = [];
-              contexts = ["subagentPalette"];
+              contexts = ["meshPalette"];
               required = false;
               target = "extension";
             };
@@ -223,7 +227,7 @@ in
             nativeAction = "app.exit";
           };
         };
-        subagentNavigation = {
+        meshNavigation = {
           enabled = cfg.enable;
           actions.parent = {
             defaultKeys = ["u"];
@@ -251,29 +255,33 @@ in
         };
       };
     };
-    myconfig.ifEnabled.programs.tmux.extraConfigFragments.piSubagentParent = lib.concatMapStrings parentBinding parentTmuxKeys;
+    myconfig.ifEnabled.programs.tmux.extraConfigFragments.piMeshParent = lib.concatMapStrings parentBinding parentTmuxKeys;
     home.ifEnabled = {
       cfg,
       myconfig,
       ...
     }: let
       names = builtins.attrNames cfg.agents;
-      settledDelegation = {
-        "mode:recon" = ["explorer" "reviewer" "codex"];
-        "mode:ops" = ["explorer" "worker" "validator" "reviewer" "fast-worker" "codex"];
-        "agent:reviewer" = ["critic"];
+      settledRoleSets = {
+        "mode:recon" = ["explorer" "reviewer" "critic" "codex"];
+        "mode:ops" = ["explorer" "worker" "validator" "reviewer" "critic" "fast-worker" "codex"];
       };
-      targetsValid = builtins.all (targets: lib.length targets == lib.length (lib.unique targets) && builtins.all (target: builtins.elem target names) targets) (builtins.attrValues cfg.delegation);
+      settledBudgets = {
+        maxLiveAgents = 12;
+        maxConcurrentTasks = 6;
+        maxTasksPerMesh = 256;
+      };
+      roleSetsValid = builtins.all (roles: lib.length roles == lib.length (lib.unique roles) && builtins.all (role: builtins.elem role names) roles) (builtins.attrValues cfg.roleSets);
       serialize = _: agent: lib.filterAttrs (name: value: value != null && !(name == "harnessOptions" && value == {})) agent;
     in {
       assertions = [
         {
-          assertion = cfg.maxDepth >= 0 && cfg.agents == settledAgents;
+          assertion = cfg.agents == settledAgents;
           message = "Pi orchestration catalog must exactly match the settled seven-agent models, instructions, tools, skills, thinking, harness options, and reviewer-owned artifact contribution.";
         }
         {
-          assertion = cfg.delegation == settledDelegation && targetsValid;
-          message = "Pi orchestration delegation must exactly match the settled recon, ops, and reviewer caller map with known unique targets.";
+          assertion = cfg.roleSets == settledRoleSets && roleSetsValid && cfg.budgets == settledBudgets;
+          message = "Pi orchestration role sets and mesh budgets must exactly match the settled recon and ops capabilities.";
         }
       ];
       home.file = {
@@ -283,11 +291,11 @@ in
         };
         "${myconfig.programs.pi-coding-agent.configDir}/orchestration.json".text = builtins.toJSON {
           schemaVersion = 1;
-          stateRoot = "${homeConfig.xdg.stateHome}/pi/orchestration-v1";
+          stateRoot = "${homeConfig.xdg.stateHome}/pi/orchestration-v2";
           tmux = lib.getExe pkgs.tmux;
           returnParentCommand = lib.getExe returnParentCommand;
           inherit parentNavigationHint historyViewerExtension popupExtension orchestrationExtension childBridgeExtension;
-          inherit (cfg) maxDepth natureHandleWords delegation;
+          inherit (cfg) natureHandleWords roleSets budgets;
           harnesses = {
             pi = {
               adapter = "pi-native";

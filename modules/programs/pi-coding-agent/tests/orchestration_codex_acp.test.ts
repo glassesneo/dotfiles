@@ -68,7 +68,7 @@ void test("Codex ACP configures the fixed read-only research session and project
         assert.deepEqual(await driver.runTask("find a current fact"), { output: "answer with source", stopReason: "end_turn" });
         const sent = await requests(f.requestsPath);
         assert.deepEqual(sent.filter(message => typeof message.method === "string").slice(0, 5).map(message => [message.method, message.params]), [
-            ["initialize", { protocolVersion: 1, clientInfo: { name: "pi-subagent-worker", version: "1" }, clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false } }],
+            ["initialize", { protocolVersion: 1, clientInfo: { name: "pi-mesh-worker", version: "1" }, clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false } }],
             ["session/new", { cwd: f.directory, mcpServers: [] }],
             ["session/set_mode", { sessionId: "session-1", modeId: "read-only" }],
             ["session/set_config_option", { sessionId: "session-1", configId: "model", value: "gpt-5.6-luna" }],

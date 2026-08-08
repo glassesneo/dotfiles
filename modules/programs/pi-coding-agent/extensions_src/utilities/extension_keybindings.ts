@@ -19,12 +19,12 @@ const FEATURE_ACTIONS: Record<string, { actions: readonly string[]; required: re
         required: ["common.next-question", "common.previous-question", "common.back", "common.cancel", "choice.accept", "choice.move-up", "choice.move-down", "choice.write-in", "editor.clear", "review.accept", "review.move-up", "review.move-down", "text.accept", "text.newline"],
     },
     interactionPolicy: { actions: ["clear", "interrupt"], required: ["clear", "interrupt"] },
-    subagentPalette: {
+    meshPalette: {
         actions: ["moveUp", "moveDown", "collapse", "expand", "confirm", "cancel", "refresh", "stop", "preview", "unlink"],
         required: ["moveUp", "moveDown", "collapse", "expand", "confirm", "cancel"],
     },
     historyViewer: { actions: ["exit"], required: ["exit"] },
-    subagentNavigation: { actions: ["parent"], required: ["parent"] },
+    meshNavigation: { actions: ["parent"], required: ["parent"] },
     tmuxPreview: { actions: ["openFull", "cancel"], required: ["openFull", "cancel"] },
 };
 

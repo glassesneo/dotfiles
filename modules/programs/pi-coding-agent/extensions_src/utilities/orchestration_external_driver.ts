@@ -47,6 +47,7 @@ export function validateExternalWorkerConfig(value: unknown): ExternalWorkerConf
 }
 
 export function resolveExternalDriver(config: ExternalWorkerConfig, definition: AgentDefinition): ExternalDriverRoute {
+    if (definition.tools.length || definition.childExtensionContributions.length) throw new Error("External ACP harnesses are leaf-only and cannot receive Pi, inbox, or mesh tools");
     if (config.adapter === "cursor-acp") {
         if (definition.harness !== "cursor-agent" || !definition.model.startsWith("cursor/")) throw new Error("cursor-acp requires a Cursor launch envelope");
         return {

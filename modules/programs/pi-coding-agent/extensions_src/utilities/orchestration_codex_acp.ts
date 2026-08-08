@@ -43,7 +43,7 @@ function supportsMode(session: JsonObject, mode: string): boolean {
 function actionableStartupError(error: unknown): Error {
     const message = error instanceof Error ? error.message : String(error);
     if (/auth|unauthoriz|login|credential/iu.test(message)) {
-        return new Error(`Codex authentication is required; run 'codex-acp login' before starting the subagent (${message})`);
+        return new Error(`Codex authentication is required; run 'codex-acp login' before starting the mesh agent (${message})`);
     }
     return error instanceof Error ? error : new Error(message);
 }
@@ -157,7 +157,7 @@ export class CodexAcpDriver implements ExternalDriver {
         try {
             const initialized = object(await this.#transport.request("initialize", {
                 protocolVersion: 1,
-                clientInfo: { name: "pi-subagent-worker", version: "1" },
+                clientInfo: { name: "pi-mesh-worker", version: "1" },
                 clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
             }));
             if (initialized?.protocolVersion !== 1) throw new Error("Codex ACP initialize returned an unsupported protocol version");

@@ -3,6 +3,7 @@ import type { NativeLaunchDescriptor } from "./orchestration_harness.ts";
 import type { TmuxAgentReference } from "./orchestration_types.ts";
 
 export interface CommandResult { stdout: string; stderr: string; code: number }
+export class AgentLaunchCleanupError extends AggregateError { readonly cleanupIncomplete = true; }
 export type CommandExecutor = (command: string, args: string[]) => Promise<CommandResult>;
 export interface TmuxContext { socket: string; serverPid: string; sessionId: string; sessionName: string; windowId: string; paneId: string; clientName?: string }
 const FORMAT = "#{pid}\t#{session_id}\t#{session_name}\t#{window_id}\t#{pane_id}\t#{client_name}";
@@ -31,10 +32,11 @@ async function serverState(exec: CommandExecutor, tmux: string, target: Pick<Tmu
 async function serverMatches(exec: CommandExecutor, tmux: string, target: Pick<TmuxAgentReference, "socket" | "serverPid">): Promise<boolean> { return await serverState(exec, tmux, target) === "match"; }
 export type TmuxPaneState = "alive" | "dead" | "unavailable";
 export async function inspectAgentTmux(exec: CommandExecutor, tmux: string, target: TmuxAgentReference): Promise<{ server: TmuxServerState; paneAlive: boolean; paneState: TmuxPaneState; sessionAlive: boolean }> { const server = await serverState(exec, tmux, target); if (server !== "match") return { server, paneAlive: false, paneState: "dead", sessionAlive: false }; const [panes, session] = await Promise.all([exec(tmux, at(target.socket, ["list-panes", "-a", "-F", "#{pane_id}\t#{pane_dead}"])), exec(tmux, at(target.socket, ["has-session", "-t", target.sessionId]))]); const paneState: TmuxPaneState = panes.code !== 0 ? "unavailable" : panes.stdout.split("\n").some(line => { const [paneId, paneDead] = line.split("\t"); return paneId === target.paneId && paneDead === "0"; }) ? "alive" : "dead"; return { server, paneAlive: paneState === "alive", paneState, sessionAlive: session.code === 0 }; }
-export function originHubName(originSessionId: string): string { return `pi-sa-hub-${createHash("sha256").update(originSessionId).digest("hex").slice(0, 24)}`; }
-async function allocateHubWindow(exec: CommandExecutor, tmux: string, context: TmuxContext, input: { originSessionId: string; windowName: string; cwd: string; command: string }): Promise<TmuxAgentReference> {
+export interface MeshHubIdentity { meshId: string }
+export function meshHubName(meshId: string): string { return `pi-mesh-hub-${createHash("sha256").update(meshId).digest("hex").slice(0, 24)}`; }
+async function allocateHubWindow(exec: CommandExecutor, tmux: string, context: TmuxContext, input: MeshHubIdentity & { windowName: string; cwd: string; command: string }): Promise<TmuxAgentReference> {
     if (!await serverMatches(exec, tmux, context)) throw new Error("Current tmux server identity changed before window launch");
-    const sessionName = originHubName(input.originSessionId);
+    const sessionName = meshHubName(input.meshId);
     const format = "#{session_id}\t#{window_id}\t#{pane_id}";
     const createWindow = () => exec(tmux, at(context.socket, ["new-window", "-d", "-P", "-F", format, "-t", `${sessionName}:`, "-n", input.windowName, "-c", input.cwd, input.command]));
     const exists = await exec(tmux, at(context.socket, ["has-session", "-t", sessionName]));
@@ -58,7 +60,7 @@ async function allocateHubWindow(exec: CommandExecutor, tmux: string, context: T
     }
     return { socket: context.socket, serverPid: context.serverPid, sessionId, sessionName, windowId, paneId, windowName: input.windowName };
 }
-export async function launchHubWindow(exec: CommandExecutor, tmux: string, context: TmuxContext, input: { originSessionId: string; windowName: string; cwd: string; command: string; remainOnExit?: boolean }): Promise<TmuxAgentReference> {
+export async function launchHubWindow(exec: CommandExecutor, tmux: string, context: TmuxContext, input: MeshHubIdentity & { windowName: string; cwd: string; command: string; remainOnExit?: boolean }): Promise<TmuxAgentReference> {
     const target = await allocateHubWindow(exec, tmux, context, input);
     if (input.remainOnExit !== false) {
         const remain = await exec(tmux, at(target.socket, ["set-option", "-w", "-t", target.windowId, "remain-on-exit", "on"]));
@@ -66,31 +68,54 @@ export async function launchHubWindow(exec: CommandExecutor, tmux: string, conte
     }
     return target;
 }
-export async function launchAgentSession(exec: CommandExecutor, tmux: string, context: TmuxContext, input: { agentId: string; agent: string; originSessionId: string; cwd: string; launch: NativeLaunchDescriptor }): Promise<TmuxAgentReference> {
+export async function launchAgentSession(exec: CommandExecutor, tmux: string, context: TmuxContext, input: MeshHubIdentity & { epochId: string; agentId: string; agent: string; cwd: string; launch: NativeLaunchDescriptor }): Promise<TmuxAgentReference> {
     const short = input.agentId.slice(0, 8);
     const safeAgent = input.agent.replace(/[^a-zA-Z0-9_-]/gu, "-").slice(0, 24);
     const command = ["env", ...Object.entries(input.launch.env).map(([key, value]) => `${key}=${value}`), input.launch.command, ...input.launch.args].map(quote).join(" ");
-    const target = await launchHubWindow(exec, tmux, context, { originSessionId: input.originSessionId, windowName: `sa-${safeAgent}-${short}-${input.agentId}`, cwd: input.cwd, command });
+    const target = await launchHubWindow(exec, tmux, context, { meshId: input.meshId, windowName: `mesh-${safeAgent}-${short}-${input.agentId}`, cwd: input.cwd, command });
     const metadata = [
-        ["@pi_subagent_parent_server_pid", context.serverPid],
-        ["@pi_subagent_parent_session_id", context.sessionId],
-        ["@pi_subagent_parent_window_id", context.windowId],
-        ["@pi_subagent_hub_session_id", target.sessionId],
-        ["@pi_subagent_schema", "1"],
+        ["@pi_mesh_parent_server_pid", context.serverPid],
+        ["@pi_mesh_parent_session_id", context.sessionId],
+        ["@pi_mesh_parent_window_id", context.windowId],
+        ["@pi_mesh_hub_session_id", target.sessionId],
+        ["@pi_mesh_id", input.meshId],
+        ["@pi_mesh_agent_id", input.agentId],
+        ["@pi_mesh_epoch_id", input.epochId],
+        ["@pi_mesh_schema", "1"],
     ] as const;
     try {
         for (const [name, value] of metadata) {
             const result = await exec(tmux, at(target.socket, ["set-option", "-w", "-t", target.windowId, name, value]));
-            if (result.code !== 0) throw new Error(result.stderr.trim() || `Could not set tmux subagent metadata ${name}`);
+            if (result.code !== 0) throw new Error(result.stderr.trim() || `Could not set tmux mesh metadata ${name}`);
         }
     } catch (error) {
-        try { await stopAgentSession(exec, tmux, target); }
-        catch (cleanupError) { throw new AggregateError([error, cleanupError], "Subagent metadata setup and cleanup failed"); }
+        try {
+            const stopped = await stopAgentSession(exec, tmux, target);
+            if (!stopped) { const inspected = await inspectAgentTmux(exec, tmux, target); if (!(inspected.server === "absent" || inspected.server === "mismatch" || inspected.server === "match" && inspected.paneState === "dead")) throw new Error("Could not confirm cleanup of the allocated mesh agent window"); }
+        } catch (cleanupError) { throw new AgentLaunchCleanupError([error, cleanupError], "Mesh metadata setup cleanup remains incomplete"); }
         throw error;
     }
     return target;
 }
-export async function stopOriginHub(exec: CommandExecutor, tmux: string, target: Pick<TmuxAgentReference, "socket" | "serverPid" | "sessionName">): Promise<boolean> {
+export type MeshAgentWindowEvidence = "live" | "absent" | "unknown";
+export async function inspectMeshAgentWindow(exec: CommandExecutor, tmux: string, context: TmuxContext | null, meshId: string, agentId: string): Promise<MeshAgentWindowEvidence> {
+    if (!context) return "unknown";
+    const server = await serverState(exec, tmux, context);
+    if (server === "unavailable") return "unknown";
+    if (server === "absent" || server === "mismatch") return "absent";
+    const result = await exec(tmux, at(context.socket, ["list-windows", "-a", "-F", "#{@pi_mesh_id}\t#{@pi_mesh_agent_id}\t#{pane_dead}\t#{window_name}"]));
+    if (result.code !== 0) return "unknown";
+    let incompleteLaunch = false;
+    for (const line of result.stdout.split("\n")) {
+        const [recordedMeshId, recordedAgentId, paneDead, windowName] = line.split("\t");
+        if (paneDead !== "0") continue;
+        if (recordedMeshId === meshId && recordedAgentId === agentId || windowName?.endsWith(`-${agentId}`)) return "live";
+        if (recordedMeshId === meshId && !recordedAgentId) incompleteLaunch = true;
+    }
+    return incompleteLaunch ? "unknown" : "absent";
+}
+
+export async function stopMeshHub(exec: CommandExecutor, tmux: string, target: Pick<TmuxAgentReference, "socket" | "serverPid" | "sessionName">): Promise<boolean> {
     if (await serverState(exec, tmux, target) !== "match") return false;
     const result = await exec(tmux, at(target.socket, ["kill-session", "-t", target.sessionName]));
     if (result.code !== 0 && !/can't find session|no such session/iu.test(result.stderr)) throw new Error(result.stderr.trim() || `Could not stop tmux hub ${target.sessionName}`);

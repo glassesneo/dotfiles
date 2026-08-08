@@ -94,11 +94,11 @@ export async function openLivePreview(
     const uniqueId = (seams.uniqueId ?? randomUUID)().replaceAll("-", "").slice(0, 20);
     const directory = seams.makeTempDirectory
         ? await seams.makeTempDirectory()
-        : await mkdtemp(join(tmpdir(), "pi-sa-preview-"));
+        : await mkdtemp(join(tmpdir(), "pi-mesh-preview-"));
     if (!seams.makeTempDirectory) await chmod(directory, 0o700);
     const marker = join(directory, "open-full");
     const wrapperSocket = join(directory, "wrapper.sock");
-    const viewName = `pi-sa-view-${uniqueId}`;
+    const viewName = `pi-mesh-view-${uniqueId}`;
     let view: TmuxPreviewView | undefined;
     let wrapperStarted = false;
     let failure: unknown;

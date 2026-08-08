@@ -43,7 +43,7 @@ expect_orchestration_rejection() {
     echo "$name: expected Nix evaluation failure" >&2
     exit 1
   fi
-  if ! grep -Eq 'settled seven-agent|multiple definitions' <<<"$output"; then
+  if ! grep -Eq 'settled seven-agent|role sets and mesh budgets|multiple definitions' <<<"$output"; then
     echo "$name: missing exact-capability diagnostic" >&2
     echo "$output" >&2
     exit 1
@@ -52,6 +52,8 @@ expect_orchestration_rejection() {
 }
 expect_orchestration_rejection critic-mutation 'myconfig.programs.pi-coding-agent.orchestration.agents.critic.tools = f.inputs.nixpkgs.lib.mkForce ["read" "write"];'
 expect_orchestration_rejection generic-child-extension 'myconfig.programs.pi-coding-agent.orchestration.agents.reviewer.childExtensionContributions = f.inputs.nixpkgs.lib.mkForce ["/unexpected.ts"];'
+expect_orchestration_rejection role-set-mutation 'myconfig.programs.pi-coding-agent.orchestration.roleSets."mode:recon" = f.inputs.nixpkgs.lib.mkForce ["explorer" "reviewer" "codex"];'
+expect_orchestration_rejection budget-mutation 'myconfig.programs.pi-coding-agent.orchestration.budgets.maxLiveAgents = f.inputs.nixpkgs.lib.mkForce 13;'
 
 collision_line=$(grep -E 'Pi keybinding conflicts:' <<<"$negative_output" | head -n 1 || true)
 grep -Eq 'commandPalette\.(cancel|moveUp)' <<<"$collision_line"
@@ -69,7 +71,7 @@ let
   navigation = base.extendModules {
     modules = [{
       myconfig.programs.tmux.prefix = "F11";
-      myconfig.programs.pi-coding-agent.keybindings.overrides.subagentNavigation.parent = ["f10"];
+      myconfig.programs.pi-coding-agent.keybindings.overrides.meshNavigation.parent = ["f10"];
     }];
   };
   navigationHomeDir = navigation.config.home.homeDirectory;
@@ -149,6 +151,9 @@ jq -e '
   ((.pi.modes | keys) == ["defaultMode", "modes", "schemaVersion"]) and .pi.modes.schemaVersion == 1 and .pi.modes.defaultMode == "recon" and
   ((.pi.modes.modes | keys) == ["ops", "recon"]) and .pi.modes.modes.recon.allowAllTools == false and .pi.modes.modes.ops.allowAllTools == true and
   (.pi.modes.modes.recon.tools | index("question")) != null and
+  (["mesh_run","mesh_submit","mesh_get","mesh_wait","mesh_stop","mesh_route"] - .pi.modes.modes.recon.tools | length) == 0 and
+   (.pi.modes.modes.recon.tools | index("mesh_enable")) == null and
+  ([.pi.modes.modes[].tools[]? | select(startswith("subagent_"))] | length) == 0 and
   ([.pi.questionDisabled.extensionPaths[] | split("/")[-1]] | index("question.ts")) == null and
   (.pi.questionDisabled.modes.modes.recon.tools | index("question")) == null and
   ((.pi.catalog | keys) == ["agents", "schemaVersion"]) and .pi.catalog.schemaVersion == 1 and
@@ -156,16 +161,28 @@ jq -e '
   (.pi.catalog.agents.reviewer.childExtensionContributions | length) == 1 and (.pi.catalog.agents.reviewer.childExtensionContributions[0] | endswith("/agent_artifact.ts")) and
   ([.pi.catalog.agents.explorer, .pi.catalog.agents.worker, .pi.catalog.agents.validator, .pi.catalog.agents.critic, .pi.catalog.agents["fast-worker"], .pi.catalog.agents.codex] | all(.childExtensionContributions == [])) and
   .pi.catalog.agents.critic.tools == ["read","grep","find","ls","bash"] and .pi.catalog.agents.critic.skillOptIns == [] and
+  .pi.catalog.agents.reviewer.tools == ["read","grep","find","ls","bash","mesh_enable","mesh_run","mesh_submit","mesh_get","mesh_wait","mesh_stop","mesh_route","save_agent_artifact"] and
+  ([.pi.catalog.agents[].tools[]? | select(startswith("subagent_"))] | length) == 0 and
   .pi.catalog.agents["fast-worker"].harness == "cursor-agent" and .pi.catalog.agents["fast-worker"].tools == [] and
-  ((.pi.orchestration | keys) == ["childBridgeExtension", "delegation", "harnesses", "historyViewerExtension", "maxDepth", "natureHandleWords", "orchestrationExtension", "parentNavigationHint", "popupExtension", "returnParentCommand", "schemaVersion", "stateRoot", "tmux"]) and
-  .pi.orchestration.schemaVersion == 1 and .pi.orchestration.delegation == {"mode:recon":["explorer","reviewer","codex"],"mode:ops":["explorer","worker","validator","reviewer","fast-worker","codex"],"agent:reviewer":["critic"]} and
+  ((.pi.orchestration | keys) == ["budgets", "childBridgeExtension", "harnesses", "historyViewerExtension", "natureHandleWords", "orchestrationExtension", "parentNavigationHint", "popupExtension", "returnParentCommand", "roleSets", "schemaVersion", "stateRoot", "tmux"]) and
+  .pi.orchestration.schemaVersion == 1 and
+  .pi.orchestration.roleSets == {"mode:recon":["explorer","reviewer","critic","codex"],"mode:ops":["explorer","worker","validator","reviewer","critic","fast-worker","codex"]} and
+  .pi.orchestration.budgets == {"maxLiveAgents":12,"maxConcurrentTasks":6,"maxTasksPerMesh":256} and
+  (.pi.orchestration | has("maxDepth") | not) and (.pi.orchestration | has("delegation") | not) and
+  (.pi.orchestration.stateRoot | endswith("/pi/orchestration-v2")) and (.pi.orchestration.stateRoot | contains("orchestration-v1") | not) and
   .pi.orchestration.harnesses.codex.adapter == "codex-acp" and (.pi.orchestration.harnesses.codex.command | endswith("/bin/codex-acp")) and
   (.pi.orchestration.harnesses.codex.workerEntrypoint | endswith("/orchestration_external_worker.ts")) and
   .pi.extensionKeybindings.features.historyViewer.exit[0] == "f12" and
+  (.pi.extensionKeybindings.features | has("meshPalette")) and
+  .pi.extensionKeybindings.features.meshNavigation.parent[0] == "u" and
+  (.pi.extensionKeybindings.features | has("subagentPalette") | not) and
+  (.pi.extensionKeybindings.features | has("subagentNavigation") | not) and
   .pi.navigationRuntime.parentNavigationHint == "F11 F10: parent · /parent" and
   (.pi.navigationTmux | contains("bind-key f10")) and
-  (.pi.navigationTmux | contains("pi-subagent-return-parent --binding #{q:client_name} #{q:session_id} #{q:window_id}")) and
-  (.pi.darwinTmux | contains("pi-subagent-return-parent --binding")) and
+  (.pi.navigationTmux | contains("pi-mesh-return-parent --binding #{q:client_name} #{q:session_id} #{q:window_id}")) and
+  (.pi.navigationTmux | contains("#{==:#{@pi_mesh_schema},1}")) and
+  (.pi.navigationTmux | contains("pi-subagent-return-parent") | not) and
+  (.pi.darwinTmux | contains("pi-mesh-return-parent --binding")) and
   .emergency.enabled.optionEnabled == true and
   ([.emergency.enabled.packageInfo[].name | select(. == "pi-emergency")] | length) == 1 and
   ([.emergency.enabled.packageInfo[].name | select(. == "pi-emergency-full")] | length) == 1 and

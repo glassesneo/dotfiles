@@ -1,4 +1,5 @@
 import { access, readFile } from "node:fs/promises";
+import { basename, dirname, resolve } from "node:path";
 import { launchEnvelopeDigest, validateLaunchEnvelope } from "./utilities/agent_types.ts";
 import { agentPaths, claimPendingTask, failAgent, finishTask, markBridgeReady, readAgentSnapshot, readTaskCancellation } from "./utilities/orchestration_store.ts";
 import { emptyUsage, isTerminalAgent } from "./utilities/orchestration_types.ts";
@@ -12,7 +13,7 @@ function errorText(error: unknown): string { return error instanceof Error ? err
 
 class TerminalView {
     constructor(agentId: string, agent: string, harness: string) {
-        process.stdout.write(`\u001b[2J\u001b[HExternal subagent\nagent: ${agentId}\nagent: ${agent}\nharness: ${harness}\n\n`);
+        process.stdout.write(`\u001b[2J\u001b[HExternal mesh agent\nagent ID: ${agentId}\nrole: ${agent}\nharness: ${harness}\n\n`);
     }
     task(summary: string): void { process.stdout.write(`\n━━ task: ${summary} ━━\nstate: running\n`); }
     event(event: ExternalWorkerEvent): void {
@@ -22,8 +23,19 @@ class TerminalView {
     outcome(outcome: string, detail = ""): void { process.stdout.write(`\nstate: ${outcome}${detail ? ` — ${detail}` : ""}\n`); }
 }
 
-async function waitForAgent(stateRoot: string, agentId: string, wait: (ms: number) => Promise<void>): Promise<void> {
-    const path = agentPaths(stateRoot, agentId).agent;
+function stateRootFromLaunchPaths(meshId: string, agentId: string, agentDirectory: string, taskPath: string): string {
+    const directory = resolve(agentDirectory);
+    const agentsDirectory = dirname(directory);
+    const meshDirectory = dirname(agentsDirectory);
+    const meshesDirectory = dirname(meshDirectory);
+    if (basename(directory) !== agentId || basename(agentsDirectory) !== "agents" || basename(meshDirectory) !== meshId || basename(meshesDirectory) !== "meshes") throw new Error("PI_MESH_AGENT_DIR does not match mesh launch identity");
+    const resolvedTask = resolve(taskPath);
+    if (dirname(dirname(resolvedTask)) !== meshDirectory || basename(dirname(resolvedTask)) !== "tasks") throw new Error("PI_MESH_TASK_PATH is not mesh-global for this mesh");
+    return dirname(meshesDirectory);
+}
+
+async function waitForAgent(stateRoot: string, meshId: string, agentId: string, wait: (ms: number) => Promise<void>): Promise<void> {
+    const path = agentPaths(stateRoot, meshId, agentId).agent;
     const deadline = Date.now() + 5000;
     while (Date.now() < deadline) {
         if (await access(path).then(() => true).catch(() => false)) return;
@@ -33,14 +45,19 @@ async function waitForAgent(stateRoot: string, agentId: string, wait: (ms: numbe
 }
 
 export async function runExternalWorker(env: NodeJS.ProcessEnv = process.env, dependencies: WorkerDependencies = {}): Promise<void> {
-    const agentId = requireEnv(env, "PI_SUBAGENT_AGENT_ID");
-    const stateRoot = requireEnv(env, "PI_SUBAGENT_STATE_ROOT");
-    const config = validateExternalWorkerConfig(JSON.parse(requireEnv(env, "PI_SUBAGENT_EXTERNAL_CONFIG")));
+    const meshId = requireEnv(env, "PI_MESH_ID");
+    const agentId = requireEnv(env, "PI_MESH_AGENT_ID");
+    const agentDirectory = requireEnv(env, "PI_MESH_AGENT_DIR");
+    const epochId = requireEnv(env, "PI_MESH_EPOCH_ID");
+    const taskPath = requireEnv(env, "PI_MESH_TASK_PATH");
+    const stateRoot = stateRootFromLaunchPaths(meshId, agentId, agentDirectory, taskPath);
+    const config = validateExternalWorkerConfig(JSON.parse(requireEnv(env, "PI_MESH_EXTERNAL_CONFIG")));
     const envelope = validateLaunchEnvelope(JSON.parse(await readFile(requireEnv(env, "PI_AGENT_RESOLVED_AGENT"), "utf8")));
+    if (envelope.meshId !== meshId || envelope.agentId !== agentId || envelope.epochId !== epochId) throw new Error("External worker metadata does not match the immutable epoch snapshot");
     const agent = envelope.identity.slice(6); const definition = envelope.self;
     const route = resolveExternalDriver(config, definition);
     const wait = dependencies.sleep ?? sleep;
-    await waitForAgent(stateRoot, agentId, wait);
+    await waitForAgent(stateRoot, meshId, agentId, wait);
     const view = new TerminalView(agentId, agent, route.display);
     const event = (workerEvent: ExternalWorkerEvent) => view.event(workerEvent);
     const driver = dependencies.createDriver?.(config, event) ?? route.create(event);
@@ -55,8 +72,8 @@ export async function runExternalWorker(env: NodeJS.ProcessEnv = process.env, de
             stopping = true;
             parentTerminalOutcome = preserveTerminalOutcome;
             await driver.cancel().catch(() => {});
-            if (activeTaskId) await finishTask(stateRoot, agentId, activeTaskId, { outcome: preserveTerminalOutcome ?? "stopped", usage: emptyUsage(), turns: 1, error: reason }).catch(() => {});
-            if (!preserveTerminalOutcome) await failAgent(stateRoot, agentId, reason, true, { overrideTerminalReason: true }).catch(() => {});
+            if (activeTaskId) await finishTask(stateRoot, meshId, activeTaskId, { outcome: preserveTerminalOutcome ?? "stopped", usage: emptyUsage(), turns: 1, error: reason }).catch(() => {});
+            if (!preserveTerminalOutcome) await failAgent(stateRoot, meshId, agentId, reason, true, { overrideTerminalReason: true }).catch(() => {});
             await shutdown();
         })();
         return stopPromise;
@@ -68,13 +85,13 @@ export async function runExternalWorker(env: NodeJS.ProcessEnv = process.env, de
     try {
         await driver.start();
         const driverClosed = driver.waitForClose().then(driverError => ({ driverError }));
-        await markBridgeReady(agentPaths(stateRoot, agentId), launchEnvelopeDigest(envelope));
+        await markBridgeReady(stateRoot, meshId, agentId, launchEnvelopeDigest(envelope));
         view.event({ type: "state", text: "ready" });
         while (!stopping) {
-            const snapshot = await readAgentSnapshot(stateRoot, agentId);
+            const snapshot = await readAgentSnapshot(stateRoot, meshId, agentId);
             if (isTerminalAgent(snapshot.status.state)) { await stop(snapshot.status.exitReason ?? "Stopped by parent", snapshot.status.state === "failed" ? "failed" : "stopped"); break; }
             if (snapshot.status.state === "stopping") { await stop(snapshot.status.exitReason ?? "Stopped by parent"); break; }
-            const task = await claimPendingTask(stateRoot, agentId);
+            const task = await claimPendingTask(stateRoot, meshId, agentId);
             if (!task) {
                 const closed = await Promise.race([wait(100).then(() => undefined), driverClosed]);
                 if (closed) throw closed.driverError;
@@ -91,7 +108,7 @@ export async function runExternalWorker(env: NodeJS.ProcessEnv = process.env, de
             const monitorStop = async (): Promise<void> => {
                 while (!turnSettled) {
                     await wait(50);
-                    const status = (await readAgentSnapshot(stateRoot, agentId)).status;
+                    const status = (await readAgentSnapshot(stateRoot, meshId, agentId)).status;
                     if (isTerminalAgent(status.state)) {
                         await stop(status.exitReason ?? "Stopped by parent", status.state === "failed" ? "failed" : "stopped");
                         throw new Error(status.exitReason ?? "Stopped by parent");
@@ -100,7 +117,7 @@ export async function runExternalWorker(env: NodeJS.ProcessEnv = process.env, de
                         await stop(status.exitReason ?? "Stopped by parent");
                         throw new Error(status.exitReason ?? "Stopped by parent");
                     }
-                    if (await readTaskCancellation(stateRoot, agentId, activeTaskId!)) {
+                    if (await readTaskCancellation(stateRoot, meshId, activeTaskId!)) {
                         taskCancelled = true;
                         await driver.cancel();
                         throw new Error("Task cancelled by parent");
@@ -117,7 +134,7 @@ export async function runExternalWorker(env: NodeJS.ProcessEnv = process.env, de
                 if (stopping) continue;
                 if (!result) throw new Error("External task monitor settled without a task result");
                 if ("driverError" in result) { driverFailed = true; throw result.driverError; }
-                await finishTask(stateRoot, agentId, activeTaskId, { outcome: "succeeded", output: result.output, usage: emptyUsage(), turns: 1 });
+                await finishTask(stateRoot, meshId, activeTaskId, { outcome: "succeeded", output: result.output, usage: emptyUsage(), turns: 1 });
                 view.outcome("succeeded", result.stopReason);
             } catch (error) {
                 if (stopPromise) await stopPromise;
@@ -125,10 +142,10 @@ export async function runExternalWorker(env: NodeJS.ProcessEnv = process.env, de
                 if (taskCancelled) await taskPromise.catch(() => undefined);
                 const outcome = parentTerminalOutcome ?? (stopping || taskCancelled ? "stopped" : "failed");
                 const output = taskCancelled ? driver.partialOutput?.() ?? "" : "";
-                await finishTask(stateRoot, agentId, activeTaskId, { outcome, output, usage: emptyUsage(), turns: 1, error: message });
+                await finishTask(stateRoot, meshId, activeTaskId, { outcome, output, usage: emptyUsage(), turns: 1, error: message });
                 view.outcome(outcome, message);
                 if (!stopping && (driverFailed || driver.fatalError())) {
-                    await failAgent(stateRoot, agentId, message, false);
+                    await failAgent(stateRoot, meshId, agentId, message, false);
                     stopping = true;
                 }
             } finally { turnSettled = true; activeTaskId = undefined; }
@@ -137,7 +154,7 @@ export async function runExternalWorker(env: NodeJS.ProcessEnv = process.env, de
         if (stopping) return;
         const message = errorText(error);
         view.outcome("failed", message);
-        await failAgent(stateRoot, agentId, message, false);
+        await failAgent(stateRoot, meshId, agentId, message, false);
         throw error;
     } finally {
         await shutdown();

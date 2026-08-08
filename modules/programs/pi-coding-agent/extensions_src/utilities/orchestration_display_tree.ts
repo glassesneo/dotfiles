@@ -53,7 +53,7 @@ export const WAIT_OUTCOME_BADGES = {
     timeout: { symbol: "◷", label: "TIMEOUT", role: "warning" as ThemeColor },
 } as const;
 
-export interface SubagentDisplayNode {
+export interface MeshDisplayNode {
     agentId: string;
     snapshot: AgentSnapshot;
     handle: string;
@@ -61,12 +61,12 @@ export interface SubagentDisplayNode {
     promoted: boolean;
     viaHandle?: string;
     orphaned: boolean;
-    children: SubagentDisplayNode[];
+    children: MeshDisplayNode[];
 }
 
-export interface SubagentDisplayTree {
-    roots: SubagentDisplayNode[];
-    byId: Map<string, SubagentDisplayNode>;
+export interface MeshDisplayTree {
+    roots: MeshDisplayNode[];
+    byId: Map<string, MeshDisplayNode>;
     handles: Map<string, string>;
 }
 
@@ -85,7 +85,7 @@ function hexSource(agentId: string): string {
     return `${hex}${hashString(agentId).toString(16).padStart(8, "0")}`;
 }
 
-/** Deterministic unique Nature-xxxx handles for one origin record set. */
+/** Deterministic unique Nature-xxxx handles for one mesh record set. */
 export function assignNatureHandles(
     agentIds: readonly string[],
     words: readonly string[] = NATURE_HANDLE_WORDS,
@@ -141,7 +141,7 @@ function createdAtMs(snapshot: AgentSnapshot): number {
     return Number.isFinite(value) ? value : 0;
 }
 
-function sortByCreatedAt(left: SubagentDisplayNode, right: SubagentDisplayNode): number {
+function sortByCreatedAt(left: MeshDisplayNode, right: MeshDisplayNode): number {
     const delta = createdAtMs(left.snapshot) - createdAtMs(right.snapshot);
     if (delta !== 0) return delta;
     return left.agentId < right.agentId ? -1 : left.agentId > right.agentId ? 1 : 0;
@@ -165,7 +165,7 @@ function nearestActiveAncestorId(agentId: string, byId: Map<string, AgentSnapsho
 /** Break display-parent cycles by promoting the lexicographically smallest id to an orphaned root. */
 export function breakDisplayParentCycles(
     displayParentIds: Map<string, string | undefined>,
-    nodes: Map<string, SubagentDisplayNode>,
+    nodes: Map<string, MeshDisplayNode>,
 ): void {
     for (const startId of [...displayParentIds.keys()].sort()) {
         const seen: string[] = [];
@@ -195,13 +195,13 @@ export function breakDisplayParentCycles(
  * Terminal middle agents remain as inline ghosts; active descendants promote to the
  * nearest active ancestor and record viaHandle for the immediate ghost parent.
  */
-export function buildSubagentDisplayTree(
+export function buildMeshDisplayTree(
     snapshots: readonly AgentSnapshot[],
     words: readonly string[] = NATURE_HANDLE_WORDS,
-): SubagentDisplayTree {
+): MeshDisplayTree {
     const bySnapshot = new Map(snapshots.map(snapshot => [snapshot.agent.agentId, snapshot]));
     const handles = assignNatureHandles([...bySnapshot.keys()], words);
-    const nodes = new Map<string, SubagentDisplayNode>();
+    const nodes = new Map<string, MeshDisplayNode>();
     const displayParentIds = new Map<string, string | undefined>();
 
     for (const snapshot of snapshots) {
@@ -251,7 +251,7 @@ export function buildSubagentDisplayTree(
 
     breakDisplayParentCycles(displayParentIds, nodes);
 
-    const roots: SubagentDisplayNode[] = [];
+    const roots: MeshDisplayNode[] = [];
     for (const node of nodes.values()) {
         const parentId = displayParentIds.get(node.agentId);
         const parent = parentId ? nodes.get(parentId) : undefined;
@@ -259,7 +259,7 @@ export function buildSubagentDisplayTree(
         else roots.push(node);
     }
 
-    const sortRecursive = (list: SubagentDisplayNode[]): void => {
+    const sortRecursive = (list: MeshDisplayNode[]): void => {
         list.sort(sortByCreatedAt);
         for (const child of list) sortRecursive(child.children);
     };
@@ -268,9 +268,9 @@ export function buildSubagentDisplayTree(
     return { roots, byId: nodes, handles };
 }
 
-export function flattenVisibleDisplayNodes(roots: readonly SubagentDisplayNode[], collapsed: ReadonlySet<string>): SubagentDisplayNode[] {
-    const visible: SubagentDisplayNode[] = [];
-    const walk = (nodes: readonly SubagentDisplayNode[]): void => {
+export function flattenVisibleDisplayNodes(roots: readonly MeshDisplayNode[], collapsed: ReadonlySet<string>): MeshDisplayNode[] {
+    const visible: MeshDisplayNode[] = [];
+    const walk = (nodes: readonly MeshDisplayNode[]): void => {
         for (const node of nodes) {
             visible.push(node);
             if (node.children.length > 0 && !collapsed.has(node.agentId)) walk(node.children);
@@ -281,7 +281,7 @@ export function flattenVisibleDisplayNodes(roots: readonly SubagentDisplayNode[]
 }
 
 /** Build connector prefixes for a visible preorder list. */
-export function treeConnectors(visible: readonly SubagentDisplayNode[], byId: Map<string, SubagentDisplayNode>): Map<string, string> {
+export function treeConnectors(visible: readonly MeshDisplayNode[], byId: Map<string, MeshDisplayNode>): Map<string, string> {
     const result = new Map<string, string>();
     const parentOf = new Map<string, string>();
     for (const node of byId.values()) {
@@ -313,7 +313,7 @@ export function treeConnectors(visible: readonly SubagentDisplayNode[], byId: Ma
 
 export function retainSelection(
     previousId: string | undefined,
-    visible: readonly SubagentDisplayNode[],
+    visible: readonly MeshDisplayNode[],
     previousVisibleIds: readonly string[],
 ): string | undefined {
     if (visible.length === 0) return undefined;

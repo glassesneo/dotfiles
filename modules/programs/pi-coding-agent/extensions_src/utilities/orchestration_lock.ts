@@ -89,8 +89,8 @@ async function tryReclaim(lockDirectory: string): Promise<boolean> {
     }
 }
 
-/** Serialize one run's cross-process lifecycle updates without external dependencies. */
-export async function withRunLock<T>(runDirectory: string, operation: () => Promise<T>): Promise<T> {
+/** Low-level cross-process lock. Lifecycle code should use the mesh helpers below. */
+async function withDirectoryLock<T>(runDirectory: string, operation: () => Promise<T>): Promise<T> {
     const lockDirectory = join(runDirectory, ".lock");
     const owner: LockOwner = { pid: process.pid, acquiredAt: new Date().toISOString(), token: randomUUID() };
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
@@ -125,5 +125,25 @@ export async function withRunLock<T>(runDirectory: string, operation: () => Prom
         if (!operationSucceeded) throw operationError;
         return operationResult;
     }
-    throw new Error(`Timed out acquiring subagent run lock: ${runDirectory}`);
+    throw new Error(`Timed out acquiring orchestration lock: ${runDirectory}`);
+}
+
+function assertUuid(id: string, label: string): void {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(id)) throw new Error(`Invalid ${label}: ${id}`);
+}
+
+export function meshDirectory(stateRoot: string, meshId: string): string {
+    assertUuid(meshId, "mesh ID");
+    return join(stateRoot, "meshes", meshId);
+}
+
+/** Serialize all mesh-wide accounting and lifecycle mutations. */
+export function withMeshLock<T>(stateRoot: string, meshId: string, operation: () => Promise<T>): Promise<T> {
+    return withDirectoryLock(meshDirectory(stateRoot, meshId), operation);
+}
+
+/** Enforce the only valid nested lock order: mesh, then agent. */
+export function withMeshAgentLock<T>(stateRoot: string, meshId: string, agentId: string, operation: () => Promise<T>): Promise<T> {
+    assertUuid(agentId, "agent ID");
+    return withMeshLock(stateRoot, meshId, () => withDirectoryLock(join(meshDirectory(stateRoot, meshId), "agents", agentId), operation));
 }

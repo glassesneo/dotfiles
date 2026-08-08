@@ -4,10 +4,10 @@ import type { CommandPaletteDisposition } from "./command_palette_contributions.
 import { paletteHelp, paletteKeyAction, type ResolvedPaletteKeymap } from "./command_palette_keymap.ts";
 import { actionHint } from "./extension_keybindings.ts";
 import { formatPaletteBreadcrumb, renderFramedLines } from "./command_palette_tui.ts";
-import { historyAvailability, openSubagentHistory } from "./orchestration_history.ts";
+import { historyAvailability, openMeshHistory } from "./orchestration_history.ts";
 import {
     AGENT_STATE_BADGES,
-    buildSubagentDisplayTree,
+    buildMeshDisplayTree,
     flattenVisibleDisplayNodes,
     formatStateBadge,
     formatTaskStateBadge,
@@ -15,19 +15,18 @@ import {
     retainSelection,
     TASK_STATE_BADGES,
     treeConnectors,
-    type SubagentDisplayNode,
-    type SubagentDisplayTree,
+    type MeshDisplayNode,
+    type MeshDisplayTree,
 } from "./orchestration_display_tree.ts";
-import { OriginAgentDiscovery, stopSubagentAgent } from "./orchestration_management.ts";
 import { openLivePreview, type LivePreviewDisposition } from "./orchestration_preview.ts";
 import { openAgentWindow, probeTmux, unlinkAgentWindow, type CommandExecutor } from "./orchestration_tmux.ts";
 import { isTerminalAgent, isTerminalTask, promptSummary, type AgentSnapshot, type TaskState } from "./orchestration_types.ts";
 
-export interface SubagentPaletteDependencies {
-    stateRoot: string;
-    originSessionId: string;
-    authorizedAgents: readonly string[];
-    callerIdentity: string;
+export interface MeshIdentity {
+    meshId: string;
+}
+
+export interface MeshPaletteDependencies extends MeshIdentity {
     exec: CommandExecutor;
     tmux: string;
     historyViewerExtension: string;
@@ -37,15 +36,16 @@ export interface SubagentPaletteDependencies {
     env?: NodeJS.ProcessEnv;
     setTimeout?: typeof setTimeout;
     clearTimeout?: typeof clearTimeout;
+    /** Mesh-wide data and authority boundaries supplied by the orchestration owner. */
+    discover: (identity: MeshIdentity) => Promise<{ agents: AgentSnapshot[]; malformedCount: number }>;
+    stopAgent: (request: MeshIdentity & { agentId: string }) => Promise<AgentSnapshot>;
     /** Optional test/harness overrides for open paths. */
-    openHistory?: typeof openSubagentHistory;
+    openHistory?: typeof openMeshHistory;
     openLiveWindow?: typeof openAgentWindow;
     previewLive?: (exec: CommandExecutor, tmux: string, context: NonNullable<Awaited<ReturnType<typeof probeTmux>>>, target: AgentSnapshot["agent"]["tmux"], title: string, seams?: Parameters<typeof openLivePreview>[5]) => Promise<LivePreviewDisposition>;
-    stopAgent?: typeof stopSubagentAgent;
-    discover?: () => Promise<{ agents: AgentSnapshot[]; malformedCount: number }>;
 }
 
-export type SubagentPaletteResult = CommandPaletteDisposition;
+export type MeshPaletteResult = CommandPaletteDisposition;
 
 /** Framed-body inner width at which the selected-agent detail pane appears. */
 export const DETAIL_BREAKPOINT = 100;
@@ -273,14 +273,14 @@ export function composeDetailSections(options: {
     return out.slice(0, height);
 }
 
-export class SubagentPaletteComponent implements Component, Focusable {
+export class MeshAgentsPaletteComponent implements Component, Focusable {
     readonly #tui: TUI;
     readonly #theme: Theme;
     readonly #ui: Pick<ExtensionUIContext, "confirm">;
     readonly #keymap: ResolvedPaletteKeymap;
-    readonly #deps: SubagentPaletteDependencies;
-    readonly #done: (value: SubagentPaletteResult) => void;
-    #tree: SubagentDisplayTree = { roots: [], byId: new Map(), handles: new Map() };
+    readonly #deps: MeshPaletteDependencies;
+    readonly #done: (value: MeshPaletteResult) => void;
+    #tree: MeshDisplayTree = { roots: [], byId: new Map(), handles: new Map() };
     #collapsed = new Set<string>();
     #selectedAgentId?: string;
     #previousVisibleIds: string[] = [];
@@ -295,7 +295,7 @@ export class SubagentPaletteComponent implements Component, Focusable {
     #acting = false;
     #cancelRequested = false;
     #disposed = false;
-    #closeDisposition: SubagentPaletteResult = "return";
+    #closeDisposition: MeshPaletteResult = "return";
     #cachedWidth?: number;
     #cachedLines?: string[];
 
@@ -304,8 +304,8 @@ export class SubagentPaletteComponent implements Component, Focusable {
         theme: Theme;
         ui: Pick<ExtensionUIContext, "confirm">;
         keymap: ResolvedPaletteKeymap;
-        deps: SubagentPaletteDependencies;
-        done: (value: SubagentPaletteResult) => void;
+        deps: MeshPaletteDependencies;
+        done: (value: MeshPaletteResult) => void;
     }) {
         this.#tui = options.tui;
         this.#theme = options.theme;
@@ -323,7 +323,7 @@ export class SubagentPaletteComponent implements Component, Focusable {
     selected(): AgentSnapshot | undefined {
         return this.#selectedAgentId ? this.#tree.byId.get(this.#selectedAgentId)?.snapshot : undefined;
     }
-    visibleNodes(): SubagentDisplayNode[] {
+    visibleNodes(): MeshDisplayNode[] {
         return flattenVisibleDisplayNodes(this.#tree.roots, this.#collapsed);
     }
     /** Test/harness seam: replace the display tree without tmux reconciliation. */
@@ -340,7 +340,7 @@ export class SubagentPaletteComponent implements Component, Focusable {
         return true;
     }
 
-    close(disposition: SubagentPaletteResult = this.#closeDisposition) {
+    close(disposition: MeshPaletteResult = this.#closeDisposition) {
         if (this.#disposed) return;
         this.#done(disposition);
     }
@@ -362,7 +362,7 @@ export class SubagentPaletteComponent implements Component, Focusable {
 
     #applySnapshots(agents: readonly AgentSnapshot[], malformedCount: number): void {
         const previousVisible = this.visibleNodes().map(node => node.agentId);
-        this.#tree = buildSubagentDisplayTree(agents, this.#deps.natureHandleWords);
+        this.#tree = buildMeshDisplayTree(agents, this.#deps.natureHandleWords);
         const known = new Set(this.#tree.byId.keys());
         this.#collapsed = new Set([...this.#collapsed].filter(id => known.has(id) && (this.#tree.byId.get(id)?.children.length ?? 0) > 0));
         const visible = this.visibleNodes();
@@ -401,9 +401,7 @@ export class SubagentPaletteComponent implements Component, Focusable {
             do {
                 this.#refreshQueued = false;
                 try {
-                    const found = this.#deps.discover
-                        ? await this.#deps.discover()
-                        : await new OriginAgentDiscovery(this.#deps).refresh();
+                    const found = await this.#deps.discover({ meshId: this.#deps.meshId });
                     if (this.#disposed) return false;
                     this.#applySnapshots(found.agents, found.malformedCount);
                     this.#lastRefreshApplied = true;
@@ -503,7 +501,7 @@ export class SubagentPaletteComponent implements Component, Focusable {
                     this.#setStatus("dim", `${this.#tree.byId.size} agent session(s)`);
                     return;
                 }
-                const stopped = await (this.#deps.stopAgent ?? stopSubagentAgent)({ ...this.#deps, agentId: selected.agent.agentId });
+                const stopped = await this.#deps.stopAgent({ meshId: this.#deps.meshId, agentId: selected.agent.agentId });
                 // Apply Stop immediately, then reload. Re-assert after reload so a raced stale poll cannot revive the node.
                 this.#upsertSnapshot(stopped);
                 const refreshed = await this.#reloadAfterMutation();
@@ -526,8 +524,8 @@ export class SubagentPaletteComponent implements Component, Focusable {
             if (!context) throw new Error("Current Pi is not attached to a usable tmux client");
             if (kind === "open") {
                 if (isTerminalAgent(selected.status.state)) {
-                    await (this.#deps.openHistory ?? openSubagentHistory)(this.#deps.exec, this.#deps, context, selected);
-                    // History is not live tmux Open: dismiss only the subagent palette and restore root.
+                    await (this.#deps.openHistory ?? openMeshHistory)(this.#deps.exec, this.#deps, context, selected);
+                    // History is not live tmux Open: dismiss only the Mesh Agents palette and restore root.
                     this.close("return");
                     return;
                 }
@@ -601,7 +599,7 @@ export class SubagentPaletteComponent implements Component, Focusable {
         this.#tui.requestRender();
     }
 
-    #nodeLine(node: SubagentDisplayNode, selected: boolean, connector: string, width: number): string {
+    #nodeLine(node: MeshDisplayNode, selected: boolean, connector: string, width: number): string {
         const badge = AGENT_STATE_BADGES[node.snapshot.status.state];
         const expand = node.children.length > 0 ? (this.#collapsed.has(node.agentId) ? "▸ " : "▾ ") : "  ";
         const marker = selected ? "> " : "  ";
@@ -625,9 +623,9 @@ export class SubagentPaletteComponent implements Component, Focusable {
         return padToWidth(truncateToWidth(this.#theme.bg("selectedBg", padded), width, ""), width);
     }
 
-    #listViewport(visible: readonly SubagentDisplayNode[], connectors: Map<string, string>, width: number, rows: number): string[] {
+    #listViewport(visible: readonly MeshDisplayNode[], connectors: Map<string, string>, width: number, rows: number): string[] {
         if (visible.length === 0) {
-            const lines = [padToWidth(truncateToWidth(this.#theme.fg("warning", " No agents for this origin session."), width, ""), width)];
+            const lines = [padToWidth(truncateToWidth(this.#theme.fg("warning", " No agents in this mesh."), width, ""), width)];
             while (lines.length < rows) lines.push(padToWidth("", width));
             return lines.slice(0, rows);
         }
@@ -672,7 +670,7 @@ export class SubagentPaletteComponent implements Component, Focusable {
         });
     }
 
-    #viewport(visible: readonly SubagentDisplayNode[], connectors: Map<string, string>, width: number, viewportRows: number): string[] {
+    #viewport(visible: readonly MeshDisplayNode[], connectors: Map<string, string>, width: number, viewportRows: number): string[] {
         const rows = Math.max(1, viewportRows);
         const columns = splitPaletteColumns(width);
         const list = this.#listViewport(visible, connectors, columns.listWidth, rows);
@@ -710,7 +708,7 @@ export class SubagentPaletteComponent implements Component, Focusable {
         const lines = renderFramedLines({
             theme: this.#theme,
             width: w,
-            title: formatPaletteBreadcrumb(["Command Palette", "Subagent Sessions"]),
+            title: formatPaletteBreadcrumb(["Command Palette", "Mesh Agents"]),
             body,
         });
         this.#cachedLines = lines.map(line => truncateToWidth(line, w, ""));

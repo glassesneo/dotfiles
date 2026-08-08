@@ -19,6 +19,23 @@ export function validateActiveModeEvent(value: unknown): ActiveModeEvent {
     const config = validateModeConfig({ schemaVersion: 1, defaultMode: raw.name, modes: { [raw.name]: raw.mode } });
     return { schemaVersion: 1, name: raw.name, mode: config.modes[raw.name]!, reason: raw.reason };
 }
+export interface ActiveModeBarrier {
+    enqueue(event: ActiveModeEvent): void;
+    wait(): Promise<void>;
+}
+
+export function createActiveModeBarrier(handler: (event: ActiveModeEvent) => Promise<void>, onError: (error: Error) => void = () => {}): ActiveModeBarrier {
+    let pending = Promise.resolve();
+    return {
+        enqueue(event) {
+            pending = pending.then(() => handler(event)).catch(error => {
+                onError(error instanceof Error ? error : new Error(String(error)));
+            });
+        },
+        wait() { return pending; },
+    };
+}
+
 export function onActiveMode(pi: ExtensionAPI, handler: (event: ActiveModeEvent) => void, onError: (error: Error) => void = () => {}): void {
     pi.events.on(ACTIVE_MODE_EVENT, value => { try { handler(validateActiveModeEvent(value)); } catch (error) { onError(error instanceof Error ? error : new Error(String(error))); } });
 }

@@ -25,14 +25,14 @@ export interface HistoryViewerDependencies {
     clearInterval?: typeof clearInterval;
     writeReady?: (path: string) => Promise<void>;
 }
-export function registerSubagentHistoryViewer(pi: ExtensionAPI, env: NodeJS.ProcessEnv = process.env, dependencies: HistoryViewerDependencies = {}): boolean {
+export function registerMeshHistoryViewer(pi: ExtensionAPI, env: NodeJS.ProcessEnv = process.env, dependencies: HistoryViewerDependencies = {}): boolean {
     loadFeatureKeybindings("historyViewer");
-    const tmux = env.PI_SUBAGENT_VIEWER_TMUX;
-    const socket = env.PI_SUBAGENT_VIEWER_SOCKET;
-    let windowId = env.PI_SUBAGENT_VIEWER_WINDOW_ID;
+    const tmux = env.PI_MESH_VIEWER_TMUX;
+    const socket = env.PI_MESH_VIEWER_SOCKET;
+    let windowId = env.PI_MESH_VIEWER_WINDOW_ID;
     const paneId = env.TMUX_PANE;
-    const temporaryDirectory = env.PI_SUBAGENT_VIEWER_TEMP_DIR;
-    const readyFile = env.PI_SUBAGENT_VIEWER_READY_FILE;
+    const temporaryDirectory = env.PI_MESH_VIEWER_TEMP_DIR;
+    const readyFile = env.PI_MESH_VIEWER_READY_FILE;
     if (!tmux || !socket || (!windowId && !paneId) || !temporaryDirectory || !readyFile) return false;
     let timer: NodeJS.Timeout | undefined;
     let seen = false;
@@ -72,4 +72,4 @@ export function registerSubagentHistoryViewer(pi: ExtensionAPI, env: NodeJS.Proc
     return true;
 }
 
-export default registerSubagentHistoryViewer;
+export default registerMeshHistoryViewer;

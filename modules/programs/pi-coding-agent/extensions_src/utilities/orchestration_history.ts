@@ -32,12 +32,17 @@ async function waitUntilViewerReady(exec: CommandExecutor, tmux: string, readyFi
     }
     throw new Error("History viewer readiness timed out");
 }
-export async function openSubagentHistory(exec: CommandExecutor, config: { tmux: string; historyViewerExtension: string; piCommand: string }, context: TmuxContext, snapshot: AgentSnapshot, dependencies: HistoryLaunchDependencies = {}): Promise<void> {
+function meshIdentity(snapshot: AgentSnapshot): { meshId: string } {
+    if (snapshot.agent.meshId.length === 0) throw new Error("Agent mesh identity is unavailable");
+    return { meshId: snapshot.agent.meshId };
+}
+
+export async function openMeshHistory(exec: CommandExecutor, config: { tmux: string; historyViewerExtension: string; piCommand: string }, context: TmuxContext, snapshot: AgentSnapshot, dependencies: HistoryLaunchDependencies = {}): Promise<void> {
     const availability = historyAvailability(snapshot);
     if (!availability.available) throw new Error(availability.reason);
     const canonical = snapshot.status.childSessionFile!;
     if (await sessionId(canonical) !== snapshot.status.childSessionId) throw new Error("Child session identity does not match its canonical file");
-    const temporaryDirectory = await mkdtemp(join(tmpdir(), "pi-subagent-history-"));
+    const temporaryDirectory = await mkdtemp(join(tmpdir(), "pi-mesh-history-"));
     await chmod(temporaryDirectory, 0o700);
     const copy = join(temporaryDirectory, basename(canonical));
     const readyFile = join(temporaryDirectory, ".viewer-ready");
@@ -47,14 +52,14 @@ export async function openSubagentHistory(exec: CommandExecutor, config: { tmux:
         await chmod(copy, 0o600);
         const short = snapshot.agent.agentId.slice(0, 8);
         const env = {
-            PI_SUBAGENT_VIEWER_TMUX: config.tmux,
-            PI_SUBAGENT_VIEWER_SOCKET: context.socket,
-            PI_SUBAGENT_VIEWER_TEMP_DIR: temporaryDirectory,
-            PI_SUBAGENT_VIEWER_READY_FILE: readyFile,
+            PI_MESH_VIEWER_TMUX: config.tmux,
+            PI_MESH_VIEWER_SOCKET: context.socket,
+            PI_MESH_VIEWER_TEMP_DIR: temporaryDirectory,
+            PI_MESH_VIEWER_READY_FILE: readyFile,
         };
         const baseArgs = ["--no-extensions", "-e", config.historyViewerExtension, "--no-tools", "--session", copy];
         const command = ["env", ...Object.entries(env).map(([key, value]) => `${key}=${value}`), config.piCommand, ...baseArgs].map(quote).join(" ");
-        window = await launchHubWindow(exec, config.tmux, context, { originSessionId: snapshot.agent.originSessionId, windowName: `history-${short}-${randomUUID()}`, cwd: snapshot.agent.cwd, command, remainOnExit: false });
+        window = await launchHubWindow(exec, config.tmux, context, { ...meshIdentity(snapshot), windowName: `history-${short}-${randomUUID()}`, cwd: snapshot.agent.cwd, command, remainOnExit: false });
         await openAgentWindow(exec, config.tmux, context, window);
         await waitUntilViewerReady(exec, config.tmux, readyFile, window, dependencies);
     } catch (error) {

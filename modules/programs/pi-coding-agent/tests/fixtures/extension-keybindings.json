@@ -3,7 +3,7 @@
   "features": {
     "commandPalette": {"open":["ctrl+shift+p"],"moveUp":["ctrl+p"],"moveDown":["ctrl+n"],"collapse":["left"],"expand":["right"],"confirm":["enter"],"cancel":["escape","ctrl+c"],"refresh":[],"stop":["x"]},
     "question": {"common.next-question":["ctrl+f"],"common.previous-question":["ctrl+b"],"common.back":["escape"],"common.cancel":["ctrl+c"],"choice.accept":["enter"],"choice.move-up":["ctrl+p"],"choice.move-down":["ctrl+n"],"choice.toggle":["space"],"choice.select-and-note":["e"],"choice.write-in":["shift+enter"],"editor.clear":["ctrl+c"],"review.accept":["enter"],"review.move-up":["ctrl+p"],"review.move-down":["ctrl+n"],"text.accept":["enter"],"text.newline":["shift+enter"]},
-    "subagentPalette": {"moveUp":["ctrl+p"],"moveDown":["ctrl+n"],"collapse":["left"],"expand":["right"],"confirm":["enter"],"cancel":["escape","ctrl+c"],"refresh":[],"stop":["x"],"preview":["space"],"unlink":[]},
+    "meshPalette": {"moveUp":["ctrl+p"],"moveDown":["ctrl+n"],"collapse":["left"],"expand":["right"],"confirm":["enter"],"cancel":["escape","ctrl+c"],"refresh":[],"stop":["x"],"preview":["space"],"unlink":[]},
     "historyViewer": {"exit":["ctrl+d"]},
     "interactionPolicy": {"clear":["ctrl+c"],"interrupt":["escape"]},
     "tmuxPreview": {"openFull":["enter"],"cancel":["escape","ctrl+c"]}

@@ -1,557 +1,130 @@
+import { randomUUID } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { StringEnum, type Usage } from "@earendil-works/pi-ai";
 import { defineTool, formatSkillsForPrompt, getAgentDir, type ExtensionAPI, type ExtensionContext, type ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { Type, type Static } from "typebox";
 import { emitResolvedAgent } from "./utilities/agent_events.ts";
-import { buildLaunchEnvelope, projectLaunchEnvelope, validateAgentCatalog, validateDelegationConfig, validateLaunchEnvelope, type AgentCatalog, type AgentDefinition, type AgentLaunchEnvelope } from "./utilities/agent_types.ts";
-import { onActiveMode } from "./utilities/mode_events.ts";
-import {
-    renderAgentToolResult,
-    renderGetCall,
-    renderRunCall,
-    renderRunResult,
-    renderStopCall,
-    renderStopResult,
-    renderSubmitCall,
-    renderSubmitResult,
-    renderWaitCall,
-    renderWaitResult,
-} from "./utilities/orchestration_cards.ts";
+import { buildLaunchEnvelope, projectLaunchEnvelope, validateAgentCatalog, validateLaunchEnvelope, validateOrchestrationConfig, type AgentCatalog, type AgentDefinition, type AgentLaunchEnvelope } from "./utilities/agent_types.ts";
+import { createActiveModeBarrier, onActiveMode, type ActiveModeBarrier, type ActiveModeEvent } from "./utilities/mode_events.ts";
 import { resolveHarnessAdapter } from "./utilities/orchestration_harness.ts";
-import { cleanupOriginAgents, failStartedSubagentAgent, readReconciledAgentSnapshot, stopSubagentAgentWithDisposition, stopSubagentTask, stopSubagentTaskWithDisposition } from "./utilities/orchestration_management.ts";
-import {
-    projectDebugSnapshot,
-    projectMinimalAgentTask,
-    projectMinimalWaitResult,
-    projectMinimalSubmitResult,
-    sanitizeSnapshot,
-    serializeModelVisibleJson,
-    type AgentToolDetails,
-    type SubmitDetails,
-    type WaitDetails,
-} from "./utilities/orchestration_projection.ts";
-import { claimTaskUsage, createTask, findTaskAgent, prepareAgent, publishAgent, readAgentSnapshot, reconcileOriginUsageClaims, removePreparedAgent } from "./utilities/orchestration_store.ts";
-import { inspectAgentTmux, launchAgentSession, probeTmux, stopAgentSession, type CommandExecutor } from "./utilities/orchestration_tmux.ts";
-import { addUsage, emptyUsage, isTerminalAgent, isTerminalTask, type AgentSnapshot, type SubagentRuntimeConfig, type UsageClaim } from "./utilities/orchestration_types.ts";
-import { SubagentPaletteComponent, type SubagentPaletteDependencies } from "./utilities/orchestration_palette.ts";
+import { cleanupMeshAgents, failStartedMeshAgent, readReconciledAgentSnapshot, stopMeshAgentWithDisposition, stopMeshTask, stopMeshTaskWithDisposition } from "./utilities/orchestration_management.ts";
+import { projectDebugSnapshot, projectMinimalAgentTask, projectMinimalSubmitResult, projectMinimalWaitResult, sanitizeSnapshot, serializeModelVisibleJson, type AgentToolDetails, type SubmitDetails, type WaitDetails } from "./utilities/orchestration_projection.ts";
+import { acknowledgeMeshEvents, bindMeshEndpoint, markMeshEventInjected, pollMeshEvents, registerMeshSignal, registerMeshWatch, resolveRouteEndpoint, setMeshEndpointOffline, type MeshEndpoint } from "./utilities/orchestration_events.ts";
+import { attachRootMesh, beginMeshClose, claimTaskUsage, completeMeshClose, createTask, ensurePolicyEpoch, heartbeatRootLease, initializeMesh, prepareAgent, publishAgent, readAgentSnapshot, readMesh, readPolicyEpoch, readTask, reconcileMeshReservations, reconcileMeshState, reconcileMeshUsageClaims, releaseMeshReservation, removePreparedAgent, reserveMeshCapacity, taskPaths } from "./utilities/orchestration_store.ts";
+import { AgentLaunchCleanupError, inspectAgentTmux, inspectMeshAgentWindow, launchAgentSession, probeTmux, stopAgentSession, type CommandExecutor } from "./utilities/orchestration_tmux.ts";
+import { addUsage, emptyUsage, isTerminalAgent, isTerminalTask, type AgentSnapshot, type PolicyEpoch, type SubagentRuntimeConfig, type UsageClaim } from "./utilities/orchestration_types.ts";
+import { MeshAgentsPaletteComponent, type MeshPaletteDependencies } from "./utilities/orchestration_palette.ts";
+import { MESH_BOOTSTRAP_TOOL_NAME, MESH_PEER_TOOL_NAMES } from "./utilities/orchestration_pi.ts";
+import { renderAgentToolResult, renderEnableCall, renderEnableResult, renderGetCall, renderRouteCall, renderRouteResult, renderRunCall, renderRunResult, renderStopCall, renderStopResult, renderSubmitCall, renderSubmitResult, renderWaitCall, renderWaitResult } from "./utilities/orchestration_cards.ts";
 import { openPopupView, providePopupView } from "./popup.ts";
 import { loadPaletteKeymap } from "./utilities/command_palette_keymap.ts";
 import { loadFeatureKeybindings } from "./utilities/extension_keybindings.ts";
 import { provideCommandPaletteContribution } from "./utilities/command_palette_contributions.ts";
 
 const CONFIG = join(getAgentDir(), "orchestration.json"); const CATALOG = join(getAgentDir(), "agent-catalog.json");
-const PARENT_NAVIGATION_STATUS = "subagent-parent-navigation";
-const taskPromptGuideline = "Give the selected agent one local objective with sufficient task-specific context. Rely on its catalog description and discoverable skills for stable behavior.";
-const runPromptGuidelines = [
-    taskPromptGuideline,
-    "Use `subagent_run` when the child result is the next dependency; do not call `subagent_wait` after it.",
-    "Emit multiple sibling `subagent_run` calls for independent foreground tasks on distinct or new agents.",
-];
-const submitPromptGuidelines = ["Use `subagent_submit` only when independent parent work can proceed before the child result is needed."];
-const getPromptGuidelines = ["Use `subagent_get` for one-time nonblocking inspection of a task or agent."];
-const waitPromptGuidelines = ["Use `subagent_wait` only to collect previously background-submitted task IDs."];
-const stopPromptGuidelines = ["Use `subagent_stop` only to terminate one task or agent."];
-const taskParametersFor = (targets: Readonly<Record<string, AgentDefinition>>) => Type.Object({
-    agent: Type.Optional(StringEnum(Object.keys(targets), { description: Object.entries(targets).map(([name, definition]) => `${name}: ${definition.description}`).join("; ") || "No new child agents are available" })),
-    agentId: Type.Optional(Type.String({ description: "Existing idle agent target. Mutually exclusive with agent." })),
-    prompt: Type.String({ minLength: 1 }),
-}, { additionalProperties: false });
-type TaskParameters = Static<ReturnType<typeof taskParametersFor>>;
-const getParameters = Type.Object({
-    agentId: Type.String(),
-    taskId: Type.Optional(Type.String()),
-    debug: Type.Optional(Type.Boolean({
-        default: false,
-        description: "Abnormal-state diagnosis only. When true, returns full sanitized persisted snapshot metadata. Not needed for normal operation.",
-    })),
-}, { additionalProperties: false });
-const waitParameters = Type.Object({
-    taskIds: Type.Array(Type.String(), { minItems: 1, maxItems: 128, uniqueItems: true }),
-    condition: StringEnum(["any", "all"] as const),
-}, { additionalProperties: false });
-const stopParameters = Type.Object({ agentId: Type.Optional(Type.String()), taskId: Type.Optional(Type.String()) }, { additionalProperties: false });
-export interface ActiveCaller { identity: string; targets: Record<string, AgentDefinition>; catalog: AgentCatalog; envelope?: AgentLaunchEnvelope; error?: string }
-export interface OrchestrationDependencies { configPath: string; catalogPath?: string; env: NodeJS.ProcessEnv; exec: CommandExecutor; activeCaller?: () => ActiveCaller | undefined; natureHandleWords?: () => readonly string[]; sleep?: (ms: number, signal?: AbortSignal) => Promise<void>; now?: () => number }
-export async function loadOrchestrationConfig(path: string): Promise<SubagentRuntimeConfig> { try { return validateDelegationConfig(JSON.parse(await readFile(path, "utf8"))); } catch (error) { throw new Error(`Cannot read orchestration config ${path}: ${error instanceof Error ? error.message : String(error)}`); } }
+const ROOT_BINDING = "mesh-root-binding"; const POLICY_BINDING = "mesh-policy-epoch"; const PARENT_STATUS = "mesh-parent-navigation"; const PUMP_STATUS = "mesh-event-pump";
+interface RootBinding { schemaVersion: 1; meshId: string }
+interface EpochBinding { schemaVersion: 1; meshId: string; mode: string; epochId: string; policyDigest: string }
+export interface ActiveCaller { identity: string; meshId: string; epoch: PolicyEpoch; catalog: AgentCatalog; envelope?: AgentLaunchEnvelope; agentId?: string; endpointId: string; sessionFile?: string; error?: string }
+export interface OrchestrationDependencies { configPath: string; catalogPath?: string; env: NodeJS.ProcessEnv; exec: CommandExecutor; activeCaller?: () => ActiveCaller | undefined; authorityBarrier?: () => Promise<void>; natureHandleWords?: () => readonly string[]; sleep?: (ms: number, signal?: AbortSignal) => Promise<void>; now?: () => number }
+export interface OrchestrationRegistrationOptions extends Partial<Pick<OrchestrationDependencies, "configPath" | "catalogPath" | "env">> { setInterval?: (callback: () => void | Promise<void>, delay: number) => unknown; clearInterval?: (timer: unknown) => void }
+export async function loadOrchestrationConfig(path: string): Promise<SubagentRuntimeConfig> { try { return validateOrchestrationConfig(JSON.parse(await readFile(path, "utf8"))); } catch (error) { throw new Error(`Cannot read orchestration config ${path}: ${error instanceof Error ? error.message : String(error)}`); } }
 export async function loadAgentCatalog(path: string): Promise<AgentCatalog> { try { return validateAgentCatalog(JSON.parse(await readFile(path, "utf8"))); } catch (error) { throw new Error(`Cannot read agent catalog ${path}: ${error instanceof Error ? error.message : String(error)}`); } }
-function origin(ctx: ExtensionContext, env: NodeJS.ProcessEnv) { const raw = Number.parseInt(env.PI_SUBAGENT_DEPTH ?? "0", 10); return { depth: Number.isInteger(raw) && raw >= 0 ? raw : 0, parentAgentId: env.PI_SUBAGENT_AGENT_ID, originSessionId: env.PI_SUBAGENT_ORIGIN_SESSION_ID ?? ctx.sessionManager.getSessionId(), originSessionFile: ctx.sessionManager.getSessionFile() ?? env.PI_SUBAGENT_ORIGIN_SESSION_FILE }; }
-function sleep(ms: number, signal?: AbortSignal): Promise<void> { return new Promise((resolve, reject) => { if (signal?.aborted) { reject(signal.reason); return; } const timer = setTimeout(resolve, ms); signal?.addEventListener("abort", () => { clearTimeout(timer); reject(signal.reason); }, { once: true }); }); }
-function errorText(value: unknown): string { if (value instanceof Error) return value.message; if (typeof value === "string") return value; return JSON.stringify(value) ?? "Unknown error"; }
+function sleep(ms: number, signal?: AbortSignal): Promise<void> { return new Promise((resolve, reject) => { if (signal?.aborted) return reject(signal.reason); const timer = setTimeout(resolve, ms); signal?.addEventListener("abort", () => { clearTimeout(timer); reject(signal.reason); }, { once: true }); }); }
+function active(deps: OrchestrationDependencies): ActiveCaller { const value = deps.activeCaller?.(); if (!value) throw new Error("Mesh unavailable: runtime identity is not attached"); if (value.error) throw new Error(`Mesh unavailable: ${value.error}`); return value; }
+async function authorized(deps: OrchestrationDependencies): Promise<ActiveCaller> { await deps.authorityBarrier?.(); return active(deps); }
+function asRecord(value: unknown): Record<string, unknown> { return value && typeof value === "object" && !Array.isArray(value) ? { ...(value as Record<string, unknown>) } : {}; }
+function branchData<T>(ctx: ExtensionContext, customType: string): T | undefined { const entry = [...ctx.sessionManager.getBranch()].reverse().find(item => item.type === "custom" && item.customType === customType) as { data?: unknown } | undefined; return entry?.data as T | undefined; }
+function errorText(value: unknown): string { return value instanceof Error ? value.message : typeof value === "string" ? value : JSON.stringify(value) ?? "Unknown error"; }
+function roleTargets(caller: ActiveCaller): Record<string, AgentDefinition> { return Object.fromEntries(caller.epoch.roleSet.map(name => [name, caller.epoch.roles[name]!]).filter(([, definition]) => definition)); }
+function authorizeRole(caller: ActiveCaller, snapshot: AgentSnapshot, action: string): void { if (!caller.epoch.roleSet.includes(snapshot.agent.agent)) throw new Error(`${caller.identity} epoch is not allowed to ${action} role ${snapshot.agent.agent}`); }
+function rejectSelfAgent(caller: ActiveCaller, agentId: string, operation: string): void { if (caller.agentId === agentId) throw new Error(`mesh_${operation} cannot target the calling agent itself (${agentId})`); }
 
-function asRecord(args: unknown): Record<string, unknown> {
-    if (!args || typeof args !== "object" || Array.isArray(args)) return {};
-    return { ...(args as Record<string, unknown>) };
-}
+const taskParametersFor = (targets: Readonly<Record<string, AgentDefinition>>) => Type.Object({ agent: Type.Optional(StringEnum(Object.keys(targets), { description: Object.entries(targets).map(([name, definition]) => `${name}: ${definition.description}`).join("; ") || "No roles available" })), agentId: Type.Optional(Type.String()), prompt: Type.String({ minLength: 1 }) }, { additionalProperties: false });
+type TaskParameters = Static<ReturnType<typeof taskParametersFor>>;
+const getParameters = Type.Object({ taskId: Type.Optional(Type.String()), agentId: Type.Optional(Type.String()), debug: Type.Optional(Type.Boolean({ default: false })) }, { additionalProperties: false });
+const waitParameters = Type.Object({ taskIds: Type.Array(Type.String(), { minItems: 1, maxItems: 128, uniqueItems: true }), condition: StringEnum(["any", "all"] as const) }, { additionalProperties: false });
+const stopParameters = Type.Object({ agentId: Type.Optional(Type.String()), taskId: Type.Optional(Type.String()) }, { additionalProperties: false });
+const routeParameters = Type.Object({ action: StringEnum(["watch", "signal"] as const), receiver: Type.String(), delivery: StringEnum(["steer", "followUp"] as const), taskIds: Type.Optional(Type.Array(Type.String(), { minItems: 1, maxItems: 128, uniqueItems: true })), condition: Type.Optional(StringEnum(["any", "all"] as const)), topic: Type.Optional(Type.String()), text: Type.Optional(Type.String()) }, { additionalProperties: false });
+const enableParameters = Type.Object({}, { additionalProperties: false });
+function exactSelector(value: { agent?: string; agentId?: string }, tool: string): { kind: "new"; agent: string } | { kind: "existing"; agentId: string } { const fresh = value.agent !== undefined; const existing = value.agentId !== undefined; if (fresh === existing) throw new Error(`${tool} requires exactly one of agent or agentId`); return fresh ? { kind: "new", agent: value.agent! } : { kind: "existing", agentId: value.agentId! }; }
 
-function prepareGetArguments(args: unknown): Static<typeof getParameters> { return asRecord(args) as Static<typeof getParameters>; }
+type Accounting = { usage?: Usage; claimedTaskIds: string[] };
+async function claim(config: SubagentRuntimeConfig, caller: ActiveCaller, snapshot: AgentSnapshot, toolCallId: string, toolName: UsageClaim["toolName"]): Promise<Accounting> { const task = snapshot.task; if (!caller.sessionFile || !snapshot.agent.capabilities.usage || !task?.result || !isTerminalTask(task.status.state)) return { claimedTaskIds: [] }; const value = await claimTaskUsage(config.stateRoot, caller.meshId, task.request.taskId, caller.sessionFile, toolCallId, toolName); return value.created ? { usage: value.result.usage, claimedTaskIds: [task.request.taskId] } : { claimedTaskIds: [] }; }
+function agentResult(raw: AgentSnapshot, accounting: Accounting, debug = false) { const snapshot = sanitizeSnapshot(raw); const details: AgentToolDetails = { ...snapshot, accounting }; return { content: [{ type: "text" as const, text: serializeModelVisibleJson(debug ? projectDebugSnapshot(snapshot) : projectMinimalAgentTask(snapshot)) }], details, usage: accounting.usage }; }
+function submitResult(raw: AgentSnapshot, accounting: Accounting) { const snapshot = sanitizeSnapshot(raw); const details: SubmitDetails = { ...snapshot, accounting }; return { content: [{ type: "text" as const, text: serializeModelVisibleJson(projectMinimalSubmitResult(snapshot)) }], details, usage: accounting.usage }; }
+function waitResult(snapshots: AgentSnapshot[], condition: "any" | "all", outcome: "completed" | undefined, accounting: Accounting) { const agents = snapshots.map(sanitizeSnapshot); const details: WaitDetails = { condition, ...(outcome ? { outcome } : {}), agents, accounting }; return { content: [{ type: "text" as const, text: serializeModelVisibleJson(outcome ? projectMinimalWaitResult(agents, "completed") : { tasks: agents.map(projectMinimalAgentTask) }) }], details, usage: accounting.usage }; }
+async function pollTasks(input: { read: () => Promise<AgentSnapshot[]>; condition: "any" | "all"; signal?: AbortSignal; sleep: typeof sleep; claim: (snapshot: AgentSnapshot) => Promise<Accounting>; update?: (snapshots: AgentSnapshot[]) => void }): Promise<{ snapshots: AgentSnapshot[]; accounting: Accounting }> { while (true) { if (input.signal?.aborted) throw input.signal.reason; const snapshots = await input.read(); const done = snapshots.filter(item => item.task && isTerminalTask(item.task.status.state)); if (input.condition === "any" ? done.length > 0 : done.length === snapshots.length) { const accounting: Accounting = { claimedTaskIds: [] }; for (const snapshot of snapshots) { const item = await input.claim(snapshot); accounting.claimedTaskIds.push(...item.claimedTaskIds); if (item.usage) { accounting.usage ??= emptyUsage(); addUsage(accounting.usage, item.usage); } } return { snapshots, accounting }; } input.update?.(snapshots); await input.sleep(250, input.signal); } }
+async function stopPreparedLaunch(deps: OrchestrationDependencies, tmuxCommand: string, tmux: NonNullable<Awaited<ReturnType<typeof launchAgentSession>>>): Promise<void> { let stopFailure: unknown; try { if (await stopAgentSession(deps.exec, tmuxCommand, tmux)) return; } catch (error) { stopFailure = error; } const inspected = await inspectAgentTmux(deps.exec, tmuxCommand, tmux).catch(error => { stopFailure ??= error; return undefined; }); const confirmed = inspected && (inspected.server === "absent" || inspected.server === "mismatch" || inspected.server === "match" && inspected.paneState === "dead"); if (!confirmed) throw new Error("Could not confirm that the pre-publication agent process stopped", { cause: stopFailure }); }
 
-async function claim(config: SubagentRuntimeConfig, snapshot: AgentSnapshot, ctx: ExtensionContext, env: NodeJS.ProcessEnv, toolCallId: string, toolName: UsageClaim["toolName"]): Promise<{ usage?: Usage; claimedTaskIds: string[] }> {
-    const task = snapshot.task;
-    if (!snapshot.agent.capabilities.usage || !task?.result || !isTerminalTask(task.status.state)) return { claimedTaskIds: [] };
-    const lineage = origin(ctx, env);
-    const value = await claimTaskUsage(config.stateRoot, snapshot.agent.agentId, task.request.taskId, lineage.originSessionId, lineage.originSessionFile, toolCallId, toolName);
-    return value.created ? { usage: value.result.usage, claimedTaskIds: [task.request.taskId] } : { claimedTaskIds: [] };
-}
-
-function agentResult(rawSnapshot: AgentSnapshot, accounting: { usage?: Usage; claimedTaskIds: string[] }, debug = false) {
-    const snapshot = sanitizeSnapshot(rawSnapshot);
-    const payload = debug ? projectDebugSnapshot(snapshot) : projectMinimalAgentTask(snapshot);
-    const details: AgentToolDetails = { ...snapshot, accounting };
-    return {
-        content: [{ type: "text" as const, text: serializeModelVisibleJson(payload) }],
-        details,
-        usage: accounting.usage,
-    };
-}
-
-function submitResult(
-    rawSnapshot: AgentSnapshot,
-    accounting: { usage?: Usage; claimedTaskIds: string[] },
-) {
-    const snapshot = sanitizeSnapshot(rawSnapshot);
-    const payload = projectMinimalSubmitResult(snapshot);
-    const details: SubmitDetails = {
-        ...snapshot,
-        accounting,
-    };
-    return {
-        content: [{ type: "text" as const, text: serializeModelVisibleJson(payload) }],
-        details,
-        usage: accounting.usage,
-    };
-}
-
-function active(deps: OrchestrationDependencies) { const value = deps.activeCaller?.(); if (!value) throw new Error("Orchestration unavailable: no caller identity has been resolved"); if (value.error) throw new Error(`Orchestration unavailable: ${value.error}`); return value; }
-export function validateAgentTargetAuthorization(current: ActiveCaller, snapshot: AgentSnapshot): void { if (!current.targets[snapshot.agent.agent]) throw new Error(`${current.identity} is not allowed to access agent ${snapshot.agent.agent}`); }
-export function validateAgentReuseAuthorization(current: ActiveCaller, snapshot: AgentSnapshot): void { try { validateAgentTargetAuthorization(current, snapshot); } catch { throw new Error(`${current.identity} is not allowed to reuse agent ${snapshot.agent.agent}`); } }
-function rejectSelfTarget(env: NodeJS.ProcessEnv, agentId: string, operation: "run" | "submit" | "get" | "stop" | "wait"): void {
-    const self = env.PI_SUBAGENT_AGENT_ID;
-    if (self && self === agentId) throw new Error(`orchestration_${operation} cannot target the calling agent itself (${agentId})`);
-}
-type WaitAccounting = { usage?: Usage; claimedTaskIds: string[] };
-type PollTasksOptions = {
-    readSnapshots: () => Promise<AgentSnapshot[]>;
-    condition: "any" | "all";
-    signal?: AbortSignal;
-    sleep: (ms: number, signal?: AbortSignal) => Promise<void>;
-    claim: (snapshot: AgentSnapshot) => Promise<{ usage?: Usage; claimedTaskIds: string[] }>;
-    onWaiting?: (snapshots: AgentSnapshot[]) => void;
-};
-type PollTasksResult = { snapshots: AgentSnapshot[]; accounting: WaitAccounting };
-
-async function pollTasks(options: PollTasksOptions): Promise<PollTasksResult> {
-    while (true) {
-        if (options.signal?.aborted) throw options.signal.reason;
-        const snapshots = await options.readSnapshots();
-        const done = snapshots.filter(value => value.task && isTerminalTask(value.task.status.state));
-        const met = options.condition === "any" ? done.length > 0 : done.length === snapshots.length;
-        if (met) {
-            const accounting: WaitAccounting = { claimedTaskIds: [] };
-            for (const snapshot of snapshots) {
-                const item = await options.claim(snapshot);
-                accounting.claimedTaskIds.push(...item.claimedTaskIds);
-                if (item.usage) {
-                    if (!accounting.usage) accounting.usage = emptyUsage();
-                    addUsage(accounting.usage, item.usage);
-                }
-            }
-            return { snapshots, accounting };
-        }
-        options.onWaiting?.(snapshots);
-        await options.sleep(250, options.signal);
-    }
-}
-
-function waitResult(
-    snapshots: readonly AgentSnapshot[],
-    condition: "any" | "all",
-    outcome: "completed" | undefined,
-    accounting: WaitAccounting,
-) {
-    const agents = snapshots.map(sanitizeSnapshot);
-    const details: WaitDetails = { condition, ...(outcome ? { outcome } : {}), agents, accounting };
-    const contentPayload = outcome
-        ? projectMinimalWaitResult(agents, "completed")
-        : { tasks: agents.map(projectMinimalAgentTask) };
-    return {
-        content: [{ type: "text" as const, text: serializeModelVisibleJson(contentPayload) }],
-        details,
-        usage: accounting.usage,
-    };
-}
-
-async function startAgentSubmission(
-    deps: OrchestrationDependencies,
-    config: SubagentRuntimeConfig,
-    current: ActiveCaller,
-    params: TaskParameters & { agent: string },
-    signal: AbortSignal | undefined,
-    ctx: ExtensionContext,
-    onTaskCreated?: (snapshot: AgentSnapshot) => void,
-    preserveOnAbortAfterSubmission = false,
-): Promise<AgentSnapshot> {
-    if (signal?.aborted) throw signal.reason;
-    const effective = current.targets[params.agent];
-    if (!effective) throw new Error(`${current.identity} is not allowed to start agent ${params.agent}`);
-    const lineage = origin(ctx, deps.env);
-    const depth = lineage.depth + 1;
-    if (depth > config.maxDepth) throw new Error(`Subagent depth ${depth} exceeds maxDepth ${config.maxDepth}`);
-    const harness = effective.harness;
-    const resolvedHarness = resolveHarnessAdapter(config, harness, effective);
-    const { adapter } = resolvedHarness;
-    const context = await probeTmux(deps.exec, config.tmux, deps.env);
-    if (!context) throw new Error("Subagent start requires a usable current tmux context");
-    const envelope = current.envelope
-        ? projectLaunchEnvelope(params.agent, current.envelope)
-        : buildLaunchEnvelope(params.agent, current.catalog, config.delegation, [config.popupExtension, config.orchestrationExtension, config.childBridgeExtension]);
-    const envelopePath = join(config.stateRoot, "agents", "pending", "launch-envelope.json");
-    const prepared = await prepareAgent(config.stateRoot, {
-        agent: params.agent, harness, cwd: ctx.cwd, agentSnapshot: effective, launchEnvelope: envelopePath,
-        lineage: { callerIdentity: current.identity, targetAgent: params.agent, depth, parentAgentId: lineage.parentAgentId, originSessionId: lineage.originSessionId, originSessionFile: lineage.originSessionFile }, capabilities: adapter.capabilities,
-    });
-    const actualEnvelopePath = join(prepared.paths.directory, "launch-envelope.json");
-    await writeFile(actualEnvelopePath, `${JSON.stringify(envelope, null, 2)}\n`, { mode: 0o600 });
-    let tmux;
-    let published = false;
-    let taskCreated = false;
+async function startAgentSubmission(deps: OrchestrationDependencies, config: SubagentRuntimeConfig, caller: ActiveCaller, params: TaskParameters & { agent: string }, signal: AbortSignal | undefined, ctx: ExtensionContext, onTaskCreated?: (snapshot: AgentSnapshot) => void, preserveOnAbort = false): Promise<AgentSnapshot> {
+    if (signal?.aborted) throw signal.reason; const definition = caller.epoch.roles[params.agent]; if (!definition || !caller.epoch.roleSet.includes(params.agent)) throw new Error(`${caller.identity} epoch is not allowed to start role ${params.agent}`);
+    const reservation = await reserveMeshCapacity(config.stateRoot, caller.meshId, "new-agent-task"); const agentId = randomUUID(); const taskId = randomUUID(); const harness = resolveHarnessAdapter(config, definition.harness, definition); const tmuxContext = await probeTmux(deps.exec, config.tmux, deps.env); if (!tmuxContext) { await releaseMeshReservation(config.stateRoot, caller.meshId, reservation.reservationId, "tmux unavailable"); throw new Error("Mesh agent start requires a usable current tmux context"); }
+    const childExtensions = Object.fromEntries(caller.epoch.roleSet.map(name => [name, caller.envelope?.childExtensions[name] ?? [config.popupExtension, config.orchestrationExtension, ...(caller.epoch.roles[name]?.childExtensionContributions ?? []), config.childBridgeExtension]]));
+    const envelope = caller.envelope ? projectLaunchEnvelope(params.agent, agentId, caller.envelope) : buildLaunchEnvelope({ meshId: caller.meshId, agentId, epochId: caller.epoch.epochId, agent: params.agent, mode: caller.epoch.mode, roleSet: caller.epoch.roleSet, catalog: caller.catalog, childExtensions });
+    const prepared = await prepareAgent(config.stateRoot, caller.meshId, { reservationId: reservation.reservationId, agentId, agent: params.agent, harness: definition.harness, cwd: ctx.cwd, agentSnapshot: definition, launchEnvelope: "pending", epochId: caller.epoch.epochId, provenance: { parentAgentId: caller.agentId, creatorSessionId: ctx.sessionManager.getSessionId(), ...(caller.sessionFile ? { creatorSessionFile: caller.sessionFile } : {}) }, capabilities: harness.adapter.capabilities });
+    const envelopePath = join(prepared.paths.directory, "launch-envelope.json"); let tmux; let published = false; let taskCreated = false;
     try {
-        const launch = adapter.launch(config, resolvedHarness.harness, {
-            agentId: prepared.agentId,
-            agentDirectory: prepared.paths.directory,
-            agent: params.agent,
-            launchEnvelope: actualEnvelopePath,
-            launchEnvelopeSnapshot: envelope,
-            depth,
-            originSessionId: lineage.originSessionId,
-            originSessionFile: lineage.originSessionFile,
-            cwd: ctx.cwd,
-        });
-        tmux = await launchAgentSession(deps.exec, config.tmux, context, { agentId: prepared.agentId, agent: params.agent, originSessionId: lineage.originSessionId, cwd: ctx.cwd, launch });
-        await publishAgent(prepared.paths, {
-            agentId: prepared.agentId, agent: params.agent, harness, cwd: ctx.cwd, agentSnapshot: effective, launchEnvelope: actualEnvelopePath,
-            tmux,
-            tmuxOwnership: "origin-hub",
-            capabilities: adapter.capabilities,
-            callerIdentity: current.identity,
-            targetAgent: params.agent,
-            depth,
-            parentAgentId: lineage.parentAgentId,
-            originSessionId: lineage.originSessionId,
-            originSessionFile: lineage.originSessionFile,
-        });
-        published = true;
-        if (signal?.aborted) throw signal.reason;
-        const task = await createTask(config.stateRoot, prepared.agentId, params.prompt);
-        taskCreated = true;
-        onTaskCreated?.(await readAgentSnapshot(config.stateRoot, prepared.agentId, task.request.taskId));
-        const readyTimeoutMs = resolvedHarness.harness.bridgeReadyTimeoutMs ?? 5000;
-        const deadline = (deps.now ?? (() => performance.now()))() + readyTimeoutMs;
-        while ((deps.now ?? (() => performance.now()))() < deadline) {
-            if (signal?.aborted) throw signal.reason;
-            const snapshot = await readAgentSnapshot(config.stateRoot, prepared.agentId);
-            if (isTerminalAgent(snapshot.status.state)) throw new Error(snapshot.status.exitReason ?? `Child agent became ${snapshot.status.state} during startup`);
-            if (snapshot.status.bridgeReady) {
-                const live = await readReconciledAgentSnapshot(deps.exec, config.tmux, config.stateRoot, prepared.agentId);
-                if (isTerminalAgent(live.status.state)) throw new Error(live.status.exitReason ?? `Child agent became ${live.status.state} during startup`);
-                return live;
-            }
-            await (deps.sleep ?? sleep)(50, signal);
-        }
-        throw new Error("Child bridge readiness timed out");
+        await writeFile(envelopePath, `${JSON.stringify(envelope, null, 2)}\n`, { mode: 0o600 });
+        const launch = harness.adapter.launch(config, harness.harness, { meshId: caller.meshId, agentId, agentDirectory: prepared.paths.directory, agent: params.agent, taskPath: taskPaths(config.stateRoot, caller.meshId, taskId).directory, launchEnvelope: envelopePath, epochSnapshot: envelope, cwd: ctx.cwd });
+        tmux = await launchAgentSession(deps.exec, config.tmux, tmuxContext, { meshId: caller.meshId, epochId: caller.epoch.epochId, agentId, agent: params.agent, cwd: ctx.cwd, launch });
+        await publishAgent(config.stateRoot, caller.meshId, prepared.paths, { agentId, epochId: caller.epoch.epochId, agent: params.agent, harness: definition.harness, cwd: ctx.cwd, agentSnapshot: definition, launchEnvelope: envelopePath, tmux, tmuxOwnership: "mesh-hub", capabilities: harness.adapter.capabilities, parentAgentId: caller.agentId, creatorSessionId: ctx.sessionManager.getSessionId(), ...(caller.sessionFile ? { creatorSessionFile: caller.sessionFile } : {}) }); published = true;
+        const task = await createTask(config.stateRoot, caller.meshId, agentId, params.prompt, reservation.reservationId, taskId); taskCreated = true; let snapshot = await readAgentSnapshot(config.stateRoot, caller.meshId, agentId, task.request.taskId); onTaskCreated?.(snapshot);
+        const deadline = (deps.now ?? (() => performance.now()))() + (harness.harness.bridgeReadyTimeoutMs ?? 5000); while ((deps.now ?? (() => performance.now()))() < deadline) { if (signal?.aborted) throw signal.reason; snapshot = await readAgentSnapshot(config.stateRoot, caller.meshId, agentId, taskId); if (isTerminalAgent(snapshot.status.state)) throw new Error(snapshot.status.exitReason ?? `Agent became ${snapshot.status.state} during startup`); if (snapshot.status.bridgeReady) return readReconciledAgentSnapshot(deps.exec, config.tmux, config.stateRoot, caller.meshId, agentId, taskId); await (deps.sleep ?? sleep)(50, signal); } throw new Error("Agent bridge readiness timed out");
     } catch (error) {
-        if (preserveOnAbortAfterSubmission && taskCreated && signal?.aborted) throw error;
-        const message = error instanceof Error ? error.message : String(error);
-        let cleanupError: unknown;
-        if (published) {
-            try { await failStartedSubagentAgent({ stateRoot: config.stateRoot, agentId: prepared.agentId, originSessionId: origin(ctx, deps.env).originSessionId, exec: deps.exec, tmux: config.tmux }, message); }
-            catch (failure) { cleanupError = failure; }
-        } else {
-            let cleanupConfirmed = tmux === undefined;
-            if (tmux) {
-                try {
-                    cleanupConfirmed = await stopAgentSession(deps.exec, config.tmux, tmux);
-                    if (!cleanupConfirmed) {
-                        const inspected = await inspectAgentTmux(deps.exec, config.tmux, tmux);
-                        cleanupConfirmed = inspected.server === "absent" || inspected.server === "mismatch" || !inspected.paneAlive;
-                    }
-                } catch (failure) {
-                    const inspected = await inspectAgentTmux(deps.exec, config.tmux, tmux).catch(() => undefined);
-                    cleanupConfirmed = inspected !== undefined && (inspected.server === "absent" || inspected.server === "mismatch" || !inspected.paneAlive);
-                    if (!cleanupConfirmed) cleanupError = failure;
-                }
-            }
-            if (cleanupConfirmed) await removePreparedAgent(prepared.paths);
-            else cleanupError ??= new Error("Could not confirm that the child tmux pane stopped");
-        }
-        if (cleanupError) throw new Error(`${message}; cleanup for agent ${prepared.agentId} remains incomplete: ${errorText(cleanupError)}`);
-        throw error;
+        if (preserveOnAbort && taskCreated && signal?.aborted) throw error; let cleanupError: unknown;
+        if (published) try { await failStartedMeshAgent({ stateRoot: config.stateRoot, meshId: caller.meshId, agentId, exec: deps.exec, tmux: config.tmux }, errorText(error)); } catch (failure) { cleanupError = failure; }
+        else { let confirmed = tmux === undefined && !(error instanceof AgentLaunchCleanupError); if (tmux) try { await stopPreparedLaunch(deps, config.tmux, tmux); confirmed = true; } catch (failure) { cleanupError = failure; } else if (!confirmed) cleanupError = error; if (confirmed) await removePreparedAgent(config.stateRoot, caller.meshId, agentId, reservation.reservationId, "launch failed"); }
+        if (cleanupError) throw new Error(`${errorText(error)}; cleanup for agent ${agentId} remains incomplete: ${errorText(cleanupError)}`); if (!taskCreated) await releaseMeshReservation(config.stateRoot, caller.meshId, reservation.reservationId, "launch failed before task commit").catch(() => {}); throw error;
     }
 }
 
-function validateTaskTarget(params: TaskParameters, toolName: "subagent_run" | "subagent_submit"): { kind: "new"; agent: string } | { kind: "existing"; agentId: string } {
-    const hasNew = params.agent !== undefined; const hasExisting = params.agentId !== undefined;
-    if (hasNew === hasExisting) throw new Error(`${toolName} requires exactly one of agent or agentId`);
-    return hasNew ? { kind: "new", agent: params.agent! } : { kind: "existing", agentId: params.agentId! };
-}
+export function createMeshRunTool(deps: OrchestrationDependencies, targets: Readonly<Record<string, AgentDefinition>> = {}): ToolDefinition { return defineTool({ name: "mesh_run", label: "Run mesh task", description: "Run one task on exactly one new role or existing idle mesh agent and wait for terminal completion.", promptSnippet: "Run one foreground mesh task", promptGuidelines: ["Use `mesh_run` when the result is the next dependency; do not wait again after it."], parameters: taskParametersFor(targets), renderCall: renderRunCall, renderResult: (result, options, theme, context) => renderRunResult(result, options, theme, context, deps.natureHandleWords?.()), async execute(id, params, signal, update, ctx) { const target = exactSelector(params, "mesh_run"); const config = await loadOrchestrationConfig(deps.configPath); const caller = await authorized(deps); let snapshot: AgentSnapshot | undefined; try { if (target.kind === "new") snapshot = await startAgentSubmission(deps, config, caller, { ...params, agent: target.agent }, signal, ctx, value => { snapshot = value; }, true); else { rejectSelfAgent(caller, target.agentId, "run"); const stored = await readAgentSnapshot(config.stateRoot, caller.meshId, target.agentId); authorizeRole(caller, stored, "reuse"); await readReconciledAgentSnapshot(deps.exec, config.tmux, config.stateRoot, caller.meshId, target.agentId); const task = await createTask(config.stateRoot, caller.meshId, target.agentId, params.prompt); snapshot = await readAgentSnapshot(config.stateRoot, caller.meshId, target.agentId, task.request.taskId); } const taskId = snapshot.task!.request.taskId; update?.(agentResult(snapshot, { claimedTaskIds: [] })); const waited = await pollTasks({ read: async () => [await readReconciledAgentSnapshot(deps.exec, config.tmux, config.stateRoot, caller.meshId, snapshot!.agent.agentId, taskId)], condition: "all", signal, sleep: deps.sleep ?? sleep, claim: value => claim(config, caller, value, id, "mesh_run"), update: values => update?.(agentResult(values[0]!, { claimedTaskIds: [] })) }); return agentResult(waited.snapshots[0]!, waited.accounting); } catch (error) { if (!signal?.aborted || !snapshot?.task) throw error; try { await stopMeshTask({ stateRoot: config.stateRoot, meshId: caller.meshId, taskId: snapshot.task.request.taskId, reason: "Foreground mesh run aborted" }); } catch (cleanup) { throw new Error(`mesh_run abort cleanup failed for task ${snapshot.task.request.taskId}: ${errorText(cleanup)}`, { cause: error }); } throw error; } } }); }
+export function createMeshSubmitTool(deps: OrchestrationDependencies, targets: Readonly<Record<string, AgentDefinition>> = {}): ToolDefinition { return defineTool({ name: "mesh_submit", label: "Submit mesh task", description: "Submit one task to exactly one new role or existing idle mesh agent and return stable agentId/taskId immediately.", promptSnippet: "Submit one background mesh task", parameters: taskParametersFor(targets), executionMode: "sequential", renderCall: renderSubmitCall, renderResult: (result, options, theme, context) => renderSubmitResult(result, options, theme, context, deps.natureHandleWords?.()), async execute(id, params, signal, _update, ctx) { const target = exactSelector(params, "mesh_submit"); const config = await loadOrchestrationConfig(deps.configPath); const caller = await authorized(deps); let snapshot: AgentSnapshot; if (target.kind === "new") snapshot = await startAgentSubmission(deps, config, caller, { ...params, agent: target.agent }, signal, ctx); else { rejectSelfAgent(caller, target.agentId, "submit"); const stored = await readAgentSnapshot(config.stateRoot, caller.meshId, target.agentId); authorizeRole(caller, stored, "reuse"); await readReconciledAgentSnapshot(deps.exec, config.tmux, config.stateRoot, caller.meshId, target.agentId); const task = await createTask(config.stateRoot, caller.meshId, target.agentId, params.prompt); snapshot = await readAgentSnapshot(config.stateRoot, caller.meshId, target.agentId, task.request.taskId); } return submitResult(snapshot, await claim(config, caller, snapshot, id, "mesh_submit")); } }); }
+export function createMeshGetTool(deps: OrchestrationDependencies): ToolDefinition<typeof getParameters, unknown> { return defineTool({ name: "mesh_get", label: "Get mesh task or agent", description: "Inspect exactly one same-mesh taskId or agentId. debug is valid only with agentId.", promptSnippet: "Inspect mesh task or agent state", parameters: getParameters, executionMode: "sequential", prepareArguments: args => asRecord(args) as Static<typeof getParameters>, renderCall: renderGetCall, renderResult: (result, options, theme, context) => renderAgentToolResult(result, options, theme, context, undefined, context.args.debug === true, deps.natureHandleWords?.()), async execute(id, params) { const task = params.taskId !== undefined; const agent = params.agentId !== undefined; if (task === agent) throw new Error("mesh_get requires exactly one of taskId or agentId"); if (params.debug && task) throw new Error("mesh_get debug is only valid with agentId"); const config = await loadOrchestrationConfig(deps.configPath); const caller = await authorized(deps); let snapshot: AgentSnapshot; if (params.taskId) { const record = await readTask(config.stateRoot, caller.meshId, params.taskId); snapshot = await readReconciledAgentSnapshot(deps.exec, config.tmux, config.stateRoot, caller.meshId, record.request.agentId, params.taskId); } else snapshot = await readReconciledAgentSnapshot(deps.exec, config.tmux, config.stateRoot, caller.meshId, params.agentId!); return agentResult(snapshot, await claim(config, caller, snapshot, id, "mesh_get"), params.debug === true); } }); }
+export function createMeshWaitTool(deps: OrchestrationDependencies): ToolDefinition<typeof waitParameters, unknown> { return defineTool({ name: "mesh_wait", label: "Wait for mesh tasks", description: "Wait for unique same-mesh task IDs until any/all become terminal. Aborting leaves tasks alive.", promptSnippet: "Wait for background mesh tasks", parameters: waitParameters, executionMode: "sequential", prepareArguments: args => asRecord(args) as Static<typeof waitParameters>, renderCall: renderWaitCall, renderResult: (result, options, theme, context) => renderWaitResult(result, options, theme, context, deps.natureHandleWords?.()), async execute(id, params, signal, update) { const config = await loadOrchestrationConfig(deps.configPath); const caller = await authorized(deps); const tasks = await Promise.all(params.taskIds.map(taskId => readTask(config.stateRoot, caller.meshId, taskId))); for (const task of tasks) if (caller.agentId === task.request.agentId && !isTerminalTask(task.status.state)) throw new Error(`mesh_wait cannot wait on the calling agent's own active task ${task.request.taskId}`); const read = () => Promise.all(tasks.map(task => readReconciledAgentSnapshot(deps.exec, config.tmux, config.stateRoot, caller.meshId, task.request.agentId, task.request.taskId))); const waited = await pollTasks({ read, condition: params.condition, signal, sleep: deps.sleep ?? sleep, claim: snapshot => claim(config, caller, snapshot, id, "mesh_wait"), update: snapshots => update?.(waitResult(snapshots, params.condition, undefined, { claimedTaskIds: [] })) }); return waitResult(waited.snapshots, params.condition, "completed", waited.accounting); } }); }
+export function createMeshStopTool(deps: OrchestrationDependencies): ToolDefinition<typeof stopParameters, unknown> { return defineTool({ name: "mesh_stop", label: "Stop mesh task or agent", description: "Stop exactly one taskId or agentId. Task stop leaves its agent reusable.", promptSnippet: "Stop one mesh task or agent", parameters: stopParameters, executionMode: "sequential", prepareArguments: args => asRecord(args) as Static<typeof stopParameters>, renderCall: renderStopCall, renderResult: (result, options, theme, context) => renderStopResult(result, options, theme, context, deps.natureHandleWords?.()), async execute(id, params) { const hasAgent = params.agentId !== undefined; const hasTask = params.taskId !== undefined; if (hasAgent === hasTask) throw new Error("mesh_stop requires exactly one of agentId or taskId"); const config = await loadOrchestrationConfig(deps.configPath); const caller = await authorized(deps); let snapshot: AgentSnapshot; let disposition; if (params.agentId) { rejectSelfAgent(caller, params.agentId, "stop"); const stored = await readAgentSnapshot(config.stateRoot, caller.meshId, params.agentId); authorizeRole(caller, stored, "stop"); const result = await stopMeshAgentWithDisposition({ stateRoot: config.stateRoot, meshId: caller.meshId, agentId: params.agentId, exec: deps.exec, tmux: config.tmux }); snapshot = result.snapshot; disposition = result.disposition; } else { const task = await readTask(config.stateRoot, caller.meshId, params.taskId!); const stored = await readAgentSnapshot(config.stateRoot, caller.meshId, task.request.agentId, params.taskId); authorizeRole(caller, stored, "stop"); const result = await stopMeshTaskWithDisposition({ stateRoot: config.stateRoot, meshId: caller.meshId, taskId: params.taskId! }); snapshot = result.snapshot; disposition = result.disposition; } const result = agentResult(snapshot, await claim(config, caller, snapshot, id, "mesh_stop")); return { ...result, details: { ...result.details, stopDisposition: disposition } }; } }); }
 
-export function createSubagentRunTool(deps: OrchestrationDependencies, targets: Readonly<Record<string, AgentDefinition>> = {}): ToolDefinition {
-    const parameters = taskParametersFor(targets);
-    return defineTool({
-        name: "subagent_run",
-        label: "Run agent task",
-        description: "Run one task on exactly one target and wait until it is terminal. Use agent for a new child or agentId for an existing idle child. Child failed or stopped outcomes are returned normally. Independent sibling runs can execute concurrently.",
-        promptSnippet: "Run one foreground task on a new or existing persistent agent",
-        promptGuidelines: runPromptGuidelines,
-        parameters,
-        async execute(toolCallId, params, signal, update, ctx) {
-            const target = validateTaskTarget(params, "subagent_run");
-            const config = await loadOrchestrationConfig(deps.configPath);
-            let snapshot: AgentSnapshot | undefined;
-            try {
-                if (target.kind === "new") {
-                    snapshot = await startAgentSubmission(deps, config, active(deps), { ...params, agent: target.agent }, signal, ctx, created => { snapshot = created; }, true);
-                } else {
-                    if (signal?.aborted) throw signal.reason;
-                    rejectSelfTarget(deps.env, target.agentId, "run");
-                    const stored = await readAgentSnapshot(config.stateRoot, target.agentId);
-                    if (stored.agent.originSessionId !== origin(ctx, deps.env).originSessionId) throw new Error(`Agent ${target.agentId} belongs to a different origin session`);
-                    validateAgentReuseAuthorization(active(deps), stored);
-                    await readReconciledAgentSnapshot(deps.exec, config.tmux, config.stateRoot, target.agentId);
-                    if (signal?.aborted) throw signal.reason;
-                    const task = await createTask(config.stateRoot, target.agentId, params.prompt);
-                    snapshot = await readAgentSnapshot(config.stateRoot, target.agentId, task.request.taskId);
-                }
-                const taskId = snapshot.task!.request.taskId;
-                update?.(agentResult(snapshot, { claimedTaskIds: [] }));
-                const waited = await pollTasks({
-                    readSnapshots: async () => [await readReconciledAgentSnapshot(deps.exec, config.tmux, config.stateRoot, snapshot!.agent.agentId, taskId)],
-                    condition: "all",
-                    signal,
-                    sleep: deps.sleep ?? sleep,
-                    claim: value => claim(config, value, ctx, deps.env, toolCallId, "subagent_run"),
-                    onWaiting: values => update?.(agentResult(values[0]!, { claimedTaskIds: [] })),
-                });
-                return agentResult(waited.snapshots[0]!, waited.accounting);
-            } catch (error) {
-                if (!signal?.aborted || !snapshot?.task) throw error;
-                const taskId = snapshot.task.request.taskId;
-                try {
-                    await stopSubagentTask({ stateRoot: config.stateRoot, agentId: snapshot.agent.agentId, taskId, originSessionId: origin(ctx, deps.env).originSessionId, reason: "Foreground run aborted by parent" });
-                } catch (cleanupError) {
-                    throw new Error(`subagent_run abort cleanup failed for agent ${snapshot.agent.agentId}, task ${taskId}; durable cancellation state may remain active: ${errorText(cleanupError)}`, { cause: error });
-                }
-                throw error;
-            }
-        },
-        renderCall(args, theme, context) { return renderRunCall(args, theme, context); },
-        renderResult(result, options, theme, context) { return renderRunResult(result, options, theme, context, deps.natureHandleWords?.()); },
-    });
-}
+function utf8(value: string): number { return Buffer.byteLength(value, "utf8"); }
+export function createMeshRouteTool(deps: OrchestrationDependencies): ToolDefinition<typeof routeParameters, unknown> { return defineTool({ name: "mesh_route", label: "Route mesh event", description: "Register a terminal task watch or send a bounded signal to a durable same-mesh Pi endpoint.", promptSnippet: "Route a watch or signal to a mesh peer", parameters: routeParameters, executionMode: "sequential", prepareArguments: args => asRecord(args) as Static<typeof routeParameters>, renderCall: renderRouteCall, renderResult: renderRouteResult, async execute(toolCallId, params) { const config = await loadOrchestrationConfig(deps.configPath); const caller = await authorized(deps); const endpoint = await resolveRouteEndpoint(config.stateRoot, caller.meshId, params.receiver, caller.agentId); let result: Record<string, unknown>; if (params.action === "watch") { if (!params.taskIds?.length || !params.condition) throw new Error("mesh_route watch requires taskIds and condition"); if (params.topic !== undefined || params.text !== undefined) throw new Error("mesh_route watch rejects topic and text"); result = await registerMeshWatch(config.stateRoot, caller.meshId, { callerEndpointId: caller.endpointId, toolCallId, endpoint, delivery: params.delivery, taskIds: params.taskIds, condition: params.condition, canonicalArguments: params }); } else { if (params.condition !== undefined) throw new Error("mesh_route signal rejects condition"); if (typeof params.topic !== "string" || utf8(params.topic) < 1 || utf8(params.topic) > 64) throw new Error("mesh_route signal topic must be 1-64 UTF-8 bytes"); if (typeof params.text !== "string" || utf8(params.text) < 1 || utf8(params.text) > 8192) throw new Error("mesh_route signal text must be 1-8192 UTF-8 bytes"); if (params.taskIds && params.taskIds.length > 16) throw new Error("mesh_route signal accepts at most 16 taskIds"); result = await registerMeshSignal(config.stateRoot, caller.meshId, { callerEndpointId: caller.endpointId, toolCallId, endpoint, delivery: params.delivery, topic: params.topic, text: params.text, ...(params.taskIds ? { taskIds: params.taskIds } : {}), canonicalArguments: params }); } return { content: [{ type: "text" as const, text: serializeModelVisibleJson(result) }], details: result }; } }); }
 
-export function createSubagentSubmitTool(deps: OrchestrationDependencies, targets: Readonly<Record<string, AgentDefinition>> = {}): ToolDefinition {
-    const parameters = taskParametersFor(targets);
-    return defineTool({
-        name: "subagent_submit",
-        label: "Submit agent task",
-        description: "Submit one task to exactly one target: agent for a new child or agentId for an existing idle child. Returns one submission result with distinct agentId and taskId. Returns immediately after task creation. Busy existing agents reject without queueing. Use subagent_run when the result is the next dependency, subagent_wait for background fan-in, and subagent_get for later inspection.",
-        promptSnippet: "Submit one background task to a new or existing persistent agent",
-        promptGuidelines: submitPromptGuidelines,
-        parameters,
-        executionMode: "sequential",
-        async execute(toolCallId, params, signal, update, ctx) {
-            const target = validateTaskTarget(params, "subagent_submit");
-            let config: SubagentRuntimeConfig;
-            let snapshot: AgentSnapshot;
-            if (target.kind === "new") {
-                config = await loadOrchestrationConfig(deps.configPath);
-                snapshot = await startAgentSubmission(deps, config, active(deps), { ...params, agent: target.agent }, signal, ctx);
-            } else {
-                rejectSelfTarget(deps.env, target.agentId, "submit");
-                config = await loadOrchestrationConfig(deps.configPath);
-                const stored = await readAgentSnapshot(config.stateRoot, target.agentId);
-                if (stored.agent.originSessionId !== origin(ctx, deps.env).originSessionId) throw new Error(`Agent ${target.agentId} belongs to a different origin session`);
-                validateAgentReuseAuthorization(active(deps), stored);
-                await readReconciledAgentSnapshot(deps.exec, config.tmux, config.stateRoot, target.agentId);
-                await createTask(config.stateRoot, target.agentId, params.prompt);
-                snapshot = await readAgentSnapshot(config.stateRoot, target.agentId);
-            }
+export async function stopPaletteMeshAgent(deps: OrchestrationDependencies, config: SubagentRuntimeConfig, request: { meshId: string; agentId: string }): Promise<AgentSnapshot> { const caller = await authorized(deps); const snapshot = await readAgentSnapshot(config.stateRoot, request.meshId, request.agentId); authorizeRole(caller, snapshot, "stop"); rejectSelfAgent(caller, request.agentId, "stop"); return (await stopMeshAgentWithDisposition({ stateRoot: config.stateRoot, meshId: request.meshId, agentId: request.agentId, exec: deps.exec, tmux: config.tmux })).snapshot; }
 
-            return submitResult(snapshot, await claim(config, snapshot, ctx, deps.env, toolCallId, "subagent_submit"));
-        },
-        renderCall(args, theme, context) { return renderSubmitCall(args, theme, context); },
-        renderResult(result, options, theme, context) { return renderSubmitResult(result, options, theme, context, deps.natureHandleWords?.()); },
-    });
-}
-export function createSubagentGetTool(deps: OrchestrationDependencies): ToolDefinition<typeof getParameters, unknown> {
-    return defineTool({
-        name: "subagent_get",
-        label: "Get agent task",
-        description: "Read a persistent agent and a specified, active, or latest task once without waiting. Optional debug returns full sanitized persisted snapshot metadata for abnormal-state diagnosis only; it is not needed for normal operation.",
-        promptSnippet: "Read an agent session and task state",
-        promptGuidelines: getPromptGuidelines,
-        parameters: getParameters,
-        executionMode: "sequential",
-        prepareArguments: prepareGetArguments,
-        async execute(id, params, _signal, _update, ctx) {
-            rejectSelfTarget(deps.env, params.agentId, "get");
-            const config = await loadOrchestrationConfig(deps.configPath);
-            const expectedOrigin = origin(ctx, deps.env).originSessionId;
-            const stored = await readAgentSnapshot(config.stateRoot, params.agentId, params.taskId);
-            if (stored.agent.originSessionId !== expectedOrigin) throw new Error(`Agent ${params.agentId} belongs to a different origin session`);
-            validateAgentTargetAuthorization(active(deps), stored);
-            const snapshot = await readReconciledAgentSnapshot(deps.exec, config.tmux, config.stateRoot, params.agentId, params.taskId);
-            return agentResult(snapshot, await claim(config, snapshot, ctx, deps.env, id, "subagent_get"), params.debug === true);
-        },
-        renderCall(args, theme, context) { return renderGetCall(args, theme, context); },
-        renderResult(result, options, theme, context) {
-            return renderAgentToolResult(result, options, theme, context, undefined, context.args?.debug === true, deps.natureHandleWords?.());
-        },
-    });
-}
-export function createSubagentWaitTool(deps: OrchestrationDependencies): ToolDefinition<typeof waitParameters, unknown> {
-    return defineTool({
-        name: "subagent_wait",
-        label: "Wait for tasks",
-        description: "Wait for specified task IDs to become terminal without a deadline until the any/all condition is met. Aborting this observer leaves agent tasks alive. For abnormal-state diagnosis of one agent, use subagent_get with debug=true.",
-        promptSnippet: "Wait for one or more background tasks",
-        promptGuidelines: waitPromptGuidelines,
-        parameters: waitParameters,
-        executionMode: "sequential",
-        prepareArguments(args) { return asRecord(args) as Static<typeof waitParameters>; },
-        async execute(id, params, signal, update, ctx) {
-            const config = await loadOrchestrationConfig(deps.configPath);
-            const session = origin(ctx, deps.env).originSessionId;
-            const mapping = new Map<string, string>();
-            for (const taskId of params.taskIds) mapping.set(taskId, await findTaskAgent(config.stateRoot, taskId, session));
-            for (const [taskId, agentId] of mapping) {
-                if (deps.env.PI_SUBAGENT_AGENT_ID && agentId === deps.env.PI_SUBAGENT_AGENT_ID) {
-                    throw new Error(`subagent_wait cannot wait on the calling agent's own task ${taskId}`);
-                }
-                validateAgentTargetAuthorization(active(deps), await readAgentSnapshot(config.stateRoot, agentId, taskId));
-            }
-            const readSnapshots = async () => Promise.all(params.taskIds.map(taskId => readReconciledAgentSnapshot(deps.exec, config.tmux, config.stateRoot, mapping.get(taskId)!, taskId)));
-            const waited = await pollTasks({
-                readSnapshots,
-                condition: params.condition,
-                signal,
-                sleep: deps.sleep ?? sleep,
-                claim: snapshot => claim(config, snapshot, ctx, deps.env, id, "subagent_wait"),
-                onWaiting: snapshots => update?.(waitResult(snapshots, params.condition, undefined, { claimedTaskIds: [] })),
-            });
-            return waitResult(waited.snapshots, params.condition, "completed", waited.accounting);
-        },
-        renderCall(args, theme, context) { return renderWaitCall(args, theme, context); },
-        renderResult(result, options, theme, context) { return renderWaitResult(result, options, theme, context, deps.natureHandleWords?.()); },
-    });
-}
-export function createSubagentStopTool(deps: OrchestrationDependencies): ToolDefinition<typeof stopParameters, unknown> {
-    return defineTool({
-        name: "subagent_stop",
-        label: "Stop agent or task",
-        description: "Stop exactly one agent or task. agentId terminates the whole persistent agent session; taskId cancels only that task and leaves the agent reusable.",
-        promptSnippet: "Stop one persistent agent session or one task",
-        promptGuidelines: stopPromptGuidelines,
-        parameters: stopParameters,
-        executionMode: "sequential",
-        prepareArguments(args) { return asRecord(args) as Static<typeof stopParameters>; },
-        async execute(id, params, _signal, _update, ctx) {
-            const hasAgent = params.agentId !== undefined;
-            const hasTask = params.taskId !== undefined;
-            if (hasAgent === hasTask) throw new Error("subagent_stop requires exactly one of agentId or taskId");
-            const config = await loadOrchestrationConfig(deps.configPath);
-            let snapshot: AgentSnapshot;
-            let stopDisposition: "stopped-now" | "stop-pending" | "already-terminal";
-            if (params.agentId) {
-                rejectSelfTarget(deps.env, params.agentId, "stop");
-                const stored = await readAgentSnapshot(config.stateRoot, params.agentId);
-                if (stored.agent.originSessionId !== origin(ctx, deps.env).originSessionId) throw new Error(`Agent ${params.agentId} belongs to a different origin session`);
-                validateAgentTargetAuthorization(active(deps), stored);
-                const stopped = await stopSubagentAgentWithDisposition({ stateRoot: config.stateRoot, agentId: params.agentId, originSessionId: origin(ctx, deps.env).originSessionId, exec: deps.exec, tmux: config.tmux });
-                stopDisposition = stopped.disposition;
-                snapshot = stopped.snapshot;
-            } else {
-                const taskId = params.taskId!;
-                const agentId = await findTaskAgent(config.stateRoot, taskId, origin(ctx, deps.env).originSessionId);
-                rejectSelfTarget(deps.env, agentId, "stop");
-                validateAgentTargetAuthorization(active(deps), await readAgentSnapshot(config.stateRoot, agentId, taskId));
-                const stopped = await stopSubagentTaskWithDisposition({ stateRoot: config.stateRoot, agentId, taskId, originSessionId: origin(ctx, deps.env).originSessionId });
-                stopDisposition = stopped.disposition;
-                snapshot = stopped.snapshot;
-            }
-            const result = agentResult(snapshot, await claim(config, snapshot, ctx, deps.env, id, "subagent_stop"));
-            return { ...result, details: { ...result.details, stopDisposition } };
-        },
-        renderCall(args, theme, context) { return renderStopCall(args, theme, context); },
-        renderResult(result, options, theme, context) { return renderStopResult(result, options, theme, context, deps.natureHandleWords?.()); },
-    });
-}
-export async function registerOrchestration(pi: ExtensionAPI, options: Partial<Pick<OrchestrationDependencies, "configPath" | "catalogPath" | "env">> = {}): Promise<boolean> {
-    loadFeatureKeybindings("subagentPalette"); loadFeatureKeybindings("tmuxPreview");
-    const configPath = options.configPath ?? CONFIG; const catalogPath = options.catalogPath ?? CATALOG; const env = options.env ?? process.env;
-    const runtime = await loadOrchestrationConfig(configPath);
-    let current: ActiveCaller | undefined; let natureHandleWords: readonly string[] = runtime.natureHandleWords;
-    const exec: CommandExecutor = async (command, args) => { const value = await pi.exec(command, args); return { stdout: value.stdout, stderr: value.stderr, code: value.code }; };
-    const deps: OrchestrationDependencies = { configPath, catalogPath, env, exec, activeCaller: () => current, natureHandleWords: () => natureHandleWords };
-    const registerDispatch = (targets: Record<string, AgentDefinition>) => { pi.registerTool(createSubagentRunTool(deps, targets)); pi.registerTool(createSubagentSubmitTool(deps, targets)); };
-    const resolvedPath = env.PI_AGENT_RESOLVED_AGENT; let resolvedEnvelope: AgentLaunchEnvelope | undefined;
-    if (resolvedPath) {
-        try {
-            const envelope = validateLaunchEnvelope(JSON.parse(await readFile(resolvedPath, "utf8"))); resolvedEnvelope = envelope;
-            const names = envelope.delegation[envelope.identity] ?? [];
-            const targets = Object.fromEntries(names.map(name => [name, envelope.catalog[name]!]).filter(([, value]) => value !== undefined));
-            current = { identity: envelope.identity, targets, catalog: { schemaVersion: 1, agents: envelope.catalog }, envelope }; registerDispatch(targets);
-        } catch (error) { current = { identity: "agent:invalid", targets: {}, catalog: { schemaVersion: 1, agents: {} }, error: error instanceof Error ? error.message : String(error) }; registerDispatch({}); }
-    } else {
-        const catalog = await loadAgentCatalog(catalogPath);
-        onActiveMode(pi, event => {
-            const identity = `mode:${event.name}`; const names = runtime.delegation[identity] ?? [];
-            const targets = Object.fromEntries(names.map(name => [name, catalog.agents[name]!]).filter(([, value]) => value !== undefined));
-            current = { identity, targets, catalog }; registerDispatch(targets);
-        }, error => { current = { identity: "mode:invalid", targets: {}, catalog, error: error.message }; registerDispatch({}); });
-        registerDispatch({});
-    }
-    if (env.PI_SUBAGENT_AGENT_ID) {
-        pi.registerCommand("parent", {
-            description: "Return to this subagent's parent tmux window",
-            async handler(_args, ctx) {
-                const config = await loadOrchestrationConfig(configPath);
-                const result = await exec(config.returnParentCommand, []);
-                if (result.code !== 0) ctx.ui.notify(result.stderr.trim() || "Could not return to the parent window", "error");
-            },
-        });
-    }
+export function createMeshEnableTool(pi: ExtensionAPI, deps: OrchestrationDependencies, persist: () => Promise<void>): ToolDefinition<typeof enableParameters, unknown> { return defineTool({ name: MESH_BOOTSTRAP_TOOL_NAME, label: "Enable peer mesh tools", description: "Add peer observation, launch, wait, stop, and routing tools when this task requires coordination. Existing role tools are preserved.", promptSnippet: "Enable peer mesh coordination tools", parameters: enableParameters, renderCall: renderEnableCall, renderResult: renderEnableResult, async execute() { const caller = await authorized(deps); const all = new Set(pi.getAllTools().map(tool => tool.name)); const missing = MESH_PEER_TOOL_NAMES.filter(name => !all.has(name)); if (missing.length) throw new Error(`Mesh activation unavailable; tools not registered: ${missing.join(", ")}`); const current = pi.getActiveTools(); const next = [...new Set([...current, ...MESH_PEER_TOOL_NAMES])]; pi.setActiveTools(next); const activeNow = new Set(pi.getActiveTools()); const failed = MESH_PEER_TOOL_NAMES.filter(name => !activeNow.has(name)); if (failed.length) throw new Error(`Mesh activation incomplete: ${failed.join(", ")}`); if (caller.agentId) await persist(); return { content: [{ type: "text" as const, text: serializeModelVisibleJson({ enabled: true, activeTools: pi.getActiveTools() }) }], details: { enabled: true, activeTools: pi.getActiveTools() } }; } }); }
+
+export async function registerOrchestration(pi: ExtensionAPI, options: OrchestrationRegistrationOptions = {}): Promise<boolean> {
+    loadFeatureKeybindings("meshPalette"); loadFeatureKeybindings("tmuxPreview"); const configPath = options.configPath ?? CONFIG; const catalogPath = options.catalogPath ?? CATALOG; const env = options.env ?? process.env; const runtime = await loadOrchestrationConfig(configPath); const catalog = await loadAgentCatalog(catalogPath); const exec: CommandExecutor = async (command, args) => { const value = await pi.exec(command, args); return { stdout: value.stdout, stderr: value.stderr, code: value.code }; };
+    let current: ActiveCaller | undefined; let rootLeaseId: string | undefined; let endpoint: MeshEndpoint | undefined; let sessionContext: ExtensionContext | undefined; let latestMode: ActiveModeEvent | undefined; let timer: unknown; let pumping = false; let shuttingDown = false; let lastPumpError: string | undefined; let modeBarrier: ActiveModeBarrier; const injectedThisRuntime = new Set<string>(); let resolvedEnvelope: AgentLaunchEnvelope | undefined; const childAgentId = env.PI_MESH_AGENT_ID; const childMeshId = env.PI_MESH_ID;
+    if (env.PI_AGENT_RESOLVED_AGENT) try { resolvedEnvelope = validateLaunchEnvelope(JSON.parse(await readFile(env.PI_AGENT_RESOLVED_AGENT, "utf8"))); } catch (error) { current = { identity: "agent:invalid", meshId: childMeshId ?? randomUUID(), epoch: {} as PolicyEpoch, catalog, endpointId: "invalid", error: errorText(error) }; }
+    const deps: OrchestrationDependencies = { configPath, catalogPath, env, exec, activeCaller: () => current, authorityBarrier: () => modeBarrier.wait(), natureHandleWords: () => runtime.natureHandleWords };
+    const inspectRootLease = (sessionId: string, sessionFile: string | undefined, tmux: Awaited<ReturnType<typeof probeTmux>>) => async (existing: Parameters<NonNullable<Parameters<typeof attachRootMesh>[2]["inspectExisting"]>>[0]) => { let pidAlive = true; try { process.kill(existing.pid, 0); } catch { pidAlive = false; } const sameSession = existing.rootSessionId === sessionId && existing.rootSessionFile === sessionFile; const tmuxMatches = existing.tmuxServerPid === undefined && existing.tmuxSessionId === undefined ? tmux === null : Boolean(tmux && existing.tmuxServerPid === tmux.serverPid && existing.tmuxSessionId === tmux.sessionId); return { pidAlive, sameSession, tmuxMatches }; };
+    const registerDispatch = (targets: Record<string, AgentDefinition>) => { pi.registerTool(createMeshRunTool(deps, targets)); pi.registerTool(createMeshSubmitTool(deps, targets)); };
+    registerDispatch(resolvedEnvelope ? resolvedEnvelope.catalog : {}); pi.registerTool(createMeshGetTool(deps)); pi.registerTool(createMeshWaitTool(deps)); pi.registerTool(createMeshStopTool(deps)); pi.registerTool(createMeshRouteTool(deps));
+    const persistEnabled = async () => { const caller = active(deps); if (caller.agentId) { const { patchAgentStatus } = await import("./utilities/orchestration_store.ts"); await patchAgentStatus(runtime.stateRoot, caller.meshId, caller.agentId, { meshToolsEnabled: true }); } };
+    if (childAgentId) pi.registerTool(createMeshEnableTool(pi, deps, persistEnabled));
+    const activateMesh = async () => { const all = new Set(pi.getAllTools().map(tool => tool.name)); const missing = MESH_PEER_TOOL_NAMES.filter(name => !all.has(name)); if (missing.length) throw new Error(`Mesh activation unavailable; tools not registered: ${missing.join(", ")}`); const next = [...new Set([...pi.getActiveTools(), ...MESH_PEER_TOOL_NAMES])]; pi.setActiveTools(next); const failed = MESH_PEER_TOOL_NAMES.filter(name => !pi.getActiveTools().includes(name)); if (failed.length) throw new Error(`Mesh activation incomplete: ${failed.join(", ")}`); await persistEnabled(); };
+    const applyMode = async (event: ActiveModeEvent) => { latestMode = event; if (!sessionContext || childAgentId || !current) return; const names = runtime.roleSets[`mode:${event.name}`]; if (!names) throw new Error(`Mode ${event.name} has no mesh role set`); const roles = Object.fromEntries(names.map(name => [name, catalog.agents[name]!])); const restored = branchData<EpochBinding>(sessionContext, POLICY_BINDING); const epoch = await ensurePolicyEpoch(runtime.stateRoot, current.meshId, { mode: event.name, roleSet: names, roles, ...(restored?.meshId === current.meshId && restored.mode === event.name ? { restoreEpochId: restored.epochId } : {}) }); current = { ...current, identity: `mode:${event.name}`, epoch, error: undefined }; registerDispatch(roleTargets(current)); if (!restored || restored.epochId !== epoch.epochId) pi.appendEntry(POLICY_BINDING, { schemaVersion: 1, meshId: current.meshId, mode: event.name, epochId: epoch.epochId, policyDigest: epoch.policyDigest } satisfies EpochBinding); };
+    modeBarrier = createActiveModeBarrier(applyMode, error => { if (current) current = { ...current, error: errorText(error) }; });
+    onActiveMode(pi, event => modeBarrier.enqueue(event), error => { if (current) current = { ...current, error: errorText(error) }; });
+    const pumpEvents = async (): Promise<boolean> => { if (shuttingDown || pumping || !endpoint || !current || !endpoint.online) return false; pumping = true; try { const events = await pollMeshEvents(runtime.stateRoot, current.meshId, endpoint); if (shuttingDown) return false; for (const event of events) { if (shuttingDown) return false; if (injectedThisRuntime.has(event.eventId)) continue; if (childAgentId) await activateMesh(); if (shuttingDown) return false; const content = `[mesh-event ${event.eventId}] ${event.kind}\n${serializeModelVisibleJson(event.payload)}`; pi.sendMessage({ customType: "mesh-event", content, display: true, details: { eventId: event.eventId, kind: event.kind, payload: event.payload } }, { deliverAs: event.delivery, triggerTurn: sessionContext?.isIdle() ?? false }); await markMeshEventInjected(runtime.stateRoot, current.meshId, event.eventId); injectedThisRuntime.add(event.eventId); } return true; } finally { pumping = false; } };
+    const pumpWithDiagnostics = async () => { try { if (await pumpEvents() && lastPumpError !== undefined) { lastPumpError = undefined; sessionContext?.ui.setStatus(PUMP_STATUS, undefined); } } catch (error) { const text = errorText(error).replace(/\s+/gu, " ").trim(); if (text !== lastPumpError) { lastPumpError = text; const diagnostic = `Mesh event pump: ${text}`; sessionContext?.ui.setStatus(PUMP_STATUS, diagnostic); sessionContext?.ui.notify(diagnostic, "error"); } } };
+    if (childAgentId) pi.registerCommand("parent", { description: "Return to this mesh agent's inviter tmux window", async handler(_args, ctx) { const result = await exec(runtime.returnParentCommand, []); if (result.code !== 0) ctx.ui.notify(result.stderr.trim() || "Could not return to the inviter window", "error"); } });
     pi.on("session_start", async (_event, ctx) => {
-        const config = await loadOrchestrationConfig(configPath); if (resolvedEnvelope) emitResolvedAgent(pi, resolvedEnvelope);
-        natureHandleWords = config.natureHandleWords;
-        if (env.PI_SUBAGENT_AGENT_ID) ctx.ui.setStatus(PARENT_NAVIGATION_STATUS, config.parentNavigationHint);
-        const lineage = origin(ctx, env);
-        await reconcileOriginUsageClaims(config.stateRoot, lineage.originSessionId, lineage.originSessionFile);
+        sessionContext = ctx; const sessionId = ctx.sessionManager.getSessionId(); const sessionFile = ctx.sessionManager.getSessionFile();
+        if (resolvedEnvelope && childMeshId && childAgentId) { if (resolvedEnvelope.meshId !== childMeshId || resolvedEnvelope.agentId !== childAgentId) throw new Error("Mesh child environment does not match launch envelope"); const epochRecord = await readPolicyEpoch(runtime.stateRoot, childMeshId, resolvedEnvelope.epochId); current = { identity: resolvedEnvelope.identity, meshId: childMeshId, epoch: epochRecord, catalog: { schemaVersion: 1, agents: resolvedEnvelope.catalog }, envelope: resolvedEnvelope, agentId: childAgentId, endpointId: `agent:${childAgentId}`, ...(sessionFile ? { sessionFile } : {}) }; emitResolvedAgent(pi, resolvedEnvelope); if (sessionFile) endpoint = await bindMeshEndpoint(runtime.stateRoot, childMeshId, { endpointId: current.endpointId, kind: "agent", agentId: childAgentId, harness: "pi", sessionId, sessionFile }); const status = await readAgentSnapshot(runtime.stateRoot, childMeshId, childAgentId).then(value => value.status); const roleTools = resolvedEnvelope.self.tools.filter(name => name !== MESH_BOOTSTRAP_TOOL_NAME && !MESH_PEER_TOOL_NAMES.includes(name as typeof MESH_PEER_TOOL_NAMES[number])); pi.setActiveTools([...new Set([...roleTools, MESH_BOOTSTRAP_TOOL_NAME, ...(status.meshToolsEnabled ? MESH_PEER_TOOL_NAMES : [])])]); ctx.ui.setStatus(PARENT_STATUS, runtime.parentNavigationHint); if (sessionFile) await reconcileMeshUsageClaims(runtime.stateRoot, childMeshId, sessionFile); }
+        else {
+            const persisted = Boolean(sessionFile); const restored = branchData<RootBinding>(ctx, ROOT_BINDING); let mesh = restored ? await readMesh(runtime.stateRoot, restored.meshId).catch(() => undefined) : undefined; if (mesh?.state === "closing" && persisted) { const recoveryTmux = await probeTmux(exec, runtime.tmux, env); const recoveryLease = await attachRootMesh(runtime.stateRoot, mesh.meshId, { rootSessionId: sessionId, ...(sessionFile ? { rootSessionFile: sessionFile } : {}), inspectExisting: inspectRootLease(sessionId, sessionFile, recoveryTmux) }); await cleanupMeshAgents({ stateRoot: runtime.stateRoot, meshId: mesh.meshId, exec, tmux: runtime.tmux, shutdownReason: "recovery", hubContext: recoveryTmux ?? undefined }); await completeMeshClose(runtime.stateRoot, mesh.meshId, recoveryLease.leaseId); mesh = undefined; } if (!mesh || mesh.state !== "open" || !mesh.recoverable || !persisted) { mesh = await initializeMesh(runtime.stateRoot, { rootSessionId: sessionId, ...(sessionFile ? { rootSessionFile: sessionFile } : {}), recoverable: persisted, budgets: runtime.budgets }); if (persisted) pi.appendEntry(ROOT_BINDING, { schemaVersion: 1, meshId: mesh.meshId } satisfies RootBinding); }
+            const tmux = await probeTmux(exec, runtime.tmux, env); const lease = await attachRootMesh(runtime.stateRoot, mesh.meshId, { rootSessionId: sessionId, ...(sessionFile ? { rootSessionFile: sessionFile } : {}), ...(tmux ? { tmuxServerPid: tmux.serverPid, tmuxSessionId: tmux.sessionId } : {}), inspectExisting: inspectRootLease(sessionId, sessionFile, tmux) }); rootLeaseId = lease.leaseId; const fallbackEpoch = mesh.currentEpochId ? await readPolicyEpoch(runtime.stateRoot, mesh.meshId, mesh.currentEpochId) : { schemaVersion: 1 as const, meshId: mesh.meshId, epochId: randomUUID(), mode: "pending", roleSet: [], roles: {}, policyDigest: "", createdAt: new Date().toISOString() }; current = { identity: "mode:pending", meshId: mesh.meshId, epoch: fallbackEpoch, catalog, endpointId: `root:${mesh.meshId}`, ...(sessionFile ? { sessionFile } : {}) }; if (sessionFile) endpoint = await bindMeshEndpoint(runtime.stateRoot, mesh.meshId, { endpointId: current.endpointId, kind: "root", harness: "pi", sessionId, sessionFile }); if (latestMode) await applyMode(latestMode); await reconcileMeshState(runtime.stateRoot, mesh.meshId); if (sessionFile) await reconcileMeshUsageClaims(runtime.stateRoot, mesh.meshId, sessionFile); await reconcileMeshReservations(runtime.stateRoot, mesh.meshId, agentId => inspectMeshAgentWindow(exec, runtime.tmux, tmux, mesh.meshId, agentId));
+        }
+        const scheduleInterval = options.setInterval ?? ((callback: () => void | Promise<void>, delay: number) => globalThis.setInterval(() => { void callback(); }, delay));
+        timer = scheduleInterval(async () => { if (rootLeaseId && current) void heartbeatRootLease(runtime.stateRoot, current.meshId, rootLeaseId).catch(() => {}); await pumpWithDiagnostics(); }, 250); await pumpWithDiagnostics();
     });
+    pi.on("context", async event => { const ids = event.messages.flatMap(message => { const raw = message as unknown as Record<string, unknown>; const details = raw.details && typeof raw.details === "object" ? raw.details as Record<string, unknown> : undefined; return raw.customType === "mesh-event" && typeof details?.eventId === "string" ? [details.eventId] : []; }); if (current && ids.length) await acknowledgeMeshEvents(runtime.stateRoot, current.meshId, ids); });
     if (resolvedEnvelope) pi.on("before_agent_start", (event, ctx) => { const definition = resolvedEnvelope!.self; const opted = new Set(definition.skillOptIns); const loaded = event.systemPromptOptions.skills ?? []; const names = new Set(loaded.map(skill => skill.name)); const missing = definition.skillOptIns.filter(name => !names.has(name)); if (missing.length) ctx.ui.notify(`Agent ${resolvedEnvelope!.identity}: opted-in skills unavailable: ${missing.join(", ")}`, "warning"); const skills = loaded.filter(skill => opted.has(skill.name) && skill.disableModelInvocation).map(skill => ({ ...skill, disableModelInvocation: false })); const addition = [formatSkillsForPrompt(skills), definition.instructions].filter(Boolean).join("\n\n"); if (addition) return { systemPrompt: `${event.systemPrompt}\n\n${addition}` }; });
-    const paletteDeps = (ctx: ExtensionContext, config: SubagentRuntimeConfig): SubagentPaletteDependencies => { const caller = active(deps); return { stateRoot: config.stateRoot, originSessionId: origin(ctx, env).originSessionId, authorizedAgents: Object.keys(caller.targets), callerIdentity: caller.identity, exec, env, tmux: config.tmux, historyViewerExtension: config.historyViewerExtension, piCommand: config.harnesses.pi!.command, natureHandleWords: config.natureHandleWords, tmuxPreviewActions: loadFeatureKeybindings("tmuxPreview").actions }; };
-    providePopupView(pi, { id: "agent-sessions", title: "Agent Sessions", create(view) { const component = new SubagentPaletteComponent({ tui: view.tui, theme: view.theme, ui: view.extensionContext.ui, keymap: loadPaletteKeymap(undefined, "subagentPalette").keymap, deps: paletteDeps(view.extensionContext, runtime), done: disposition => view.done(disposition === "close" ? "close-all" : "back") }); component.start(); return component; } });
-    const open = async (ctx: ExtensionContext, placement: "root" | "push" = "root") => openPopupView(pi, "agent-sessions", ctx, placement);
-    const unregister = provideCommandPaletteContribution(pi.events, {
-        owner: "subagent",
-        id: "agents",
-        label: "/subagent  Manage agent sessions",
-        description: "Open, unlink, or stop native tmux agent sessions.",
-        keywords: ["agents", "tmux"],
-        run: async ctx => { const result = await open(ctx, "push"); return result === "close-all" ? "close" : "return"; },
-    });
-    pi.registerCommand("subagent", { description: "Manage persistent agent sessions", handler: async (_args, ctx) => { await open(ctx, "root"); } });
-    pi.on("session_shutdown", async (event, ctx) => {
-        unregister();
-        const lineage = origin(ctx, env);
-        if (lineage.depth > 0 || event.reason === "reload") return;
-        const config = await loadOrchestrationConfig(configPath);
-        const hubContext = await probeTmux(exec, config.tmux, env) ?? undefined;
-        await cleanupOriginAgents({ stateRoot: config.stateRoot, originSessionId: lineage.originSessionId, exec, tmux: config.tmux, shutdownReason: event.reason, hubContext });
-    });
-    pi.registerTool(createSubagentGetTool(deps));
-    pi.registerTool(createSubagentWaitTool(deps));
-    pi.registerTool(createSubagentStopTool(deps));
+    const paletteDeps = (): MeshPaletteDependencies => { const caller = active(deps); return { meshId: caller.meshId, exec, tmux: runtime.tmux, historyViewerExtension: runtime.historyViewerExtension, piCommand: runtime.harnesses.pi!.command, natureHandleWords: runtime.natureHandleWords, tmuxPreviewActions: loadFeatureKeybindings("tmuxPreview").actions, discover: async identity => { const store = await import("./utilities/orchestration_store.ts"); const items = await store.listMeshAgents(runtime.stateRoot, identity.meshId); const values = await Promise.all(items.map(item => readReconciledAgentSnapshot(exec, runtime.tmux, runtime.stateRoot, identity.meshId, item.agent.agentId).then(value => ({ ok: true as const, value })).catch(() => ({ ok: false as const })))); return { agents: values.flatMap(item => item.ok ? [item.value] : []), malformedCount: values.filter(item => !item.ok).length }; }, stopAgent: request => stopPaletteMeshAgent(deps, runtime, request) }; };
+    providePopupView(pi, { id: "agent-sessions", title: "Mesh Agents", create(view) { const component = new MeshAgentsPaletteComponent({ tui: view.tui, theme: view.theme, ui: view.extensionContext.ui, keymap: loadPaletteKeymap(undefined, "meshPalette").keymap, deps: paletteDeps(), done: disposition => view.done(disposition === "close" ? "close-all" : "back") }); component.start(); return component; } }); const open = async (ctx: ExtensionContext, placement: "root" | "push" = "root") => openPopupView(pi, "agent-sessions", ctx, placement); const unregister = provideCommandPaletteContribution(pi.events, { owner: "mesh", id: "agents", label: "/mesh  Manage mesh agents", description: "Open, unlink, inspect, or stop mesh agent sessions.", keywords: ["mesh", "agents", "tmux"], run: async ctx => (await open(ctx, "push")) === "close-all" ? "close" : "return" }); pi.registerCommand("mesh", { description: "Manage persistent mesh agents", handler: async (_args, ctx) => { await open(ctx); } });
+    pi.on("session_shutdown", async event => { shuttingDown = true; unregister(); if (timer !== undefined) (options.clearInterval ?? (value => globalThis.clearInterval(value as NodeJS.Timeout)))(timer); if (endpoint && current) await setMeshEndpointOffline(runtime.stateRoot, current.meshId, endpoint.endpointId).catch(() => {}); if (childAgentId || !current || !rootLeaseId || event.reason === "reload") return; await beginMeshClose(runtime.stateRoot, current.meshId, rootLeaseId); const hubContext = await probeTmux(exec, runtime.tmux, env) ?? undefined; await cleanupMeshAgents({ stateRoot: runtime.stateRoot, meshId: current.meshId, exec, tmux: runtime.tmux, shutdownReason: event.reason, hubContext }); await completeMeshClose(runtime.stateRoot, current.meshId, rootLeaseId); });
     return true;
 }
 export default registerOrchestration;

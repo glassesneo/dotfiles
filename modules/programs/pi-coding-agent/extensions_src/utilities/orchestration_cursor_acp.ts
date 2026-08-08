@@ -59,7 +59,7 @@ export class CursorAcpDriver implements ExternalDriver {
             return { outcome: { outcome: "selected", optionId } };
         }
         if (message.method === "cursor/create_plan") { this.#event({ type: "tool", text: "accepted implementation plan" }); return { accepted: true }; }
-        if (message.method === "cursor/ask_question") { this.#event({ type: "tool", text: "skipped blocking question; report blocker in result" }); return { skipped: true, reason: "non-interactive subagent" }; }
+        if (message.method === "cursor/ask_question") { this.#event({ type: "tool", text: "skipped blocking question; report blocker in result" }); return { skipped: true, reason: "non-interactive mesh agent" }; }
         if (message.id !== undefined) this.#failTurn(`Unsupported blocking ACP request: ${message.method}`);
         return null;
     }
@@ -72,7 +72,7 @@ export class CursorAcpDriver implements ExternalDriver {
         });
         const initialized = record(await this.#transport.request("initialize", {
             protocolVersion: 1,
-            clientInfo: { name: "pi-subagent-worker", version: "1" },
+            clientInfo: { name: "pi-mesh-worker", version: "1" },
             clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
         }));
         const methods = Array.isArray(initialized?.authMethods) ? initialized.authMethods : [];

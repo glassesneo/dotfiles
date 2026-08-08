@@ -31,7 +31,8 @@ export interface PerformanceResourceSnapshot {
     swap: string;
     diskFreeBytes: number | "unavailable";
 }
-export interface SubagentTaskMetric {
+export interface MeshTaskMetric {
+    meshId: string;
     agentId: string;
     taskId: string;
     agentType: string;
@@ -42,7 +43,7 @@ export interface SubagentTaskMetric {
     open: boolean;
     longRunning: boolean;
 }
-export interface SubagentMetrics { tasks: SubagentTaskMetric[]; unread: number; unavailable?: string }
+export interface MeshMetrics { tasks: MeshTaskMetric[]; unread: number; unavailable?: string }
 
 function finite(value: unknown): value is number { return typeof value === "number" && Number.isFinite(value) && value >= 0; }
 function object(value: unknown): Record<string, unknown> | undefined { return value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : undefined; }
@@ -125,50 +126,65 @@ export async function resourceSnapshot(cwd: string): Promise<PerformanceResource
 }
 
 async function json(path: string): Promise<unknown> { return JSON.parse(await readFile(path, "utf8")); }
-export async function readSubagentMetrics(configPath: string, options: { originSessionId?: string; sinceMs?: number; nowMs?: number } = {}): Promise<SubagentMetrics> {
+export async function readMeshMetrics(configPath: string, options: { meshId?: string; sinceMs?: number; nowMs?: number } = {}): Promise<MeshMetrics> {
     const nowMs = options.nowMs ?? Date.now(); let unread = 0;
     let config: Record<string, unknown> | undefined;
-    try { config = object(await json(configPath)); } catch { return { tasks: [], unread: 1, unavailable: "subagent config unavailable" }; }
-    if (typeof config?.stateRoot !== "string") return { tasks: [], unread: 1, unavailable: "subagent stateRoot unavailable" };
-    const agentsRoot = join(config.stateRoot, "agents"); let agentIds: string[];
-    try { agentIds = await readdir(agentsRoot); }
-    catch { return { tasks: [], unread: 1, unavailable: "subagent agents state unavailable" }; }
-    const tasks: SubagentTaskMetric[] = [];
-    for (const agentId of agentIds) {
-        const directory = join(agentsRoot, agentId); let agent: Record<string, unknown> | undefined;
-        try { agent = object(await json(join(directory, "agent.json"))); } catch { unread += 1; continue; }
-        if (!agent || typeof agent.agent !== "string" || typeof agent.originSessionId !== "string") { unread += 1; continue; }
-        if (options.originSessionId && agent.originSessionId !== options.originSessionId) continue;
-        const taskIds = await readdir(join(directory, "tasks")).catch(() => { unread += 1; return [] as string[]; });
+    try { config = object(await json(configPath)); } catch { return { tasks: [], unread: 1, unavailable: "mesh config unavailable" }; }
+    if (typeof config?.stateRoot !== "string") return { tasks: [], unread: 1, unavailable: "mesh stateRoot unavailable" };
+    const meshesRoot = join(config.stateRoot, "meshes");
+    let meshIds: string[];
+    if (options.meshId) meshIds = [options.meshId];
+    else {
+        try { meshIds = await readdir(meshesRoot); }
+        catch { return { tasks: [], unread: 1, unavailable: "mesh state unavailable" }; }
+    }
+    const tasks: MeshTaskMetric[] = [];
+    for (const meshId of meshIds) {
+        const meshRoot = join(meshesRoot, meshId);
+        let taskIds: string[];
+        try { taskIds = await readdir(join(meshRoot, "tasks")); }
+        catch {
+            if (options.meshId) return { tasks: [], unread: unread + 1, unavailable: "mesh tasks state unavailable" };
+            unread += 1; continue;
+        }
+        const agents = new Map<string, string | undefined>();
         for (const taskId of taskIds) {
             try {
-                const taskDirectory = join(directory, "tasks", taskId); const [requestRaw, statusRaw, resultRaw] = await Promise.all([json(join(taskDirectory, "request.json")), json(join(taskDirectory, "status.json")), json(join(taskDirectory, "result.json")).catch(() => undefined)]);
+                const taskDirectory = join(meshRoot, "tasks", taskId);
+                const [requestRaw, statusRaw, resultRaw] = await Promise.all([json(join(taskDirectory, "request.json")), json(join(taskDirectory, "status.json")), json(join(taskDirectory, "result.json")).catch(() => undefined)]);
                 const request = object(requestRaw); const status = object(statusRaw); const result = object(resultRaw);
+                const agentId = typeof request?.agentId === "string" ? request.agentId : undefined;
                 const startedMs = isoMs(result?.startedAt) ?? isoMs(status?.startedAt) ?? isoMs(request?.createdAt); const finishedMs = isoMs(result?.finishedAt) ?? isoMs(status?.finishedAt);
-                if (!request || !status || typeof request.taskId !== "string" || startedMs === undefined || (finishedMs !== undefined && finishedMs < startedMs)) { unread += 1; continue; }
+                if (!request || !status || request.meshId !== meshId || status.meshId !== meshId || typeof request.taskId !== "string" || request.taskId !== taskId || !agentId || status.agentId !== agentId || status.taskId !== taskId || result && (result.meshId !== meshId || result.agentId !== agentId || result.taskId !== taskId) || startedMs === undefined || (finishedMs !== undefined && finishedMs < startedMs)) { unread += 1; continue; }
+                if (!agents.has(agentId)) {
+                    const rawAgent = object(await json(join(meshRoot, "agents", agentId, "agent.json")).catch(() => undefined));
+                    agents.set(agentId, rawAgent?.meshId === meshId && rawAgent.agentId === agentId && typeof rawAgent.agent === "string" ? rawAgent.agent : undefined);
+                }
+                const agentType = agents.get(agentId);
+                if (!agentType) { unread += 1; continue; }
                 const open = finishedMs === undefined;
                 if (open && startedMs > nowMs) { unread += 1; continue; }
                 const elapsed = (finishedMs ?? nowMs) - startedMs;
                 if (options.sinceMs !== undefined && (finishedMs ?? startedMs) < options.sinceMs) continue;
-                tasks.push({ agentId, taskId: request.taskId, agentType: agent.agent, outcome: typeof result?.outcome === "string" ? result.outcome : typeof status.state === "string" ? status.state : "unknown", startedAt: new Date(startedMs).toISOString(), ...(finishedMs === undefined ? {} : { finishedAt: new Date(finishedMs).toISOString() }), durationMs: elapsed, open, longRunning: elapsed >= LONG_RUNNING_MS });
+                tasks.push({ meshId, agentId, taskId: request.taskId, agentType, outcome: typeof result?.outcome === "string" ? result.outcome : typeof status.state === "string" ? status.state : "unknown", startedAt: new Date(startedMs).toISOString(), ...(finishedMs === undefined ? {} : { finishedAt: new Date(finishedMs).toISOString() }), durationMs: elapsed, open, longRunning: elapsed >= LONG_RUNNING_MS });
             } catch { unread += 1; }
         }
     }
-    return { tasks: tasks.toSorted((a, b) => b.durationMs - a.durationMs), unread };
+    return { tasks: tasks.toSorted((a, b) => b.durationMs - a.durationMs || a.taskId.localeCompare(b.taskId)), unread };
 }
 
 function percentile(values: readonly number[], fraction: number): number { if (values.length === 0) return 0; const sorted = values.toSorted((a, b) => a - b); return sorted[Math.ceil(sorted.length * fraction) - 1] ?? 0; }
-function agentTypeLines(tasks: readonly SubagentTaskMetric[]): string[] { const grouped = new Map<string, SubagentTaskMetric[]>(); for (const task of tasks) grouped.set(task.agentType, [...(grouped.get(task.agentType) ?? []), task]); return [...grouped].toSorted(([a], [b]) => a.localeCompare(b)).map(([agentType, values]) => `  ${agentType}: ${values.length}, ${duration(values.reduce((sum, item) => sum + item.durationMs, 0))}`); }
-export function formatCurrentPerformance(runs: readonly PerformanceRun[], subagents: SubagentMetrics, resources: PerformanceResourceSnapshot): string {
+function agentTypeLines(tasks: readonly MeshTaskMetric[]): string[] { const grouped = new Map<string, MeshTaskMetric[]>(); for (const task of tasks) grouped.set(task.agentType, [...(grouped.get(task.agentType) ?? []), task]); return [...grouped].toSorted(([a], [b]) => a.localeCompare(b)).map(([agentType, values]) => `  ${agentType}: ${values.length}, ${duration(values.reduce((sum, item) => sum + item.durationMs, 0))}`); }
+export function formatCurrentPerformance(runs: readonly PerformanceRun[], mesh: MeshMetrics, resources: PerformanceResourceSnapshot): string {
     const total = runs.reduce((sum, run) => sum + run.totalMs, 0); const turns = runs.reduce((sum, run) => sum + run.turnCount, 0); const turnMs = runs.reduce((sum, run) => sum + run.turnMs, 0); const toolWall = runs.reduce((sum, run) => sum + run.toolWallMs, 0); const nonTool = runs.reduce((sum, run) => sum + run.nonToolMs, 0); const tools = new Map<string, ToolAggregate>();
     for (const run of runs) for (const [name, value] of Object.entries(run.tools)) { const current = tools.get(name) ?? { count: 0, durationMs: 0 }; current.count += value.count; current.durationMs += value.durationMs; tools.set(name, current); }
-    const lines = ["Performance — current session", `Settled runs: ${runs.length}; total ${duration(total)}; turns ${turns} / ${duration(turnMs)}`, `Tool wall: ${duration(toolWall)}; non-tool: ${duration(nonTool)}`, "Tools:", ...([...tools].toSorted(([a], [b]) => a.localeCompare(b)).map(([name, value]) => `  ${name}: ${value.count}, ${duration(value.durationMs)}`)), `Subagents: ${subagents.tasks.length}; unread: ${subagents.unread}${subagents.unavailable ? `; unavailable: ${subagents.unavailable}` : ""}`, ...subagents.tasks.map(task => `  ${task.agentType} ${task.outcome} ${duration(task.durationMs)} ${shortId(task.taskId)}${task.longRunning ? " long-running" : ""}${task.open ? " open" : ""}`), `Resources: ${resources.cpuCount} CPU; load ${resources.loadAverage.map(value => value.toFixed(2)).join(" ")}; memory ${bytes(resources.memoryFreeBytes)} free / ${bytes(resources.memoryTotalBytes)}`, `Swap: ${resources.swap}; disk free: ${resources.diskFreeBytes === "unavailable" ? "unavailable" : bytes(resources.diskFreeBytes)}`];
+    const lines = ["Performance — current session", `Settled runs: ${runs.length}; total ${duration(total)}; turns ${turns} / ${duration(turnMs)}`, `Tool wall: ${duration(toolWall)}; non-tool: ${duration(nonTool)}`, "Tools:", ...([...tools].toSorted(([a], [b]) => a.localeCompare(b)).map(([name, value]) => `  ${name}: ${value.count}, ${duration(value.durationMs)}`)), `Mesh tasks: ${mesh.tasks.length}; unread: ${mesh.unread}${mesh.unavailable ? `; unavailable: ${mesh.unavailable}` : ""}`, ...mesh.tasks.map(task => `  ${task.agentType} ${task.outcome} ${duration(task.durationMs)} ${shortId(task.taskId)}${task.longRunning ? " long-running" : ""}${task.open ? " open" : ""}`), `Resources: ${resources.cpuCount} CPU; load ${resources.loadAverage.map(value => value.toFixed(2)).join(" ")}; memory ${bytes(resources.memoryFreeBytes)} free / ${bytes(resources.memoryTotalBytes)}`, `Swap: ${resources.swap}; disk free: ${resources.diskFreeBytes === "unavailable" ? "unavailable" : bytes(resources.diskFreeBytes)}`];
     return lines.join("\n");
 }
-export function formatRecentPerformance(days: number, metrics: SubagentMetrics): string {
+export function formatRecentPerformance(days: number, metrics: MeshMetrics): string {
     const values = metrics.tasks.map(task => task.durationMs); const total = values.reduce((sum, value) => sum + value, 0);
     return [
-        `Performance — subagents, last ${days} day(s)`,
+        `Performance — mesh tasks, last ${days} day(s)`,
         `Tasks: ${metrics.tasks.length}; total ${duration(total)}; median ${duration(percentile(values, 0.5))}; p90 ${duration(percentile(values, 0.9))}; unread: ${metrics.unread}${metrics.unavailable ? `; unavailable: ${metrics.unavailable}` : ""}`,
         "Agent types:", ...agentTypeLines(metrics.tasks), "Longest:", ...metrics.tasks.slice(0, 10).map(task => `  ${task.agentType} ${task.outcome} ${duration(task.durationMs)} ${shortId(task.taskId)}${task.longRunning ? " long-running" : ""}${task.open ? " open" : ""}`),
     ].join("\n");
@@ -179,8 +195,8 @@ export function parsePerformanceArguments(raw: string): { mode: "current" } | { 
     if (!Number.isInteger(days) || days < 1 || days > 90) throw new Error("Performance days must be an integer from 1 to 90"); return { mode: "recent", days };
 }
 
-export default function performanceExtension(pi: ExtensionAPI, options: { configPath?: string; clock?: () => number; wallClock?: () => Date } = {}): void {
-    const collector = new PerformanceCollector(options.clock, options.wallClock); const configPath = options.configPath ?? join(getAgentDir(), "orchestration.json");
+export default function performanceExtension(pi: ExtensionAPI, options: { configPath?: string; clock?: () => number; wallClock?: () => Date; env?: NodeJS.ProcessEnv } = {}): void {
+    const collector = new PerformanceCollector(options.clock, options.wallClock); const configPath = options.configPath ?? join(getAgentDir(), "orchestration.json"); const env = options.env ?? process.env;
     pi.on("agent_start", () => collector.startRun());
     pi.on("turn_start", event => collector.startTurn(event.turnIndex));
     pi.on("turn_end", event => collector.endTurn(event.turnIndex));
@@ -190,12 +206,12 @@ export default function performanceExtension(pi: ExtensionAPI, options: { config
     const handler = async (raw: string, ctx: ExtensionContext): Promise<void> => {
         try {
             const command = parsePerformanceArguments(raw); let text: string;
-            if (command.mode === "recent") text = formatRecentPerformance(command.days, await readSubagentMetrics(configPath, { sinceMs: Date.now() - command.days * 86_400_000 }));
-            else { const summary = summarizeRuns(ctx.sessionManager.getEntries()); text = formatCurrentPerformance(summary.runs, await readSubagentMetrics(configPath, { originSessionId: process.env.PI_SUBAGENT_ORIGIN_SESSION_ID ?? ctx.sessionManager.getSessionId() }), await resourceSnapshot(ctx.cwd)); if (summary.unread) text += `\nUnread performance entries: ${summary.unread}`; }
+            if (command.mode === "recent") text = formatRecentPerformance(command.days, await readMeshMetrics(configPath, { sinceMs: Date.now() - command.days * 86_400_000 }));
+            else { const summary = summarizeRuns(ctx.sessionManager.getEntries()); text = formatCurrentPerformance(summary.runs, await readMeshMetrics(configPath, { meshId: env.PI_MESH_ID }), await resourceSnapshot(ctx.cwd)); if (summary.unread) text += `\nUnread performance entries: ${summary.unread}`; }
             ctx.ui.notify(text, "info");
         } catch (error) { ctx.ui.notify(error instanceof Error ? error.message : String(error), "error"); }
     };
-    pi.registerCommand("performance", { description: "Show local session, subagent, and resource performance", getArgumentCompletions: prefix => "recent".startsWith(prefix.trim()) ? [{ value: "recent", label: "recent", description: "Aggregate recent subagent tasks" }] : null, handler });
-    const unregister = provideCommandPaletteContribution(pi.events, { owner: "performance", id: "show", label: "/performance  Show local performance", description: "View session, subagent, and resource timing.", keywords: ["timing", "tools", "subagent", "resources"], run: ctx => handler("", ctx) });
+    pi.registerCommand("performance", { description: "Show local session, mesh, and resource performance", getArgumentCompletions: prefix => "recent".startsWith(prefix.trim()) ? [{ value: "recent", label: "recent", description: "Aggregate recent mesh tasks" }] : null, handler });
+    const unregister = provideCommandPaletteContribution(pi.events, { owner: "performance", id: "show", label: "/performance  Show local performance", description: "View session, mesh, and resource timing.", keywords: ["timing", "tools", "mesh", "resources"], run: ctx => handler("", ctx) });
     pi.on("session_shutdown", unregister);
 }
