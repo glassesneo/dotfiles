@@ -5,7 +5,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { Value } from "typebox/value";
 import { createMeshEnableTool, createMeshGetTool, createMeshRunTool, createMeshStopTool, createMeshSubmitTool, createMeshWaitTool, registerOrchestration, stopPaletteMeshAgent, type ActiveCaller, type OrchestrationDependencies } from "../extensions_src/orchestration.ts";
-import { AGENT_ARTIFACT_EXTENSION, buildLaunchEnvelope, settledAgentCatalog, settledAgentDefinition, settledMeshRoleSets, type AgentLaunchEnvelope, type OrchestrationConfig } from "../extensions_src/utilities/agent_types.ts";
+import { AGENT_ARTIFACT_EXTENSION, WEB_FETCH_EXTENSION, WEB_SEARCH_EXTENSION, buildLaunchEnvelope, settledAgentCatalog, settledAgentDefinition, settledMeshRoleSets, type AgentLaunchEnvelope, type OrchestrationConfig } from "../extensions_src/utilities/agent_types.ts";
 import { bindMeshEndpoint, registerMeshSignal, registerMeshWatch } from "../extensions_src/utilities/orchestration_events.ts";
 import { ACTIVE_MODE_EVENT } from "../extensions_src/utilities/mode_events.ts";
 import { withMeshLock } from "../extensions_src/utilities/orchestration_lock.ts";
@@ -167,17 +167,21 @@ void test("a fresh root session silently ignores retained v1 state without modif
     } finally { if (previous === undefined) delete process.env.PI_EXTENSION_KEYBINDINGS_PATH; else process.env.PI_EXTENSION_KEYBINDINGS_PATH = previous; }
 }));
 
-void test("manual mesh activation is additive and idempotent and persists success only after all six tools are active", async () => {
+void test("a fresh Researcher bootstrap activates mesh_run additively and persists only complete activation", async () => {
     const pi = new PiMock();
     for (const name of MESH_TOOLS) pi.registerTool({ name });
-    pi.active = ["read", "save_agent_artifact"];
+    const bootstrapTools = [...settledAgentDefinition("researcher").tools, MESH_BOOTSTRAP_TOOL_NAME];
+    pi.active = [...bootstrapTools];
+    assert.equal(pi.active.includes(MESH_BOOTSTRAP_TOOL_NAME), true);
+    assert.equal(pi.active.includes("mesh_run"), false);
     let persisted = 0;
     const epoch = { schemaVersion: 1, meshId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", epochId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", mode: "ops", roleSet: [], roles: {}, policyDigest: "", createdAt: new Date().toISOString() } as const;
     const deps = { configPath: "/unused", env: {}, exec: absentTmux, activeCaller: () => caller(epoch.meshId, epoch as never, { agentId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc" }) };
     const enable = createMeshEnableTool(pi as never, deps, async () => { persisted += 1; });
     const first = await enable.execute("enable", {}, undefined, undefined, {} as never);
     const second = await enable.execute("enable-again", {}, undefined, undefined, {} as never);
-    assert.deepEqual(pi.active, ["read", "save_agent_artifact", ...MESH_TOOLS]);
+    assert.deepEqual(pi.active, [...bootstrapTools, ...MESH_TOOLS]);
+    assert.equal(pi.active.includes("mesh_run"), true);
     assert.deepEqual((first.details as any).activeTools, pi.active);
     assert.deepEqual((second.details as any).activeTools, pi.active);
     assert.equal(persisted, 2);
@@ -287,4 +291,33 @@ void test("native child launch manifests order popup, orchestration, role contri
     const union = launchTools(launchFor(["read", "mesh_route", "read", MESH_BOOTSTRAP_TOOL_NAME]));
     assert.deepEqual(union, ["read", "mesh_route", MESH_BOOTSTRAP_TOOL_NAME, ...MESH_TOOLS.filter(name => name !== "mesh_route")]);
     assert.equal(new Set(union).size, union.length);
+});
+
+void test("researcher catalog and native launch project retrieval capabilities without expanding another child", () => {
+    const catalog = settledAgentCatalog();
+    const researcher = settledAgentDefinition("researcher");
+    assert.deepEqual(researcher.tools, ["read", "grep", "find", "ls", "bash", "web_search", "web_fetch"]);
+    assert.deepEqual(researcher.skillOptIns, ["web-research"]);
+    assert.equal(researcher.model, "openai-codex/gpt-5.6-terra");
+    assert.equal(researcher.thinkingLevel, "high");
+    for (const roles of Object.values(settledMeshRoleSets())) assert.ok(roles.includes("researcher"));
+
+    const meshId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    const agentId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+    const epochId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+    const roleSet = ["researcher", "worker"];
+    const childExtensions = {
+        researcher: ["/popup.ts", "/orchestration.ts", WEB_SEARCH_EXTENSION, WEB_FETCH_EXTENSION, "/bridge.ts"],
+        worker: ["/popup.ts", "/orchestration.ts", "/bridge.ts"],
+    };
+    const launch = (agent: "researcher" | "worker") => {
+        const envelope = buildLaunchEnvelope({ meshId, agentId, epochId, agent, mode: "ops", roleSet, catalog, childExtensions });
+        return piLaunchDescriptor(runtimeConfig("/state"), { meshId, agentId, agentDirectory: `/state/meshes/${meshId}/agents/${agentId}`, agent, taskPath: "/task", launchEnvelope: "/envelope.json", epochSnapshot: envelope });
+    };
+    const researcherLaunch = launch("researcher");
+    const researcherLaunchTools = researcherLaunch.args[researcherLaunch.args.indexOf("--tools") + 1]!.split(",");
+    assert.deepEqual(researcherLaunch.args.filter((value, index) => researcherLaunch.args[index - 1] === "-e"), childExtensions.researcher);
+    assert.deepEqual(researcherLaunchTools.slice(0, researcher.tools.length), researcher.tools);
+    assert.equal(researcherLaunchTools.includes(MESH_BOOTSTRAP_TOOL_NAME), true);
+    assert.deepEqual(launch("worker").args.filter((value, index, args) => args[index - 1] === "-e"), childExtensions.worker);
 });

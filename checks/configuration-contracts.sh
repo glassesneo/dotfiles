@@ -43,7 +43,7 @@ expect_orchestration_rejection() {
     echo "$name: expected Nix evaluation failure" >&2
     exit 1
   fi
-  if ! grep -Eq 'settled seven-agent|role sets and mesh budgets|multiple definitions' <<<"$output"; then
+  if ! grep -Eq 'settled eight-agent|role sets and mesh budgets|multiple definitions' <<<"$output"; then
     echo "$name: missing exact-capability diagnostic" >&2
     echo "$output" >&2
     exit 1
@@ -81,6 +81,24 @@ let
   questionDisabled = base.extendModules {
     modules = [{ myconfig.programs.pi-coding-agent.question.enable = false; }];
   };
+  darwin = f.darwinConfigurations.seiran;
+  partialSecrets = darwin.extendModules {
+    modules = [{ myconfig.toplevel.secrets.names = f.inputs.nixpkgs.lib.mkForce ["parallel-api-key" "exa-api-key"]; }];
+  };
+  nullSecrets = darwin.extendModules {
+    modules = [{ myconfig.toplevel.secrets.enable = f.inputs.nixpkgs.lib.mkForce false; }];
+  };
+  retrievalSecretNames = ["parallel-api-key" "brave-api-key" "brave-free-api-key" "exa-api-key"];
+  collectWebRetrieval = system: let
+    c = system.config.home-manager.users.neo;
+    configDir = "\${c.home.homeDirectory}/.pi/agent";
+  in {
+    config = builtins.fromJSON (builtins.unsafeDiscardStringContext c.home.file."\${configDir}/web-retrieval.json".text);
+    secretPaths = builtins.listToAttrs (map (name: {
+      inherit name;
+      value = system.config.sops.secrets.\${name}.path or null;
+    }) retrievalSecretNames);
+  };
   collectEmergency = x: let
     c = x.config;
     cfg = c.myconfig.programs.pi-coding-agent;
@@ -109,7 +127,7 @@ let
         source = toString source;
         target = "\${cfg.configDir}/\${name}";
       };
-    }) ["auth.json" "agent-modes.json" "agent-catalog.json" "orchestration.json" "web-search.json" "extension-keybindings.json"]);
+    }) ["auth.json" "agent-modes.json" "agent-catalog.json" "orchestration.json" "web-retrieval.json" "extension-keybindings.json"]);
   };
   disabledConfig = disabled.config;
   disabledDir = "\${disabledConfig.home.homeDirectory}/.pi/emergency-agent";
@@ -125,6 +143,11 @@ in {
     };
     catalog = builtins.fromJSON (builtins.unsafeDiscardStringContext base.config.home.file."\${base.config.home.homeDirectory}/.pi/agent/agent-catalog.json".text);
     orchestration = builtins.fromJSON (builtins.unsafeDiscardStringContext base.config.home.file."\${base.config.home.homeDirectory}/.pi/agent/orchestration.json".text);
+    webRetrieval = {
+      all = collectWebRetrieval darwin;
+      partial = collectWebRetrieval partialSecrets;
+      null = collectWebRetrieval nullSecrets;
+    };
     extensionKeybindings = builtins.fromJSON (builtins.unsafeDiscardStringContext aliasOverride.config.home.file."\${aliasHomeDir}/.pi/agent/extension-keybindings.json".text);
     navigationRuntime = builtins.fromJSON (builtins.unsafeDiscardStringContext navigation.config.home.file."\${navigationHomeDir}/.pi/agent/orchestration.json".text);
     navigationTmux = navigation.config.programs.tmux.extraConfig;
@@ -146,27 +169,34 @@ NIX
 result=$(nix eval --impure --json --expr "$positive_expr")
 
 jq -e '
-  .pi.defaultExtensionNames == ["popup", "mode", "orchestration", "command_palette"] and
-  ([.pi.defaultExtensionPaths[] | split("/")[-1]] == ["popup.ts", "mode.ts", "orchestration.ts", "command_palette.ts", "question.ts", "interaction_policy.ts", "agent_artifact.ts"]) and
+  .pi.defaultExtensionNames == ["popup", "mode", "orchestration", "command_palette", "web_retrieval"] and
+  ([.pi.defaultExtensionPaths[] | split("/")[-1]] == ["popup.ts", "mode.ts", "orchestration.ts", "command_palette.ts", "web_search.ts", "web_fetch.ts", "question.ts", "interaction_policy.ts", "agent_artifact.ts"]) and
   ((.pi.modes | keys) == ["defaultMode", "modes", "schemaVersion"]) and .pi.modes.schemaVersion == 1 and .pi.modes.defaultMode == "recon" and
   ((.pi.modes.modes | keys) == ["ops", "recon"]) and .pi.modes.modes.recon.allowAllTools == false and .pi.modes.modes.ops.allowAllTools == true and
   (.pi.modes.modes.recon.tools | index("question")) != null and
+  (["web_search","web_fetch"] - .pi.modes.modes.recon.tools | length) == 0 and
   (["mesh_run","mesh_submit","mesh_get","mesh_wait","mesh_stop","mesh_route"] - .pi.modes.modes.recon.tools | length) == 0 and
    (.pi.modes.modes.recon.tools | index("mesh_enable")) == null and
   ([.pi.modes.modes[].tools[]? | select(startswith("subagent_"))] | length) == 0 and
   ([.pi.questionDisabled.extensionPaths[] | split("/")[-1]] | index("question.ts")) == null and
   (.pi.questionDisabled.modes.modes.recon.tools | index("question")) == null and
   ((.pi.catalog | keys) == ["agents", "schemaVersion"]) and .pi.catalog.schemaVersion == 1 and
-  ((.pi.catalog.agents | keys) == ["codex", "critic", "explorer", "fast-worker", "reviewer", "validator", "worker"]) and
+  ((.pi.catalog.agents | keys) == ["codex", "critic", "explorer", "fast-worker", "researcher", "reviewer", "validator", "worker"]) and
   (.pi.catalog.agents.reviewer.childExtensionContributions | length) == 1 and (.pi.catalog.agents.reviewer.childExtensionContributions[0] | endswith("/agent_artifact.ts")) and
+  .pi.catalog.agents.researcher.model == "openai-codex/gpt-5.6-terra" and .pi.catalog.agents.researcher.thinkingLevel == "high" and
+  .pi.catalog.agents.researcher.tools == ["read","grep","find","ls","bash","web_search","web_fetch"] and .pi.catalog.agents.researcher.skillOptIns == ["web-research"] and
+  ([.pi.catalog.agents.researcher.childExtensionContributions[] | split("/")[-1]] == ["web_search.ts","web_fetch.ts"]) and
+  ([.pi.catalog.agents | to_entries[] | select(.key != "researcher") | .value.tools[]? | select(. == "web_search" or . == "web_fetch")] | length) == 0 and
   ([.pi.catalog.agents.explorer, .pi.catalog.agents.worker, .pi.catalog.agents.validator, .pi.catalog.agents.critic, .pi.catalog.agents["fast-worker"], .pi.catalog.agents.codex] | all(.childExtensionContributions == [])) and
   .pi.catalog.agents.critic.tools == ["read","grep","find","ls","bash"] and .pi.catalog.agents.critic.skillOptIns == [] and
   .pi.catalog.agents.reviewer.tools == ["read","grep","find","ls","bash","mesh_enable","mesh_run","mesh_submit","mesh_get","mesh_wait","mesh_stop","mesh_route","save_agent_artifact"] and
   ([.pi.catalog.agents[].tools[]? | select(startswith("subagent_"))] | length) == 0 and
   .pi.catalog.agents["fast-worker"].harness == "cursor-agent" and .pi.catalog.agents["fast-worker"].tools == [] and
+  .pi.catalog.agents.codex.harness == "codex" and .pi.catalog.agents.codex.tools == [] and .pi.catalog.agents.codex.skillOptIns == [] and
+  .pi.catalog.agents.codex.harnessOptions == {"mode":"read-only","permissionPolicy":"reject","webSearch":"cached"} and
   ((.pi.orchestration | keys) == ["budgets", "childBridgeExtension", "harnesses", "historyViewerExtension", "natureHandleWords", "orchestrationExtension", "parentNavigationHint", "popupExtension", "returnParentCommand", "roleSets", "schemaVersion", "stateRoot", "tmux"]) and
   .pi.orchestration.schemaVersion == 1 and
-  .pi.orchestration.roleSets == {"mode:recon":["explorer","reviewer","critic","codex"],"mode:ops":["explorer","worker","validator","reviewer","critic","fast-worker","codex"]} and
+  .pi.orchestration.roleSets == {"mode:recon":["explorer","reviewer","critic","researcher","codex"],"mode:ops":["explorer","worker","validator","reviewer","critic","researcher","fast-worker","codex"]} and
   .pi.orchestration.budgets == {"maxLiveAgents":12,"maxConcurrentTasks":6,"maxTasksPerMesh":256} and
   (.pi.orchestration | has("maxDepth") | not) and (.pi.orchestration | has("delegation") | not) and
   (.pi.orchestration.stateRoot | endswith("/pi/orchestration-v2")) and (.pi.orchestration.stateRoot | contains("orchestration-v1") | not) and
@@ -199,18 +229,40 @@ jq -e '
 AGENT_TYPES_VALIDATOR=$(jq -r '.pi.catalog.agents.reviewer.childExtensionContributions[0] | sub("/agent_artifact.ts$"; "/utilities/agent_types.ts")' <<<"$result") \
 GENERATED_AGENT_CATALOG=$(jq -c '.pi.catalog' <<<"$result") \
 GENERATED_EXTENSION_KEYBINDINGS=$(jq -c '.pi.extensionKeybindings' <<<"$result") \
+GENERATED_WEB_RETRIEVAL=$(jq -c '.pi.webRetrieval' <<<"$result") \
 PACKAGE_ROOT="$package_root" node --input-type=module -e '
     import assert from "node:assert/strict";
     import { pathToFileURL } from "node:url";
     const utilities = `${process.env.PACKAGE_ROOT}/extensions_src/utilities`;
     const { validateAgentCatalog } = await import(pathToFileURL(process.env.AGENT_TYPES_VALIDATOR).href);
     const { validateExtensionKeybindings } = await import(pathToFileURL(`${utilities}/extension_keybindings.ts`).href);
+    const { validateWebRetrievalRuntimeConfig } = await import(pathToFileURL(`${utilities}/web_retrieval_types.ts`).href);
     const catalog = JSON.parse(process.env.GENERATED_AGENT_CATALOG);
     validateAgentCatalog(catalog);
     const oneSidedDrift = structuredClone(catalog);
     oneSidedDrift.agents.codex.harnessOptions.mode = "agent";
     assert.throws(() => validateAgentCatalog(oneSidedDrift), /settled codex capability/u);
     validateExtensionKeybindings(JSON.parse(process.env.GENERATED_EXTENSION_KEYBINDINGS), "generated extension-keybindings.json");
+
+    const projections = JSON.parse(process.env.GENERATED_WEB_RETRIEVAL);
+    const expectedProviders = secretPaths => [
+      ["parallel-search", "parallel-search", "https://api.parallel.ai/v1beta/search", secretPaths["parallel-api-key"]],
+      ["brave-llm-context", "brave-llm-context", "https://api.search.brave.com/res/v1/llm/context", secretPaths["brave-api-key"]],
+      ["brave-web-search", "brave-web-search", "https://api.search.brave.com/res/v1/web/search", secretPaths["brave-free-api-key"]],
+      ["exa-search", "exa-search", "https://api.exa.ai/search", secretPaths["exa-api-key"]],
+      ["parallel-extract", "parallel-extract", "https://api.parallel.ai/v1beta/extract", secretPaths["parallel-api-key"]],
+      ["exa-contents", "exa-contents", "https://api.exa.ai/contents", secretPaths["exa-api-key"]],
+    ].map(([id, kind, endpoint, apiKeyFile]) => ({ id, kind, endpoint, apiKeyFile }));
+    for (const projection of Object.values(projections)) {
+      const config = validateWebRetrievalRuntimeConfig(projection.config);
+      assert.deepEqual(config.providers, expectedProviders(projection.secretPaths));
+      assert.deepEqual(config.routing, { generalFamilies: { parallel: 5, brave: 1 }, braveProviders: { "brave-llm-context": 2, "brave-web-search": 1 } });
+      assert.deepEqual(config.deadlinesMs, { search: 30_000, fetch: 60_000 });
+      assert.deepEqual(config.retry, { maxRetries: 1, defaultWaitMs: 1_000 });
+    }
+    assert.ok(Object.values(projections.all.secretPaths).every(path => typeof path === "string" && path.length > 0));
+    assert.deepEqual(projections.partial.secretPaths, { "parallel-api-key": projections.all.secretPaths["parallel-api-key"], "brave-api-key": null, "brave-free-api-key": null, "exa-api-key": projections.all.secretPaths["exa-api-key"] });
+    assert.ok(Object.values(projections.null.secretPaths).every(path => path === null));
   '
 
 gc_roots=$(mktemp -d "${TMPDIR:-/tmp}/configuration-contracts.XXXXXX")

@@ -15,6 +15,7 @@
     "test:mesh": "PI_EXTENSION_KEYBINDINGS_PATH=tests/fixtures/extension-keybindings.json node --test \"tests/{orchestration,mesh}*.test.ts\"",
     "test:agent-artifact": "PI_EXTENSION_KEYBINDINGS_PATH=tests/fixtures/extension-keybindings.json node --test tests/agent_artifact.test.ts",
     "test:web-search": "PI_EXTENSION_KEYBINDINGS_PATH=tests/fixtures/extension-keybindings.json node --test tests/web_search.test.ts",
+    "test:web-retrieval": "PI_EXTENSION_KEYBINDINGS_PATH=tests/fixtures/extension-keybindings.json node --test tests/{web_search,web_fetch}.test.ts",
     "check": "node scripts/run-check.mts"
   },
   "devDependencies": {

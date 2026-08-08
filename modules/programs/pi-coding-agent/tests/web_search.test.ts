@@ -1,631 +1,463 @@
 import assert from "node:assert/strict";
-import { randomBytes } from "node:crypto";
-import { mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import Value from "typebox/value";
 import {
-    BUDGET_LIMITS,
-    FRESHNESS_TO_BRAVE,
     buildBraveLlmContextBody,
-    createBraveLlmContextProvider,
-    normalizeBraveLlmContextResponse,
-    parseRetryWaitMs,
-} from "../extensions_src/utilities/brave_llm_context.ts";
+    buildBraveWebSearchUrl,
+    buildExaSearchBody,
+    buildParallelSearchBody,
+    createSearchAdapter,
+} from "../extensions_src/utilities/search_adapters.ts";
 import {
-    WEB_SEARCH_CONFIG_UNAVAILABLE,
-    WEB_SEARCH_QUERY_MAX_CHARS,
-    containsAnyControls,
-    containsUnsafeControls,
-    formatSearchResultText,
-    isSafeHttpUrl,
-    isValidIso8601Timestamp,
-    parseSearchRequest,
-    queryCharacterCount,
-    requireSingleBraveProvider,
-    validateWebSearchRuntimeConfig,
-    type SearchRequest,
-    type WebSearchRuntimeConfig,
-} from "../extensions_src/utilities/web_search_types.ts";
+    SearchRoutingError,
+    createSearchRouter,
+    selectSearchAdapter,
+    type SearchRouterDependencies,
+} from "../extensions_src/utilities/search_router.ts";
+import {
+    parseWebSearchInput,
+    type NormalizedSearchRequest,
+    type SearchAdapter,
+    type WebRetrievalRuntimeConfig,
+    type WebSearchDetails,
+} from "../extensions_src/utilities/web_retrieval_types.ts";
 import {
     createWebSearchToolDefinition,
-    loadWebSearchConfig,
     registerWebSearch,
-    shouldRegisterWebSearch,
     webSearchParameters,
 } from "../extensions_src/web_search.ts";
 
-function opaqueSentinel(label: string): string {
-    return `test-sentinel-${label}-${randomBytes(16).toString("hex")}`;
-}
+const endpoints = {
+    "parallel-search": "https://parallel.example/search",
+    "brave-llm-context": "https://brave.example/context",
+    "brave-web-search": "https://brave.example/web",
+    "exa-search": "https://exa.example/search",
+    "parallel-extract": "https://parallel.example/extract",
+    "exa-contents": "https://exa.example/contents",
+} as const;
 
-function validConfig(apiKeyFile: string | null = "/secrets/brave-api-key"): WebSearchRuntimeConfig {
+function config(apiKeyFile: string | null = "/key"): WebRetrievalRuntimeConfig {
     return {
-        schemaVersion: 1,
-        providers: [
-            {
-                id: "brave",
-                kind: "brave-llm-context",
-                endpoint: "https://api.search.brave.com/res/v1/llm/context",
-                apiKeyFile,
-            },
-        ],
-    };
-}
-
-function disabledAgentEnv(): NodeJS.ProcessEnv {
-    return { PI_AGENT_RESOLVED_AGENT: "/disabled/web-search-agent-envelope.json" };
-}
-
-function bravePayload(documents: Array<{ url: string; title: string; snippets: string[]; age?: string }>, leak?: string) {
-    const grounding = {
-        generic: documents.map(({ url, title, snippets }) => ({ url, title, snippets })),
-    };
-    const sources: Record<string, { title: string; hostname: string; age: string[] }> = {};
-    for (const document of documents) {
-        if (document.url.trim() === "") continue;
-        try {
-            sources[document.url] = {
-                title: document.title,
-                hostname: new URL(document.url).hostname,
-                age: document.age === undefined
-                    ? []
-                    : ["Monday", "2024-01-15", "380 days ago", document.age],
-            };
-        } catch {
-            // Leave malformed URLs without source metadata.
-        }
-    }
-    return { grounding, sources, subscriptionToken: leak, rawHeader: "leak" };
-}
-
-void test("web_search schema accepts query budget freshness and rejects invalid query shapes", () => {
-    assert.deepEqual(parseSearchRequest({ query: "  tallest mountains  " }), {
-        query: "tallest mountains",
-        budget: "standard",
-    });
-    assert.deepEqual(
-        parseSearchRequest({ query: "react hooks", budget: "small", freshness: "week" }),
-        { query: "react hooks", budget: "small", freshness: "week" },
-    );
-    assert.throws(() => parseSearchRequest({ query: "" }), /1\.\.400/);
-    assert.throws(() => parseSearchRequest({ query: "x".repeat(401) }), /1\.\.400/);
-    assert.throws(() => parseSearchRequest({ query: Array.from({ length: 51 }, (_, i) => `w${i}`).join(" ") }), /50 words/);
-    assert.throws(() => parseSearchRequest({ query: "ok", budget: "huge" }), /budget/);
-    assert.throws(() => parseSearchRequest({ query: "ok", freshness: "hour" }), /freshness/);
-});
-
-void test("public schema and runtime share post-trim query character policy including Unicode", () => {
-    const padded = `  ${"x".repeat(WEB_SEARCH_QUERY_MAX_CHARS)}  `;
-    assert.equal(Value.Check(webSearchParameters, { query: padded }), true);
-    assert.deepEqual(parseSearchRequest({ query: padded }), {
-        query: "x".repeat(WEB_SEARCH_QUERY_MAX_CHARS),
-        budget: "standard",
-    });
-
-    const emoji = "🙂";
-    assert.equal(queryCharacterCount(emoji), 2);
-    assert.equal(Value.Check(webSearchParameters, { query: emoji.repeat(200) }), true);
-    assert.equal(parseSearchRequest({ query: emoji.repeat(200) }).query, emoji.repeat(200));
-    assert.throws(() => parseSearchRequest({ query: emoji.repeat(201) }), /1\.\.400/);
-
-    assert.equal(Value.Check(webSearchParameters, { query: "   " }), true);
-    assert.throws(() => parseSearchRequest({ query: "   " }), /1\.\.400/);
-    assert.throws(() => parseSearchRequest({ query: "ok\u0001there" }), /control characters/);
-});
-
-void test("runtime config validates exact keys and treats null apiKeyFile as unavailable provider", () => {
-    const config = validateWebSearchRuntimeConfig(validConfig(null));
-    assert.equal(config.providers[0]!.apiKeyFile, null);
-    assert.throws(
-        () => validateWebSearchRuntimeConfig({ ...validConfig(), unexpected: true }),
-        /unknown keys/,
-    );
-    assert.throws(
-        () => validateWebSearchRuntimeConfig({ schemaVersion: 2, providers: [] }),
-        /schemaVersion/,
-    );
-});
-
-void test("config loader and tool boundary sanitize filesystem and validation failures", async () => {
-    const missingPath = join(tmpdir(), "missing-web-search-config.json");
-    await assert.rejects(loadWebSearchConfig(missingPath), error => {
-        assert.ok(error instanceof Error);
-        assert.equal(error.message, WEB_SEARCH_CONFIG_UNAVAILABLE);
-        assert.doesNotMatch(error.message, /ENOENT|web-search\.json|\/Users\//);
-        return true;
-    });
-
-    const root = await mkdtemp(join(tmpdir(), "web-search-config-"));
-    const badJsonPath = join(root, "web-search.json");
-    await writeFile(badJsonPath, "{not-json", "utf8");
-    await assert.rejects(loadWebSearchConfig(badJsonPath), error => {
-        assert.equal(error instanceof Error && error.message, WEB_SEARCH_CONFIG_UNAVAILABLE);
-        assert.doesNotMatch(String(error), /not-json|SyntaxError|web-search\.json/);
-        return true;
-    });
-
-    const injectedPath = "/Users/alice/.pi/agent/web-search.json";
-    const tool = createWebSearchToolDefinition({
-        loadConfig: async () => {
-            throw new Error(`ENOENT open '${injectedPath}'`);
+        schemaVersion: 2,
+        providers: Object.entries(endpoints).map(([id, endpoint]) => ({ id, kind: id, endpoint, apiKeyFile })) as WebRetrievalRuntimeConfig["providers"],
+        routing: {
+            generalFamilies: { parallel: 5, brave: 1 },
+            braveProviders: { "brave-llm-context": 2, "brave-web-search": 1 },
         },
-        createProvider: () => ({
-            id: "brave",
-            async search() {
-                throw new Error("should not search");
-            },
-        }),
+        deadlinesMs: { search: 30_000, fetch: 60_000 },
+        retry: { maxRetries: 1, defaultWaitMs: 1_000 },
+    };
+}
+
+function request(overrides: Partial<NormalizedSearchRequest> = {}): NormalizedSearchRequest {
+    return { query: "web retrieval", intent: "auto", maxResults: 10, ...overrides };
+}
+
+function adapter(id: SearchAdapter["id"], family: SearchAdapter["family"]): SearchAdapter {
+    return {
+        id,
+        family,
+        capabilities: {
+            lanes: id === "exa-search" ? ["discovery"] : ["general"],
+            freshness: id !== "parallel-search",
+            domains: id === "brave-web-search" || id === "exa-search",
+            objective: id === "parallel-search" || id === "exa-search",
+        },
+        async search() {
+            return { results: [], normalizationWarnings: [], providerResultCount: 0 };
+        },
+    };
+}
+
+function deps(overrides: Partial<SearchRouterDependencies> = {}): SearchRouterDependencies {
+    return {
+        fetch: async () => Response.json({ results: [] }),
+        readTextFile: async () => "credential",
+        sleep: async () => {},
+        now: () => 1_000,
+        rng: () => 0,
+        requestId: () => "local-request-id",
+        ...overrides,
+    };
+}
+
+void test("AC1: public input normalizes defaults and rejects material invalid shapes", () => {
+    assert.deepEqual(parseWebSearchInput({
+        query: "  provider   independent search  ",
+        objective: "  compare sources  ",
+        includeDomains: ["EXAMPLE.COM"],
+    }), {
+        query: "provider independent search",
+        objective: "compare sources",
+        intent: "auto",
+        includeDomains: ["example.com"],
+        maxResults: 10,
     });
+    assert.throws(() => parseWebSearchInput({ query: "ok", provider: "exa" }), /unknown keys/);
+    assert.throws(() => parseWebSearchInput({ query: "ok", includeDomains: ["https://example.com"] }), /bare hostname/);
+    assert.throws(() => parseWebSearchInput({ query: "ok", includeDomains: ["a.example"], excludeDomains: ["A.EXAMPLE"] }), /overlap/);
+    assert.throws(() => parseWebSearchInput({ query: "x".repeat(401) }), /1\.\.400/);
+    assert.equal(Value.Check(webSearchParameters, { query: "query", intent: "discovery", maxResults: 20 }), true);
+    assert.equal(Value.Check(webSearchParameters, { query: "query", provider: "exa-search" }), false);
+});
+
+void test("AC2: hierarchical RNG boundaries implement 5:1 then 2:1 routing", () => {
+    const choices = [
+        adapter("parallel-search", "parallel"),
+        adapter("brave-llm-context", "brave"),
+        adapter("brave-web-search", "brave"),
+    ];
+    const draws = (values: number[]) => {
+        let index = 0;
+        return () => values[index++]!;
+    };
+    assert.equal(selectSearchAdapter(choices, "general", config(), draws([5 / 6 - Number.EPSILON])).id, "parallel-search");
+    assert.equal(selectSearchAdapter(choices, "general", config(), draws([5 / 6, 2 / 3 - Number.EPSILON])).id, "brave-llm-context");
+    assert.equal(selectSearchAdapter(choices, "general", config(), draws([5 / 6, 2 / 3])).id, "brave-web-search");
+});
+
+void test("AC3: credential and capability eligibility preserve lane and native constraints", async () => {
+    const seen: string[] = [];
+    const runtime = config("/key");
+    runtime.providers.find(provider => provider.id === "parallel-search")!.apiKeyFile = null;
+    const router = createSearchRouter(deps({
+        fetch: async input => {
+            seen.push(input);
+            if (input.startsWith(endpoints["exa-search"])) return Response.json({ results: [] });
+            return input.startsWith(endpoints["brave-web-search"])
+                ? Response.json({ web: { results: [] } })
+                : Response.json({ results: [] });
+        },
+    }));
+    const domainResult = await router.search(runtime, request({ includeDomains: ["example.com"] }));
+    assert.equal(domainResult.provider, "brave-web-search");
+    assert.equal(domainResult.eligibilityDiagnostics.some(item =>
+        item.provider === "parallel-search" && item.category === "credential" && item.reason === "not-configured"), true);
+    assert.equal(domainResult.eligibilityDiagnostics.some(item =>
+        item.provider === "brave-llm-context" && item.category === "capability" && item.reason === "domains"), true);
+    const discoveryResult = await router.search(runtime, request({ intent: "discovery" }));
+    assert.equal(discoveryResult.provider, "exa-search");
+    assert.equal(seen.some(url => url.startsWith(endpoints["parallel-search"])), false);
+
+    const ineligible = config("/valid");
+    ineligible.providers.find(provider => provider.id === "parallel-search")!.apiKeyFile = null;
+    ineligible.providers.find(provider => provider.id === "brave-llm-context")!.apiKeyFile = "/private/unreadable";
+    ineligible.providers.find(provider => provider.id === "brave-web-search")!.apiKeyFile = "/private/empty";
     await assert.rejects(
-        tool.execute("call", { query: "mountains" }, undefined, undefined, { cwd: "/work" } as never),
+        createSearchRouter(deps({
+            readTextFile: async path => {
+                if (path.endsWith("unreadable")) throw new Error(`ENOENT ${path}`);
+                return path.endsWith("empty") ? "  \n" : "credential";
+            },
+        })).search(ineligible, request()),
         error => {
-            assert.ok(error instanceof Error);
-            assert.equal(error.message, WEB_SEARCH_CONFIG_UNAVAILABLE);
-            assert.doesNotMatch(error.message, /ENOENT|alice|web-search\.json/);
+            assert.ok(error instanceof SearchRoutingError);
+            assert.match(error.message, /no eligible general provider/);
+            assert.doesNotMatch(String(error), /private|unreadable|empty|ENOENT/);
+            assert.deepEqual(error.eligibilityDiagnostics, [
+                { provider: "parallel-search", category: "credential", reason: "not-configured" },
+                { provider: "brave-llm-context", category: "credential", reason: "unreadable" },
+                { provider: "brave-web-search", category: "credential", reason: "empty" },
+                { provider: "exa-search", category: "capability", reason: "lane" },
+            ]);
             return true;
         },
     );
 });
 
-void test("budget and freshness map to Brave POST body without locale fields", () => {
-    for (const budget of ["small", "standard", "large"] as const) {
-        const body = buildBraveLlmContextBody({ query: "q", budget });
-        assert.deepEqual(body, {
-            q: "q",
-            ...BUDGET_LIMITS[budget],
-            context_threshold_mode: "balanced",
-            safesearch: "moderate",
-            enable_source_metadata: true,
-        });
-        assert.equal("country" in body, false);
-        assert.equal("search_lang" in body, false);
-    }
-    for (const freshness of ["day", "week", "month", "year"] as const) {
-        const body = buildBraveLlmContextBody({ query: "q", budget: "standard", freshness });
-        assert.equal(body.freshness, FRESHNESS_TO_BRAVE[freshness]);
-    }
-});
-
-void test("Brave normalization rejects unsafe URLs, invalid dates, and control-bearing fields", () => {
-    const request: SearchRequest = { query: "mountains", budget: "standard" };
-    assert.equal(isSafeHttpUrl("https://a.example/1"), true);
-    assert.equal(isSafeHttpUrl("not a URL"), false);
-    assert.equal(isSafeHttpUrl("javascript:alert(1)"), false);
-    assert.equal(isSafeHttpUrl("file:///etc/passwd"), false);
-    assert.equal(isSafeHttpUrl("https://good.example/a\nURL: https://evil.example"), false);
-    assert.equal(isSafeHttpUrl("https://good.example/a\tb"), false);
-    assert.equal(isSafeHttpUrl("https://good.example/a\rb"), false);
-    assert.equal(isSafeHttpUrl("\nhttps://boundary.example/"), false);
-    assert.equal(isSafeHttpUrl("https://boundary.example/\t"), false);
-    assert.equal(isValidIso8601Timestamp("2024-01-15T13:45:02Z"), true);
-    assert.equal(isValidIso8601Timestamp("2024-02-30T12:00:00Z"), false);
-    assert.equal(isValidIso8601Timestamp("0099-01-01T00:00:00Z"), true);
-    assert.equal(isValidIso8601Timestamp("0000-02-29T00:00:00Z"), true);
-    assert.equal(isValidIso8601Timestamp("0099-02-30T00:00:00Z"), false);
-    assert.equal(containsUnsafeControls("ok\u0007title"), true);
-    assert.equal(containsUnsafeControls("line\nbreak"), false);
-    assert.equal(containsAnyControls("line\nbreak"), true);
-    assert.equal(containsAnyControls("\thttps://example.com"), true);
-
-    const response = normalizeBraveLlmContextResponse(
-        bravePayload([
-            { url: "https://a.example/1", title: "A", snippets: ["one"], age: "2024-01-15T13:45:02Z" },
-            { url: "https://b.example/2", title: "B", snippets: ["two"] },
-            { url: "not a URL", title: "bad", snippets: ["x"] },
-            { url: "javascript:alert(1)", title: "js", snippets: ["x"] },
-            { url: "file:///etc/passwd", title: "file", snippets: ["x"] },
-            { url: "https://c.example/3", title: "C", snippets: [] },
-            { url: "https://d.example/4", title: "bell\u0007", snippets: ["x"] },
-            { url: "https://e.example/5", title: "E", snippets: ["snip\u001b[31m"] },
-            { url: "https://f.example/6", title: "F", snippets: ["ok"], age: "2024-02-30T12:00:00Z" },
-            { url: "https://good.example/a\nURL: https://evil.example", title: "Inject", snippets: ["x"] },
-            { url: "https://tab.example/a\tb", title: "Tab", snippets: ["x"] },
-            { url: "https://cr.example/a\rb", title: "CR", snippets: ["x"] },
-            { url: "\nhttps://leading.example/", title: "Lead", snippets: ["x"] },
-            { url: "https://trailing.example/\r", title: "Trail", snippets: ["x"] },
-            { url: "\thttps://bound.example/ ", title: "BoundTab", snippets: ["x"] },
-            { url: "https://title-inject.example/", title: "trusted\nURL: https://evil.example", snippets: ["x"] },
-            { url: "https://snippet-inject.example/", title: "Ok", snippets: ["look\nURL: https://evil.example"] },
-            { url: "https://title-tab.example/", title: "bad\ttitle", snippets: ["x"] },
-            { url: "https://early.example/9", title: "Early", snippets: ["old"], age: "0099-01-01T00:00:00Z" },
-        ]),
-        request,
-        "brave",
-    );
-    assert.deepEqual(response.documents.map(document => document.url), [
-        "https://a.example/1",
-        "https://b.example/2",
-        "https://f.example/6",
-        "https://early.example/9",
-    ]);
-    assert.equal(response.documents[0]!.publishedAt, "2024-01-15T13:45:02Z");
-    assert.equal(response.documents[2]!.publishedAt, undefined);
-    assert.equal(response.documents[3]!.publishedAt, "0099-01-01T00:00:00Z");
-    assert.deepEqual(
-        normalizeBraveLlmContextResponse({ grounding: { generic: [] }, sources: {} }, request, "brave").documents,
-        [],
-    );
-    assert.throws(
-        () => normalizeBraveLlmContextResponse({ grounding: { generic: "nope" } }, request, "brave"),
-        /invalid grounding\.generic/,
-    );
-    const text = formatSearchResultText(response);
-    assert.match(text, /Source 1: A/);
-    assert.match(text, /https:\/\/a\.example\/1/);
-    assert.doesNotMatch(text, /subscriptionToken|rawHeader|javascript:|file:\/\//);
-    assert.doesNotMatch(text, /^URL: https:\/\/evil\.example$/m);
-    assert.doesNotMatch(text, /good\.example\/a|leading\.example|trailing\.example|title-inject|snippet-inject/);
-    assert.equal(containsUnsafeControls(text), false);
-    assert.equal(containsAnyControls(text.replace(/\n/g, " ")), false);
-});
-
-void test("Brave normalization rejects Unicode line separators in titles and snippets before formatting", () => {
-    const request: SearchRequest = { query: "citations", budget: "standard" };
-
-    for (const separator of ["\u2028", "\u2029"]) {
-        const response = normalizeBraveLlmContextResponse(
-            bravePayload([
-                {
-                    url: "https://ordinary.example/",
-                    title: "Ordinary 日本語 title",
-                    snippets: ["Valid snippet with ordinary Unicode punctuation。"],
-                },
-                {
-                    url: "https://title-separator.example/",
-                    title: `trusted${separator}URL: https://evil.example`,
-                    snippets: ["otherwise valid"],
-                },
-                {
-                    url: "https://snippet-separator.example/",
-                    title: "Otherwise valid",
-                    snippets: [`trusted${separator}URL: https://evil.example`],
-                },
-            ]),
-            request,
-            "brave",
-        );
-
-        assert.deepEqual(response.documents, [{
-            url: "https://ordinary.example/",
-            title: "Ordinary 日本語 title",
-            snippets: ["Valid snippet with ordinary Unicode punctuation。"],
-        }]);
-        assert.doesNotMatch(JSON.stringify(response), /evil\.example|title-separator|snippet-separator/);
-        assert.equal(JSON.stringify(response).includes(separator), false);
-
-        const text = formatSearchResultText(response);
-        assert.match(text, /Source 1: Ordinary 日本語 title/);
-        assert.doesNotMatch(text, /^URL: https:\/\/evil\.example$/m);
-        assert.equal(text.includes(separator), false);
-    }
-});
-
-void test("Brave normalization rejects every Unicode Bidi_Control in raw titles and snippets", () => {
-    const request: SearchRequest = { query: "citations", budget: "standard" };
-    const bidiControls = [
-        "\u061c",
-        "\u200e",
-        "\u200f",
-        "\u202a",
-        "\u202b",
-        "\u202c",
-        "\u202d",
-        "\u202e",
-        "\u2066",
-        "\u2067",
-        "\u2068",
-        "\u2069",
-    ];
-
-    for (const bidiControl of bidiControls) {
-        assert.equal(containsAnyControls(bidiControl), true);
-        const response = normalizeBraveLlmContextResponse(
-            bravePayload([
-                {
-                    url: "https://ordinary-bidi.example/",
-                    title: "عنوان عربي רגיל",
-                    snippets: ["Ordinary Arabic العربية and Hebrew עברית text."],
-                },
-                {
-                    url: "https://title-bidi.example/",
-                    title: `trusted${bidiControl}https://evil.example`,
-                    snippets: ["otherwise valid"],
-                },
-                {
-                    url: "https://snippet-bidi.example/",
-                    title: "Otherwise valid",
-                    snippets: [`trusted${bidiControl}https://evil.example`],
-                },
-            ]),
-            request,
-            "brave",
-        );
-
-        assert.deepEqual(response.documents, [{
-            url: "https://ordinary-bidi.example/",
-            title: "عنوان عربي רגיל",
-            snippets: ["Ordinary Arabic العربية and Hebrew עברית text."],
-        }]);
-        const normalizedDetails = JSON.stringify(response);
-        assert.doesNotMatch(normalizedDetails, /evil\.example|title-bidi|snippet-bidi/);
-        assert.equal(normalizedDetails.includes(bidiControl), false);
-
-        const text = formatSearchResultText(response);
-        assert.match(text, /Source 1: عنوان عربي רגיל/);
-        assert.doesNotMatch(text, /evil\.example|title-bidi|snippet-bidi/);
-        assert.equal(text.includes(bidiControl), false);
-    }
-});
-
-void test("Retry-After supports numeric and HTTP-date values relative to the injected clock", () => {
-    const now = Date.parse("2026-08-06T01:00:00Z");
-
-    assert.equal(parseRetryWaitMs(new Headers({
-        "Retry-After": "2",
-        "X-RateLimit-Reset": "99",
-    }), now), 2000);
-    assert.equal(parseRetryWaitMs(new Headers({
-        "Retry-After": "Thu, 06 Aug 2026 01:00:05 GMT",
-        "X-RateLimit-Reset": "99",
-    }), now), 5000);
-    assert.equal(parseRetryWaitMs(new Headers({
-        "Retry-After": "Thu, 06 Aug 2026 00:59:55 GMT",
-    }), now), 0);
-    assert.equal(parseRetryWaitMs(new Headers({
-        "Retry-After": "not-an-http-date",
-        "X-RateLimit-Reset": "3",
-    }), now), 3000);
-    assert.equal(parseRetryWaitMs(new Headers({
-        "Retry-After": "not-an-http-date",
-    }), now), 1000);
-});
-
-void test("Brave adapter retries once for transient statuses and redacts opaque sentinels from errors", async () => {
-    const sentinel = opaqueSentinel("header");
-    const root = await mkdtemp(join(tmpdir(), "web-search-"));
-    const keyPath = join(root, "key");
-    await writeFile(keyPath, `${sentinel}\n`, "utf8");
-    const calls: Array<{ headers: Record<string, string>; body: string }> = [];
-    let fetchCount = 0;
-    const sleeps: number[] = [];
-    const provider = createBraveLlmContextProvider(requireSingleBraveProvider(validConfig(keyPath)), {
-        now: (() => {
-            let t = 0;
-            return () => {
-                t += 10;
-                return t;
-            };
-        })(),
-        sleep: async ms => {
-            sleeps.push(ms);
-        },
-        readTextFile: path => readFile(path, "utf8"),
-        fetch: async (_url, init) => {
-            fetchCount += 1;
-            const headers = Object.fromEntries(new Headers(init.headers).entries());
-            calls.push({ headers, body: typeof init.body === "string" ? init.body : "" });
-            if (fetchCount === 1) {
-                return new Response("rate", {
-                    status: 429,
-                    headers: { "Retry-After": "2", "X-RateLimit-Reset": "9, 100" },
-                });
-            }
-            return Response.json(bravePayload([
-                { url: "https://example.com", title: "Example", snippets: ["snippet"] },
-            ], sentinel));
-        },
+// Given config or credential I/O that never settles, the tool/router boundary observes caller cancellation or its owning deadline without waiting for that I/O.
+void test("delayed config and credential reads obey cancellation and deadlines", async () => {
+    const never = new Promise<never>(() => {});
+    let routerCalls = 0;
+    const configCaller = new AbortController();
+    const configTool = createWebSearchToolDefinition({
+        loadConfig: async () => never,
+        router: { search: async () => { routerCalls += 1; throw new Error("unexpected"); } },
+        toolDeadlineMs: 1_000,
     });
-
-    const response = await provider.search({ query: "example", budget: "small" });
-    assert.equal(response.documents.length, 1);
-    assert.equal(fetchCount, 2);
-    assert.deepEqual(sleeps, [2000]);
-    assert.equal(calls[0]!.headers["x-subscription-token"], sentinel);
-    assert.doesNotMatch(calls[0]!.body, new RegExp(sentinel));
-    assert.match(calls[0]!.body, /"q":"example"/);
-    assert.doesNotMatch(calls[0]!.body, /country|search_lang/);
-    assert.doesNotMatch(JSON.stringify(response), new RegExp(sentinel));
-
-    const failing = createBraveLlmContextProvider(requireSingleBraveProvider(validConfig(keyPath)), {
-        now: () => 0,
-        sleep: async () => {},
-        readTextFile: path => readFile(path, "utf8"),
-        fetch: async () => new Response("no", { status: 401 }),
-    });
-    await assert.rejects(failing.search({ query: "x", budget: "standard" }), error => {
-        assert.ok(error instanceof Error);
-        assert.match(error.message, /status 401/);
-        assert.doesNotMatch(error.message, new RegExp(sentinel));
-        assert.doesNotMatch(error.message, /keyPath|\/secrets|apiKeyFile|body/i);
+    const cancelledConfig = configTool.execute("call", { query: "evidence" }, configCaller.signal, undefined, { cwd: "/work" } as never);
+    configCaller.abort("/private/caller-reason");
+    await assert.rejects(cancelledConfig, error => {
+        assert.match(String(error), /request aborted/);
+        assert.doesNotMatch(String(error), /private|caller-reason/);
         return true;
     });
+    assert.equal(routerCalls, 0);
+
+    const deadlineTool = createWebSearchToolDefinition({
+        loadConfig: async () => never,
+        router: { search: async () => { routerCalls += 1; throw new Error("unexpected"); } },
+        toolDeadlineMs: 5,
+    });
+    await assert.rejects(
+        deadlineTool.execute("call", { query: "evidence" }, undefined, undefined, { cwd: "/work" } as never),
+        /deadline exceeded/,
+    );
+    assert.equal(routerCalls, 0);
+
+    const credentialCaller = new AbortController();
+    const cancelledCredential = createSearchRouter(deps({ readTextFile: async () => never }))
+        .search(config(), request(), credentialCaller.signal);
+    credentialCaller.abort("/private/credential-abort");
+    await assert.rejects(cancelledCredential, error => {
+        assert.match(String(error), /request aborted/);
+        assert.doesNotMatch(String(error), /private|credential-abort|\/key/);
+        return true;
+    });
+
+    const short = config();
+    short.deadlinesMs.search = 5;
+    await assert.rejects(
+        createSearchRouter(deps({ readTextFile: async () => never })).search(short, request()),
+        /deadline exceeded/,
+    );
 });
 
-void test("response-body abort and deadline are classified after headers arrive", async () => {
-    const sentinel = opaqueSentinel("body");
-    const root = await mkdtemp(join(tmpdir(), "web-search-"));
-    const keyPath = join(root, "key");
-    await writeFile(keyPath, sentinel, "utf8");
+void test("AC4: retryable status retries once, then falls back with bounded attempts", async () => {
+    let parallelCalls = 0;
+    const sleeps: number[] = [];
+    const router = createSearchRouter(deps({
+        fetch: async input => {
+            if (input === endpoints["parallel-search"]) {
+                parallelCalls += 1;
+                return new Response("opaque provider body", { status: 503, headers: { "Retry-After": "0" } });
+            }
+            return Response.json({ grounding: { generic: [] }, sources: {} });
+        },
+        sleep: async ms => { sleeps.push(ms); },
+        rng: () => 0,
+    }));
+    const result = await router.search(config(), request());
+    assert.equal(parallelCalls, 2);
+    assert.deepEqual(sleeps, [0]);
+    assert.equal(result.initialProvider, "parallel-search");
+    assert.equal(result.provider, "brave-llm-context");
+    assert.equal(result.fallback, true);
+    assert.deepEqual(result.attempts.map(item => ({ provider: item.provider, retryCount: item.retryCount, outcome: item.outcome, status: item.error?.status })), [
+        { provider: "parallel-search", retryCount: 1, outcome: "error", status: 503 },
+        { provider: "brave-llm-context", retryCount: 0, outcome: "success", status: undefined },
+    ]);
+    assert.doesNotMatch(JSON.stringify(result), /opaque provider body|credential|\/key/);
 
     const caller = new AbortController();
-    const abortedBody = createBraveLlmContextProvider(requireSingleBraveProvider(validConfig(keyPath)), {
-        now: () => 0,
-        sleep: async () => {},
-        readTextFile: path => readFile(path, "utf8"),
-        fetch: async () => {
-            caller.abort();
-            return {
-                ok: true,
-                status: 200,
-                headers: new Headers(),
-                async json() {
-                    throw Object.assign(new Error("aborted while reading body"), { name: "AbortError" });
-                },
-            } as unknown as Response;
+    caller.abort("private caller reason");
+    let calls = 0;
+    await assert.rejects(
+        createSearchRouter(deps({ fetch: async () => { calls += 1; return Response.json({}); } })).search(config(), request(), caller.signal),
+        /aborted/,
+    );
+    assert.equal(calls, 0);
+
+    const duringRetry = new AbortController();
+    let fallbackCalls = 0;
+    const abortingRouter = createSearchRouter(deps({
+        fetch: async input => {
+            if (input !== endpoints["parallel-search"]) fallbackCalls += 1;
+            return new Response("busy", { status: 503, headers: { "Retry-After": "1" } });
         },
-    });
-    await assert.rejects(abortedBody.search({ query: "x", budget: "standard" }, caller.signal), /aborted/);
-
-    let nowValue = 0;
-    const timedOutBody = createBraveLlmContextProvider(requireSingleBraveProvider(validConfig(keyPath)), {
-        now: () => nowValue,
-        sleep: async () => {},
-        readTextFile: path => readFile(path, "utf8"),
-        fetch: async () => ({
-            ok: true,
-            status: 200,
-            headers: new Headers(),
-            async json() {
-                nowValue = 30_000;
-                throw Object.assign(new Error("deadline while reading body"), { name: "TimeoutError" });
-            },
-        } as unknown as Response),
-    });
-    await assert.rejects(timedOutBody.search({ query: "x", budget: "standard" }), /timed out/);
-});
-
-void test("Brave adapter aborts, times out before oversized retry wait, and rejects empty keys", async () => {
-    const sentinel = opaqueSentinel("empty");
-    const root = await mkdtemp(join(tmpdir(), "web-search-"));
-    const keyPath = join(root, "key");
-    await writeFile(keyPath, "   \n", "utf8");
-    const emptyKey = createBraveLlmContextProvider(requireSingleBraveProvider(validConfig(keyPath)), {
-        now: () => 0,
-        sleep: async () => {},
-        readTextFile: path => readFile(path, "utf8"),
-        fetch: async () => {
-            throw new Error("should not fetch");
-        },
-    });
-    await assert.rejects(emptyKey.search({ query: "x", budget: "standard" }), /API key is empty/);
-
-    await writeFile(keyPath, sentinel, "utf8");
-    const controller = new AbortController();
-    controller.abort();
-    const aborted = createBraveLlmContextProvider(requireSingleBraveProvider(validConfig(keyPath)), {
-        now: () => 0,
-        sleep: async () => {},
-        readTextFile: path => readFile(path, "utf8"),
-        fetch: async (_url, init) => {
-            assert.equal(init.signal?.aborted, true);
-            throw Object.assign(new Error("aborted"), { name: "AbortError" });
-        },
-    });
-    await assert.rejects(aborted.search({ query: "x", budget: "standard" }, controller.signal), /aborted/);
-
-    let nowValue = 0;
-    const timeoutBeforeRetry = createBraveLlmContextProvider(requireSingleBraveProvider(validConfig(keyPath)), {
-        now: () => nowValue,
         sleep: async () => {
-            throw new Error("should not sleep");
+            duringRetry.abort("private abort detail");
+            throw new Error("private abort detail");
         },
-        readTextFile: path => readFile(path, "utf8"),
-        fetch: async () => {
-            nowValue = 29_500;
-            return new Response("busy", {
-                status: 503,
-                headers: { "Retry-After": "5" },
+    }));
+    await assert.rejects(abortingRouter.search(config(), request(), duringRetry.signal), error => {
+        assert.match(String(error), /aborted/);
+        assert.doesNotMatch(String(error), /private abort detail/);
+        return true;
+    });
+    assert.equal(fallbackCalls, 0);
+
+    const deadlineConfig = config();
+    deadlineConfig.deadlinesMs.search = 5;
+    let deadlineCalls = 0;
+    const deadlineRouter = createSearchRouter(deps({
+        fetch: (_input, init) => {
+            deadlineCalls += 1;
+            return new Promise<Response>((_resolve, reject) => {
+                init.signal?.addEventListener("abort", () => reject(init.signal?.reason), { once: true });
             });
         },
+    }));
+    await assert.rejects(deadlineRouter.search(deadlineConfig, request()), error => {
+        assert.match(String(error), /timeout/);
+        assert.doesNotMatch(String(error), /deadline exceeded/);
+        return true;
     });
-    await assert.rejects(timeoutBeforeRetry.search({ query: "x", budget: "standard" }), /timed out/);
-
-    const headers = new Headers({ "X-RateLimit-Reset": "1, 999" });
-    assert.equal(parseRetryWaitMs(headers), 1000);
+    assert.equal(deadlineCalls, 1);
 });
 
-void test("tool result keeps normalized details, truncates oversized output, and uses private temp modes", async () => {
-    const request: SearchRequest = { query: "large", budget: "large" };
-    const hugeSnippet = "chunk ".repeat(20_000);
-    const response = {
-        query: "large",
-        providerId: "brave",
-        documents: [
-            { url: "https://example.com/a", title: "A", snippets: [hugeSnippet] },
-            { url: "https://example.com/b", title: "B", snippets: ["short"] },
-        ],
+// Given an HTTP authentication rejection at the provider boundary, callers observe a non-retryable credential classification and sanitized exhaustion diagnostics.
+void test("HTTP 401 and 403 are credential failures and do not retry", async () => {
+    for (const status of [401, 403]) {
+        const created = createSearchAdapter(
+            config().providers.find(provider => provider.id === "parallel-search")!,
+            "secret-sentinel",
+            { now: () => 0, fetch: async () => new Response("opaque body", { status }) },
+            1_000,
+        );
+        await assert.rejects(created.search(request(), new AbortController().signal), error => {
+            assert.equal(error instanceof Error && "category" in error && error.category, "credential");
+            assert.equal(error instanceof Error && "retryable" in error && error.retryable, false);
+            assert.equal(error instanceof Error && "status" in error && error.status, status);
+            assert.doesNotMatch(String(error), /opaque|secret-sentinel/);
+            return true;
+        });
+    }
+
+    const runtime = config(null);
+    runtime.providers.find(provider => provider.id === "parallel-search")!.apiKeyFile = "/key";
+    let calls = 0;
+    await assert.rejects(
+        createSearchRouter(deps({
+            fetch: async () => { calls += 1; return new Response("private provider body", { status: 401 }); },
+        })).search(runtime, request()),
+        error => {
+            assert.ok(error instanceof SearchRoutingError);
+            assert.equal(error.attempts[0]?.error?.category, "credential");
+            assert.equal(error.attempts[0]?.error?.retryable, false);
+            assert.equal(error.eligibilityDiagnostics.every(item => item.reason === "not-configured"), true);
+            assert.doesNotMatch(String(error), /private provider body|\/key/);
+            return true;
+        },
+    );
+    assert.equal(calls, 1);
+});
+
+void test("AC5-AC7: adapters map native requests and retain safe URL results without optional-field loss", async () => {
+    const nativeRequest = request({
+        objective: "find primary evidence",
+        freshness: "week",
+        includeDomains: ["docs.example"],
+        excludeDomains: ["blog.example"],
+        maxResults: 4,
+    });
+    assert.deepEqual(buildParallelSearchBody(nativeRequest), {
+        search_queries: ["web retrieval"], objective: "find primary evidence", max_chars_total: 20_000,
+    });
+    assert.deepEqual(buildBraveLlmContextBody(nativeRequest), {
+        q: "web retrieval", count: 4, maximum_number_of_urls: 4, maximum_number_of_tokens: 4_096,
+        maximum_number_of_snippets: 12, context_threshold_mode: "balanced", safesearch: "moderate",
+        enable_source_metadata: true, freshness: "pw",
+    });
+    const braveUrl = new URL(buildBraveWebSearchUrl(endpoints["brave-web-search"], nativeRequest));
+    assert.equal(braveUrl.searchParams.get("q"), "web retrieval site:docs.example -site:blog.example");
+    assert.equal(braveUrl.searchParams.get("count"), "4");
+    assert.equal(braveUrl.searchParams.get("freshness"), "pw");
+    assert.deepEqual(buildExaSearchBody(nativeRequest, Date.parse("2026-08-08T12:00:00Z")), {
+        query: "web retrieval\n\nSearch objective: find primary evidence",
+        type: "auto",
+        numResults: 4,
+        contents: { highlights: true },
+        includeDomains: ["docs.example"],
+        excludeDomains: ["blog.example"],
+        startPublishedDate: "2026-08-01T12:00:00.000Z",
+    });
+
+    const payloads: Record<string, unknown> = {
+        "parallel-search": {
+            search_id: "parallel-request", session_id: "parallel-session", warnings: ["bounded"], usage: [{ searches: 1 }],
+            results: [
+                { url: "https://same.example/", title: "", excerpts: [], score: 0.8 },
+                { url: "https://same.example/", title: "unsafe\u2028title", publish_date: "not-a-date" },
+                { url: "javascript:alert(1)", title: "drop only this item" },
+            ],
+        },
+        "brave-llm-context": {
+            grounding: { generic: [{ url: "https://brave.example/a", snippets: ["context"] }] },
+            sources: { "https://brave.example/a": { hostname: "brave.example", age: ["", "", "", "2026-08-01T00:00:00Z"] } },
+        },
+        "brave-web-search": { web: { results: [{ url: "https://web.example/a", description: "description", age: "2 days ago" }] } },
+        "exa-search": {
+            requestId: "exa-request", cost: { total: 0.01 },
+            results: [{ id: "exa-id", url: "https://exa.example/a", highlights: ["highlight"], score: 0.7, author: "Author" }],
+        },
     };
-    const isolatedTmp = await mkdtemp(join(tmpdir(), "web-search-isolated-"));
-    const previousTmpdir = process.env.TMPDIR;
+    for (const id of ["parallel-search", "brave-llm-context", "brave-web-search", "exa-search"] as const) {
+        const providerConfig = config().providers.find(provider => provider.id === id)!;
+        const created = createSearchAdapter(providerConfig, "secret-sentinel", {
+            now: () => Date.parse("2026-08-08T12:00:00Z"),
+            fetch: async (_input, init) => {
+                assert.equal(JSON.stringify(init.body ?? "").includes("secret-sentinel"), false);
+                return Response.json(payloads[id]);
+            },
+        }, 1_000);
+        const response = await created.search(nativeRequest, new AbortController().signal);
+        assert.equal(response.providerResultCount >= response.results.length, true);
+        assert.doesNotMatch(JSON.stringify(response), /secret-sentinel/);
+        if (id === "parallel-search") {
+            assert.deepEqual(response.results.map(result => result.url), ["https://same.example/", "https://same.example/"]);
+            assert.equal(response.results[0]!.title, undefined);
+            assert.equal(response.results[1]!.title, undefined);
+            assert.equal(response.results[1]!.providerMetadata?.publish_date, "not-a-date");
+            assert.equal(response.normalizationWarnings.some(warning => warning.resultIndex === 2 && warning.field === "url"), true);
+            assert.equal(response.providerRequestId, "parallel-request");
+            assert.equal(response.providerSessionId, "parallel-session");
+        }
+        if (id === "brave-llm-context") {
+            assert.equal(response.results[0]!.publishedAt, "2026-08-01T00:00:00Z");
+            assert.deepEqual(response.unsupportedHints, ["objective", "domains"]);
+        }
+        if (id === "brave-web-search") assert.deepEqual(response.unsupportedHints, ["objective"]);
+        if (id === "exa-search") {
+            assert.equal(response.results[0]!.source.resultId, "exa-id");
+            assert.equal(response.results[0]!.providerMetadata?.score, 0.7);
+            assert.equal(response.providerRequestId, "exa-request");
+        }
+    }
+});
+
+void test("AC15: tool registration is extension-owned and truncation preserves full structured details privately", async () => {
+    const tools: string[] = [];
+    registerWebSearch({ registerTool(tool: { name: string }) { tools.push(tool.name); } } as unknown as ExtensionAPI, {
+        loadConfig: async () => config(),
+        router: createSearchRouter(deps()),
+    });
+    assert.deepEqual(tools, ["web_search"]);
+
+    const huge = "evidence ".repeat(30_000);
+    const response: WebSearchDetails["response"] = {
+        requestId: "request", lane: "general", initialProvider: "parallel-search", provider: "parallel-search",
+        results: [{ url: "https://example.com", excerpts: [huge], source: { provider: "parallel-search", rank: 1 } }],
+        fallback: false, attempts: [{ provider: "parallel-search", latencyMs: 1, retryCount: 0, outcome: "success" }],
+        eligibilityDiagnostics: [], normalizationWarnings: [], providerResultCount: 1, returnedResultCount: 1,
+    };
+    const isolatedTmp = await mkdtemp(join(tmpdir(), "web-search-test-"));
+    const previousTmp = process.env.TMPDIR;
     process.env.TMPDIR = isolatedTmp;
     try {
         const tool = createWebSearchToolDefinition({
-            loadConfig: async () => validConfig("/unused"),
-            createProvider: () => ({
-                id: "brave",
-                search: async () => response,
-            }),
+            loadConfig: async () => config(),
+            router: { search: async () => response },
         });
-        const result = await tool.execute("call", { query: "large", budget: "large" }, undefined, undefined, {
-            cwd: "/work",
-        } as never);
-        assert.equal(result.details.schemaVersion, 1);
-        assert.deepEqual(result.details.request, request);
+        const result = await tool.execute("call", { query: "evidence" }, undefined, undefined, { cwd: "/work" } as never);
         assert.deepEqual(result.details.response, response);
         assert.equal(result.details.truncation?.truncated, true);
-        const fullOutputPath = result.details.truncation?.fullOutputPath;
-        assert.ok(fullOutputPath?.startsWith(isolatedTmp));
-        const fileInfo = await stat(fullOutputPath!);
-        const dirInfo = await stat(join(fullOutputPath!, ".."));
-        assert.equal(fileInfo.mode & 0o777, 0o600);
-        assert.equal(dirInfo.mode & 0o777, 0o700);
-        const contentText = result.content[0];
-        assert.ok(contentText?.type === "text");
-        assert.match(contentText.text, /Output truncated/);
-        assert.doesNotMatch(JSON.stringify(result), /grounding|subscriptionToken|X-Subscription|raw Brave/i);
-        const full = await readFile(fullOutputPath!, "utf8");
-        assert.match(full, /Source 2: B/);
+        assert.match(result.content[0]?.type === "text" ? result.content[0].text : "", /Provider: parallel-search/);
+        const path = result.details.truncation?.fullOutputPath;
+        assert.ok(path?.startsWith(isolatedTmp));
+        assert.equal((await stat(path!)).mode & 0o777, 0o600);
+        assert.equal((await stat(join(path!, ".."))).mode & 0o777, 0o700);
+        assert.match(await readFile(path!, "utf8"), /https:\/\/example.com/);
 
-        const injectedDiagnostic = "/private/injected-temp/output.txt: permission denied";
-        const failingTool = createWebSearchToolDefinition({
-            loadConfig: async () => validConfig("/unused"),
-            createProvider: () => ({
-                id: "brave",
-                search: async () => response,
-            }),
-            writeTempOutput: async () => {
-                throw new Error(injectedDiagnostic);
-            },
+        const failing = createWebSearchToolDefinition({
+            loadConfig: async () => config(),
+            router: { search: async () => response },
+            writeTempOutput: async () => { throw new Error("EACCES /private/output.txt"); },
         });
         await assert.rejects(
-            failingTool.execute("call", { query: "large", budget: "large" }, undefined, undefined, {
-                cwd: "/work",
-            } as never),
+            failing.execute("call", { query: "evidence" }, undefined, undefined, { cwd: "/work" } as never),
             error => {
-                assert.ok(error instanceof Error);
-                assert.equal(error.message, "web_search could not save truncated output");
-                assert.doesNotMatch(error.message, /private|injected-temp|permission denied|output\.txt/);
+                assert.equal(error instanceof Error && error.message, "web_search could not save truncated output");
+                assert.doesNotMatch(String(error), /private|EACCES|output\.txt/);
                 return true;
             },
         );
     } finally {
-        if (previousTmpdir === undefined) delete process.env.TMPDIR;
-        else process.env.TMPDIR = previousTmpdir;
+        if (previousTmp === undefined) delete process.env.TMPDIR;
+        else process.env.TMPDIR = previousTmp;
     }
-});
-
-void test("web_search remains disabled without a catalog agent", () => {
-    const tools: string[] = [];
-    const pi = { registerTool(tool: { name: string }) { tools.push(tool.name); } } as unknown as ExtensionAPI;
-    assert.equal(shouldRegisterWebSearch({}), false);
-    assert.equal(shouldRegisterWebSearch(disabledAgentEnv()), false);
-    assert.equal(registerWebSearch(pi, { env: disabledAgentEnv() }), false);
-    assert.deepEqual(tools, []);
-});
-
-void test("public tool exposes the web search machine schema", () => {
-    const tool = createWebSearchToolDefinition({
-        loadConfig: async () => validConfig(null),
-        createProvider: () => ({
-            id: "brave",
-            async search() {
-                throw new Error("unused");
-            },
-        }),
-    });
-    assert.equal(tool.name, "web_search");
-    assert.deepEqual(Object.keys(tool.parameters.properties ?? {}).sort(), ["budget", "freshness", "query"]);
 });

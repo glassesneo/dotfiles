@@ -12,11 +12,13 @@ export interface HarnessRuntimeConfig { adapter: "pi-native" | "cursor-acp" | "c
 export interface AgentLaunchEnvelope { schemaVersion: 1; marker: "pi-mesh-agent-launch-v1"; meshId: string; agentId: string; epochId: string; identity: string; self: AgentDefinition; roleSet: string[]; catalog: Record<string, AgentDefinition>; policyDigest: string; childExtensions: Record<string, string[]> }
 
 export const AGENT_ARTIFACT_EXTENSION = fileURLToPath(new URL("../agent_artifact.ts", import.meta.url));
+export const WEB_SEARCH_EXTENSION = fileURLToPath(new URL("../web_search.ts", import.meta.url));
+export const WEB_FETCH_EXTENSION = fileURLToPath(new URL("../web_fetch.ts", import.meta.url));
 const cursorHarnessOptions = { mode: "agent", permissionPolicy: "allow-always", sandbox: "disabled", trustWorkspace: true, worktree: false } as const;
 const codexHarnessOptions = { mode: "read-only", permissionPolicy: "reject", webSearch: "cached" } as const;
 const settledRoleSets: Record<string, string[]> = {
-    "mode:recon": ["explorer", "reviewer", "critic", "codex"],
-    "mode:ops": ["explorer", "worker", "validator", "reviewer", "critic", "fast-worker", "codex"],
+    "mode:recon": ["explorer", "reviewer", "critic", "researcher", "codex"],
+    "mode:ops": ["explorer", "worker", "validator", "reviewer", "critic", "researcher", "fast-worker", "codex"],
 };
 const settledAgents: Record<string, AgentDefinition> = {
     explorer: { model: "openai-codex/gpt-5.6-luna", description: "Read-only bounded repository evidence gathering.", thinkingLevel: "medium", tools: ["read", "grep", "find", "ls", "bash"], skillOptIns: ["codebase-exploration"], instructions: "Investigate one bounded repository question and return concise evidence with file references.", harness: "pi", childExtensionContributions: [] },
@@ -24,8 +26,14 @@ const settledAgents: Record<string, AgentDefinition> = {
     validator: { model: "openai-codex/gpt-5.6-luna", description: "Read-only automated implementation validation.", thinkingLevel: "medium", tools: ["read", "grep", "find", "ls", "bash"], skillOptIns: ["implementation-validation"], instructions: "Run the caller's requested automated validation objective without changing repository source and return concrete evidence.", harness: "pi", childExtensionContributions: [] },
     reviewer: { model: "openai-codex/gpt-5.6-sol", description: "Read-only review consolidator that may request an independent critic task.", thinkingLevel: "high", tools: ["read", "grep", "find", "ls", "bash", "mesh_enable", "mesh_run", "mesh_submit", "mesh_get", "mesh_wait", "mesh_stop", "mesh_route", "save_agent_artifact"], skillOptIns: ["adaptive-review", "task-orchestration", "agent-artifact"], instructions: "Review the defined target, request an independent critic task for a concrete lens when useful, consolidate the review outcome, and save one review report when requested.", harness: "pi", childExtensionContributions: [AGENT_ARTIFACT_EXTENSION] },
     critic: { model: "openai-codex/gpt-5.6-terra", description: "Read-only independent focused review peer for a caller-supplied lens or dossier.", thinkingLevel: "medium", tools: ["read", "grep", "find", "ls", "bash"], skillOptIns: [], instructions: "Independently review only the caller-supplied lens or dossier and return severity-ordered evidence, gaps, and residual risk.", harness: "pi", childExtensionContributions: [] },
+    researcher: { model: "openai-codex/gpt-5.6-terra", description: "Read-only bounded Web research with claim-linked evidence.", thinkingLevel: "high", tools: ["read", "grep", "find", "ls", "bash", "web_search", "web_fetch"], skillOptIns: ["web-research"], instructions: "Investigate the bounded research question using read operations only, apply web-research, and return its claim-linked evidence brief. Report decision-critical missing context instead of guessing.", harness: "pi", childExtensionContributions: [WEB_SEARCH_EXTENSION, WEB_FETCH_EXTENSION] },
     "fast-worker": { model: "cursor/cursor-grok-4.5-high-fast", description: "Fast bounded source worker through Cursor ACP; usage and interactive parity are limited.", tools: [], skillOptIns: [], instructions: "Implement the bounded source objective in the current workspace, validate proportionately, and return changed files, evidence, deviations, and risks.", harness: "cursor-agent", harnessOptions: cursorHarnessOptions, childExtensionContributions: [] },
     codex: { model: "codex/gpt-5.6-luna", description: "Read-only bounded source-backed Web research peer through Codex ACP.", thinkingLevel: "high", tools: [], skillOptIns: [], instructions: "Use Codex's built-in Web search to investigate the bounded research question. Return a concise evidence brief containing the conclusion, source URLs with the claim each supports, freshness, and material uncertainty. Read workspace context only when the task requires it. If evidence is insufficient, state what is missing.", harness: "codex", harnessOptions: codexHarnessOptions, childExtensionContributions: [] },
+};
+const historicalAgentSnapshots: Partial<Record<string, AgentDefinition[]>> = {
+    reviewer: [{ model: "openai-codex/gpt-5.6-sol", description: "Read-only adaptive review owner with optional critic delegation.", thinkingLevel: "high", tools: ["read", "grep", "find", "ls", "bash", "mesh_enable", "mesh_run", "mesh_submit", "mesh_get", "mesh_wait", "mesh_stop", "mesh_route", "save_agent_artifact"], skillOptIns: ["adaptive-review", "task-orchestration", "agent-artifact"], instructions: "Review the defined target, delegate only a concrete independent critic lens when useful, and save one review report when requested.", harness: "pi", childExtensionContributions: [AGENT_ARTIFACT_EXTENSION] }],
+    critic: [{ model: "openai-codex/gpt-5.6-terra", description: "Read-only focused or dissenting review leaf.", thinkingLevel: "medium", tools: ["read", "grep", "find", "ls", "bash"], skillOptIns: [], instructions: "Review only the caller-supplied lens or dossier and return severity-ordered evidence, gaps, and residual risk.", harness: "pi", childExtensionContributions: [] }],
+    codex: [{ model: "codex/gpt-5.6-luna", description: "Read-only, source-backed Web research leaf through Codex ACP.", thinkingLevel: "high", tools: [], skillOptIns: [], instructions: "Use Codex's built-in Web search to investigate the delegated question. Return a concise evidence brief containing the conclusion, source URLs with the claim each supports, freshness, and material uncertainty. Read workspace context only when the task requires it. If evidence is insufficient, state what is missing.", harness: "codex", harnessOptions: codexHarnessOptions, childExtensionContributions: [] }],
 };
 
 export function settledAgentCatalog(): AgentCatalog { return { schemaVersion: 1, agents: structuredClone(settledAgents) }; }
@@ -42,7 +50,7 @@ function positiveInteger(value: unknown, label: string): number { if (!Number.is
 function uuid(value: unknown, label: string): string { const id = text(value, label); if (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(id)) throw new Error(`${label} must be a UUID`); return id; }
 
 function nixStoreContributionIdentity(path: string): string | undefined { const match = path.match(/^\/nix\/store\/[0-9a-z]{32}-([^/]+)\/(.+)$/u); return match ? `${match[1]}/${match[2]}` : undefined; }
-function sourceContributionIdentity(path: string): string | undefined { return path === AGENT_ARTIFACT_EXTENSION ? `${basename(dirname(path))}/${basename(path)}` : undefined; }
+function sourceContributionIdentity(path: string): string | undefined { return [AGENT_ARTIFACT_EXTENSION, WEB_SEARCH_EXTENSION, WEB_FETCH_EXTENSION].includes(path) ? `${basename(dirname(path))}/${basename(path)}` : undefined; }
 function sameContributionSnapshot(path: string, expected: string): boolean {
     if (path === expected) return true;
     const actualIdentity = nixStoreContributionIdentity(path) ?? sourceContributionIdentity(path);
@@ -62,9 +70,13 @@ export function validateAgentDefinition(name: string, value: unknown, label = `a
 }
 export function validateAgentDefinitionSnapshot(name: string, value: unknown, label = `agent definition snapshot ${name}`): AgentDefinition {
     const { raw, expected } = validateDefinitionShape(name, value, label);
-    const rawContributions = raw.childExtensionContributions as string[];
-    const sameContributions = rawContributions.length === expected.childExtensionContributions.length && rawContributions.every((path, index) => sameContributionSnapshot(path, expected.childExtensionContributions[index]!));
-    if (!sameContributions || !same({ ...raw, childExtensionContributions: [] }, { ...expected, childExtensionContributions: [] })) throw new Error(`${label} must exactly match the settled ${name} capability contract`);
+    const candidates = [expected, ...(historicalAgentSnapshots[name] ?? [])];
+    const matches = candidates.some(candidate => {
+        const rawContributions = raw.childExtensionContributions as string[];
+        const sameContributions = rawContributions.length === candidate.childExtensionContributions.length && rawContributions.every((path, index) => sameContributionSnapshot(path, candidate.childExtensionContributions[index]!));
+        return sameContributions && same({ ...raw, childExtensionContributions: [] }, { ...candidate, childExtensionContributions: [] });
+    });
+    if (!matches) throw new Error(`${label} must match a settled ${name} capability contract`);
     return structuredClone(raw) as unknown as AgentDefinition;
 }
 export function validateOrchestrationConfig(value: unknown): OrchestrationConfig {
@@ -78,7 +90,7 @@ export function validateOrchestrationConfig(value: unknown): OrchestrationConfig
 }
 /** Transitional function name for downstream W2; validation is mesh-v2 only. */
 export const validateDelegationConfig = validateOrchestrationConfig;
-export function validateAgentCatalog(value: unknown): AgentCatalog { const root = object(value, "agent catalog"); exact(root, ["schemaVersion", "agents"], "agent catalog"); if (root.schemaVersion !== 1) throw new Error("Unsupported agent catalog schemaVersion"); const raw = object(root.agents, "agents"); if (!same(Object.keys(raw).sort(), Object.keys(settledAgents).sort())) throw new Error("agent catalog must contain exactly the seven settled agents"); return { schemaVersion: 1, agents: Object.fromEntries(Object.entries(raw).map(([name, definition]) => [name, validateAgentDefinition(name, definition, `agents.${name}`)])) }; }
+export function validateAgentCatalog(value: unknown): AgentCatalog { const root = object(value, "agent catalog"); exact(root, ["schemaVersion", "agents"], "agent catalog"); if (root.schemaVersion !== 1) throw new Error("Unsupported agent catalog schemaVersion"); const raw = object(root.agents, "agents"); if (!same(Object.keys(raw).sort(), Object.keys(settledAgents).sort())) throw new Error("agent catalog must contain exactly the eight settled agents"); return { schemaVersion: 1, agents: Object.fromEntries(Object.entries(raw).map(([name, definition]) => [name, validateAgentDefinition(name, definition, `agents.${name}`)])) }; }
 export function policyDigest(input: { mode: string; roleSet: readonly string[]; roles: Record<string, AgentDefinition> }): string { return createHash("sha256").update(canonicalJson({ mode: input.mode, roleSet: input.roleSet, roles: input.roles })).digest("hex"); }
 export function launchEnvelopeDigest(envelope: AgentLaunchEnvelope): string { return createHash("sha256").update(canonicalJson(validateLaunchEnvelope(envelope))).digest("hex"); }
 export function validateLaunchEnvelope(value: unknown): AgentLaunchEnvelope {

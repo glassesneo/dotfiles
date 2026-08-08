@@ -15,7 +15,12 @@ delib.host {
     # Bootstrap without an Age key. Install the key before re-enabling.
     toplevel.secrets = {
       enable = true;
-      names = ["brave-api-key"];
+      names = [
+        "brave-api-key"
+        "brave-free-api-key"
+        "parallel-api-key"
+        "exa-api-key"
+      ];
     };
     nix-darwin.preferences = {
       appearance.enable = false;

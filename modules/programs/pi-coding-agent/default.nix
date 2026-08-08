@@ -29,6 +29,7 @@ in
           "mode"
           "orchestration"
           "command_palette"
+          "web_retrieval"
         ]);
       };
 
@@ -99,7 +100,7 @@ in
           "agent-modes.json"
           "agent-catalog.json"
           "orchestration.json"
-          "web-search.json"
+          "web-retrieval.json"
           "extension-keybindings.json"
         ]);
     in {

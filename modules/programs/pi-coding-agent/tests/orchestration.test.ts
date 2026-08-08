@@ -105,27 +105,35 @@ void test("policy changes create immutable epochs while restore and nested launc
     assert.equal((await readMesh(root, mesh.meshId)).currentEpochId, ops.epochId);
 }));
 
-void test("reload accepts a prior realization snapshot and advances to the current relocated policy", async () => withRoot("mesh-relocated-policy-", async root => {
+void test("reload accepts a prior settled capability snapshot and advances to the current policy", async () => withRoot("mesh-relocated-policy-", async root => {
     const mesh = await initializeMesh(root, { rootSessionId: "session", recoverable: true, budgets });
     const currentReviewer = settledAgentDefinition("reviewer");
-    const currentRoles = { reviewer: currentReviewer };
-    const original = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", roleSet: ["reviewer"], roles: currentRoles });
+    const currentCritic = settledAgentDefinition("critic");
+    const currentCodex = settledAgentDefinition("codex");
+    const roleSet = ["reviewer", "critic", "codex"];
+    const currentRoles = { reviewer: currentReviewer, critic: currentCritic, codex: currentCodex };
+    const original = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", roleSet, roles: currentRoles });
     const priorArtifactExtension = `/nix/store/${"a".repeat(32)}-extensions_src/agent_artifact.ts`;
-    const priorReviewer = { ...currentReviewer, childExtensionContributions: [priorArtifactExtension] };
-    const priorRoles = { reviewer: priorReviewer };
+    const priorReviewer = { ...currentReviewer, description: "Read-only adaptive review owner with optional critic delegation.", instructions: "Review the defined target, delegate only a concrete independent critic lens when useful, and save one review report when requested.", childExtensionContributions: [priorArtifactExtension] };
+    const priorCritic = { ...currentCritic, description: "Read-only focused or dissenting review leaf.", instructions: "Review only the caller-supplied lens or dossier and return severity-ordered evidence, gaps, and residual risk." };
+    const priorCodex = { ...currentCodex, description: "Read-only, source-backed Web research leaf through Codex ACP.", instructions: "Use Codex's built-in Web search to investigate the delegated question. Return a concise evidence brief containing the conclusion, source URLs with the claim each supports, freshness, and material uncertainty. Read workspace context only when the task requires it. If evidence is insufficient, state what is missing." };
+    const priorRoles = { reviewer: priorReviewer, critic: priorCritic, codex: priorCodex };
     const persisted = JSON.parse(await readFile(epochPath(root, mesh.meshId, original.epochId), "utf8")) as Record<string, unknown>;
     persisted.roles = priorRoles;
-    persisted.policyDigest = policyDigest({ mode: "ops", roleSet: ["reviewer"], roles: priorRoles });
+    persisted.policyDigest = policyDigest({ mode: "ops", roleSet, roles: priorRoles });
     await writeFile(epochPath(root, mesh.meshId, original.epochId), `${JSON.stringify(persisted)}\n`);
 
     const historical = await readPolicyEpoch(root, mesh.meshId, original.epochId);
+    assert.equal(historical.roles.reviewer?.description, priorReviewer.description);
     assert.deepEqual(historical.roles.reviewer?.childExtensionContributions, [priorArtifactExtension]);
-    const current = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", roleSet: ["reviewer"], roles: currentRoles, restoreEpochId: original.epochId });
+    const current = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", roleSet, roles: currentRoles, restoreEpochId: original.epochId });
     assert.notEqual(current.epochId, original.epochId);
+    assert.equal(current.roles.reviewer?.description, currentReviewer.description);
     assert.deepEqual(current.roles.reviewer?.childExtensionContributions, currentReviewer.childExtensionContributions);
 
     const envelope = buildLaunchEnvelope({ meshId: mesh.meshId, agentId: randomUUID(), epochId: original.epochId, agent: "reviewer", mode: "ops", roleSet: ["reviewer"], catalog: settledAgentCatalog(), childExtensions: { reviewer: [priorArtifactExtension] } });
-    const priorEnvelope = { ...envelope, self: priorReviewer, catalog: priorRoles, policyDigest: policyDigest({ mode: "ops", roleSet: ["reviewer"], roles: priorRoles }) };
+    const priorReviewerRoles = { reviewer: priorReviewer };
+    const priorEnvelope = { ...envelope, self: priorReviewer, catalog: priorReviewerRoles, policyDigest: policyDigest({ mode: "ops", roleSet: ["reviewer"], roles: priorReviewerRoles }) };
     assert.deepEqual(validateLaunchEnvelope(priorEnvelope).self.childExtensionContributions, [priorArtifactExtension]);
     const untrustedReviewer = { ...currentReviewer, childExtensionContributions: ["/tmp/extensions_src/agent_artifact.ts"] };
     assert.throws(() => validateLaunchEnvelope({ ...envelope, self: untrustedReviewer, catalog: { reviewer: untrustedReviewer } }), /settled reviewer capability contract/u);

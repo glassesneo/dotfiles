@@ -59,6 +59,10 @@ delib.module {
         source = ./skills/codebase-exploration;
         targetDirs = piAuthoringTargets;
       };
+      web-research = {
+        source = ./skills/web-research;
+        targetDirs = piAuthoringTargets;
+      };
       source-implementation = {
         source = ./skills/source-implementation;
         targetDirs = piAuthoringTargets;

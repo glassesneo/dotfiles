@@ -13,6 +13,8 @@
   orchestrationExtension = "${./../../extensions_src}/orchestration.ts";
   childBridgeExtension = "${./../../extensions_src}/orchestration_child_bridge.ts";
   artifactExtension = "${./../../extensions_src}/agent_artifact.ts";
+  webSearchExtension = "${./../../extensions_src}/web_search.ts";
+  webFetchExtension = "${./../../extensions_src}/web_fetch.ts";
   historyViewerExtension = "${./../../extensions_src}/orchestration_history_viewer.ts";
   externalWorkerEntrypoint = "${./../../extensions_src}/orchestration_external_worker.ts";
   parentKeys = piKeybindings.keysFor "meshNavigation" "parent";
@@ -93,6 +95,17 @@
       harnessOptions = {};
       childExtensionContributions = [];
     };
+    researcher = {
+      model = "openai-codex/gpt-5.6-terra";
+      description = "Read-only bounded Web research with claim-linked evidence.";
+      thinkingLevel = "high";
+      tools = ["read" "grep" "find" "ls" "bash" "web_search" "web_fetch"];
+      skillOptIns = ["web-research"];
+      instructions = "Investigate the bounded research question using read operations only, apply web-research, and return its claim-linked evidence brief. Report decision-critical missing context instead of guessing.";
+      harness = "pi";
+      harnessOptions = {};
+      childExtensionContributions = [webSearchExtension webFetchExtension];
+    };
     fast-worker = {
       model = "cursor/cursor-grok-4.5-high-fast";
       description = "Fast bounded source worker through Cursor ACP; usage and interactive parity are limited.";
@@ -142,8 +155,8 @@ in
       programs.pi-coding-agent.orchestration = {
         agents = settledAgents;
         roleSets = {
-          "mode:recon" = ["explorer" "reviewer" "critic" "codex"];
-          "mode:ops" = ["explorer" "worker" "validator" "reviewer" "critic" "fast-worker" "codex"];
+          "mode:recon" = ["explorer" "reviewer" "critic" "researcher" "codex"];
+          "mode:ops" = ["explorer" "worker" "validator" "reviewer" "critic" "researcher" "fast-worker" "codex"];
         };
         budgets = {
           maxLiveAgents = 12;
@@ -263,8 +276,8 @@ in
     }: let
       names = builtins.attrNames cfg.agents;
       settledRoleSets = {
-        "mode:recon" = ["explorer" "reviewer" "critic" "codex"];
-        "mode:ops" = ["explorer" "worker" "validator" "reviewer" "critic" "fast-worker" "codex"];
+        "mode:recon" = ["explorer" "reviewer" "critic" "researcher" "codex"];
+        "mode:ops" = ["explorer" "worker" "validator" "reviewer" "critic" "researcher" "fast-worker" "codex"];
       };
       settledBudgets = {
         maxLiveAgents = 12;
@@ -277,7 +290,7 @@ in
       assertions = [
         {
           assertion = cfg.agents == settledAgents;
-          message = "Pi orchestration catalog must exactly match the settled seven-agent models, instructions, tools, skills, thinking, harness options, and reviewer-owned artifact contribution.";
+          message = "Pi orchestration catalog must exactly match the settled eight-agent models, instructions, tools, skills, thinking, harness options, and role-owned child extension contributions.";
         }
         {
           assertion = cfg.roleSets == settledRoleSets && roleSetsValid && cfg.budgets == settledBudgets;
