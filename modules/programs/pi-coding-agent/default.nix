@@ -25,11 +25,10 @@ in
           options.enable = boolOption true;
         } {};
         defaultExtensions = readOnly (listOfOption str [
-          "profile"
+          "popup"
+          "mode"
+          "orchestration"
           "command_palette"
-          "subagent"
-          "performance"
-          "web_search"
         ]);
       };
 
@@ -97,8 +96,9 @@ in
           value.source = homeConfig.lib.file.mkOutOfStoreSymlink "${cfg.configDir}/${name}";
         }) [
           "auth.json"
-          "agent-profiles.json"
-          "subagent.json"
+          "agent-modes.json"
+          "agent-catalog.json"
+          "orchestration.json"
           "web-search.json"
           "extension-keybindings.json"
         ]);

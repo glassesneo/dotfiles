@@ -37,6 +37,22 @@ expect_diagnostic overlapping-context 'pi\.app\.clear.*pi\.tui\.editor\.cursorUp
 expect_diagnostic tmux-unrepresentable 'tmuxPreview\.openFull=clear'
 expect_diagnostic direct-native-required-empty 'historyViewer\.exit'
 
+expect_orchestration_rejection() {
+  local name=$1 assignment=$2
+  if output=$(nix eval --impure --raw --expr "$base $assignment $tail" 2>&1); then
+    echo "$name: expected Nix evaluation failure" >&2
+    exit 1
+  fi
+  if ! grep -Eq 'settled six-agent|multiple definitions' <<<"$output"; then
+    echo "$name: missing exact-capability diagnostic" >&2
+    echo "$output" >&2
+    exit 1
+  fi
+  printf 'negative: %s\n' "$name"
+}
+expect_orchestration_rejection critic-mutation 'myconfig.programs.pi-coding-agent.orchestration.agents.critic.tools = f.inputs.nixpkgs.lib.mkForce ["read" "write"];'
+expect_orchestration_rejection generic-child-extension 'myconfig.programs.pi-coding-agent.orchestration.agents.reviewer.childExtensionContributions = f.inputs.nixpkgs.lib.mkForce ["/unexpected.ts"];'
+
 collision_line=$(grep -E 'Pi keybinding conflicts:' <<<"$negative_output" | head -n 1 || true)
 grep -Eq 'commandPalette\.(cancel|moveUp)' <<<"$collision_line"
 grep -Eq 'pi\.(app\.clear|tui\.editor\.cursorUp)' <<<"$collision_line"
@@ -59,6 +75,9 @@ let
   navigationHomeDir = navigation.config.home.homeDirectory;
   disabled = base.extendModules {
     modules = [{ myconfig.programs.pi-coding-agent.emergency.enable = false; }];
+  };
+  questionDisabled = base.extendModules {
+    modules = [{ myconfig.programs.pi-coding-agent.question.enable = false; }];
   };
   collectEmergency = x: let
     c = x.config;
@@ -88,15 +107,24 @@ let
         source = toString source;
         target = "\${cfg.configDir}/\${name}";
       };
-    }) ["auth.json" "agent-profiles.json" "subagent.json" "web-search.json" "extension-keybindings.json"]);
+    }) ["auth.json" "agent-modes.json" "agent-catalog.json" "orchestration.json" "web-search.json" "extension-keybindings.json"]);
   };
   disabledConfig = disabled.config;
   disabledDir = "\${disabledConfig.home.homeDirectory}/.pi/emergency-agent";
   disabledPackageNames = map (package: package.pname or package.name) disabledConfig.home.packages;
 in {
   pi = {
+    defaultExtensionNames = base.config.myconfig.programs.pi-coding-agent.defaultExtensions;
+    defaultExtensionPaths = base.config.programs.pi-coding-agent.settings.extensions;
+    modes = builtins.fromJSON (builtins.unsafeDiscardStringContext base.config.home.file."\${base.config.home.homeDirectory}/.pi/agent/agent-modes.json".text);
+    questionDisabled = {
+      extensionPaths = questionDisabled.config.programs.pi-coding-agent.settings.extensions;
+      modes = builtins.fromJSON (builtins.unsafeDiscardStringContext questionDisabled.config.home.file."\${questionDisabled.config.home.homeDirectory}/.pi/agent/agent-modes.json".text);
+    };
+    catalog = builtins.fromJSON (builtins.unsafeDiscardStringContext base.config.home.file."\${base.config.home.homeDirectory}/.pi/agent/agent-catalog.json".text);
+    orchestration = builtins.fromJSON (builtins.unsafeDiscardStringContext base.config.home.file."\${base.config.home.homeDirectory}/.pi/agent/orchestration.json".text);
     extensionKeybindings = builtins.fromJSON (builtins.unsafeDiscardStringContext aliasOverride.config.home.file."\${aliasHomeDir}/.pi/agent/extension-keybindings.json".text);
-    navigationRuntime = builtins.fromJSON (builtins.unsafeDiscardStringContext navigation.config.home.file."\${navigationHomeDir}/.pi/agent/subagent.json".text);
+    navigationRuntime = builtins.fromJSON (builtins.unsafeDiscardStringContext navigation.config.home.file."\${navigationHomeDir}/.pi/agent/orchestration.json".text);
     navigationTmux = navigation.config.programs.tmux.extraConfig;
     darwinTmux = f.darwinConfigurations.seiran.config.home-manager.users.neo.programs.tmux.extraConfig;
   };
@@ -116,6 +144,21 @@ NIX
 result=$(nix eval --impure --json --expr "$positive_expr")
 
 jq -e '
+  .pi.defaultExtensionNames == ["popup", "mode", "orchestration", "command_palette"] and
+  ([.pi.defaultExtensionPaths[] | split("/")[-1]] == ["popup.ts", "mode.ts", "orchestration.ts", "command_palette.ts", "question.ts", "interaction_policy.ts", "agent_artifact.ts"]) and
+  ((.pi.modes | keys) == ["defaultMode", "modes", "schemaVersion"]) and .pi.modes.schemaVersion == 1 and .pi.modes.defaultMode == "recon" and
+  ((.pi.modes.modes | keys) == ["ops", "recon"]) and .pi.modes.modes.recon.allowAllTools == false and .pi.modes.modes.ops.allowAllTools == true and
+  (.pi.modes.modes.recon.tools | index("question")) != null and
+  ([.pi.questionDisabled.extensionPaths[] | split("/")[-1]] | index("question.ts")) == null and
+  (.pi.questionDisabled.modes.modes.recon.tools | index("question")) == null and
+  ((.pi.catalog | keys) == ["agents", "schemaVersion"]) and .pi.catalog.schemaVersion == 1 and
+  ((.pi.catalog.agents | keys) == ["critic", "explorer", "fast-worker", "reviewer", "validator", "worker"]) and
+  (.pi.catalog.agents.reviewer.childExtensionContributions | length) == 1 and (.pi.catalog.agents.reviewer.childExtensionContributions[0] | endswith("/agent_artifact.ts")) and
+  ([.pi.catalog.agents.explorer, .pi.catalog.agents.worker, .pi.catalog.agents.validator, .pi.catalog.agents.critic, .pi.catalog.agents["fast-worker"]] | all(.childExtensionContributions == [])) and
+  .pi.catalog.agents.critic.tools == ["read","grep","find","ls","bash"] and .pi.catalog.agents.critic.skillOptIns == [] and
+  .pi.catalog.agents["fast-worker"].harness == "cursor-agent" and .pi.catalog.agents["fast-worker"].tools == [] and
+  ((.pi.orchestration | keys) == ["childBridgeExtension", "delegation", "harnesses", "historyViewerExtension", "maxDepth", "natureHandleWords", "orchestrationExtension", "parentNavigationHint", "popupExtension", "returnParentCommand", "schemaVersion", "stateRoot", "tmux"]) and
+  .pi.orchestration.schemaVersion == 1 and .pi.orchestration.delegation == {"mode:recon":["explorer","reviewer"],"mode:ops":["explorer","worker","validator","reviewer","fast-worker"],"agent:reviewer":["critic"]} and
   .pi.extensionKeybindings.features.historyViewer.exit[0] == "f12" and
   .pi.navigationRuntime.parentNavigationHint == "F11 F10: parent · /parent" and
   (.pi.navigationTmux | contains("bind-key f10")) and
@@ -134,11 +177,20 @@ jq -e '
   (.emergency.disabled.emergencyFiles | length) == 0
 ' <<<"$result" >/dev/null
 
+AGENT_TYPES_VALIDATOR=$(jq -r '.pi.catalog.agents.reviewer.childExtensionContributions[0] | sub("/agent_artifact.ts$"; "/utilities/agent_types.ts")' <<<"$result") \
+GENERATED_AGENT_CATALOG=$(jq -c '.pi.catalog' <<<"$result") \
 GENERATED_EXTENSION_KEYBINDINGS=$(jq -c '.pi.extensionKeybindings' <<<"$result") \
 PACKAGE_ROOT="$package_root" node --input-type=module -e '
+    import assert from "node:assert/strict";
     import { pathToFileURL } from "node:url";
-    const moduleUrl = pathToFileURL(`${process.env.PACKAGE_ROOT}/extensions_src/utilities/extension_keybindings.ts`);
-    const { validateExtensionKeybindings } = await import(moduleUrl.href);
+    const utilities = `${process.env.PACKAGE_ROOT}/extensions_src/utilities`;
+    const { validateAgentCatalog } = await import(pathToFileURL(process.env.AGENT_TYPES_VALIDATOR).href);
+    const { validateExtensionKeybindings } = await import(pathToFileURL(`${utilities}/extension_keybindings.ts`).href);
+    const catalog = JSON.parse(process.env.GENERATED_AGENT_CATALOG);
+    validateAgentCatalog(catalog);
+    const oneSidedDrift = structuredClone(catalog);
+    oneSidedDrift.agents.worker.instructions += " Generated-only drift.";
+    assert.throws(() => validateAgentCatalog(oneSidedDrift), /settled worker capability/u);
     validateExtensionKeybindings(JSON.parse(process.env.GENERATED_EXTENSION_KEYBINDINGS), "generated extension-keybindings.json");
   '
 

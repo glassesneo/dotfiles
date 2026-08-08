@@ -108,8 +108,7 @@ delib.module {
     };
   };
 
-  myconfig.ifEnabled.programs.pi-coding-agent.profile.defaultTools = ["question"];
-  myconfig.ifEnabled.programs.pi-coding-agent.subagent.childExcludedTools = ["question"];
+  myconfig.ifEnabled.programs.pi-coding-agent.mode.modes.recon.tools = ["question"];
 
   home.ifEnabled.programs.pi-coding-agent.settings.extensions = [
     "${./../../extensions_src}/question.ts"

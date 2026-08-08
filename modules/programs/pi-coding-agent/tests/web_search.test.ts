@@ -55,24 +55,8 @@ function validConfig(apiKeyFile: string | null = "/secrets/brave-api-key"): WebS
     };
 }
 
-function librarianEnv(name = "librarian"): NodeJS.ProcessEnv {
-    return {
-        PI_AGENT_RESOLVED_PROFILE: JSON.stringify({
-            name,
-            profile: {
-                id: "f8e9225a-a129-4f74-9962-7800aab70dab",
-                model: "openai-codex/gpt-5.6-luna",
-                availability: ["subagent"],
-                description: "External research.",
-                thinkingLevel: "high",
-                allowAllTools: false,
-                tools: ["read", "web_search"],
-                hiddenSkillOptIns: [],
-                instructions: "Research.",
-                extensions: { subagent: { allowedTargets: [] } },
-            },
-        }),
-    };
+function disabledAgentEnv(): NodeJS.ProcessEnv {
+    return { PI_AGENT_RESOLVED_AGENT: "/disabled/web-search-agent-envelope.json" };
 }
 
 function bravePayload(documents: Array<{ url: string; title: string; snippets: string[]; age?: string }>, leak?: string) {
@@ -623,22 +607,13 @@ void test("tool result keeps normalized details, truncates oversized output, and
     }
 });
 
-void test("web_search registers only for resolved librarian child profiles", () => {
-    assert.equal(shouldRegisterWebSearch({}), false);
-    assert.equal(shouldRegisterWebSearch(librarianEnv("scout")), false);
-    assert.equal(shouldRegisterWebSearch(librarianEnv("librarian")), true);
-    assert.equal(shouldRegisterWebSearch({ PI_AGENT_RESOLVED_PROFILE: "{bad" }), false);
-
+void test("web_search remains disabled without a catalog agent", () => {
     const tools: string[] = [];
-    const pi = {
-        registerTool(tool: { name: string }) {
-            tools.push(tool.name);
-        },
-    } as unknown as ExtensionAPI;
-    assert.equal(registerWebSearch(pi, { env: {} }), false);
+    const pi = { registerTool(tool: { name: string }) { tools.push(tool.name); } } as unknown as ExtensionAPI;
+    assert.equal(shouldRegisterWebSearch({}), false);
+    assert.equal(shouldRegisterWebSearch(disabledAgentEnv()), false);
+    assert.equal(registerWebSearch(pi, { env: disabledAgentEnv() }), false);
     assert.deepEqual(tools, []);
-    assert.equal(registerWebSearch(pi, { env: librarianEnv("librarian") }), true);
-    assert.deepEqual(tools, ["web_search"]);
 });
 
 void test("public tool exposes the web search machine schema", () => {

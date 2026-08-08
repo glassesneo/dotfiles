@@ -15,11 +15,6 @@ in
         extensionPaths = readOnly (listOfOption str [webSearchExtension]);
       });
 
-    myconfig.ifEnabled = {
-      programs.pi-coding-agent.subagent.childExtensionContributions.web_search = [webSearchExtension];
-      programs.pi-coding-agent.profile.profiles.librarian.tools = ["web_search"];
-    };
-
     home.ifEnabled = {myconfig, ...}: {
       home.file."${myconfig.programs.pi-coding-agent.configDir}/web-search.json".text = builtins.toJSON {
         schemaVersion = 1;

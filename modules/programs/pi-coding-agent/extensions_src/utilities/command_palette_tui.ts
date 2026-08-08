@@ -1,4 +1,4 @@
-import type { ExtensionUIContext, Theme } from "@earendil-works/pi-coding-agent";
+import type { Theme } from "@earendil-works/pi-coding-agent";
 import { Input, truncateToWidth, visibleWidth, wrapTextWithAnsi, type Component, type Focusable, type TUI } from "@earendil-works/pi-tui";
 import { filterPaletteItems, type PaletteListItem } from "./command_palette_core.ts";
 import { paletteHelp, paletteKeyAction, type ResolvedPaletteKeymap } from "./command_palette_keymap.ts";
@@ -61,6 +61,7 @@ export class PaletteListComponent<T> implements Component, Focusable {
     #focused = false;
     #finished = false;
     #busy = false;
+    #cancelRequested = false;
     #cachedWidth?: number;
     #cachedLines?: string[];
 
@@ -91,10 +92,12 @@ export class PaletteListComponent<T> implements Component, Focusable {
         this.refresh();
         return true;
     }
-    setStatus(kind: "success" | "error" | "warning", text: string): void { this.#status = { kind, text }; this.refresh(); }
-    clearStatus(): void { this.#status = undefined; this.refresh(); }
-    setBusy(value: boolean): void { this.#busy = value; this.refresh(); }
+    setStatus(kind: "success" | "error" | "warning", text: string): void { if (this.#finished) return; this.#status = { kind, text }; this.refresh(); }
+    clearStatus(): void { if (this.#finished) return; this.#status = undefined; this.refresh(); }
+    setBusy(value: boolean): void { if (this.#finished) return; this.#busy = value; this.refresh(); if (!value && this.#cancelRequested) this.close(null); }
+    requestClose(): boolean { if (this.#busy) { this.#cancelRequested = true; return false; } return true; }
     close(value: T | null = null): void { if (this.#finished) return; this.#finished = true; this.#input.focused = false; this.#done(value); }
+    dispose(): void { if (this.#finished) return; this.#finished = true; this.#busy = false; this.#input.focused = false; this.invalidate(); }
     invalidate(): void { this.#cachedWidth = undefined; this.#cachedLines = undefined; this.#input.invalidate(); }
     refresh(): void { this.invalidate(); this.#tui.requestRender(); }
     #normalizeSelection(): void { const count = this.filteredItems.length; this.#selected = count === 0 ? 0 : Math.min(this.#selected, count - 1); }
@@ -109,7 +112,7 @@ export class PaletteListComponent<T> implements Component, Focusable {
     handleInput(data: string): void {
         if (this.#finished) return;
         const action = paletteKeyAction(data, this.#keymap);
-        if (action === "cancel") { this.close(null); return; }
+        if (action === "cancel") { if (this.#busy) { this.#cancelRequested = true; return; } this.close(null); return; }
         if (this.#busy) return;
         if (action === "moveUp") { this.#move(-1); return; }
         if (action === "moveDown") { this.#move(1); return; }
@@ -172,26 +175,4 @@ export class PaletteListComponent<T> implements Component, Focusable {
         const lines = renderFramedLines({ theme: this.#theme, width: w, title: this.#title, body: body.slice(0, Math.max(1, targetRows - 2)) });
         this.#cachedLines = lines.map(line => truncateToWidth(line, w, "")); this.#cachedWidth = w; return this.#cachedLines;
     }
-}
-
-export async function runPaletteList<T>(ui: Pick<ExtensionUIContext, "custom">, options: {
-    title: string;
-    items: readonly PaletteListItem<T>[];
-    keymap: ResolvedPaletteKeymap;
-    searchable?: boolean;
-    onConfirm?: (item: PaletteListItem<T>, component: PaletteListComponent<T>) => void | Promise<void>;
-}): Promise<T | null> {
-    return ui.custom<T | null>(
-        (tui, theme, _keybindings, done) => new PaletteListComponent({ tui, theme, done, ...options }),
-        {
-            overlay: true,
-            overlayOptions: {
-                anchor: "center",
-                width: "35%",
-                minWidth: 60,
-                maxHeight: "70%",
-                margin: 1,
-            },
-        },
-    );
 }

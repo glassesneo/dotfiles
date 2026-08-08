@@ -34,7 +34,7 @@ export interface PerformanceResourceSnapshot {
 export interface SubagentTaskMetric {
     agentId: string;
     taskId: string;
-    profile: string;
+    agentType: string;
     outcome: string;
     startedAt: string;
     finishedAt?: string;
@@ -137,7 +137,7 @@ export async function readSubagentMetrics(configPath: string, options: { originS
     for (const agentId of agentIds) {
         const directory = join(agentsRoot, agentId); let agent: Record<string, unknown> | undefined;
         try { agent = object(await json(join(directory, "agent.json"))); } catch { unread += 1; continue; }
-        if (!agent || typeof agent.profile !== "string" || typeof agent.originSessionId !== "string") { unread += 1; continue; }
+        if (!agent || typeof agent.agent !== "string" || typeof agent.originSessionId !== "string") { unread += 1; continue; }
         if (options.originSessionId && agent.originSessionId !== options.originSessionId) continue;
         const taskIds = await readdir(join(directory, "tasks")).catch(() => { unread += 1; return [] as string[]; });
         for (const taskId of taskIds) {
@@ -150,7 +150,7 @@ export async function readSubagentMetrics(configPath: string, options: { originS
                 if (open && startedMs > nowMs) { unread += 1; continue; }
                 const elapsed = (finishedMs ?? nowMs) - startedMs;
                 if (options.sinceMs !== undefined && (finishedMs ?? startedMs) < options.sinceMs) continue;
-                tasks.push({ agentId, taskId: request.taskId, profile: agent.profile, outcome: typeof result?.outcome === "string" ? result.outcome : typeof status.state === "string" ? status.state : "unknown", startedAt: new Date(startedMs).toISOString(), ...(finishedMs === undefined ? {} : { finishedAt: new Date(finishedMs).toISOString() }), durationMs: elapsed, open, longRunning: elapsed >= LONG_RUNNING_MS });
+                tasks.push({ agentId, taskId: request.taskId, agentType: agent.agent, outcome: typeof result?.outcome === "string" ? result.outcome : typeof status.state === "string" ? status.state : "unknown", startedAt: new Date(startedMs).toISOString(), ...(finishedMs === undefined ? {} : { finishedAt: new Date(finishedMs).toISOString() }), durationMs: elapsed, open, longRunning: elapsed >= LONG_RUNNING_MS });
             } catch { unread += 1; }
         }
     }
@@ -158,11 +158,11 @@ export async function readSubagentMetrics(configPath: string, options: { originS
 }
 
 function percentile(values: readonly number[], fraction: number): number { if (values.length === 0) return 0; const sorted = values.toSorted((a, b) => a - b); return sorted[Math.ceil(sorted.length * fraction) - 1] ?? 0; }
-function profileLines(tasks: readonly SubagentTaskMetric[]): string[] { const grouped = new Map<string, SubagentTaskMetric[]>(); for (const task of tasks) grouped.set(task.profile, [...(grouped.get(task.profile) ?? []), task]); return [...grouped].toSorted(([a], [b]) => a.localeCompare(b)).map(([profile, values]) => `  ${profile}: ${values.length}, ${duration(values.reduce((sum, item) => sum + item.durationMs, 0))}`); }
+function agentTypeLines(tasks: readonly SubagentTaskMetric[]): string[] { const grouped = new Map<string, SubagentTaskMetric[]>(); for (const task of tasks) grouped.set(task.agentType, [...(grouped.get(task.agentType) ?? []), task]); return [...grouped].toSorted(([a], [b]) => a.localeCompare(b)).map(([agentType, values]) => `  ${agentType}: ${values.length}, ${duration(values.reduce((sum, item) => sum + item.durationMs, 0))}`); }
 export function formatCurrentPerformance(runs: readonly PerformanceRun[], subagents: SubagentMetrics, resources: PerformanceResourceSnapshot): string {
     const total = runs.reduce((sum, run) => sum + run.totalMs, 0); const turns = runs.reduce((sum, run) => sum + run.turnCount, 0); const turnMs = runs.reduce((sum, run) => sum + run.turnMs, 0); const toolWall = runs.reduce((sum, run) => sum + run.toolWallMs, 0); const nonTool = runs.reduce((sum, run) => sum + run.nonToolMs, 0); const tools = new Map<string, ToolAggregate>();
     for (const run of runs) for (const [name, value] of Object.entries(run.tools)) { const current = tools.get(name) ?? { count: 0, durationMs: 0 }; current.count += value.count; current.durationMs += value.durationMs; tools.set(name, current); }
-    const lines = ["Performance — current session", `Settled runs: ${runs.length}; total ${duration(total)}; turns ${turns} / ${duration(turnMs)}`, `Tool wall: ${duration(toolWall)}; non-tool: ${duration(nonTool)}`, "Tools:", ...([...tools].toSorted(([a], [b]) => a.localeCompare(b)).map(([name, value]) => `  ${name}: ${value.count}, ${duration(value.durationMs)}`)), `Subagents: ${subagents.tasks.length}; unread: ${subagents.unread}${subagents.unavailable ? `; unavailable: ${subagents.unavailable}` : ""}`, ...subagents.tasks.map(task => `  ${task.profile} ${task.outcome} ${duration(task.durationMs)} ${shortId(task.taskId)}${task.longRunning ? " long-running" : ""}${task.open ? " open" : ""}`), `Resources: ${resources.cpuCount} CPU; load ${resources.loadAverage.map(value => value.toFixed(2)).join(" ")}; memory ${bytes(resources.memoryFreeBytes)} free / ${bytes(resources.memoryTotalBytes)}`, `Swap: ${resources.swap}; disk free: ${resources.diskFreeBytes === "unavailable" ? "unavailable" : bytes(resources.diskFreeBytes)}`];
+    const lines = ["Performance — current session", `Settled runs: ${runs.length}; total ${duration(total)}; turns ${turns} / ${duration(turnMs)}`, `Tool wall: ${duration(toolWall)}; non-tool: ${duration(nonTool)}`, "Tools:", ...([...tools].toSorted(([a], [b]) => a.localeCompare(b)).map(([name, value]) => `  ${name}: ${value.count}, ${duration(value.durationMs)}`)), `Subagents: ${subagents.tasks.length}; unread: ${subagents.unread}${subagents.unavailable ? `; unavailable: ${subagents.unavailable}` : ""}`, ...subagents.tasks.map(task => `  ${task.agentType} ${task.outcome} ${duration(task.durationMs)} ${shortId(task.taskId)}${task.longRunning ? " long-running" : ""}${task.open ? " open" : ""}`), `Resources: ${resources.cpuCount} CPU; load ${resources.loadAverage.map(value => value.toFixed(2)).join(" ")}; memory ${bytes(resources.memoryFreeBytes)} free / ${bytes(resources.memoryTotalBytes)}`, `Swap: ${resources.swap}; disk free: ${resources.diskFreeBytes === "unavailable" ? "unavailable" : bytes(resources.diskFreeBytes)}`];
     return lines.join("\n");
 }
 export function formatRecentPerformance(days: number, metrics: SubagentMetrics): string {
@@ -170,7 +170,7 @@ export function formatRecentPerformance(days: number, metrics: SubagentMetrics):
     return [
         `Performance — subagents, last ${days} day(s)`,
         `Tasks: ${metrics.tasks.length}; total ${duration(total)}; median ${duration(percentile(values, 0.5))}; p90 ${duration(percentile(values, 0.9))}; unread: ${metrics.unread}${metrics.unavailable ? `; unavailable: ${metrics.unavailable}` : ""}`,
-        "Profiles:", ...profileLines(metrics.tasks), "Longest:", ...metrics.tasks.slice(0, 10).map(task => `  ${task.profile} ${task.outcome} ${duration(task.durationMs)} ${shortId(task.taskId)}${task.longRunning ? " long-running" : ""}${task.open ? " open" : ""}`),
+        "Agent types:", ...agentTypeLines(metrics.tasks), "Longest:", ...metrics.tasks.slice(0, 10).map(task => `  ${task.agentType} ${task.outcome} ${duration(task.durationMs)} ${shortId(task.taskId)}${task.longRunning ? " long-running" : ""}${task.open ? " open" : ""}`),
     ].join("\n");
 }
 export function parsePerformanceArguments(raw: string): { mode: "current" } | { mode: "recent"; days: number } {
@@ -180,7 +180,7 @@ export function parsePerformanceArguments(raw: string): { mode: "current" } | { 
 }
 
 export default function performanceExtension(pi: ExtensionAPI, options: { configPath?: string; clock?: () => number; wallClock?: () => Date } = {}): void {
-    const collector = new PerformanceCollector(options.clock, options.wallClock); const configPath = options.configPath ?? join(getAgentDir(), "subagent.json");
+    const collector = new PerformanceCollector(options.clock, options.wallClock); const configPath = options.configPath ?? join(getAgentDir(), "orchestration.json");
     pi.on("agent_start", () => collector.startRun());
     pi.on("turn_start", event => collector.startTurn(event.turnIndex));
     pi.on("turn_end", event => collector.endTurn(event.turnIndex));

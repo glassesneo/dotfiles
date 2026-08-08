@@ -19,7 +19,6 @@ import {
     defaultSleep,
     type BraveLlmContextDependencies,
 } from "./utilities/brave_llm_context.ts";
-import { validateResolvedProfile } from "./utilities/profile_types.ts";
 import {
     WEB_SEARCH_CONFIG_UNAVAILABLE,
     WEB_SEARCH_QUERY_MAX_CHARS,
@@ -182,16 +181,7 @@ export function createWebSearchToolDefinition(
     });
 }
 
-export function shouldRegisterWebSearch(env: NodeJS.ProcessEnv = process.env): boolean {
-    const raw = env.PI_AGENT_RESOLVED_PROFILE;
-    if (raw === undefined) return false;
-    try {
-        const resolved = validateResolvedProfile(JSON.parse(raw));
-        return resolved.name === "librarian";
-    } catch {
-        return false;
-    }
-}
+export function shouldRegisterWebSearch(_env: NodeJS.ProcessEnv = process.env): boolean { return false; }
 
 export function registerWebSearch(
     pi: ExtensionAPI,

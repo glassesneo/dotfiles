@@ -1,13 +1,7 @@
 ---
-description: Adaptively review an optional target, defaulting to current worktree changes
+description: Review a target and save one durable review report
 argument-hint: "[target/context]"
 ---
-Load and execute the `adaptive-review` Skill in `auto` mode.
+Review the supplied target, or all current staged, unstaged, and untracked worktree changes when no target is supplied. Use the applicable review capability and save exactly one canonical review report through `agent-artifact`.
 
 Target: $ARGUMENTS
-
-When no target is supplied, review all staged, unstaged, and untracked
-current-worktree changes, excluding ignored files. Do not require or invent an
-implementation report or approved design. If the default target has no
-reviewable diff, persist an inconclusive review report rather than claiming no
-findings.

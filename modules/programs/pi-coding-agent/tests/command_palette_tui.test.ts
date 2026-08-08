@@ -3,7 +3,7 @@ import test from "node:test";
 import type { Theme } from "@earendil-works/pi-coding-agent";
 import { visibleWidth, type TUI } from "@earendil-works/pi-tui";
 import { resolvePaletteKeymap } from "../extensions_src/utilities/command_palette_keymap.ts";
-import { formatPaletteBreadcrumb, paletteTargetRows, PaletteListComponent, renderFramedLines, runPaletteList } from "../extensions_src/utilities/command_palette_tui.ts";
+import { formatPaletteBreadcrumb, paletteTargetRows, PaletteListComponent, renderFramedLines } from "../extensions_src/utilities/command_palette_tui.ts";
 
 const theme = {
     fg(_color: string, text: string) { return text; },
@@ -67,39 +67,26 @@ void test("palette height stays compact on standard and tall terminals", () => {
     assert.equal(paletteTargetRows(24, false), 15);
 });
 
-void test("palette lists open as centered overlays", async () => {
-    let customOptions: { overlay?: boolean; overlayOptions?: { anchor?: string; maxHeight?: string } } | undefined;
-    const result = await runPaletteList({ async custom(factory: any, options: any) {
-        customOptions = options;
-        let value: string | null | undefined;
-        const component = await factory({ terminal: { rows: 24, columns: 80 }, requestRender() {} } as TUI, theme, {} as never, (next: string | null) => { value = next; });
-        component.handleInput?.(keys.ctrlC);
-        return value as never;
-    } } as never, { title: "Palette", keymap: testKeymap(), items: [{ value: "a", label: "Alpha" }] });
-    assert.equal(result, null);
-    assert.equal(customOptions?.overlay, true);
-    assert.equal(customOptions?.overlayOptions?.anchor, "center");
-    assert.equal(customOptions?.overlayOptions?.maxHeight, "70%");
-});
 
-void test("busy state suppresses duplicate confirm and shows WORKING status", () => {
-    let confirms = 0;
+void test("busy state suppresses duplicate confirm, defers Escape, and closes once after settlement", () => {
+    let confirms = 0; const results: Array<string | null> = [];
     const component = new PaletteListComponent({
         tui: { terminal: { rows: 24, columns: 80 }, requestRender() {} } as TUI,
         theme,
         title: "Palette",
         keymap: testKeymap(),
         items: [{ value: "a", label: "Alpha" }],
-        done() {},
+        done(value) { results.push(value); },
         onConfirm: async () => { confirms += 1; },
     });
     component.setBusy(true);
     component.handleInput(keys.enter);
-    assert.equal(confirms, 0);
+    component.handleInput(keys.escape);
+    assert.equal(confirms, 0); assert.deepEqual(results, []);
     assert.match(component.render(80).join("\n"), /WORKING/);
     component.setBusy(false);
-    component.handleInput(keys.enter);
-    assert.equal(confirms, 1);
+    component.handleInput(keys.escape);
+    assert.deepEqual(results, [null]);
 });
 
 void test("theme invalidate regenerates framed colors from the current theme", () => {

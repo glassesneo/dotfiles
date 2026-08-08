@@ -22,9 +22,9 @@ void test("performance entries reject old or corrupt schemas and contain no priv
 });
 
 void test("subagent metrics filter origin and recent period, calculate open age, and tolerate corrupt state", async () => {
-    const root = await mkdtemp(join(tmpdir(), "performance-state-")); const stateRoot = join(root, "state"); const configPath = join(root, "subagent.json"); const now = Date.parse("2026-08-04T12:00:00.000Z");
+    const root = await mkdtemp(join(tmpdir(), "performance-state-")); const stateRoot = join(root, "state"); const configPath = join(root, "orchestration.json"); const now = Date.parse("2026-08-04T12:00:00.000Z");
     await writeFile(configPath, JSON.stringify({ schemaVersion: 7, stateRoot }));
-    const add = async (agentId: string, origin: string, profile: string, taskId: string, start: string, finish?: string) => { const agent = join(stateRoot, "agents", agentId); const task = join(agent, "tasks", taskId); await mkdir(task, { recursive: true }); await writeFile(join(agent, "agent.json"), JSON.stringify({ profile, originSessionId: origin })); await writeFile(join(task, "request.json"), JSON.stringify({ taskId, createdAt: start })); await writeFile(join(task, "status.json"), JSON.stringify({ state: finish ? "succeeded" : "running", startedAt: start, ...(finish ? { finishedAt: finish } : {}) })); if (finish) await writeFile(join(task, "result.json"), JSON.stringify({ outcome: "succeeded", startedAt: start, finishedAt: finish })); };
+    const add = async (agentId: string, origin: string, agentType: string, taskId: string, start: string, finish?: string) => { const agent = join(stateRoot, "agents", agentId); const task = join(agent, "tasks", taskId); await mkdir(task, { recursive: true }); await writeFile(join(agent, "agent.json"), JSON.stringify({ agent: agentType, originSessionId: origin })); await writeFile(join(task, "request.json"), JSON.stringify({ taskId, createdAt: start })); await writeFile(join(task, "status.json"), JSON.stringify({ state: finish ? "succeeded" : "running", startedAt: start, ...(finish ? { finishedAt: finish } : {}) })); if (finish) await writeFile(join(task, "result.json"), JSON.stringify({ outcome: "succeeded", startedAt: start, finishedAt: finish })); };
     await add("agent-a", "current", "tester", "task-current", "2026-08-04T11:40:00.000Z"); await add("agent-b", "other", "reviewer", "task-other", "2026-08-03T10:00:00.000Z", "2026-08-03T10:20:00.000Z");
     const current = await readSubagentMetrics(configPath, { originSessionId: "current", nowMs: now }); assert.equal(current.tasks.length, 1); assert.equal(current.tasks[0]?.open, true); assert.equal(current.tasks[0]?.longRunning, true); assert.equal(current.tasks[0]?.durationMs, 20 * 60 * 1000);
     const recent = await readSubagentMetrics(configPath, { sinceMs: now - 2 * 86_400_000, nowMs: now }); assert.equal(recent.tasks.length, 2); assert.match(formatRecentPerformance(2, recent), /median.*p90.*tester.*reviewer.*long-running/su);
@@ -32,16 +32,16 @@ void test("subagent metrics filter origin and recent period, calculate open age,
 });
 
 void test("subagent metrics surface a missing agents state root instead of empty success", async () => {
-    const root = await mkdtemp(join(tmpdir(), "performance-missing-state-")); const configPath = join(root, "subagent.json");
+    const root = await mkdtemp(join(tmpdir(), "performance-missing-state-")); const configPath = join(root, "orchestration.json");
     await writeFile(configPath, JSON.stringify({ schemaVersion: 7, stateRoot: join(root, "missing") }));
     const metrics = await readSubagentMetrics(configPath);
     assert.deepEqual(metrics.tasks, []); assert.equal(metrics.unread, 1); assert.equal(metrics.unavailable, "subagent agents state unavailable"); assert.match(formatRecentPerformance(7, metrics), /unread: 1; unavailable: subagent agents state unavailable/u);
 });
 
 void test("subagent metrics exclude and count an open task with a future start", async () => {
-    const root = await mkdtemp(join(tmpdir(), "performance-future-task-")); const stateRoot = join(root, "state"); const configPath = join(root, "subagent.json"); const task = join(stateRoot, "agents", "agent", "tasks", "task");
+    const root = await mkdtemp(join(tmpdir(), "performance-future-task-")); const stateRoot = join(root, "state"); const configPath = join(root, "orchestration.json"); const task = join(stateRoot, "agents", "agent", "tasks", "task");
     await mkdir(task, { recursive: true }); await writeFile(configPath, JSON.stringify({ schemaVersion: 7, stateRoot }));
-    await writeFile(join(stateRoot, "agents", "agent", "agent.json"), JSON.stringify({ profile: "tester", originSessionId: "origin" }));
+    await writeFile(join(stateRoot, "agents", "agent", "agent.json"), JSON.stringify({ agentType: "tester", originSessionId: "origin" }));
     await writeFile(join(task, "request.json"), JSON.stringify({ taskId: "future-task", createdAt: "2026-08-04T12:01:00.000Z" })); await writeFile(join(task, "status.json"), JSON.stringify({ state: "running", startedAt: "2026-08-04T12:01:00.000Z" }));
     const metrics = await readSubagentMetrics(configPath, { nowMs: Date.parse("2026-08-04T12:00:00.000Z") });
     assert.deepEqual(metrics.tasks, []); assert.equal(metrics.unread, 1); assert.equal(metrics.unavailable, undefined);
@@ -54,7 +54,7 @@ void test("performance argument range is strict", () => {
 
 void test("current formatter labels non-tool and limits task display to safe fields", () => {
     const resources: PerformanceResourceSnapshot = { cpuCount: 6, loadAverage: [1, 2, 3], memoryTotalBytes: 8 * 1024 ** 3, memoryFreeBytes: 4 * 1024 ** 3, swap: "0 used", diskFreeBytes: 20 * 1024 ** 3 };
-    const text = formatCurrentPerformance([], { unread: 2, tasks: [{ agentId: "agent-secret", taskId: "12345678-private", profile: "tester", outcome: "running", startedAt: "2026-01-01T00:00:00Z", durationMs: 700000, open: true, longRunning: true }] }, resources);
+    const text = formatCurrentPerformance([], { unread: 2, tasks: [{ agentId: "agent-secret", taskId: "12345678-private", agentType: "tester", outcome: "running", startedAt: "2026-01-01T00:00:00Z", durationMs: 700000, open: true, longRunning: true }] }, resources);
     assert.match(text, /non-tool/u); assert.match(text, /tester running.*12345678.*long-running.*open/u); assert.doesNotMatch(text, /agent-secret|purpose|prompt|private/u);
 });
 

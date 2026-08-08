@@ -18,7 +18,6 @@ const FEATURE_ACTIONS: Record<string, { actions: readonly string[]; required: re
         actions: ["common.next-question", "common.previous-question", "common.back", "common.cancel", "choice.accept", "choice.move-up", "choice.move-down", "choice.toggle", "choice.select-and-note", "choice.write-in", "editor.clear", "review.accept", "review.move-up", "review.move-down", "text.accept", "text.newline"],
         required: ["common.next-question", "common.previous-question", "common.back", "common.cancel", "choice.accept", "choice.move-up", "choice.move-down", "choice.write-in", "editor.clear", "review.accept", "review.move-up", "review.move-down", "text.accept", "text.newline"],
     },
-    profile: { actions: ["cycle"], required: [] },
     interactionPolicy: { actions: ["clear", "interrupt"], required: ["clear", "interrupt"] },
     subagentPalette: {
         actions: ["moveUp", "moveDown", "collapse", "expand", "confirm", "cancel", "refresh", "stop", "preview", "unlink"],

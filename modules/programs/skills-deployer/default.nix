@@ -71,12 +71,8 @@ delib.module {
         source = ./skills/adaptive-review;
         targetDirs = piAuthoringTargets;
       };
-      implementation-lifecycle = {
-        source = ./skills/implementation-lifecycle;
-        targetDirs = piAuthoringTargets;
-      };
-      lightweight-implementation-lifecycle = {
-        source = ./skills/lightweight-implementation-lifecycle;
+      task-orchestration = {
+        source = ./skills/task-orchestration;
         targetDirs = piAuthoringTargets;
       };
       intent-elicitation = {
@@ -152,13 +148,11 @@ delib.module {
           builtins.pathExists ./skills/source-implementation/SKILL.md
           && builtins.pathExists ./skills/implementation-validation/SKILL.md
           && builtins.pathExists ./skills/adaptive-review/SKILL.md
-          && builtins.pathExists ./skills/implementation-lifecycle/SKILL.md
-          && builtins.pathExists ./skills/lightweight-implementation-lifecycle/SKILL.md
+          && builtins.pathExists ./skills/task-orchestration/SKILL.md
           && skills.source-implementation.targetDirs == piAuthoringTargets
           && skills.implementation-validation.targetDirs == piAuthoringTargets
           && skills.adaptive-review.targetDirs == piAuthoringTargets
-          && skills.implementation-lifecycle.targetDirs == piAuthoringTargets
-          && skills.lightweight-implementation-lifecycle.targetDirs == piAuthoringTargets;
+          && skills.task-orchestration.targetDirs == piAuthoringTargets;
         message = "Pi implementation-assurance skills must be packaged and deployed to the shared agents skill directory.";
       }
     ];

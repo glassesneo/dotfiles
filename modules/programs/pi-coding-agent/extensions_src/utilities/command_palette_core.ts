@@ -1,8 +1,8 @@
 import type { ContextUsage } from "@earendil-works/pi-coding-agent";
 
-export const commandPaletteActionIds = ["model", "thinking", "tools", "tool-output", "session-info", "copy-last-response", "theme"] as const;
+export const commandPaletteActionIds = ["tool-output", "session-info", "copy-last-response", "theme"] as const;
 export type CommandPaletteActionId = (typeof commandPaletteActionIds)[number];
-export type PaletteUiKind = "select" | "settings" | "toggle" | "information" | "immediate";
+export type PaletteUiKind = "select" | "toggle" | "information" | "immediate";
 
 export interface PaletteAction {
     id: CommandPaletteActionId;

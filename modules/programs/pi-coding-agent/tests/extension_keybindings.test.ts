@@ -1,12 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { validateExtensionKeybindings } from "../extensions_src/utilities/extension_keybindings.ts";
-import { tmuxKeyToken } from "../extensions_src/utilities/subagent_preview.ts";
+import { tmuxKeyToken } from "../extensions_src/utilities/orchestration_preview.ts";
 
 const valid = {
     schemaVersion: 1,
     features: {
-        profile: { cycle: [] },
         historyViewer: { exit: ["ctrl+d"] },
         subagentNavigation: { parent: ["u"] },
     },
