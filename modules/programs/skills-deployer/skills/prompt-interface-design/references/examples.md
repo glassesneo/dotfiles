@@ -18,9 +18,9 @@ Avoid:
 `You are running the /impl command. Do not mention slash commands. Do not
 repeat the implementation workflow.`
 
-## Subagent handoff prompt
+## Delegated peer task handoff prompt
 
-Receiver: a delegated agent responsible for one local task.
+Receiver: a delegated peer responsible for one local task.
 
 Good:
 
@@ -30,8 +30,8 @@ references, severity, and recommended fixes. Stop after the review report.`
 
 Avoid:
 
-`Help the main agent implement the whole feature. Remember the overall plan and
-decide what to do next.`
+`Implement the whole requesting task. Infer the coordination context and decide
+what every peer should do next.`
 
 ## Agent profile / AGENTS.md instruction
 

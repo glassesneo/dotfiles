@@ -2,17 +2,17 @@
 name: codebase-exploration
 disable-model-invocation: true
 description: >-
-  Use when an explorer subagent receives one bounded codebase question and must
-  return evidence, constraints, and implications without changing source or
-  configuration. Trigger only for an explicit explorer handoff. Do not use for
-  parent-task orchestration, design decisions, implementation, or user dialogue.
+  Use when one bounded codebase question needs read-only evidence, constraints,
+  and implications. Trigger only for an explicit exploration task. Do not use
+  for requester-level orchestration, design decisions, implementation, or user
+  dialogue.
 ---
 
 # Codebase Exploration
 
-Investigate one bounded question for the parent agent. Build only the evidence
-needed to update the parent's working model; do not take ownership of the
-parent task.
+Investigate one bounded question for its consumer. Own the evidence quality
+needed to update the consumer's working model without taking ownership of the
+consumer's broader outcome.
 
 ## Required Handoff
 
@@ -27,8 +27,8 @@ owns read-only operations, the default report shape, and stop conditions; the
 handoff does not restate them.
 
 When required task-specific information is missing and the question cannot be
-answered with evidence, do not infer or expand the parent task. Identify the
-missing conditions under `Unknowns` and stop.
+answered with evidence, do not infer or expand the requesting task. Identify
+the missing conditions under `Unknowns` and stop.
 
 ## Exploration Procedure
 
@@ -48,14 +48,28 @@ missing conditions under `Unknowns` and stop.
    locations, tests, configuration, and command results over unsupported
    summaries.
 4. Distinguish confirmed facts from inference. Analogous implementations are
-   evidence for the parent to evaluate, not a decision that they must be
+   evidence for the consumer to evaluate, not a decision that they must be
    followed.
 5. Return the smallest complete report that answers the bounded question.
 
+Keep ownership of the bounded question when coordination helps. Use
+`task-orchestration` only when an independent contradiction attempt or separate
+capability would materially improve the answer. For background peer work, make
+the monitoring owner explicit. Pass the needed `agentId`, `taskId`, current
+state, and expected follow-up only when the consumer or a new monitoring owner
+must act. A terminal notification is not proof of success; use `mesh_get` when
+the peer's outcome or evidence matters. External harness agents are not route
+endpoints, so a Pi peer must retain their monitoring ownership.
+
+When evidence materially contradicts a known peer task's premise, consider a
+bounded signal to the relevant durable Pi consumer instead of expanding this
+question. Successful queueing is not acknowledgement that the consumer acted.
+Continue to return the requester-facing evidence report.
+
 Do not change source or configuration, ask the user questions, decide the final
-design, direct the parent task, or delegate to another agent. When a question
-concerns design alternatives, report evidence-supported options as
-implications without making a final recommendation the center of the result.
+design, or direct the consumer's broader task. When a question concerns design
+alternatives, report evidence-supported options as implications without making
+a final recommendation the center of the result.
 
 ## Stop Conditions
 
@@ -64,7 +78,7 @@ Stop when any one condition holds:
 - the question has an evidence-backed answer;
 - the specified scope has been fully examined;
 - required information cannot be reached and the missing condition is known;
-- further exploration no longer adds material information to the parent's
+- further exploration no longer adds material information to the consumer's
   decision.
 
 Do not widen the investigation merely because adjacent code is interesting.
@@ -102,7 +116,7 @@ List inaccessible or unresolved facts and missing handoff conditions. Write
 
 ## Implications
 
-Explain what the evidence enables or rules out for the parent without taking
+Explain what the evidence enables or rules out for the consumer without taking
 over its decision.
 
 ## Confidence

@@ -73,22 +73,22 @@
     };
     reviewer = {
       model = "openai-codex/gpt-5.6-sol";
-      description = "Read-only adaptive review owner with optional critic delegation.";
+      description = "Read-only review consolidator that may request an independent critic task.";
       thinkingLevel = "high";
       tools = ["read" "grep" "find" "ls" "bash" "mesh_enable" "mesh_run" "mesh_submit" "mesh_get" "mesh_wait" "mesh_stop" "mesh_route" "save_agent_artifact"];
       skillOptIns = ["adaptive-review" "task-orchestration" "agent-artifact"];
-      instructions = "Review the defined target, delegate only a concrete independent critic lens when useful, and save one review report when requested.";
+      instructions = "Review the defined target, request an independent critic task for a concrete lens when useful, consolidate the review outcome, and save one review report when requested.";
       harness = "pi";
       harnessOptions = {};
       childExtensionContributions = [artifactExtension];
     };
     critic = {
       model = "openai-codex/gpt-5.6-terra";
-      description = "Read-only focused or dissenting review leaf.";
+      description = "Read-only independent focused review peer for a caller-supplied lens or dossier.";
       thinkingLevel = "medium";
       tools = ["read" "grep" "find" "ls" "bash"];
       skillOptIns = [];
-      instructions = "Review only the caller-supplied lens or dossier and return severity-ordered evidence, gaps, and residual risk.";
+      instructions = "Independently review only the caller-supplied lens or dossier and return severity-ordered evidence, gaps, and residual risk.";
       harness = "pi";
       harnessOptions = {};
       childExtensionContributions = [];
@@ -112,11 +112,11 @@
     };
     codex = {
       model = "codex/gpt-5.6-luna";
-      description = "Read-only, source-backed Web research leaf through Codex ACP.";
+      description = "Read-only bounded source-backed Web research peer through Codex ACP.";
       thinkingLevel = "high";
       tools = [];
       skillOptIns = [];
-      instructions = "Use Codex's built-in Web search to investigate the delegated question. Return a concise evidence brief containing the conclusion, source URLs with the claim each supports, freshness, and material uncertainty. Read workspace context only when the task requires it. If evidence is insufficient, state what is missing.";
+      instructions = "Use Codex's built-in Web search to investigate the bounded research question. Return a concise evidence brief containing the conclusion, source URLs with the claim each supports, freshness, and material uncertainty. Read workspace context only when the task requires it. If evidence is insufficient, state what is missing.";
       harness = "codex";
       harnessOptions = {
         mode = "read-only";

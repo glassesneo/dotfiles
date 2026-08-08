@@ -63,7 +63,7 @@ Use a skill for reusable, opt-in task behavior selected by name and description.
 Prefer another artifact when the request is not skill-shaped:
 
 - use project guidance for always-on repository invariants
-- use a subagent role for delegated work with its own responsibility boundary
+- use a delegated peer role for delegated work with its own responsibility boundary
 - use a tool, hook, or script for deterministic execution or event-triggered enforcement
 - use an asset for copyable source material, not hidden behavior
 - use a reference for optional depth, not mandatory instructions
