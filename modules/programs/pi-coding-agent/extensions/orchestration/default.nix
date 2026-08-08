@@ -32,7 +32,7 @@
       tools = listOfOption str [];
       skillOptIns = listOfOption str [];
       instructions = noDefault (strOption null);
-      harness = enumOption ["pi" "cursor-agent"] "pi";
+      harness = enumOption ["pi" "cursor-agent" "codex"] "pi";
       harnessOptions = attrsOfOption lib.types.anything {};
       childExtensionContributions = listOfOption str [];
     };
@@ -110,6 +110,21 @@
       };
       childExtensionContributions = [];
     };
+    codex = {
+      model = "codex/gpt-5.6-luna";
+      description = "Read-only, source-backed Web research leaf through Codex ACP.";
+      thinkingLevel = "high";
+      tools = [];
+      skillOptIns = [];
+      instructions = "Use Codex's built-in Web search to investigate the delegated question. Return a concise evidence brief containing the conclusion, source URLs with the claim each supports, freshness, and material uncertainty. Read workspace context only when the task requires it. If evidence is insufficient, state what is missing.";
+      harness = "codex";
+      harnessOptions = {
+        mode = "read-only";
+        permissionPolicy = "reject";
+        webSearch = "cached";
+      };
+      childExtensionContributions = [];
+    };
   };
 in
   delib.module {
@@ -127,8 +142,8 @@ in
       programs.pi-coding-agent.orchestration = {
         agents = settledAgents;
         delegation = {
-          "mode:recon" = ["explorer" "reviewer"];
-          "mode:ops" = ["explorer" "worker" "validator" "reviewer" "fast-worker"];
+          "mode:recon" = ["explorer" "reviewer" "codex"];
+          "mode:ops" = ["explorer" "worker" "validator" "reviewer" "fast-worker" "codex"];
           "agent:reviewer" = ["critic"];
         };
       };
@@ -244,8 +259,8 @@ in
     }: let
       names = builtins.attrNames cfg.agents;
       settledDelegation = {
-        "mode:recon" = ["explorer" "reviewer"];
-        "mode:ops" = ["explorer" "worker" "validator" "reviewer" "fast-worker"];
+        "mode:recon" = ["explorer" "reviewer" "codex"];
+        "mode:ops" = ["explorer" "worker" "validator" "reviewer" "fast-worker" "codex"];
         "agent:reviewer" = ["critic"];
       };
       targetsValid = builtins.all (targets: lib.length targets == lib.length (lib.unique targets) && builtins.all (target: builtins.elem target names) targets) (builtins.attrValues cfg.delegation);
@@ -254,7 +269,7 @@ in
       assertions = [
         {
           assertion = cfg.maxDepth >= 0 && cfg.agents == settledAgents;
-          message = "Pi orchestration catalog must exactly match the settled six-agent models, instructions, tools, skills, thinking, harness options, and reviewer-owned artifact contribution.";
+          message = "Pi orchestration catalog must exactly match the settled seven-agent models, instructions, tools, skills, thinking, harness options, and reviewer-owned artifact contribution.";
         }
         {
           assertion = cfg.delegation == settledDelegation && targetsValid;
@@ -281,6 +296,13 @@ in
             cursor-agent = {
               adapter = "cursor-acp";
               command = lib.getExe llm-agents.cursor-agent;
+              workerCommand = lib.getExe pkgs.nodejs;
+              workerEntrypoint = externalWorkerEntrypoint;
+              bridgeReadyTimeoutMs = 15000;
+            };
+            codex = {
+              adapter = "codex-acp";
+              command = lib.getExe llm-agents.codex-acp;
               workerCommand = lib.getExe pkgs.nodejs;
               workerEntrypoint = externalWorkerEntrypoint;
               bridgeReadyTimeoutMs = 15000;

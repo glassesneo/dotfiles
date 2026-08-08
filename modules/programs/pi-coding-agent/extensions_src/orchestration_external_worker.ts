@@ -2,18 +2,17 @@ import { access, readFile } from "node:fs/promises";
 import { launchEnvelopeDigest, validateLaunchEnvelope } from "./utilities/agent_types.ts";
 import { agentPaths, claimPendingTask, failAgent, finishTask, markBridgeReady, readAgentSnapshot, readTaskCancellation } from "./utilities/orchestration_store.ts";
 import { emptyUsage, isTerminalAgent } from "./utilities/orchestration_types.ts";
-import { CursorAcpDriver, type ExternalDriver, type ExternalWorkerEvent } from "./utilities/orchestration_cursor_acp.ts";
+import { resolveExternalDriver, validateExternalWorkerConfig, type ExternalDriver, type ExternalWorkerConfig, type ExternalWorkerEvent } from "./utilities/orchestration_external_driver.ts";
 
-interface WorkerConfig { adapter: "cursor-acp"; command: string; cwd: string; permissionPolicy: string }
-interface WorkerDependencies { createDriver?: (config: WorkerConfig, event: (event: ExternalWorkerEvent) => void) => ExternalDriver; sleep?: (ms: number) => Promise<void> }
+interface WorkerDependencies { createDriver?: (config: ExternalWorkerConfig, event: (event: ExternalWorkerEvent) => void) => ExternalDriver; sleep?: (ms: number) => Promise<void> }
 
 function requireEnv(env: NodeJS.ProcessEnv, name: string): string { const value = env[name]; if (!value?.trim()) throw new Error(`${name} is required`); return value; }
 function sleep(ms: number): Promise<void> { return new Promise(resolve => setTimeout(resolve, ms)); }
 function errorText(error: unknown): string { return error instanceof Error ? error.message : String(error); }
 
 class TerminalView {
-    constructor(agentId: string, agent: string) {
-        process.stdout.write(`\u001b[2J\u001b[HExternal subagent\nagent: ${agentId}\nagent: ${agent}\nharness: cursor-agent\n\n`);
+    constructor(agentId: string, agent: string, harness: string) {
+        process.stdout.write(`\u001b[2J\u001b[HExternal subagent\nagent: ${agentId}\nagent: ${agent}\nharness: ${harness}\n\n`);
     }
     task(summary: string): void { process.stdout.write(`\n━━ task: ${summary} ━━\nstate: running\n`); }
     event(event: ExternalWorkerEvent): void {
@@ -36,23 +35,15 @@ async function waitForAgent(stateRoot: string, agentId: string, wait: (ms: numbe
 export async function runExternalWorker(env: NodeJS.ProcessEnv = process.env, dependencies: WorkerDependencies = {}): Promise<void> {
     const agentId = requireEnv(env, "PI_SUBAGENT_AGENT_ID");
     const stateRoot = requireEnv(env, "PI_SUBAGENT_STATE_ROOT");
-    const rawConfig = JSON.parse(requireEnv(env, "PI_SUBAGENT_EXTERNAL_CONFIG")) as WorkerConfig;
-    const configKeys = Object.keys(rawConfig).sort();
-    if (JSON.stringify(configKeys) !== JSON.stringify(["adapter", "command", "cwd", "permissionPolicy"])) throw new Error("External worker config keys are invalid");
-    if (rawConfig.adapter !== "cursor-acp") throw new Error(`Unsupported external worker adapter: ${String(rawConfig.adapter)}`);
+    const config = validateExternalWorkerConfig(JSON.parse(requireEnv(env, "PI_SUBAGENT_EXTERNAL_CONFIG")));
     const envelope = validateLaunchEnvelope(JSON.parse(await readFile(requireEnv(env, "PI_AGENT_RESOLVED_AGENT"), "utf8")));
     const agent = envelope.identity.slice(6); const definition = envelope.self;
-    if (definition.harness !== "cursor-agent" || definition.model.slice(0, 7) !== "cursor/") throw new Error("External launch envelope does not describe a Cursor agent");
+    const route = resolveExternalDriver(config, definition);
     const wait = dependencies.sleep ?? sleep;
     await waitForAgent(stateRoot, agentId, wait);
-    const view = new TerminalView(agentId, agent);
-    const driver = dependencies.createDriver?.(rawConfig, event => view.event(event)) ?? new CursorAcpDriver({
-        command: rawConfig.command,
-        cwd: rawConfig.cwd,
-        model: definition.model.slice(7),
-        permissionPolicy: rawConfig.permissionPolicy,
-        event: event => view.event(event),
-    });
+    const view = new TerminalView(agentId, agent, route.display);
+    const event = (workerEvent: ExternalWorkerEvent) => view.event(workerEvent);
+    const driver = dependencies.createDriver?.(config, event) ?? route.create(event);
     let stopping = false;
     let stopPromise: Promise<void> | undefined;
     let shutdownPromise: Promise<void> | undefined;

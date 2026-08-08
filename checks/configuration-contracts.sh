@@ -43,7 +43,7 @@ expect_orchestration_rejection() {
     echo "$name: expected Nix evaluation failure" >&2
     exit 1
   fi
-  if ! grep -Eq 'settled six-agent|multiple definitions' <<<"$output"; then
+  if ! grep -Eq 'settled seven-agent|multiple definitions' <<<"$output"; then
     echo "$name: missing exact-capability diagnostic" >&2
     echo "$output" >&2
     exit 1
@@ -152,13 +152,15 @@ jq -e '
   ([.pi.questionDisabled.extensionPaths[] | split("/")[-1]] | index("question.ts")) == null and
   (.pi.questionDisabled.modes.modes.recon.tools | index("question")) == null and
   ((.pi.catalog | keys) == ["agents", "schemaVersion"]) and .pi.catalog.schemaVersion == 1 and
-  ((.pi.catalog.agents | keys) == ["critic", "explorer", "fast-worker", "reviewer", "validator", "worker"]) and
+  ((.pi.catalog.agents | keys) == ["codex", "critic", "explorer", "fast-worker", "reviewer", "validator", "worker"]) and
   (.pi.catalog.agents.reviewer.childExtensionContributions | length) == 1 and (.pi.catalog.agents.reviewer.childExtensionContributions[0] | endswith("/agent_artifact.ts")) and
-  ([.pi.catalog.agents.explorer, .pi.catalog.agents.worker, .pi.catalog.agents.validator, .pi.catalog.agents.critic, .pi.catalog.agents["fast-worker"]] | all(.childExtensionContributions == [])) and
+  ([.pi.catalog.agents.explorer, .pi.catalog.agents.worker, .pi.catalog.agents.validator, .pi.catalog.agents.critic, .pi.catalog.agents["fast-worker"], .pi.catalog.agents.codex] | all(.childExtensionContributions == [])) and
   .pi.catalog.agents.critic.tools == ["read","grep","find","ls","bash"] and .pi.catalog.agents.critic.skillOptIns == [] and
   .pi.catalog.agents["fast-worker"].harness == "cursor-agent" and .pi.catalog.agents["fast-worker"].tools == [] and
   ((.pi.orchestration | keys) == ["childBridgeExtension", "delegation", "harnesses", "historyViewerExtension", "maxDepth", "natureHandleWords", "orchestrationExtension", "parentNavigationHint", "popupExtension", "returnParentCommand", "schemaVersion", "stateRoot", "tmux"]) and
-  .pi.orchestration.schemaVersion == 1 and .pi.orchestration.delegation == {"mode:recon":["explorer","reviewer"],"mode:ops":["explorer","worker","validator","reviewer","fast-worker"],"agent:reviewer":["critic"]} and
+  .pi.orchestration.schemaVersion == 1 and .pi.orchestration.delegation == {"mode:recon":["explorer","reviewer","codex"],"mode:ops":["explorer","worker","validator","reviewer","fast-worker","codex"],"agent:reviewer":["critic"]} and
+  .pi.orchestration.harnesses.codex.adapter == "codex-acp" and (.pi.orchestration.harnesses.codex.command | endswith("/bin/codex-acp")) and
+  (.pi.orchestration.harnesses.codex.workerEntrypoint | endswith("/orchestration_external_worker.ts")) and
   .pi.extensionKeybindings.features.historyViewer.exit[0] == "f12" and
   .pi.navigationRuntime.parentNavigationHint == "F11 F10: parent · /parent" and
   (.pi.navigationTmux | contains("bind-key f10")) and
@@ -189,8 +191,8 @@ PACKAGE_ROOT="$package_root" node --input-type=module -e '
     const catalog = JSON.parse(process.env.GENERATED_AGENT_CATALOG);
     validateAgentCatalog(catalog);
     const oneSidedDrift = structuredClone(catalog);
-    oneSidedDrift.agents.worker.instructions += " Generated-only drift.";
-    assert.throws(() => validateAgentCatalog(oneSidedDrift), /settled worker capability/u);
+    oneSidedDrift.agents.codex.harnessOptions.mode = "agent";
+    assert.throws(() => validateAgentCatalog(oneSidedDrift), /settled codex capability/u);
     validateExtensionKeybindings(JSON.parse(process.env.GENERATED_EXTENSION_KEYBINDINGS), "generated extension-keybindings.json");
   '
 

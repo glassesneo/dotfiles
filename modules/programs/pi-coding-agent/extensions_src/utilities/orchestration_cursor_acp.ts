@@ -1,13 +1,5 @@
 import { AcpTransport, type JsonRpcMessage } from "./orchestration_acp.ts";
-
-export type ExternalWorkerEvent =
-    | { type: "state"; text: string }
-    | { type: "text"; text: string }
-    | { type: "thought"; text: string }
-    | { type: "tool"; text: string }
-    | { type: "permission"; text: string };
-export interface ExternalTaskResult { output: string; stopReason: string }
-export interface ExternalDriver { start(): Promise<void>; runTask(prompt: string): Promise<ExternalTaskResult>; cancel(): Promise<void>; partialOutput?(): string; shutdown(): Promise<void>; waitForClose(): Promise<Error>; fatalError(): Error | undefined }
+import type { ExternalDriver, ExternalTaskResult, ExternalWorkerEvent } from "./orchestration_external_driver.ts";
 
 function record(value: unknown): Record<string, unknown> | undefined { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : undefined; }
 function scalar(value: unknown): string { return typeof value === "string" || typeof value === "number" || typeof value === "boolean" ? String(value) : ""; }

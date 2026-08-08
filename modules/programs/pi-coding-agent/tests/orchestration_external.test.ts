@@ -5,7 +5,8 @@ import { join } from "node:path";
 import test from "node:test";
 import { runExternalWorker } from "../extensions_src/orchestration_external_worker.ts";
 import { buildLaunchEnvelope, settledAgentCatalog, settledAgentDefinition } from "../extensions_src/utilities/agent_types.ts";
-import type { ExternalDriver } from "../extensions_src/utilities/orchestration_cursor_acp.ts";
+import { resolveExternalDriver, validateExternalWorkerConfig, type ExternalDriver } from "../extensions_src/utilities/orchestration_external_driver.ts";
+import { resolveHarnessAdapter } from "../extensions_src/utilities/orchestration_harness.ts";
 import { createTask, markAgentStopping, prepareAgent, publishAgent, readAgentSnapshot, requestTaskCancellation } from "../extensions_src/utilities/orchestration_store.ts";
 
 const definition = settledAgentDefinition("fast-worker");
@@ -13,6 +14,31 @@ const capabilities = { nativeScreen: true, taskDelivery: true, taskCompletion: t
 const tmux = { socket: "/tmp/tmux", serverPid: "1", sessionId: "$1", sessionName: "main", windowId: "@1", paneId: "%1", windowName: "fast" };
 const yieldToIO = () => new Promise<void>(resolve => setImmediate(resolve));
 async function eventually(predicate: () => Promise<boolean>): Promise<void> { for (let n = 0; n < 500; n += 1) { if (await predicate()) return; await yieldToIO(); } throw new Error("condition did not settle"); }
+
+void test("external worker routing accepts only exact adapter configs and matching envelopes", () => {
+    const cursorConfig = validateExternalWorkerConfig({ adapter: "cursor-acp", command: "/cursor", cwd: "/work", permissionPolicy: "allow-always" });
+    const codexConfig = validateExternalWorkerConfig({ adapter: "codex-acp", command: "/codex-acp", cwd: "/work", mode: "read-only", permissionPolicy: "reject", webSearch: "cached" });
+    const cursorDefinition = definition;
+    const codexDefinition = settledAgentDefinition("codex");
+    assert.equal(resolveExternalDriver(cursorConfig, cursorDefinition).display, "cursor-agent");
+    assert.equal(resolveExternalDriver(codexConfig, codexDefinition).display, "codex");
+    assert.throws(() => validateExternalWorkerConfig({ ...codexConfig, permissionPolicy: "allow-always" }), /permissionPolicy/u);
+    assert.throws(() => resolveExternalDriver(codexConfig, cursorDefinition), /Codex launch envelope/u);
+});
+
+void test("external harnesses emit their exact shared-worker launch descriptors", () => {
+    const codexDefinition = settledAgentDefinition("codex");
+    const runtime = { stateRoot: "/state", harnesses: { codex: { adapter: "codex-acp", command: "/codex-acp", workerCommand: "/node", workerEntrypoint: "/worker.ts" } } } as never;
+    const { adapter, harness } = resolveHarnessAdapter(runtime, "codex", codexDefinition);
+    assert.throws(() => resolveHarnessAdapter(runtime, "codex", { ...codexDefinition, harnessOptions: { ...codexDefinition.harnessOptions, mode: "agent" } }), /mode/u);
+    const launch = adapter.launch(runtime, harness, { agentId: "agent-id", agentDirectory: "/agent", agent: "codex-worker", launchEnvelope: "/envelope.json", launchEnvelopeSnapshot: { self: codexDefinition } as never, depth: 1, originSessionId: "origin", cwd: "/work" });
+    assert.deepEqual({ command: launch.command, args: launch.args, config: JSON.parse(launch.env.PI_SUBAGENT_EXTERNAL_CONFIG!) }, { command: "/node", args: ["--experimental-strip-types", "/worker.ts"], config: { adapter: "codex-acp", command: "/codex-acp", cwd: "/work", mode: "read-only", permissionPolicy: "reject", webSearch: "cached" } });
+    const cursorDefinition = settledAgentDefinition("fast-worker");
+    const cursorRuntime = { stateRoot: "/state", harnesses: { "cursor-agent": { adapter: "cursor-acp", command: "/cursor", workerCommand: "/node", workerEntrypoint: "/worker.ts" } } } as never;
+    const cursorHarness = resolveHarnessAdapter(cursorRuntime, "cursor-agent", cursorDefinition);
+    const cursorLaunch = cursorHarness.adapter.launch(cursorRuntime, cursorHarness.harness, { agentId: "agent-id", agentDirectory: "/agent", agent: "fast-worker", launchEnvelope: "/envelope.json", launchEnvelopeSnapshot: { self: cursorDefinition } as never, depth: 1, originSessionId: "origin", cwd: "/work" });
+    assert.deepEqual({ command: cursorLaunch.command, args: cursorLaunch.args, config: JSON.parse(cursorLaunch.env.PI_SUBAGENT_EXTERNAL_CONFIG!) }, { command: "/node", args: ["--experimental-strip-types", "/worker.ts"], config: { adapter: "cursor-acp", command: "/cursor", cwd: "/work", permissionPolicy: "allow-always" } });
+});
 
 void test("ACP readiness rejects a tampered settled capability before driver startup", async () => {
     const root = await mkdtemp(join(tmpdir(), "orchestration-external-digest-")); const prepared = await prepareAgent(root, { agent: "fast-worker", harness: "cursor-agent", cwd: root, agentSnapshot: definition, launchEnvelope: "pending", lineage: { callerIdentity: "mode:ops", targetAgent: "fast-worker", depth: 1, originSessionId: "origin" }, capabilities });
