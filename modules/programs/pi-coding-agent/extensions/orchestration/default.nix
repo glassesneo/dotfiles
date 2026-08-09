@@ -185,14 +185,46 @@ in
           activityHeartbeatMs = 2000;
           activityStaleMs = 10000;
           roles = {
-            explorer = { collectAt = 6; retain = 4; pressureFloor = 1; };
-            worker = { collectAt = 6; retain = 3; pressureFloor = 1; };
-            validator = { collectAt = 3; retain = 2; pressureFloor = 1; };
-            reviewer = { collectAt = 3; retain = 1; pressureFloor = 1; };
-            critic = { collectAt = 6; retain = 4; pressureFloor = 1; };
-            researcher = { collectAt = 3; retain = 1; pressureFloor = 1; };
-            fast-worker = { collectAt = 2; retain = 1; pressureFloor = 0; };
-            codex = { collectAt = 3; retain = 2; pressureFloor = 0; };
+            explorer = {
+              collectAt = 6;
+              retain = 4;
+              pressureFloor = 1;
+            };
+            worker = {
+              collectAt = 6;
+              retain = 3;
+              pressureFloor = 1;
+            };
+            validator = {
+              collectAt = 3;
+              retain = 2;
+              pressureFloor = 1;
+            };
+            reviewer = {
+              collectAt = 3;
+              retain = 1;
+              pressureFloor = 1;
+            };
+            critic = {
+              collectAt = 6;
+              retain = 4;
+              pressureFloor = 1;
+            };
+            researcher = {
+              collectAt = 3;
+              retain = 1;
+              pressureFloor = 1;
+            };
+            fast-worker = {
+              collectAt = 2;
+              retain = 1;
+              pressureFloor = 0;
+            };
+            codex = {
+              collectAt = 3;
+              retain = 2;
+              pressureFloor = 0;
+            };
           };
         };
       };
@@ -322,14 +354,46 @@ in
         activityHeartbeatMs = 2000;
         activityStaleMs = 10000;
         roles = {
-          explorer = { collectAt = 6; retain = 4; pressureFloor = 1; };
-          worker = { collectAt = 6; retain = 3; pressureFloor = 1; };
-          validator = { collectAt = 3; retain = 2; pressureFloor = 1; };
-          reviewer = { collectAt = 3; retain = 1; pressureFloor = 1; };
-          critic = { collectAt = 6; retain = 4; pressureFloor = 1; };
-          researcher = { collectAt = 3; retain = 1; pressureFloor = 1; };
-          fast-worker = { collectAt = 2; retain = 1; pressureFloor = 0; };
-          codex = { collectAt = 3; retain = 2; pressureFloor = 0; };
+          explorer = {
+            collectAt = 6;
+            retain = 4;
+            pressureFloor = 1;
+          };
+          worker = {
+            collectAt = 6;
+            retain = 3;
+            pressureFloor = 1;
+          };
+          validator = {
+            collectAt = 3;
+            retain = 2;
+            pressureFloor = 1;
+          };
+          reviewer = {
+            collectAt = 3;
+            retain = 1;
+            pressureFloor = 1;
+          };
+          critic = {
+            collectAt = 6;
+            retain = 4;
+            pressureFloor = 1;
+          };
+          researcher = {
+            collectAt = 3;
+            retain = 1;
+            pressureFloor = 1;
+          };
+          fast-worker = {
+            collectAt = 2;
+            retain = 1;
+            pressureFloor = 0;
+          };
+          codex = {
+            collectAt = 3;
+            retain = 2;
+            pressureFloor = 0;
+          };
         };
       };
       roleSetsValid = builtins.all (roles: lib.length roles == lib.length (lib.unique roles) && builtins.all (role: builtins.elem role names) roles) (builtins.attrValues cfg.roleSets);

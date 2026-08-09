@@ -148,11 +148,13 @@ in
         emergencyLauncher
         emergencyFullLauncher
       ];
-      home.file = {
-        "${cfg.configDir}/models.json".text = builtins.toJSON modelOverrides;
-      } // lib.optionalAttrs cfg.emergency.enable (sharedEmergencyFiles
-        // {
-          "${emergencyConfigDir}/settings.json".text = builtins.toJSON emergencySettings;
-        });
+      home.file =
+        {
+          "${cfg.configDir}/models.json".text = builtins.toJSON modelOverrides;
+        }
+        // lib.optionalAttrs cfg.emergency.enable (sharedEmergencyFiles
+          // {
+            "${emergencyConfigDir}/settings.json".text = builtins.toJSON emergencySettings;
+          });
     };
   }
