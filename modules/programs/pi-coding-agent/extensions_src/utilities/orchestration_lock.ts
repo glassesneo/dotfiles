@@ -14,16 +14,35 @@ interface LockOwner {
 
 function processExists(pid: number): boolean {
     try { process.kill(pid, 0); return true; }
-    catch (error) { return (error as NodeJS.ErrnoException).code !== "ESRCH"; }
+    catch (error) { return (error as NodeJS.ErrnoException).code === "EPERM"; }
 }
 
 async function readOwner(lockDirectory: string): Promise<LockOwner | undefined> {
     try {
         const value = JSON.parse(await readFile(join(lockDirectory, "owner.json"), "utf8")) as Partial<LockOwner>;
-        return Number.isInteger(value.pid) && typeof value.acquiredAt === "string" && typeof value.token === "string"
+        return Number.isInteger(value.pid) && value.pid! > 0 && typeof value.acquiredAt === "string" && typeof value.token === "string"
             ? value as LockOwner
             : undefined;
     } catch { return undefined; }
+}
+
+async function acquireLock(lockDirectory: string, owner: LockOwner): Promise<boolean> {
+    const candidate = `${lockDirectory}.candidate.${process.pid}.${owner.token}`;
+    await mkdir(candidate, { mode: 0o700 });
+    try {
+        await writeFile(join(candidate, "owner.json"), `${JSON.stringify(owner)}\n`, { encoding: "utf8", mode: 0o600, flag: "wx" });
+        if (await stat(lockDirectory).then(() => true).catch(error => {
+            if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+            throw error;
+        })) return false;
+        try {
+            await rename(candidate, lockDirectory);
+            return true;
+        } catch (error) {
+            if (!["EEXIST", "ENOTEMPTY"].includes((error as NodeJS.ErrnoException).code ?? "")) throw error;
+            return false;
+        }
+    } finally { await rm(candidate, { recursive: true, force: true }); }
 }
 
 async function removeQuarantine(quarantine: string): Promise<void> {
@@ -36,8 +55,10 @@ async function removeQuarantine(quarantine: string): Promise<void> {
 }
 
 async function tryReclaim(lockDirectory: string): Promise<boolean> {
-    // Capture age before creating the reclaim marker, which updates the directory mtime.
-    const directoryIdentity = await stat(lockDirectory).catch(() => undefined);
+    const observedIdentity = await stat(lockDirectory).catch(() => undefined);
+    if (!observedIdentity) return false;
+    const observedOwner = await readOwner(lockDirectory);
+    if (observedOwner ? processExists(observedOwner.pid) : Date.now() - observedIdentity.mtimeMs < OWNER_WRITE_GRACE_MS) return false;
     const claimPath = join(lockDirectory, "reclaim");
     const temporary = `${lockDirectory}.reclaim.${process.pid}.${randomUUID()}.tmp`;
     await writeFile(temporary, `${process.pid}\n`, { encoding: "utf8", mode: 0o600, flag: "wx" }).catch(error => {
@@ -64,17 +85,29 @@ async function tryReclaim(lockDirectory: string): Promise<boolean> {
         throw error;
     } finally { await unlink(temporary).catch(() => {}); }
 
-    const claimedIdentity = await stat(lockDirectory).catch(() => undefined);
-    if (!directoryIdentity || claimedIdentity?.dev !== directoryIdentity.dev || claimedIdentity.ino !== directoryIdentity.ino) return false;
-
+    // Capture the directory identity only after installing the marker. This
+    // binds the claim to whichever lock generation received the hard link.
+    const directoryIdentity = await stat(lockDirectory).catch(() => undefined);
+    if (!directoryIdentity) return false;
     let removed = false;
     try {
+        const claimedIdentity = await stat(lockDirectory).catch(() => undefined);
+        if (claimedIdentity?.dev !== directoryIdentity.dev || claimedIdentity.ino !== directoryIdentity.ino) return false;
         const current = await readOwner(lockDirectory);
-        const ownerlessStale = current === undefined && directoryIdentity !== undefined
-            && Date.now() - directoryIdentity.mtimeMs >= OWNER_WRITE_GRACE_MS;
+        const ownerlessMtimeMs = observedIdentity?.dev === directoryIdentity.dev && observedIdentity.ino === directoryIdentity.ino
+            ? observedIdentity.mtimeMs
+            : directoryIdentity.mtimeMs;
+        const ownerlessStale = current === undefined
+            && Date.now() - ownerlessMtimeMs >= OWNER_WRITE_GRACE_MS;
         if ((current !== undefined && !processExists(current.pid)) || ownerlessStale) {
+            const currentIdentity = await stat(lockDirectory).catch(() => undefined);
+            if (currentIdentity?.dev !== directoryIdentity.dev || currentIdentity.ino !== directoryIdentity.ino) return false;
             const quarantine = `${lockDirectory}.stale.${process.pid}.${randomUUID()}`;
-            await rename(lockDirectory, quarantine);
+            try { await rename(lockDirectory, quarantine); }
+            catch (error) {
+                if (["ENOENT", "EINVAL"].includes((error as NodeJS.ErrnoException).code ?? "")) return false;
+                throw error;
+            }
             removed = true;
             await removeQuarantine(quarantine);
         }
@@ -94,9 +127,7 @@ async function withDirectoryLock<T>(runDirectory: string, operation: () => Promi
     const lockDirectory = join(runDirectory, ".lock");
     const owner: LockOwner = { pid: process.pid, acquiredAt: new Date().toISOString(), token: randomUUID() };
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
-        try { await mkdir(lockDirectory, { mode: 0o700 }); }
-        catch (error) {
-            if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+        if (!await acquireLock(lockDirectory, owner)) {
             if (await tryReclaim(lockDirectory)) continue;
             await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
             continue;
@@ -105,7 +136,6 @@ async function withDirectoryLock<T>(runDirectory: string, operation: () => Promi
         let operationError: unknown;
         let operationSucceeded = false;
         try {
-            await writeFile(join(lockDirectory, "owner.json"), `${JSON.stringify(owner)}\n`, { encoding: "utf8", mode: 0o600 });
             operationResult = await operation();
             operationSucceeded = true;
         } catch (error) {
@@ -113,7 +143,7 @@ async function withDirectoryLock<T>(runDirectory: string, operation: () => Promi
         }
 
         const current = await readOwner(lockDirectory);
-        if (current?.token === owner.token || current === undefined) {
+        if (current?.token === owner.token) {
             const quarantine = `${lockDirectory}.release.${process.pid}.${randomUUID()}`;
             try {
                 await rename(lockDirectory, quarantine);

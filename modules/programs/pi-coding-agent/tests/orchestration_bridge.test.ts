@@ -88,6 +88,39 @@ void test("child readiness rejects a different activated epoch snapshot and boun
     assert.equal(timedOut.shutdowns, 1);
 });
 
+void test("child initialization failure requests shutdown even when failure persistence is unavailable", async () => {
+    const fixture = await bridgeFixture({ dependencies: {
+        recordChildSessionIdentity: async () => { throw new Error("mesh store unavailable"); },
+        failAgent: async () => { throw new Error("mesh store still unavailable"); },
+    } });
+    fixture.activate();
+    await fixture.start();
+    assert.equal(fixture.shutdowns, 1);
+});
+
+void test("stalled completion persistence shuts down the settled child after a bounded window", async () => {
+    let now = 0; let expire!: () => void; let timerScheduled!: () => void; const scheduled = new Promise<void>(resolve => { timerScheduled = resolve; });
+    const fixture = await bridgeFixture({ dependencies: {
+        completionPersistenceTimeoutMs: 2,
+        now: () => now,
+        finishTask: () => new Promise<never>(() => {}),
+        setTimeout(callback) { expire = callback; timerScheduled(); return 1; },
+        clearTimeout() {},
+    } });
+    fixture.activate();
+    await fixture.start();
+    await createTask(fixture.root, fixture.meshId, fixture.agentId, "complete before store failure");
+    await fixture.tick();
+    await fixture.emit("before_agent_start", { prompt: "complete before store failure" });
+    await fixture.emit("agent_start");
+    await fixture.emit("message_end", { message: { role: "assistant", content: [{ type: "text", text: "done" }], stopReason: "stop" } });
+    const settling = fixture.emit("agent_settled");
+    await scheduled; assert.equal(fixture.shutdowns, 0);
+    now = 2; expire(); await settling;
+    assert.equal(fixture.shutdowns, 1);
+    await fixture.emit("session_shutdown", { reason: "quit" });
+});
+
 void test("Pi child tasks preserve completion, cancellation, and failure outcomes", async () => {
     const fixture = await bridgeFixture();
     fixture.activate();

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { access, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, readdir, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -8,6 +8,7 @@ import { buildLaunchEnvelope, policyDigest, settledAgentCatalog, settledAgentDef
 import {
     attachRootMesh,
     beginMeshClose,
+    claimPendingTask,
     completeMeshClose,
     createTask,
     ensurePolicyEpoch,
@@ -29,6 +30,7 @@ import {
     reservationPath,
     taskPaths,
 } from "../extensions_src/utilities/orchestration_store.ts";
+import { withMeshLock } from "../extensions_src/utilities/orchestration_lock.ts";
 import { emptyUsage } from "../extensions_src/utilities/orchestration_types.ts";
 
 const budgets = { maxLiveAgents: 2, maxConcurrentTasks: 2, maxTasksPerMesh: 8 };
@@ -64,6 +66,43 @@ void test("persisted roots reuse an open lease, close durably, and require a fre
     await assert.rejects(attachRootMesh(root, mesh.meshId, { rootSessionId: "session", rootSessionFile: "/session.jsonl" }), /closed/u);
     const reopened = await initializeMesh(root, { rootSessionId: "session", rootSessionFile: "/session.jsonl", recoverable: true, budgets });
     assert.notEqual(reopened.meshId, mesh.meshId);
+}));
+
+void test("contended mesh locking reclaims a dead owner without losing exclusion or leaking lock paths", async () => withRoot("mesh-lock-reclaim-", async root => {
+    const mesh = await initializeMesh(root, { rootSessionId: "root", recoverable: true, budgets });
+    const lockDirectory = join(meshPaths(root, mesh.meshId).directory, ".lock");
+    await mkdir(lockDirectory);
+    await writeFile(join(lockDirectory, "owner.json"), `${JSON.stringify({ pid: 99_999_999, acquiredAt: new Date().toISOString(), token: randomUUID() })}\n`);
+    let entered = 0; let maximumEntered = 0; let completed = 0;
+    await Promise.all(Array.from({ length: 24 }, () => withMeshLock(root, mesh.meshId, async () => {
+        entered += 1; maximumEntered = Math.max(maximumEntered, entered);
+        await new Promise(resolve => setTimeout(resolve, 2));
+        completed += 1; entered -= 1;
+    })));
+    assert.equal(completed, 24);
+    assert.equal(maximumEntered, 1);
+    assert.deepEqual((await readdir(meshPaths(root, mesh.meshId).directory)).filter(name => name.startsWith(".lock")), []);
+}));
+
+void test("an ownerless lock left before owner publication ages into recoverable state", async () => withRoot("mesh-ownerless-lock-", async root => {
+    const mesh = await initializeMesh(root, { rootSessionId: "root", recoverable: true, budgets });
+    const directory = meshPaths(root, mesh.meshId).directory; const lockDirectory = join(directory, ".lock");
+    await mkdir(lockDirectory); const stale = new Date(Date.now() - 2000); await utimes(lockDirectory, stale, stale);
+    let called = false; await withMeshLock(root, mesh.meshId, async () => { called = true; });
+    assert.equal(called, true);
+    assert.deepEqual((await readdir(directory)).filter(name => name.startsWith(".lock")), []);
+}));
+
+void test("an idle agent poll does not queue behind unrelated mesh-wide work", async () => withRoot("mesh-idle-poll-", async root => {
+    const mesh = await initializeMesh(root, { rootSessionId: "root", recoverable: true, budgets });
+    const epoch = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", roleSet: ["worker"], roles: { worker: settledAgentDefinition("worker") } });
+    const agent = await createPublishedAgent(root, mesh.meshId, epoch.epochId);
+    let release!: () => void; let acquired!: () => void; const acquiredPromise = new Promise<void>(resolve => { acquired = resolve; }); const gate = new Promise<void>(resolve => { release = resolve; });
+    const held = withMeshLock(root, mesh.meshId, async () => { acquired(); await gate; });
+    await acquiredPromise;
+    const observed = await Promise.race([claimPendingTask(root, mesh.meshId, agent.agentId), new Promise<"blocked">(resolve => setTimeout(() => resolve("blocked"), 100))]);
+    release(); await held;
+    assert.equal(observed, null);
 }));
 
 void test("stale persisted leases recover only with dead-PID, same-session, and matching-tmux evidence", async () => withRoot("mesh-lease-", async root => {
