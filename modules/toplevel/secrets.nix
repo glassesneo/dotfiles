@@ -32,9 +32,13 @@ in
 
     myconfig.always = {cfg, ...}: {
       args.shared.sopsSecretPaths =
-        if cfg.enable && builtins.elem moduleSystem ["darwin" "nixos"]
+        if !cfg.enable
+        then {}
+        else if builtins.elem moduleSystem ["darwin" "nixos"]
         then lib.mapAttrs (_: secret: secret.path) config.sops.secrets
-        else {};
+        # Standalone Home Manager consumes secrets provisioned by the host's
+        # sops-nix configuration rather than declaring a second secret owner.
+        else lib.genAttrs cfg.names (name: "/run/secrets/${name}");
     };
 
     # Nix module imports cannot depend on config. Keep the upstream module

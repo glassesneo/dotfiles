@@ -82,6 +82,9 @@ let
     modules = [{ myconfig.programs.pi-coding-agent.question.enable = false; }];
   };
   darwin = f.darwinConfigurations.seiran;
+  partialHomeSecrets = base.extendModules {
+    modules = [{ myconfig.toplevel.secrets.names = f.inputs.nixpkgs.lib.mkForce ["parallel-api-key" "exa-api-key"]; }];
+  };
   partialSecrets = darwin.extendModules {
     modules = [{ myconfig.toplevel.secrets.names = f.inputs.nixpkgs.lib.mkForce ["parallel-api-key" "exa-api-key"]; }];
   };
@@ -97,6 +100,19 @@ let
     secretPaths = builtins.listToAttrs (map (name: {
       inherit name;
       value = system.config.sops.secrets.\${name}.path or null;
+    }) retrievalSecretNames);
+  };
+  collectHomeWebRetrieval = home: let
+    c = home.config;
+    configDir = "\${c.home.homeDirectory}/.pi/agent";
+  in {
+    config = builtins.fromJSON (builtins.unsafeDiscardStringContext c.home.file."\${configDir}/web-retrieval.json".text);
+    secretPaths = builtins.listToAttrs (map (name: {
+      inherit name;
+      value =
+        if c.myconfig.toplevel.secrets.enable && builtins.elem name c.myconfig.toplevel.secrets.names
+        then "/run/secrets/\${name}"
+        else null;
     }) retrievalSecretNames);
   };
   collectEmergency = x: let
@@ -145,6 +161,8 @@ in {
     models = builtins.fromJSON (builtins.unsafeDiscardStringContext base.config.home.file."\${base.config.home.homeDirectory}/.pi/agent/models.json".text);
     orchestration = builtins.fromJSON (builtins.unsafeDiscardStringContext base.config.home.file."\${base.config.home.homeDirectory}/.pi/agent/orchestration.json".text);
     webRetrieval = {
+      home = collectHomeWebRetrieval base;
+      homePartial = collectHomeWebRetrieval partialHomeSecrets;
       all = collectWebRetrieval darwin;
       partial = collectWebRetrieval partialSecrets;
       null = collectWebRetrieval nullSecrets;
@@ -266,6 +284,13 @@ PACKAGE_ROOT="$package_root" node --input-type=module -e '
       assert.deepEqual(config.retry, { maxRetries: 1, defaultWaitMs: 1_000 });
     }
     assert.ok(Object.values(projections.all.secretPaths).every(path => typeof path === "string" && path.length > 0));
+    assert.deepEqual(projections.home.secretPaths, {
+      "parallel-api-key": "/run/secrets/parallel-api-key",
+      "brave-api-key": "/run/secrets/brave-api-key",
+      "brave-free-api-key": "/run/secrets/brave-free-api-key",
+      "exa-api-key": "/run/secrets/exa-api-key",
+    });
+    assert.deepEqual(projections.homePartial.secretPaths, { "parallel-api-key": projections.home.secretPaths["parallel-api-key"], "brave-api-key": null, "brave-free-api-key": null, "exa-api-key": projections.home.secretPaths["exa-api-key"] });
     assert.deepEqual(projections.partial.secretPaths, { "parallel-api-key": projections.all.secretPaths["parallel-api-key"], "brave-api-key": null, "brave-free-api-key": null, "exa-api-key": projections.all.secretPaths["exa-api-key"] });
     assert.ok(Object.values(projections.null.secretPaths).every(path => path === null));
   '
