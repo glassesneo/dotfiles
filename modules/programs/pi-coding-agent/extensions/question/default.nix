@@ -5,6 +5,10 @@ delib.module {
   options = delib.singleCascadeEnableOption;
 
   myconfig.always = {cfg, ...}: {
+    args.shared.piQuestion = {
+      enabled = cfg.enable;
+      tool = "question";
+    };
     programs.pi-coding-agent.keybindings.contributions.question = {
       enabled = cfg.enable;
       actions = {
@@ -107,8 +111,6 @@ delib.module {
       };
     };
   };
-
-  myconfig.ifEnabled.programs.pi-coding-agent.mode.modes.recon.tools = ["question"];
 
   home.ifEnabled.programs.pi-coding-agent.settings.extensions = [
     "${./../../extensions_src}/question.ts"

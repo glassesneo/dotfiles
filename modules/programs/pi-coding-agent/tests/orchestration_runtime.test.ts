@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import test from "node:test";
 import { Value } from "typebox/value";
@@ -17,17 +16,13 @@ import { ACTIVE_MODE_EVENT } from "../extensions_src/utilities/mode_events.ts";
 import { withMeshLock } from "../extensions_src/utilities/orchestration_lock.ts";
 import { MESH_BOOTSTRAP_TOOL_NAME, MESH_PEER_TOOL_NAMES, piLaunchDescriptor } from "../extensions_src/utilities/orchestration_pi.ts";
 import { claimTaskUsage, createTask, ensurePolicyEpoch, finishTask, initializeMesh, meshPaths, patchAgentStatus, prepareAgent, publishAgent, readAgentSnapshot, readPolicyEpoch, reserveMeshCapacity } from "../extensions_src/utilities/orchestration_store.ts";
+import { withTemporaryRoot as withRoot } from "./test_helpers.ts";
 
 const MESH_TOOLS = [...MESH_PEER_TOOL_NAMES];
 const REQUIRED_PEER_CAPABILITIES = ["mesh_run", "mesh_submit", "mesh_get", "mesh_wait", "mesh_stop", "mesh_route"] as const;
 const budgets = { maxLiveAgents: 4, maxConcurrentTasks: 4, maxTasksPerMesh: 16 };
 const capabilities = { nativeScreen: true, taskDelivery: true, taskCompletion: true, taskCancellation: true, usage: true, interactiveInterventions: true, terminalHistory: true };
 const tmux = { socket: "/tmp/tmux", serverPid: "10", sessionId: "$1", sessionName: "mesh", windowId: "@1", paneId: "%1", windowName: "worker" };
-
-async function withRoot(prefix: string, run: (root: string) => Promise<void>): Promise<void> {
-    const root = await mkdtemp(join(tmpdir(), prefix));
-    try { await run(root); } finally { await rm(root, { recursive: true, force: true }); }
-}
 
 function runtimeConfig(stateRoot: string): OrchestrationConfig {
     return { schemaVersion: 2, stateRoot, tmux: "/tmux", returnParentCommand: "/parent", parentNavigationHint: "parent", historyViewerExtension: "/history.ts", popupExtension: "/popup.ts", orchestrationExtension: "/orchestration.ts", childBridgeExtension: "/bridge.ts", harnesses: { pi: { adapter: "pi-native", command: "/pi" } }, natureHandleWords: ["May"], roleSets: settledMeshRoleSets(), budgets, gc: settledMeshGcConfig() };

@@ -67,6 +67,7 @@ def main [] {
   assert-contract (not ($pi.questionDisabled.extensionPaths | any {|path| ($path | path basename) == "question.ts" })) "question-extension-disabled"
   assert-contract ($pi.modes.defaultMode == "recon") "mode-default"
   assert-contract ($pi.modes.modes.recon.allowAllTools == false and $pi.modes.modes.ops.allowAllTools == true) "mode-capability-delta"
+  assert-contract (($pi.modes.modes.recon.tools | any {|tool| $tool == "question" })) "question-tool-enabled"
   assert-contract (not ($pi.questionDisabled.modes.modes.recon.tools | any {|tool| $tool == "question" })) "question-tool-disabled"
   let overridden_model = "gpt-5.6-sol"
   assert-contract (($pi.models.providers.openai-codex.modelOverrides | get $overridden_model | get contextWindow) == 1050000) "model-override"

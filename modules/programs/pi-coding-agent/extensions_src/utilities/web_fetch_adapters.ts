@@ -149,10 +149,12 @@ export function normalizeParallelExtractResponse(payload: unknown, request: Norm
             continue;
         }
         const excerpts = optionalStringArray(raw.excerpts);
+        const title = optionalSafeText(raw.title);
+        const providerMetadata = allowlistedMetadata(raw, ["id", "result_id"]);
         normalized.set(raw.url, {
-            ...(optionalSafeText(raw.title) === undefined ? {} : { title: optionalSafeText(raw.title) }),
+            ...(title === undefined ? {} : { title }),
             ...(excerpts === undefined ? {} : { excerpts }),
-            ...(allowlistedMetadata(raw, ["id", "result_id"]) === undefined ? {} : { providerMetadata: allowlistedMetadata(raw, ["id", "result_id"]) }),
+            ...(providerMetadata === undefined ? {} : { providerMetadata }),
         });
     }
     addReportedErrors(root, normalized);
@@ -177,14 +179,14 @@ export function normalizeExaContentsResponse(payload: unknown, request: Normaliz
             continue;
         }
         const content = optionalSafeText(raw.text);
+        const title = content === undefined ? undefined : optionalSafeText(raw.title);
+        const providerMetadata = content === undefined ? undefined : allowlistedMetadata(raw, ["id", "author", "publishedDate", "image", "favicon"]);
         normalized.set(raw.url, content === undefined
             ? { error: { category: "invalid-response", message: "Provider returned no text for this URL" } }
             : {
                 content,
-                ...(optionalSafeText(raw.title) === undefined ? {} : { title: optionalSafeText(raw.title) }),
-                ...(allowlistedMetadata(raw, ["id", "author", "publishedDate", "image", "favicon"]) === undefined
-                    ? {}
-                    : { providerMetadata: allowlistedMetadata(raw, ["id", "author", "publishedDate", "image", "favicon"]) }),
+                ...(title === undefined ? {} : { title }),
+                ...(providerMetadata === undefined ? {} : { providerMetadata }),
             });
     }
     addReportedErrors(root, normalized);

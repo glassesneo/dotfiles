@@ -16,6 +16,7 @@ import {
     normalizeLineEndings,
     type FetchAdapterDependencies,
 } from "./web_fetch_adapters.ts";
+export { defaultSleep } from "./web_retrieval_runtime.ts";
 
 export type ReadTextFile = (path: string) => Promise<string>;
 export type Sleep = (ms: number, signal?: AbortSignal) => Promise<void>;
@@ -84,17 +85,6 @@ export async function raceWithSignal<T>(promise: Promise<T>, signal: AbortSignal
 function retryWaitMs(error: ProviderError, defaultWaitMs: number): number {
     if (!RETRYABLE_STATUSES.has(error.status ?? 0)) return 0;
     return error instanceof FetchHttpError && error.retryWaitMs >= 0 ? error.retryWaitMs : defaultWaitMs;
-}
-
-export async function defaultSleep(ms: number, signal?: AbortSignal): Promise<void> {
-    if (signal?.aborted) throw signal.reason ?? new Error("aborted");
-    await new Promise<void>((resolve, reject) => {
-        const timer = setTimeout(resolve, ms);
-        signal?.addEventListener("abort", () => {
-            clearTimeout(timer);
-            reject(signal.reason ?? new Error("aborted"));
-        }, { once: true });
-    });
 }
 
 function applyTextBudget(items: readonly FetchItem[], maxCharsTotal: number): { items: FetchItem[]; warnings: unknown[] } {

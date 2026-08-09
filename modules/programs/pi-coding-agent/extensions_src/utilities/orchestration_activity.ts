@@ -1,6 +1,6 @@
-import { randomUUID } from "node:crypto";
-import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+import { writeAtomicJson as atomicJson } from "./orchestration_json.ts";
 import { meshDirectory, withMeshAgentLock } from "./orchestration_lock.ts";
 import { assertCurrentAgentRuntime } from "./orchestration_runtime.ts";
 import { isTerminalAgent, type AgentStatus } from "./orchestration_types.ts";
@@ -122,10 +122,6 @@ export function validateAgentActivity(value: unknown, expected?: { meshId: strin
     return value as AgentActivity;
 }
 
-async function atomicJson(path: string, value: unknown): Promise<void> {
-    await mkdir(dirname(path), { recursive: true, mode: 0o700 }); const temporary = `${path}.${process.pid}.${randomUUID()}.tmp`;
-    await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 }); await rename(temporary, path); await chmod(path, 0o600);
-}
 async function optionalActivity(path: string, identity: { meshId: string; agentId: string }): Promise<AgentActivity | undefined> {
     try { return validateAgentActivity(JSON.parse(await readFile(path, "utf8")), identity); }
     catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined; throw error; }

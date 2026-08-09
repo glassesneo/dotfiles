@@ -18,6 +18,9 @@ import {
     createSearchAdapter,
     type FetchLike,
 } from "./search_adapters.ts";
+import { defaultSleep } from "./web_retrieval_runtime.ts";
+
+export { defaultSleep };
 
 export type Sleep = (ms: number, signal: AbortSignal) => Promise<void>;
 
@@ -43,21 +46,6 @@ class DeadlineError extends Error {
         super("deadline exceeded");
         this.name = "DeadlineError";
     }
-}
-
-export async function defaultSleep(ms: number, signal: AbortSignal): Promise<void> {
-    if (signal.aborted) throw signal.reason ?? new Error("aborted");
-    await new Promise<void>((resolve, reject) => {
-        const onAbort = () => {
-            clearTimeout(timer);
-            reject(signal.reason ?? new Error("aborted"));
-        };
-        const timer = setTimeout(() => {
-            signal.removeEventListener("abort", onAbort);
-            resolve();
-        }, ms);
-        signal.addEventListener("abort", onAbort, { once: true });
-    });
 }
 
 export function defaultSearchRouterDependencies(

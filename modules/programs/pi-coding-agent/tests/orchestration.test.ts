@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { access, mkdir, mkdtemp, readFile, readdir, rm, stat, utimes, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { access, mkdir, readFile, readdir, stat, utimes, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import test from "node:test";
 import { buildLaunchEnvelope, policyDigest, settledAgentCatalog, settledAgentDefinition, validateLaunchEnvelope } from "../extensions_src/utilities/agent_types.ts";
@@ -34,16 +33,11 @@ import {
 } from "../extensions_src/utilities/orchestration_store.ts";
 import { withMeshLock } from "../extensions_src/utilities/orchestration_lock.ts";
 import { emptyUsage } from "../extensions_src/utilities/orchestration_types.ts";
-import { settleWithinEventLoopTurns, yieldToIO } from "./test_helpers.ts";
+import { settleWithinEventLoopTurns, withTemporaryRoot as withRoot, yieldToIO } from "./test_helpers.ts";
 
 const budgets = { maxLiveAgents: 2, maxConcurrentTasks: 2, maxTasksPerMesh: 8 };
 const tmux = { socket: "/tmp/tmux", serverPid: "10", sessionId: "$1", sessionName: "mesh", windowId: "@1", paneId: "%1", windowName: "worker" };
 const capabilities = { nativeScreen: true, taskDelivery: true, taskCompletion: true, taskCancellation: true, usage: true, interactiveInterventions: true, terminalHistory: true };
-
-async function withRoot(prefix: string, run: (root: string) => Promise<void>): Promise<void> {
-    const root = await mkdtemp(join(tmpdir(), prefix));
-    try { await run(root); } finally { await rm(root, { recursive: true, force: true }); }
-}
 
 async function createPublishedAgent(stateRoot: string, meshId: string, epochId: string, role = "worker") {
     const definition = settledAgentDefinition(role);

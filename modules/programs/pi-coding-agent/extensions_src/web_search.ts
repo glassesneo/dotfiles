@@ -21,7 +21,6 @@ import {
     WEB_SEARCH_QUERY_MAX_CHARS,
     WEB_SEARCH_QUERY_MAX_WORDS,
     parseWebSearchInput,
-    validateWebRetrievalRuntimeConfig,
     type SearchResult,
     type WebRetrievalRuntimeConfig,
     type WebSearchDetails,
@@ -31,6 +30,7 @@ import {
     defaultSearchRouterDependencies,
     type SearchRouter,
 } from "./utilities/search_router.ts";
+import { loadWebRetrievalRuntimeConfig } from "./utilities/web_retrieval_runtime.ts";
 
 export const WEB_RETRIEVAL_CONFIG_UNAVAILABLE = "web retrieval configuration is unavailable";
 
@@ -80,8 +80,7 @@ export async function loadWebSearchConfig(
     signal?: AbortSignal,
 ): Promise<WebRetrievalRuntimeConfig> {
     try {
-        const raw = await readFile(path, { encoding: "utf8", signal });
-        return validateWebRetrievalRuntimeConfig(JSON.parse(raw));
+        return await loadWebRetrievalRuntimeConfig(path, signal);
     } catch {
         throw new Error(WEB_RETRIEVAL_CONFIG_UNAVAILABLE);
     }

@@ -1,6 +1,7 @@
-import { createHash, randomUUID } from "node:crypto";
-import { chmod, mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { createHash } from "node:crypto";
+import { readFile, readdir } from "node:fs/promises";
+import { join } from "node:path";
+import { writeAtomicJson as atomicJson } from "./orchestration_json.ts";
 import { meshDirectory, withMeshLock } from "./orchestration_lock.ts";
 import { listMeshAgents, readAgentSnapshot } from "./orchestration_store.ts";
 import type { AgentSnapshot } from "./orchestration_types.ts";
@@ -137,10 +138,6 @@ function identityNoticeId(kind: TuiNotice["kind"], identity: string, endpointId:
     const bytes = Buffer.from(createHash("sha256").update(`${kind}\0${identity}\0${endpointId}`).digest().subarray(0, 16));
     bytes[6] = (bytes[6]! & 0x0f) | 0x50; bytes[8] = (bytes[8]! & 0x3f) | 0x80;
     const hex = bytes.toString("hex"); return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
-}
-async function atomicJson(path: string, value: unknown): Promise<void> {
-    await mkdir(dirname(path), { recursive: true, mode: 0o700 }); const temporary = `${path}.${process.pid}.${randomUUID()}.tmp`;
-    await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 }); await rename(temporary, path); await chmod(path, 0o600);
 }
 async function readNotice(path: string, meshId: string, noticeId: string): Promise<TuiNotice> { return validateTuiNotice(JSON.parse(await readFile(path, "utf8")), { meshId, noticeId }); }
 function equivalent(existing: TuiNotice, candidate: TuiNotice): boolean {

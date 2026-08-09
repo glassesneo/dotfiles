@@ -1,9 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { appendFile, chmod, link, mkdir, open, readFile, readdir, rename, rm, unlink, writeFile } from "node:fs/promises";
+import { appendFile, link, mkdir, open, readFile, readdir, rm, unlink, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { canonicalJson, launchEnvelopeDigest, policyDigest, validateAgentDefinition, validateAgentDefinitionSnapshot, validateLaunchEnvelope, type AgentDefinition, type AgentHarness, type MeshBudgets } from "./agent_types.ts";
 import { projectAgentActivity, readAgentActivity, readProjectedAgentActivity } from "./orchestration_activity.ts";
 import { mapConcurrent } from "./orchestration_concurrency.ts";
+import { writeAtomicJson as atomicJson } from "./orchestration_json.ts";
 import { meshDirectory, withMeshAgentLock, withMeshLock } from "./orchestration_lock.ts";
 import { assertCurrentAgentRuntime, readAgentRuntimeBinding } from "./orchestration_runtime.ts";
 import { AGENT_STATES, AGENT_STOP_SOURCES, AGENT_STOP_STATES, MESH_STATES, RESERVATION_STATES, TASK_STATES, addUsage, emptyUsage, isTerminalAgent, isTerminalTask, type AgentProvenance, type AgentRecord, type AgentSnapshot, type AgentState, type AgentStatus, type AgentStopRequest, type AgentStopSource, type BudgetReservation, type Intervention, type MeshBudgetUsage, type MeshRecord, type NativeCapabilities, type PolicyEpoch, type RootLease, type TaskCancelRequest, type TaskRequest, type TaskResult, type TaskSnapshot, type TaskStatus, type UsageClaim } from "./orchestration_types.ts";
@@ -24,7 +25,6 @@ export function taskPaths(stateRoot: string, meshId: string, taskId: string): Ta
 export function epochPath(stateRoot: string, meshId: string, epochId: string): string { assertId(epochId, "epoch ID"); return join(meshPaths(stateRoot, meshId).epochs, `${epochId}.json`); }
 export function reservationPath(stateRoot: string, meshId: string, reservationId: string): string { assertId(reservationId, "reservation ID"); return join(meshPaths(stateRoot, meshId).reservations, `${reservationId}.json`); }
 
-async function atomicJson(path: string, value: unknown): Promise<void> { await mkdir(dirname(path), { recursive: true, mode: 0o700 }); const temporary = `${path}.${process.pid}.${randomUUID()}.tmp`; await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 }); await rename(temporary, path); await chmod(path, 0o600); }
 export async function readJson<T>(path: string): Promise<T> { return JSON.parse(await readFile(path, "utf8")) as T; }
 async function optionalJson(path: string): Promise<unknown> { return readJson<unknown>(path).catch(error => (error as NodeJS.ErrnoException).code === "ENOENT" ? undefined : Promise.reject(error)); }
 function record(value: unknown, required: readonly string[], optional: readonly string[], label: string): Record<string, unknown> { if (!value || typeof value !== "object" || Array.isArray(value) || (value as { schemaVersion?: unknown }).schemaVersion !== 1) throw new Error(`Unsupported ${label} schemaVersion`); const raw = value as Record<string, unknown>; const allowed = ["schemaVersion", ...required, ...optional]; const unknown = Object.keys(raw).filter(key => !allowed.includes(key)); if (unknown.length) throw new Error(`${label} contains unknown keys: ${unknown.join(", ")}`); const missing = required.filter(key => !(key in raw)); if (missing.length) throw new Error(`${label} is missing required keys: ${missing.join(", ")}`); return raw; }

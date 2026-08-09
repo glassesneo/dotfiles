@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { readFile, readdir, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import test from "node:test";
 import { buildLaunchEnvelope, settledAgentCatalog, settledAgentDefinition } from "../extensions_src/utilities/agent_types.ts";
@@ -8,15 +7,11 @@ import { availableContext, publishAgentActivity } from "../extensions_src/utilit
 import { bindAgentRuntime } from "../extensions_src/utilities/orchestration_runtime.ts";
 import { acknowledgeMeshEvents, bindMeshEndpoint, markMeshEventInjected, pollMeshEvents, registerMeshSignal, registerMeshWatch, setMeshEndpointOffline } from "../extensions_src/utilities/orchestration_events.ts";
 import { createTask, ensurePolicyEpoch, finishTask, initializeMesh, meshPaths, patchAgentStatus, prepareAgent, publishAgent, readPolicyEpoch, reserveMeshCapacity } from "../extensions_src/utilities/orchestration_store.ts";
+import { withTemporaryRoot as withRoot } from "./test_helpers.ts";
 
 const budgets = { maxLiveAgents: 2, maxConcurrentTasks: 3, maxTasksPerMesh: 8 };
 const capabilities = { nativeScreen: true, taskDelivery: true, taskCompletion: true, taskCancellation: true, usage: true, interactiveInterventions: true, terminalHistory: true };
 const tmux = { socket: "/tmp/tmux", serverPid: "10", sessionId: "$1", sessionName: "mesh", windowId: "@1", paneId: "%1", windowName: "worker" };
-
-async function withRoot(prefix: string, run: (root: string) => Promise<void>): Promise<void> {
-    const root = await mkdtemp(join(tmpdir(), prefix));
-    try { await run(root); } finally { await rm(root, { recursive: true, force: true }); }
-}
 
 async function eventFixture(root: string) {
     const mesh = await initializeMesh(root, { rootSessionId: "root", rootSessionFile: "/root.jsonl", recoverable: true, budgets });

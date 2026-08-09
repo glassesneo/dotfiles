@@ -75,28 +75,23 @@ in
           ];
           theme = "dark";
         };
-      emergencyLauncher = pkgs.writeShellApplication {
-        name = "pi-emergency";
-        text = ''
-          export PI_CODING_AGENT_DIR=${lib.escapeShellArg emergencyConfigDir}
-          export PI_CODING_AGENT_SESSION_DIR=${lib.escapeShellArg "${cfg.configDir}/sessions"}
-          exec ${lib.getExe llm-agents.pi} \
-            --no-extensions \
-            --no-skills \
-            --no-prompt-templates \
-            --no-themes \
-            --no-approve \
-            "$@"
-        '';
-      };
-      emergencyFullLauncher = pkgs.writeShellApplication {
-        name = "pi-emergency-full";
-        text = ''
-          export PI_CODING_AGENT_DIR=${lib.escapeShellArg emergencyConfigDir}
-          export PI_CODING_AGENT_SESSION_DIR=${lib.escapeShellArg "${cfg.configDir}/sessions"}
-          exec ${lib.getExe llm-agents.pi} --no-approve "$@"
-        '';
-      };
+      mkEmergencyLauncher = name: flags:
+        pkgs.writeShellApplication {
+          inherit name;
+          text = ''
+            export PI_CODING_AGENT_DIR=${lib.escapeShellArg emergencyConfigDir}
+            export PI_CODING_AGENT_SESSION_DIR=${lib.escapeShellArg "${cfg.configDir}/sessions"}
+            exec ${lib.getExe llm-agents.pi} ${lib.escapeShellArgs flags} "$@"
+          '';
+        };
+      emergencyLauncher = mkEmergencyLauncher "pi-emergency" [
+        "--no-extensions"
+        "--no-skills"
+        "--no-prompt-templates"
+        "--no-themes"
+        "--no-approve"
+      ];
+      emergencyFullLauncher = mkEmergencyLauncher "pi-emergency-full" ["--no-approve"];
       sharedEmergencyFiles = builtins.listToAttrs (map (name: {
           name = "${emergencyConfigDir}/${name}";
           value.source = homeConfig.lib.file.mkOutOfStoreSymlink "${cfg.configDir}/${name}";

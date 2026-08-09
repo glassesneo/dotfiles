@@ -18,7 +18,6 @@ import { Type, type Static } from "typebox";
 import {
     WEB_FETCH_DEADLINE_MS,
     parseWebFetchInput,
-    validateWebRetrievalRuntimeConfig,
     type FetchItem,
     type WebFetchDetails,
     type WebRetrievalRuntimeConfig,
@@ -31,6 +30,7 @@ import {
     routeWebFetch,
     type FetchRouterDependencies,
 } from "./utilities/web_fetch_router.ts";
+import { loadWebRetrievalRuntimeConfig } from "./utilities/web_retrieval_runtime.ts";
 
 export const WEB_FETCH_CONFIG_UNAVAILABLE = "web_fetch configuration is unavailable";
 
@@ -62,7 +62,7 @@ const DEFAULT_CONFIG_PATH = join(getAgentDir(), "web-retrieval.json");
 
 export async function loadWebFetchConfig(path = DEFAULT_CONFIG_PATH): Promise<WebRetrievalRuntimeConfig> {
     try {
-        return validateWebRetrievalRuntimeConfig(JSON.parse(await readFile(path, "utf8")));
+        return await loadWebRetrievalRuntimeConfig(path);
     } catch {
         throw new Error(WEB_FETCH_CONFIG_UNAVAILABLE);
     }

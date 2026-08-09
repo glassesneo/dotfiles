@@ -1,5 +1,13 @@
 import assert from "node:assert/strict";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { ExtensionContext, ExtensionUIContext } from "@earendil-works/pi-coding-agent";
+
+export async function withTemporaryRoot(prefix: string, run: (root: string) => Promise<void>): Promise<void> {
+    const root = await mkdtemp(join(tmpdir(), prefix));
+    try { await run(root); } finally { await rm(root, { recursive: true, force: true }); }
+}
 
 export function extensionContext(options: {
     cwd?: string;

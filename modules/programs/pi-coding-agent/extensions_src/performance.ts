@@ -121,8 +121,11 @@ async function swapSnapshot(): Promise<string> {
     return "unavailable";
 }
 export async function resourceSnapshot(cwd: string): Promise<PerformanceResourceSnapshot> {
-    const diskFreeBytes = await statfs(cwd).then(value => value.bavail * value.bsize).catch(() => "unavailable" as const);
-    return { cpuCount: cpus().length, loadAverage: loadavg(), memoryTotalBytes: totalmem(), memoryFreeBytes: freemem(), swap: await swapSnapshot(), diskFreeBytes };
+    const [diskFreeBytes, swap] = await Promise.all([
+        statfs(cwd).then(value => value.bavail * value.bsize).catch(() => "unavailable" as const),
+        swapSnapshot(),
+    ]);
+    return { cpuCount: cpus().length, loadAverage: loadavg(), memoryTotalBytes: totalmem(), memoryFreeBytes: freemem(), swap, diskFreeBytes };
 }
 
 async function json(path: string): Promise<unknown> { return JSON.parse(await readFile(path, "utf8")); }
@@ -207,7 +210,7 @@ export default function performanceExtension(pi: ExtensionAPI, options: { config
         try {
             const command = parsePerformanceArguments(raw); let text: string;
             if (command.mode === "recent") text = formatRecentPerformance(command.days, await readMeshMetrics(configPath, { sinceMs: Date.now() - command.days * 86_400_000 }));
-            else { const summary = summarizeRuns(ctx.sessionManager.getEntries()); text = formatCurrentPerformance(summary.runs, await readMeshMetrics(configPath, { meshId: env.PI_MESH_ID }), await resourceSnapshot(ctx.cwd)); if (summary.unread) text += `\nUnread performance entries: ${summary.unread}`; }
+            else { const summary = summarizeRuns(ctx.sessionManager.getEntries()); const [mesh, resources] = await Promise.all([readMeshMetrics(configPath, { meshId: env.PI_MESH_ID }), resourceSnapshot(ctx.cwd)]); text = formatCurrentPerformance(summary.runs, mesh, resources); if (summary.unread) text += `\nUnread performance entries: ${summary.unread}`; }
             ctx.ui.notify(text, "info");
         } catch (error) { ctx.ui.notify(error instanceof Error ? error.message : String(error), "error"); }
     };
