@@ -43,7 +43,7 @@ expect_orchestration_rejection() {
     echo "$name: expected Nix evaluation failure" >&2
     exit 1
   fi
-  if ! grep -Eq 'settled eight-agent|role sets and mesh budgets|multiple definitions' <<<"$output"; then
+  if ! grep -Eq 'settled eight-agent|role sets.*mesh budgets|multiple definitions' <<<"$output"; then
     echo "$name: missing exact-capability diagnostic" >&2
     echo "$output" >&2
     exit 1
@@ -127,7 +127,7 @@ let
         source = toString source;
         target = "\${cfg.configDir}/\${name}";
       };
-    }) ["auth.json" "agent-modes.json" "agent-catalog.json" "orchestration.json" "web-retrieval.json" "extension-keybindings.json"]);
+    }) ["auth.json" "models.json" "agent-modes.json" "agent-catalog.json" "orchestration.json" "web-retrieval.json" "extension-keybindings.json"]);
   };
   disabledConfig = disabled.config;
   disabledDir = "\${disabledConfig.home.homeDirectory}/.pi/emergency-agent";
@@ -142,6 +142,7 @@ in {
       modes = builtins.fromJSON (builtins.unsafeDiscardStringContext questionDisabled.config.home.file."\${questionDisabled.config.home.homeDirectory}/.pi/agent/agent-modes.json".text);
     };
     catalog = builtins.fromJSON (builtins.unsafeDiscardStringContext base.config.home.file."\${base.config.home.homeDirectory}/.pi/agent/agent-catalog.json".text);
+    models = builtins.fromJSON (builtins.unsafeDiscardStringContext base.config.home.file."\${base.config.home.homeDirectory}/.pi/agent/models.json".text);
     orchestration = builtins.fromJSON (builtins.unsafeDiscardStringContext base.config.home.file."\${base.config.home.homeDirectory}/.pi/agent/orchestration.json".text);
     webRetrieval = {
       all = collectWebRetrieval darwin;
@@ -194,10 +195,12 @@ jq -e '
   .pi.catalog.agents["fast-worker"].harness == "cursor-agent" and .pi.catalog.agents["fast-worker"].tools == [] and
   .pi.catalog.agents.codex.harness == "codex" and .pi.catalog.agents.codex.tools == [] and .pi.catalog.agents.codex.skillOptIns == [] and
   .pi.catalog.agents.codex.harnessOptions == {"mode":"read-only","permissionPolicy":"reject","webSearch":"cached"} and
-  ((.pi.orchestration | keys) == ["budgets", "childBridgeExtension", "harnesses", "historyViewerExtension", "natureHandleWords", "orchestrationExtension", "parentNavigationHint", "popupExtension", "returnParentCommand", "roleSets", "schemaVersion", "stateRoot", "tmux"]) and
-  .pi.orchestration.schemaVersion == 1 and
+  .pi.models == {"providers":{"openai-codex":{"modelOverrides":{"gpt-5.6-sol":{"contextWindow":1050000}}}}} and
+  ((.pi.orchestration | keys) == ["budgets", "childBridgeExtension", "gc", "harnesses", "historyViewerExtension", "natureHandleWords", "orchestrationExtension", "parentNavigationHint", "popupExtension", "returnParentCommand", "roleSets", "schemaVersion", "stateRoot", "tmux"]) and
+  .pi.orchestration.schemaVersion == 2 and
   .pi.orchestration.roleSets == {"mode:recon":["explorer","reviewer","critic","researcher","codex"],"mode:ops":["explorer","worker","validator","reviewer","critic","researcher","fast-worker","codex"]} and
-  .pi.orchestration.budgets == {"maxLiveAgents":12,"maxConcurrentTasks":6,"maxTasksPerMesh":256} and
+  .pi.orchestration.budgets == {"maxLiveAgents":20,"maxConcurrentTasks":6,"maxTasksPerMesh":256} and
+  .pi.orchestration.gc == {"contextHeadroomTokens":32768,"periodicIntervalMs":5000,"activityHeartbeatMs":2000,"activityStaleMs":10000,"roles":{"explorer":{"collectAt":6,"retain":4,"pressureFloor":1},"worker":{"collectAt":6,"retain":3,"pressureFloor":1},"validator":{"collectAt":3,"retain":2,"pressureFloor":1},"reviewer":{"collectAt":3,"retain":1,"pressureFloor":1},"critic":{"collectAt":6,"retain":4,"pressureFloor":1},"researcher":{"collectAt":3,"retain":1,"pressureFloor":1},"fast-worker":{"collectAt":2,"retain":1,"pressureFloor":0},"codex":{"collectAt":3,"retain":2,"pressureFloor":0}}} and
   (.pi.orchestration | has("maxDepth") | not) and (.pi.orchestration | has("delegation") | not) and
   (.pi.orchestration.stateRoot | endswith("/pi/orchestration-v2")) and (.pi.orchestration.stateRoot | contains("orchestration-v1") | not) and
   .pi.orchestration.harnesses.codex.adapter == "codex-acp" and (.pi.orchestration.harnesses.codex.command | endswith("/bin/codex-acp")) and
@@ -228,17 +231,19 @@ jq -e '
 
 AGENT_TYPES_VALIDATOR=$(jq -r '.pi.catalog.agents.reviewer.childExtensionContributions[0] | sub("/agent_artifact.ts$"; "/utilities/agent_types.ts")' <<<"$result") \
 GENERATED_AGENT_CATALOG=$(jq -c '.pi.catalog' <<<"$result") \
+GENERATED_ORCHESTRATION=$(jq -c '.pi.orchestration' <<<"$result") \
 GENERATED_EXTENSION_KEYBINDINGS=$(jq -c '.pi.extensionKeybindings' <<<"$result") \
 GENERATED_WEB_RETRIEVAL=$(jq -c '.pi.webRetrieval' <<<"$result") \
 PACKAGE_ROOT="$package_root" node --input-type=module -e '
     import assert from "node:assert/strict";
     import { pathToFileURL } from "node:url";
     const utilities = `${process.env.PACKAGE_ROOT}/extensions_src/utilities`;
-    const { validateAgentCatalog } = await import(pathToFileURL(process.env.AGENT_TYPES_VALIDATOR).href);
+    const { validateAgentCatalog, validateOrchestrationConfig } = await import(pathToFileURL(process.env.AGENT_TYPES_VALIDATOR).href);
     const { validateExtensionKeybindings } = await import(pathToFileURL(`${utilities}/extension_keybindings.ts`).href);
     const { validateWebRetrievalRuntimeConfig } = await import(pathToFileURL(`${utilities}/web_retrieval_types.ts`).href);
     const catalog = JSON.parse(process.env.GENERATED_AGENT_CATALOG);
     validateAgentCatalog(catalog);
+    validateOrchestrationConfig(JSON.parse(process.env.GENERATED_ORCHESTRATION));
     const oneSidedDrift = structuredClone(catalog);
     oneSidedDrift.agents.codex.harnessOptions.mode = "agent";
     assert.throws(() => validateAgentCatalog(oneSidedDrift), /settled codex capability/u);

@@ -110,10 +110,13 @@ function handleFor(agentId: string, handles?: Map<string, string>, words?: reado
 }
 
 function compactAgentLine(theme: Theme, snapshot: AgentSnapshot, handles?: Map<string, string>): string {
+    const acceptance = snapshot.activity.acceptingTask ? theme.fg("success", "ACCEPTING") : theme.fg("muted", "NOT ACCEPTING");
     return joinParts([
         theme.bold(handleFor(snapshot.agent.agentId, handles)),
         agentTypeText(theme, snapshot.agent.agent),
         agentStateText(theme, snapshot.status.state),
+        theme.fg("muted", `activity:${snapshot.activity.phase}`),
+        acceptance,
         snapshot.task ? taskStateText(theme, snapshot.task.status.state) : undefined,
         theme.fg("muted", snapshot.task ? promptSummary(snapshot.task.request.prompt) : "No task"),
     ]);
@@ -126,7 +129,16 @@ function expandedAgentCard(theme: Theme, snapshot: AgentSnapshot, argsPrompt?: s
         labeled(theme, "agentId", snapshot.agent.agentId),
         labeled(theme, "role", agentTypeText(theme, snapshot.agent.agent)),
         labeled(theme, "agentState", agentStateText(theme, snapshot.status.state)),
+        labeled(theme, "activity", snapshot.activity.phase),
+        labeled(theme, "acceptingTask", String(snapshot.activity.acceptingTask)),
+        labeled(theme, "pendingMessages", snapshot.activity.pendingMessages === null ? "unknown" : String(snapshot.activity.pendingMessages)),
+        labeled(theme, "contextHealth", snapshot.activity.context.health),
     ];
+    if (snapshot.stop) {
+        lines.push(labeled(theme, "stopState", snapshot.stop.state));
+        lines.push(labeled(theme, "stopSource", snapshot.stop.source));
+        lines.push(labeled(theme, "stopReason", previewText(snapshot.stop.reason, 4, 512)));
+    }
     if (task) {
         lines.push(labeled(theme, "taskId", task.request.taskId));
         lines.push(labeled(theme, "taskState", taskStateText(theme, task.status.state)));
@@ -224,9 +236,9 @@ export function renderWaitCall(args: { taskIds: string[]; condition: "any" | "al
     return textFromComponent(context.lastComponent, lines.join("\n"));
 }
 
-export function renderStopCall(args: { agentId?: string; taskId?: string }, theme: Theme, context: CardRenderContext): Component {
+export function renderStopCall(args: { agentId?: string; taskId?: string; reason?: string }, theme: Theme, context: CardRenderContext): Component {
     const lines = [`mesh_stop · ${args.taskId ? "task" : "agent"}`];
-    if (context.expanded) lines.push(labeled(theme, args.taskId ? "taskId" : "agentId", args.taskId ?? args.agentId ?? "missing"));
+    if (context.expanded) { lines.push(labeled(theme, args.taskId ? "taskId" : "agentId", args.taskId ?? args.agentId ?? "missing")); if (args.reason) lines.push(labeled(theme, "reason", previewText(args.reason, 4, 512))); }
     return textFromComponent(context.lastComponent, lines.join("\n"));
 }
 
@@ -267,9 +279,12 @@ export function renderSubmitResult(result: AgentToolResult<unknown>, options: To
 }
 
 export function renderStopResult(result: AgentToolResult<unknown>, options: ToolRenderResultOptions, theme: Theme, context: CardRenderContext, words?: readonly string[]): Component {
-    const disposition = isRenderableAgentSnapshot(result.details) ? (result.details as unknown as { stopDisposition?: string }).stopDisposition : undefined;
+    const snapshot = isRenderableAgentSnapshot(result.details) ? result.details : undefined;
+    const disposition = snapshot ? (snapshot as unknown as { stopDisposition?: string }).stopDisposition : undefined;
     const target = argsRecord(context).taskId !== undefined ? "task" : "agent";
-    const state = disposition === "stopped-now" ? "stopped" : disposition === "stop-pending" ? "cancellation completed" : "already terminal";
+    const state = target === "task"
+        ? disposition === "stopped-now" ? "stopped" : disposition === "stop-pending" ? "cancellation completed" : "already terminal"
+        : snapshot?.stop?.state === "confirmed" ? "stopped" : disposition === "stop-pending" && (snapshot?.stop?.state === "requested" || snapshot?.stop?.state === "terminating" || snapshot?.status.state === "stopping") ? "stop pending" : disposition === "stopped-now" ? "stopped" : "already terminal";
     return renderAgentResult(result, options, theme, context, words, `${target} · ${state}`);
 }
 

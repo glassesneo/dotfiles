@@ -3,6 +3,7 @@ import test from "node:test";
 import { visibleWidth } from "@earendil-works/pi-tui";
 import { createMeshEnableTool, createMeshGetTool, createMeshRouteTool, createMeshRunTool, createMeshStopTool, createMeshSubmitTool, createMeshWaitTool, type OrchestrationDependencies } from "../extensions_src/orchestration.ts";
 import { settledAgentDefinition } from "../extensions_src/utilities/agent_types.ts";
+import { unknownAgentActivityProjection } from "../extensions_src/utilities/orchestration_activity.ts";
 import { MESH_PEER_TOOL_NAMES } from "../extensions_src/utilities/orchestration_pi.ts";
 import { emptyUsage, type AgentSnapshot } from "../extensions_src/utilities/orchestration_types.ts";
 
@@ -21,6 +22,8 @@ function snapshot(id = agentId, idTask = taskId): AgentSnapshot {
     return {
         agent: { schemaVersion: 1, meshId: "55555555-5555-4555-8555-555555555555", agentId: id, epochId: "66666666-6666-4666-8666-666666666666", agent: "worker", harness: "pi", cwd: "/private/worktree", createdAt: "2026-01-01T00:00:00Z", agentSnapshot: definition, launchEnvelope: "/private/envelope.json", launchEnvelopeDigest: "digest", tmux: { socket: "/tmp/tmux", serverPid: "1", sessionId: "$1", sessionName: "mesh", windowId: "@1", paneId: "%1", windowName: "worker" }, capabilities: { nativeScreen: true, taskDelivery: true, taskCompletion: true, taskCancellation: true, usage: true, interactiveInterventions: true, terminalHistory: true }, creatorSessionId: "creator" },
         status: { schemaVersion: 1, meshId: "55555555-5555-4555-8555-555555555555", agentId: id, state: "idle", bridgeReady: true, meshToolsEnabled: true, agentUsage: usage, accountedTaskIds: [], updatedAt: "2026-01-01T00:02:00Z", childSessionFile: "/private/session.jsonl" },
+        activity: unknownAgentActivityProjection(),
+        stop: null,
         task: { request: { schemaVersion: 1, meshId: "55555555-5555-4555-8555-555555555555", agentId: id, taskId: idTask, prompt, createdAt: "2026-01-01T00:00:00Z" }, status: { schemaVersion: 1, meshId: "55555555-5555-4555-8555-555555555555", agentId: id, taskId: idTask, state: "succeeded", createdAt: "2026-01-01T00:00:00Z", startedAt: "2026-01-01T00:00:10Z", finishedAt: "2026-01-01T00:01:00Z" }, result: { schemaVersion: 1, meshId: "55555555-5555-4555-8555-555555555555", agentId: id, taskId: idTask, outcome: "succeeded", output, usage, turns: 2, interventions: [], startedAt: "2026-01-01T00:00:10Z", finishedAt: "2026-01-01T00:01:00Z" }, interventions: [{ taskId: idTask, sequence: 1, deliveryMode: "steer", text: "check edge", timestamp: "2026-01-01T00:00:20Z", images: [] }], claimed: false, directory: "/private/task" },
     };
 }
@@ -63,7 +66,7 @@ void test("real mesh tool definitions compose concise collapsed rows without rep
         render(item.tool.renderResult?.({ content: [], details: item.details } as never, { expanded: false } as never, theme as never, { args: item.args, lastComponent: undefined } as never), 18);
     }
     const values = tools();
-    assert.match(render(values[0].tool.renderResult?.({ content: [], details: values[0].details } as never, { expanded: false } as never, theme as never, { args: values[0].args } as never)), /Fern.*worker.*IDLE.*SUCCEEDED.*Inspect the migration boundary/u);
+    assert.match(render(values[0].tool.renderResult?.({ content: [], details: values[0].details } as never, { expanded: false } as never, theme as never, { args: values[0].args } as never)), /Fern.*worker.*IDLE.*activity:unknown.*NOT ACCEPTING.*SUCCEEDED.*Inspect the migration\s+boundary/u);
     assert.match(render(values[1].tool.renderCall?.(values[1].args as never, theme as never, { args: values[1].args, expanded: false } as never)), /mesh_submit.*reused agent/u);
     assert.match(render(values[1].tool.renderResult?.({ content: [], details: values[1].details } as never, { expanded: false } as never, theme as never, { args: values[1].args } as never)), /Fern.*worker.*IDLE.*SUCCEEDED/u);
     assert.match(render(values[3].tool.renderResult?.({ content: [], details: values[3].details } as never, { expanded: false } as never, theme as never, { args: values[3].args } as never)), /COMPLETED.*all.*2\/2 terminal[\s\S]*Fern.*worker.*IDLE.*SUCCEEDED[\s\S]*worker.*IDLE.*SUCCEEDED/u);
@@ -94,6 +97,15 @@ void test("wait and stop result transitions remain explicit without duplicate he
     assert.doesNotMatch(stopped, /mesh_stop/u);
 });
 
+// Given an agent stop that remains requested while lifecycle is stopping, when it crosses the result-card boundary, the user sees stop pending rather than a completed stop or task-cancellation heading.
+void test("pending agent stop card reports stop pending", () => {
+    const pending = snapshot(); pending.status.state = "stopping"; pending.stop = { schemaVersion: 1, meshId: pending.agent.meshId, agentId: pending.agent.agentId, stopRequestId: "99999999-9999-4999-8999-999999999999", state: "requested", source: "peer", reason: "awaiting tmux confirmation", previousAgentState: "idle", requestedAt: "2026-01-01T00:02:00Z", updatedAt: "2026-01-01T00:02:00Z" };
+    const stop = createMeshStopTool(deps); const args = { agentId };
+    const rendered = render(stop.renderResult?.({ content: [], details: { ...pending, stopDisposition: "stop-pending" } } as never, { expanded: false, isPartial: false } as never, theme as never, { args } as never));
+    assert.match(rendered, /^agent · stop pending[\s\S]*worker.*STOPPING/u);
+    assert.doesNotMatch(rendered, /cancellation completed|agent · stopped/u);
+});
+
 // Given expansion at the Pi renderer boundary, users receive bounded diagnostic identities, content, timing, usage, paths, and route/activation lists.
 void test("real mesh tool definitions expose diagnostic detail only when expanded", () => {
     for (const item of tools()) {
@@ -115,6 +127,13 @@ void test("real mesh tool definitions expose diagnostic detail only when expande
 });
 
 // Given malformed result details crossing a real Pi tool renderer, collapsed cards preserve privacy while expansion provides only a bounded raw diagnostic.
+// Given lifecycle/activity/stop metadata, when it crosses the card renderer, collapsed and expanded users receive textual state while every line remains width bounded.
+void test("mesh cards expose stable activity, acceptance, and stop detail within width", () => {
+    const value = snapshot(); value.stop = { schemaVersion: 1, meshId: value.agent.meshId, agentId: value.agent.agentId, stopRequestId: "99999999-9999-4999-8999-999999999999", state: "confirmed", source: "peer", reason: "bounded parent-visible cleanup reason", previousAgentState: "idle", requestedAt: "2026-01-01T00:02:00Z", updatedAt: "2026-01-01T00:03:00Z", confirmedAt: "2026-01-01T00:03:00Z" };
+    const tool = createMeshGetTool(deps); const collapsed = render(tool.renderResult?.({ content: [], details: value } as never, { expanded: false } as never, theme as never, { args: { agentId } } as never), 30); assert.match(collapsed, /activity:unknown|NOT ACCEPTING/u);
+    const expanded = render(tool.renderResult?.({ content: [], details: value } as never, { expanded: true } as never, theme as never, { args: { agentId } } as never), 30); assert.match(expanded, /activity: unknown[\s\S]*acceptingTask: false[\s\S]*stopState: confirmed[\s\S]*stopSource: peer[\s\S]*stopReason: bounded\s+parent-visible cleanup reason/u);
+});
+
 void test("real mesh tool definitions handle malformed payloads privately and reuse Text components", () => {
     const secret = { token: "raw-secret", path: "/private/raw", body: "x".repeat(10_000) };
     for (const item of tools()) {

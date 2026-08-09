@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { runExternalWorker } from "../extensions_src/orchestration_external_worker.ts";
+import { readAgentActivity } from "../extensions_src/utilities/orchestration_activity.ts";
 import { buildLaunchEnvelope, settledAgentDefinition } from "../extensions_src/utilities/agent_types.ts";
 import { resolveExternalDriver, validateExternalWorkerConfig, type ExternalDriver, type ExternalWorkerConfig } from "../extensions_src/utilities/orchestration_external_driver.ts";
 import { resolveHarnessAdapter } from "../extensions_src/utilities/orchestration_harness.ts";
@@ -14,7 +15,7 @@ const capabilities = { nativeScreen: true, taskDelivery: true, taskCompletion: t
 const tmux = { socket: "/tmp/tmux", serverPid: "1", sessionId: "$1", sessionName: "main", windowId: "@1", paneId: "%1", windowName: "external" };
 const budgets = { maxLiveAgents: 4, maxConcurrentTasks: 4, maxTasksPerMesh: 20 };
 const yieldToIO = () => new Promise<void>(resolve => setImmediate(resolve));
-async function eventually(predicate: () => Promise<boolean>): Promise<void> { for (let n = 0; n < 500; n += 1) { if (await predicate()) return; await yieldToIO(); } throw new Error("condition did not settle"); }
+async function eventually(predicate: () => Promise<boolean>): Promise<void> { for (let n = 0; n < 500; n += 1) { if (await predicate()) return; await new Promise(resolve => setTimeout(resolve, 1)); } throw new Error("condition did not settle"); }
 
 type ExternalCase = { agent: "fast-worker" | "codex"; harness: "cursor-agent" | "codex"; config: ExternalWorkerConfig };
 const cases: ExternalCase[] = [
@@ -102,20 +103,25 @@ void test("Cursor and Codex workers preserve completion, cancellation, and failu
             waitForClose: () => new Promise(() => {}),
             fatalError: () => undefined,
         };
-        const worker = runExternalWorker(fixture.env, { createDriver: () => driver, sleep: yieldToIO });
-        await eventually(async () => (await readAgentSnapshot(fixture.root, fixture.meshId, fixture.agentId)).status.bridgeReady);
+        const worker = runExternalWorker(fixture.env, { createDriver: () => driver, sleep: yieldToIO, activityHeartbeatMs: 1 });
+        await eventually(async () => { const snapshot = await readAgentSnapshot(fixture.root, fixture.meshId, fixture.agentId); return snapshot.status.bridgeReady && snapshot.activity.phase === "idle"; });
+        const ready = await readAgentSnapshot(fixture.root, fixture.meshId, fixture.agentId);
+        assert.deepEqual({ phase: ready.activity.phase, context: ready.activity.context.state, accepting: ready.activity.acceptingTask }, { phase: "idle", context: "unsupported", accepting: true });
 
         const complete = await createTask(fixture.root, fixture.meshId, fixture.agentId, "complete");
         await eventually(async () => (await readAgentSnapshot(fixture.root, fixture.meshId, fixture.agentId, complete.request.taskId)).task?.status.state === "succeeded");
         assert.equal((await readAgentSnapshot(fixture.root, fixture.meshId, fixture.agentId, complete.request.taskId)).task?.result?.output, "done");
+        await eventually(async () => (await readAgentSnapshot(fixture.root, fixture.meshId, fixture.agentId)).activity.acceptingTask);
 
         const cancel = await createTask(fixture.root, fixture.meshId, fixture.agentId, "cancel");
         await eventually(async () => (await readAgentSnapshot(fixture.root, fixture.meshId, fixture.agentId, cancel.request.taskId)).task?.status.state === "running");
+        const runningSequence = (await readAgentActivity(fixture.root, fixture.meshId, fixture.agentId))!.sequence; await eventually(async () => ((await readAgentActivity(fixture.root, fixture.meshId, fixture.agentId))?.sequence ?? 0) > runningSequence);
         await requestTaskCancellation(fixture.root, fixture.meshId, cancel.request.taskId, "caller cancelled");
         await eventually(async () => cancels > 0);
         rejectCancelled(new Error("cancelled"));
         await eventually(async () => (await readAgentSnapshot(fixture.root, fixture.meshId, fixture.agentId, cancel.request.taskId)).task?.status.state === "stopped");
         assert.equal((await readAgentSnapshot(fixture.root, fixture.meshId, fixture.agentId, cancel.request.taskId)).task?.result?.output, "partial");
+        await eventually(async () => (await readAgentSnapshot(fixture.root, fixture.meshId, fixture.agentId)).activity.acceptingTask);
 
         const failure = await createTask(fixture.root, fixture.meshId, fixture.agentId, "fail");
         await eventually(async () => (await readAgentSnapshot(fixture.root, fixture.meshId, fixture.agentId, failure.request.taskId)).task?.status.state === "failed");
@@ -123,6 +129,7 @@ void test("Cursor and Codex workers preserve completion, cancellation, and failu
 
         await markAgentStopping(fixture.root, fixture.meshId, fixture.agentId);
         await worker;
+        assert.equal((await readAgentSnapshot(fixture.root, fixture.meshId, fixture.agentId)).status.state, "stopping");
         assert.deepEqual(prompts, ["complete", "cancel", "fail"].map(prompt => `${fixture.definition.instructions}\n\nDelegated task:\n${prompt}`));
     }
 });

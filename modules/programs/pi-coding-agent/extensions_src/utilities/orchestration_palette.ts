@@ -38,7 +38,7 @@ export interface MeshPaletteDependencies extends MeshIdentity {
     clearTimeout?: typeof clearTimeout;
     /** Mesh-wide data and authority boundaries supplied by the orchestration owner. */
     discover: (identity: MeshIdentity) => Promise<{ agents: AgentSnapshot[]; malformedCount: number }>;
-    stopAgent: (request: MeshIdentity & { agentId: string }) => Promise<AgentSnapshot>;
+    stopAgent: (request: MeshIdentity & { agentId: string; reason: string }) => Promise<AgentSnapshot>;
     /** Optional test/harness overrides for open paths. */
     openHistory?: typeof openMeshHistory;
     openLiveWindow?: typeof openAgentWindow;
@@ -162,6 +162,13 @@ export function splitPaletteColumns(innerWidth: number): { listWidth: number; de
     return { listWidth, detailWidth: Math.max(1, width - listWidth - 3) };
 }
 
+function lifecycleNotices(snapshot: AgentSnapshot): Array<{ text: string; role: DetailSemanticRole }> {
+    const acceptance = snapshot.activity.acceptingTask ? "accepting tasks" : "not accepting tasks";
+    const values: Array<{ text: string; role: DetailSemanticRole }> = [{ text: `Lifecycle ${snapshot.status.state} · activity ${snapshot.activity.phase} · ${acceptance} · context ${snapshot.activity.context.health}`, role: snapshot.activity.acceptingTask ? "success" : "muted" }];
+    if (snapshot.stop) values.push({ text: `Stop ${snapshot.stop.state} · ${snapshot.stop.source} · ${snapshot.stop.reason}`, role: snapshot.stop.state === "failed" ? "error" : snapshot.stop.state === "confirmed" ? "warning" : "muted" });
+    return values;
+}
+
 /** Derive detail-pane content from the selected snapshot. */
 export function detailPaneModel(snapshot: AgentSnapshot | undefined): DetailPaneModel {
     if (!snapshot) {
@@ -173,7 +180,7 @@ export function detailPaneModel(snapshot: AgentSnapshot | undefined): DetailPane
             role: "accent",
             title: "Agent",
             body: `${snapshot.agent.agent}\n\n${snapshot.agent.agentSnapshot.instructions}`,
-            notices: [{ text: "No task record", role: "muted" }],
+            notices: [{ text: "No task record", role: "muted" }, ...lifecycleNotices(snapshot)],
         };
     }
     if (!isTerminalTask(task.status.state)) {
@@ -182,23 +189,23 @@ export function detailPaneModel(snapshot: AgentSnapshot | undefined): DetailPane
             title: "Instruction",
             badgeState: task.status.state,
             body: task.request.prompt,
-            notices: [],
+            notices: lifecycleNotices(snapshot),
         };
     }
     if (task.result) {
         const role: DetailSemanticRole = task.status.state === "succeeded" ? "success" : task.status.state === "failed" ? "error" : "warning";
         if (isNonblank(task.result.output)) {
-            return { role, title: "Answer", badgeState: task.status.state, body: task.result.output, notices: [] };
+            return { role, title: "Answer", badgeState: task.status.state, body: task.result.output, notices: lifecycleNotices(snapshot) };
         }
         if (isNonblank(task.result.error)) {
-            return { role, title: "Answer", badgeState: task.status.state, body: task.result.error, notices: [] };
+            return { role, title: "Answer", badgeState: task.status.state, body: task.result.error, notices: lifecycleNotices(snapshot) };
         }
         return {
             role,
             title: "Answer",
             badgeState: task.status.state,
             body: "",
-            notices: [{ text: "No answer text was recorded.", role: "muted" }],
+            notices: [{ text: "No answer text was recorded.", role: "muted" }, ...lifecycleNotices(snapshot)],
         };
     }
     return {
@@ -206,7 +213,7 @@ export function detailPaneModel(snapshot: AgentSnapshot | undefined): DetailPane
         title: "Answer",
         badgeState: task.status.state,
         body: task.request.prompt,
-        notices: [{ text: "Answer not recorded", role: "warning" }],
+        notices: [{ text: "Answer not recorded", role: "warning" }, ...lifecycleNotices(snapshot)],
     };
 }
 
@@ -276,7 +283,7 @@ export function composeDetailSections(options: {
 export class MeshAgentsPaletteComponent implements Component, Focusable {
     readonly #tui: TUI;
     readonly #theme: Theme;
-    readonly #ui: Pick<ExtensionUIContext, "confirm">;
+    readonly #ui: Pick<ExtensionUIContext, "input" | "confirm">;
     readonly #keymap: ResolvedPaletteKeymap;
     readonly #deps: MeshPaletteDependencies;
     readonly #done: (value: MeshPaletteResult) => void;
@@ -302,7 +309,7 @@ export class MeshAgentsPaletteComponent implements Component, Focusable {
     constructor(options: {
         tui: TUI;
         theme: Theme;
-        ui: Pick<ExtensionUIContext, "confirm">;
+        ui: Pick<ExtensionUIContext, "input" | "confirm">;
         keymap: ResolvedPaletteKeymap;
         deps: MeshPaletteDependencies;
         done: (value: MeshPaletteResult) => void;
@@ -495,19 +502,35 @@ export class MeshAgentsPaletteComponent implements Component, Focusable {
         this.#setStatus("warning", "WORKING");
         try {
             if (kind === "stop") {
-                const confirmed = await this.#ui.confirm(`Stop ${node.handle}?`, "This kills the agent window and every linked view. Use Unlink to close only this view.");
-                if (!confirmed) {
+                const selection = selected.agent.agentId;
+                const rawReason = await this.#ui.input(`Reason for stopping ${node.handle}`, "Required: 1–512 UTF-8 bytes");
+                if (this.#tree.byId.has(selection)) this.#selectedAgentId = selection;
+                const reason = rawReason?.trim();
+                if (!reason) {
                     if (this.#cancelRequested) { this.close("return"); return; }
-                    this.#setStatus("dim", `${this.#tree.byId.size} agent session(s)`);
+                    this.#setStatus("dim", `Stop cancelled for ${node.handle}`);
                     return;
                 }
-                const stopped = await this.#deps.stopAgent({ meshId: this.#deps.meshId, agentId: selected.agent.agentId });
+                if (Buffer.byteLength(reason, "utf8") > 512) {
+                    this.#setStatus("error", "Stop reason must be 1–512 UTF-8 bytes after trimming.");
+                    return;
+                }
+                const confirmed = await this.#ui.confirm(`Stop ${node.handle}?`, `Reason: ${reason}\n\nThis kills the agent window and every linked view. Use Unlink to close only this view.`);
+                if (this.#tree.byId.has(selection)) this.#selectedAgentId = selection;
+                if (!confirmed) {
+                    if (this.#cancelRequested) { this.close("return"); return; }
+                    this.#setStatus("dim", `Stop cancelled for ${node.handle}`);
+                    return;
+                }
+                const stopped = await this.#deps.stopAgent({ meshId: this.#deps.meshId, agentId: selected.agent.agentId, reason });
                 // Apply Stop immediately, then reload. Re-assert after reload so a raced stale poll cannot revive the node.
                 this.#upsertSnapshot(stopped);
                 const refreshed = await this.#reloadAfterMutation();
                 if (this.#disposed) return;
                 this.#upsertSnapshot(stopped);
-                if (refreshed) this.#setStatus("success", `Stopped ${node.handle}`);
+                const pending = stopped.status.state === "stopping" || stopped.stop?.state === "requested" || stopped.stop?.state === "terminating";
+                if (pending) this.#setStatus("warning", `Stop pending for ${node.handle}; process termination is not yet confirmed`);
+                else if (refreshed) this.#setStatus("success", `Stopped ${node.handle}`);
                 else this.#setStatus("warning", `Stopped ${node.handle}; refresh failed — showing stop result`);
                 if (this.#cancelRequested) this.close("return");
                 return;
@@ -605,7 +628,10 @@ export class MeshAgentsPaletteComponent implements Component, Focusable {
         const marker = selected ? "> " : "  ";
         const handle = dimIf(this.#theme, node.ghost, this.#theme.bold(node.handle));
         const agentType = dimIf(this.#theme, node.ghost, this.#theme.fg(agentColorRole(node.snapshot.agent.agent), node.snapshot.agent.agent));
-        const stateText = this.#theme.fg(badge.role, formatStateBadge(node.snapshot.status.state));
+        const lifecycle = this.#theme.fg(badge.role, formatStateBadge(node.snapshot.status.state));
+        const activity = this.#theme.fg("muted", node.snapshot.activity.phase.toUpperCase());
+        const acceptance = node.snapshot.activity.acceptingTask ? this.#theme.fg("success", "ACCEPTING") : this.#theme.fg("muted", "NOT ACCEPTING");
+        const stateText = `${lifecycle} ${activity} ${acceptance}`;
         const summary = dimIf(this.#theme, node.ghost, this.#theme.fg("muted", node.snapshot.task ? promptSummary(node.snapshot.task.request.prompt) : "No task"));
         const lineRaw = composeAgentRow({
             width,

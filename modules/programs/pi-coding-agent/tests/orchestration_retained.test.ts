@@ -5,12 +5,13 @@ import { join } from "node:path";
 import test from "node:test";
 import { visibleWidth } from "@earendil-works/pi-tui";
 import { settledAgentDefinition } from "../extensions_src/utilities/agent_types.ts";
+import { unknownAgentActivityProjection } from "../extensions_src/utilities/orchestration_activity.ts";
 import { renderRunResult } from "../extensions_src/utilities/orchestration_cards.ts";
 import { buildMeshDisplayTree } from "../extensions_src/utilities/orchestration_display_tree.ts";
 import { openMeshHistory } from "../extensions_src/utilities/orchestration_history.ts";
 import { MeshAgentsPaletteComponent, detailPaneModel } from "../extensions_src/utilities/orchestration_palette.ts";
 import { openLivePreview } from "../extensions_src/utilities/orchestration_preview.ts";
-import { MAX_MODEL_VISIBLE_BYTES, MAX_MODEL_VISIBLE_LINES, serializeModelVisibleJson } from "../extensions_src/utilities/orchestration_projection.ts";
+import { MAX_MODEL_VISIBLE_BYTES, MAX_MODEL_VISIBLE_LINES, projectDebugSnapshot, projectMinimalAgentTask, serializeModelVisibleJson } from "../extensions_src/utilities/orchestration_projection.ts";
 import { inspectMeshAgentWindow, launchAgentSession, meshHubName, stopAgentSession, type CommandResult } from "../extensions_src/utilities/orchestration_tmux.ts";
 import { emptyUsage, type AgentSnapshot, type AgentState, type TaskState } from "../extensions_src/utilities/orchestration_types.ts";
 
@@ -25,6 +26,8 @@ function snapshot(id: string, state: AgentState, options: { parentAgentId?: stri
     return {
         agent: { schemaVersion: 1, meshId, agentId: id, epochId, agent: "worker", harness: "pi", cwd: "/work", createdAt: options.createdAt ?? id, agentSnapshot: definition, launchEnvelope: "/envelope", launchEnvelopeDigest: "digest", tmux, capabilities, creatorSessionId: "creator", ...(options.parentAgentId ? { parentAgentId: options.parentAgentId } : {}) },
         status: { schemaVersion: 1, meshId, agentId: id, state, bridgeReady: true, meshToolsEnabled: true, agentUsage: emptyUsage(), accountedTaskIds: [], updatedAt: options.createdAt ?? id, ...(options.sessionFile ? { childSessionFile: options.sessionFile } : {}), ...(options.sessionId ? { childSessionId: options.sessionId } : {}) },
+        activity: unknownAgentActivityProjection(),
+        stop: null,
         task: { request: { schemaVersion: 1, meshId, agentId: id, taskId, prompt, createdAt: options.createdAt ?? id }, status: { schemaVersion: 1, meshId, agentId: id, taskId, state: taskState, createdAt: options.createdAt ?? id, ...(terminal ? { finishedAt: options.createdAt ?? id } : {}) }, result: terminal ? { schemaVersion: 1, meshId, agentId: id, taskId, outcome: taskState, output: "done", usage: emptyUsage(), turns: 1, interventions: [], startedAt: options.createdAt ?? id, finishedAt: options.createdAt ?? id } : null, interventions: [], claimed: false, directory: "/task" },
     };
 }
@@ -82,6 +85,14 @@ void test("model-visible projection truncates content while preserving machine f
     assert.equal(projected.outcome, "completed"); assert.equal(projected.tasks.length, tasks.length); assert.deepEqual(projected.tasks.map(task => task.agentId), tasks.map(task => task.agentId)); assert.ok(projected.tasks.every(task => task.agentState === "idle" && task.taskState === "succeeded")); assert.ok(projected.tasks.some(task => task.outputTruncated));
 });
 
+void test("model-visible stop projection keeps one fixed nullable shape without internal fields", () => {
+    const value = snapshot("abababab-abab-4bab-8bab-abababababab", "stopping");
+    value.stop = { schemaVersion: 1, meshId, agentId: value.agent.agentId, stopRequestId: "cdcdcdcd-cdcd-4dcd-8dcd-cdcdcdcdcdcd", state: "terminating", source: "gc-pressure", requesterEndpointId: "internal:endpoint", reason: "capacity", activitySequence: 7, gcPassId: "efefefef-efef-4efe-8efe-efefefefefef", previousAgentState: "idle", requestedAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:01Z", terminatingAt: "2026-01-01T00:00:01Z", noticeCreatedAt: "2026-01-01T00:00:02Z" };
+    const expected = { stopRequestId: value.stop.stopRequestId, state: "terminating", source: "gc-pressure", reason: "capacity", requestedAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:01Z", terminatingAt: "2026-01-01T00:00:01Z", confirmedAt: null, failedAt: null, failureCategory: null };
+    assert.deepEqual(projectMinimalAgentTask(value).stop, expected);
+    assert.deepEqual(projectDebugSnapshot(value).stop, expected);
+});
+
 void test("history and preview reject unsafe identity before allocating tmux state", async () => {
     const directory = await mkdtemp(join(tmpdir(), "mesh-history-safety-")); const sessionFile = join(directory, "session.jsonl"); await writeFile(sessionFile, `${JSON.stringify({ type: "session", id: "canonical" })}\n`);
     const historyCalls: string[][] = []; const historyExec = async (_command: string, args: string[]): Promise<CommandResult> => { historyCalls.push(args); return { stdout: "", stderr: "", code: 0 }; };
@@ -97,10 +108,20 @@ void test("palette delegates stop authority with mesh identity and preserves the
     const component = new MeshAgentsPaletteComponent({
         tui: { terminal: { rows: 24 }, requestRender() {} } as never,
         theme: { fg: (_role: string, text: string) => text, bg: (_role: string, text: string) => text, bold: (text: string) => text } as never,
-        ui: { confirm: async () => true }, keymap: {} as never,
+        ui: { input: async () => "  planned cleanup  ", confirm: async () => true }, keymap: {} as never,
         deps: { meshId, exec: async () => ({ stdout: "", stderr: "", code: 0 }), tmux: "/tmux", historyViewerExtension: "/viewer", piCommand: "/pi", natureHandleWords: ["May"], discover: async identity => { discoveries.push(identity); return { agents: [live], malformedCount: 0 }; }, stopAgent: async request => { stopRequests.push(request); return stopped; }, setTimeout: (() => ({}) as NodeJS.Timeout) as unknown as typeof setTimeout, clearTimeout: (() => {}) as typeof clearTimeout },
         done() {},
     });
     component.replaceAgents([live]); await component.action("stop");
-    assert.deepEqual(stopRequests, [{ meshId, agentId: live.agent.agentId }]); assert.deepEqual(discoveries, [{ meshId }]); assert.equal(component.selected()?.status.state, "stopped"); component.dispose();
+    assert.deepEqual(stopRequests, [{ meshId, agentId: live.agent.agentId, reason: "planned cleanup" }]); assert.deepEqual(discoveries, [{ meshId }]); assert.equal(component.selected()?.status.state, "stopped"); component.dispose();
+});
+
+// Given cancelled, blank, or oversized Pi-native reason input, when it crosses the Palette action boundary, no stop occurs and the same Palette selection/focus is retained.
+void test("palette reason validation cancels safely and preserves focus and selection", async () => {
+    const live = snapshot("abababab-abab-4bab-8bab-abababababab", "idle");
+    for (const input of [undefined, "   ", "界".repeat(171)]) {
+        let stops = 0; let confirms = 0;
+        const component = new MeshAgentsPaletteComponent({ tui: { terminal: { rows: 24 }, requestRender() {} } as never, theme: { fg: (_role: string, text: string) => text, bg: (_role: string, text: string) => text, bold: (text: string) => text } as never, ui: { input: async () => input, confirm: async () => { confirms += 1; return true; } }, keymap: {} as never, deps: { meshId, exec: async () => ({ stdout: "", stderr: "", code: 0 }), tmux: "/tmux", historyViewerExtension: "/viewer", piCommand: "/pi", natureHandleWords: ["May"], discover: async () => ({ agents: [live], malformedCount: 0 }), stopAgent: async () => { stops += 1; return live; }, setTimeout: (() => ({}) as NodeJS.Timeout) as unknown as typeof setTimeout, clearTimeout: (() => {}) as typeof clearTimeout }, done() {} });
+        component.replaceAgents([live]); component.focused = true; const selected = component.selectedAgentId; await component.action("stop"); assert.equal(stops, 0); assert.equal(confirms, 0); assert.equal(component.selectedAgentId, selected); assert.equal(component.focused, true); component.dispose();
+    }
 });

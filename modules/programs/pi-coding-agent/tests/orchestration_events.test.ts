@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { buildLaunchEnvelope, settledAgentCatalog, settledAgentDefinition } from "../extensions_src/utilities/agent_types.ts";
+import { availableContext, publishAgentActivity } from "../extensions_src/utilities/orchestration_activity.ts";
+import { bindAgentRuntime } from "../extensions_src/utilities/orchestration_runtime.ts";
 import { acknowledgeMeshEvents, bindMeshEndpoint, markMeshEventInjected, pollMeshEvents, registerMeshSignal, registerMeshWatch, setMeshEndpointOffline } from "../extensions_src/utilities/orchestration_events.ts";
 import { createTask, ensurePolicyEpoch, finishTask, initializeMesh, meshPaths, patchAgentStatus, prepareAgent, publishAgent, readPolicyEpoch, reserveMeshCapacity } from "../extensions_src/utilities/orchestration_store.ts";
 
@@ -29,6 +31,7 @@ async function eventFixture(root: string) {
     await writeFile(envelopePath, JSON.stringify(envelope), { mode: 0o600 });
     await publishAgent(root, mesh.meshId, prepared.paths, { agentId: prepared.agentId, epochId: epoch.epochId, agent: "worker", harness: "pi", cwd: root, agentSnapshot: definition, launchEnvelope: envelopePath, tmux, capabilities, creatorSessionId: "root" });
     await patchAgentStatus(root, mesh.meshId, prepared.agentId, { state: "idle", bridgeReady: true });
+    await bindAgentRuntime(root, mesh.meshId, prepared.agentId, { runtimeId: prepared.agentId, kind: "external" }); const now = new Date().toISOString(); await publishAgentActivity(root, mesh.meshId, prepared.agentId, { runtimeId: prepared.agentId, phase: "idle", acceptingTask: true, pendingMessages: false, phaseSince: now, observedAt: now, heartbeatAt: now, context: availableContext(10, 100_000, 100) });
     const endpoint = await bindMeshEndpoint(root, mesh.meshId, { endpointId: `root:${mesh.meshId}`, kind: "root", harness: "pi", sessionId: "root", sessionFile: "/root.jsonl" });
     return { mesh, agentId: prepared.agentId, endpoint };
 }

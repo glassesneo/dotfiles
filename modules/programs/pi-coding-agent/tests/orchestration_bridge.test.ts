@@ -7,7 +7,8 @@ import test from "node:test";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { registerMeshChildBridge, type MeshChildBridgeDependencies } from "../extensions_src/orchestration_child_bridge.ts";
 import { buildLaunchEnvelope, settledAgentDefinition } from "../extensions_src/utilities/agent_types.ts";
-import { createTask, ensurePolicyEpoch, initializeMesh, prepareAgent, publishAgent, readAgentSnapshot, requestTaskCancellation, reserveMeshCapacity } from "../extensions_src/utilities/orchestration_store.ts";
+import { readAgentActivity } from "../extensions_src/utilities/orchestration_activity.ts";
+import { createTask, ensurePolicyEpoch, initializeMesh, markAgentStopping, prepareAgent, publishAgent, readAgentSnapshot, requestTaskCancellation, reserveMeshCapacity } from "../extensions_src/utilities/orchestration_store.ts";
 
 const definition = settledAgentDefinition("worker");
 const capabilities = { nativeScreen: true, taskDelivery: true, taskCompletion: true, taskCancellation: true, usage: true, interactiveInterventions: true, terminalHistory: true };
@@ -39,6 +40,8 @@ async function bridgeFixture(options: { publish?: boolean; dependencies?: MeshCh
     let intervalCallback: (() => void | Promise<void>) | undefined;
     let shutdowns = 0;
     let aborts = 0;
+    let idle = true;
+    let pendingMessages = false;
     const delivered: string[] = [];
     const pi = {
         on(name: string, handler: (...args: any[]) => any) { handlers.set(name, handler); },
@@ -46,13 +49,13 @@ async function bridgeFixture(options: { publish?: boolean; dependencies?: MeshCh
         sendUserMessage(prompt: string) { delivered.push(prompt); },
     } as unknown as ExtensionAPI;
     registerMeshChildBridge(pi, { PI_MESH_ID: mesh.meshId, PI_MESH_AGENT_ID: agentId, PI_MESH_AGENT_DIR: prepared.paths.directory, PI_MESH_EPOCH_ID: epoch.epochId, PI_AGENT_RESOLVED_AGENT: envelopePath }, {
-        setInterval(callback) { intervalCallback = callback; return 1; }, clearInterval() {}, ...options.dependencies,
+        setInterval(callback) { intervalCallback = callback; return 1; }, clearInterval() {}, resolveCompactionReserveTokens: () => 68, contextHeadroomTokens: 32, standaloneRuntimeBinding: true, ...options.dependencies,
     });
     const activate = (value: unknown = envelope) => { for (const handler of eventHandlers) handler({ schemaVersion: 1, identity: envelope.identity, envelope: value }); };
-    const start = () => handlers.get("session_start")?.({}, { sessionManager: { getSessionId: () => "child", getSessionFile: () => undefined }, abort() { aborts += 1; }, shutdown() { shutdowns += 1; } });
+    const start = () => handlers.get("session_start")?.({}, { cwd: "/work", sessionManager: { getSessionId: () => "child", getSessionFile: () => join(root, "child.jsonl") }, getContextUsage: () => ({ tokens: 99, contextWindow: 200, percent: 49.5 }), isIdle: () => idle, hasPendingMessages: () => pendingMessages, abort() { aborts += 1; }, shutdown() { shutdowns += 1; } });
     const tick = async () => { await intervalCallback?.(); };
     const emit = async (name: string, event: unknown = {}) => { await handlers.get(name)?.(event, {}); };
-    return { root, meshId: mesh.meshId, envelope, envelopePath, prepared, agentId, activate, start, tick, emit, publish, delivered, get shutdowns() { return shutdowns; }, get aborts() { return aborts; } };
+    return { root, meshId: mesh.meshId, envelope, envelopePath, prepared, agentId, activate, start, tick, emit, publish, delivered, setIdle(value: boolean) { idle = value; }, setPendingMessages(value: boolean) { pendingMessages = value; }, get shutdowns() { return shutdowns; }, get aborts() { return aborts; } };
 }
 
 void test("child readiness accepts the activated immutable epoch snapshot independent of JSON key order", async () => {
@@ -64,6 +67,40 @@ void test("child readiness accepts the activated immutable epoch snapshot indepe
     const ready = await readAgentSnapshot(fixture.root, fixture.meshId, fixture.agentId);
     assert.equal(ready.status.bridgeReady, true);
     assert.equal(ready.status.state, "idle");
+});
+
+void test("Pi lifecycle events publish running, compaction health, and settled activity", async () => {
+    const fixture = await bridgeFixture({ dependencies: { resolveCompactionReserveTokens: () => 68, contextHeadroomTokens: 32 } });
+    fixture.activate(); await fixture.start();
+    const ready = await readAgentActivity(fixture.root, fixture.meshId, fixture.agentId);
+    assert.deepEqual({ phase: ready?.phase, health: ready?.context.health, until: ready?.context.tokensUntilCompaction }, { phase: "idle", health: "healthy", until: 33 });
+    await fixture.emit("agent_start");
+    assert.equal((await readAgentActivity(fixture.root, fixture.meshId, fixture.agentId))?.phase, "running");
+    const controller = new AbortController(); await fixture.emit("session_before_compact", { reason: "threshold", signal: controller.signal });
+    assert.deepEqual({ phase: (await readAgentActivity(fixture.root, fixture.meshId, fixture.agentId))?.phase, reason: (await readAgentActivity(fixture.root, fixture.meshId, fixture.agentId))?.compactionReason }, { phase: "compacting", reason: "threshold" });
+    await fixture.emit("agent_settled");
+    assert.equal((await readAgentActivity(fixture.root, fixture.meshId, fixture.agentId))?.phase, "idle");
+    const manual = new AbortController(); await fixture.emit("session_before_compact", { reason: "manual", signal: manual.signal }); await fixture.emit("session_compact", { reason: "manual", willRetry: false }); assert.equal((await readAgentActivity(fixture.root, fixture.meshId, fixture.agentId))?.phase, "compacting"); await fixture.emit("agent_settled"); assert.equal((await readAgentActivity(fixture.root, fixture.meshId, fixture.agentId))?.phase, "idle");
+});
+
+// Given a completed manual idle compaction, when a later tick observes Pi idle with no queued work, the mesh consumer sees the child become idle without requiring agent_settled.
+void test("manual idle compaction settles on a later quiescent observation", async () => {
+    const fixture = await bridgeFixture(); fixture.activate(); await fixture.start();
+    const manual = new AbortController(); await fixture.emit("session_before_compact", { reason: "manual", signal: manual.signal }); await fixture.emit("session_compact", { reason: "manual", willRetry: false });
+    assert.equal((await readAgentActivity(fixture.root, fixture.meshId, fixture.agentId))?.phase, "compacting");
+    fixture.setIdle(false); await fixture.tick(); assert.equal((await readAgentActivity(fixture.root, fixture.meshId, fixture.agentId))?.phase, "compacting");
+    fixture.setIdle(true); fixture.setPendingMessages(true); await fixture.tick(); assert.equal((await readAgentActivity(fixture.root, fixture.meshId, fixture.agentId))?.phase, "compacting");
+    fixture.setPendingMessages(false); await fixture.tick(); assert.equal((await readAgentActivity(fixture.root, fixture.meshId, fixture.agentId))?.phase, "idle");
+});
+
+// Given a durable root stop, when child shutdown crosses the bridge boundary, lifecycle remains stopping for root tmux confirmation.
+void test("Pi bridge never terminalizes a root-managed stopping agent", async () => { const fixture = await bridgeFixture(); fixture.activate(); await fixture.start(); await markAgentStopping(fixture.root, fixture.meshId, fixture.agentId); await fixture.emit("session_shutdown", { reason: "quit" }); assert.equal((await readAgentSnapshot(fixture.root, fixture.meshId, fixture.agentId)).status.state, "stopping"); });
+
+void test("Pi settings resolution failure preserves readiness with unknown context health", async () => {
+    const fixture = await bridgeFixture({ dependencies: { resolveCompactionReserveTokens: () => { throw new Error("settings unavailable"); } } });
+    fixture.activate(); await fixture.start();
+    const activity = await readAgentActivity(fixture.root, fixture.meshId, fixture.agentId);
+    assert.deepEqual({ bridgeReady: (await readAgentSnapshot(fixture.root, fixture.meshId, fixture.agentId)).status.bridgeReady, context: activity?.context.state, health: activity?.context.health }, { bridgeReady: true, context: "unknown", health: "unknown" });
 });
 
 void test("child readiness rejects a different activated epoch snapshot and bounds publication waiting", async () => {
@@ -99,7 +136,7 @@ void test("child initialization failure requests shutdown even when failure pers
 });
 
 void test("stalled completion persistence shuts down the settled child after a bounded window", async () => {
-    let now = 0; let expire!: () => void; let timerScheduled!: () => void; const scheduled = new Promise<void>(resolve => { timerScheduled = resolve; });
+    let now = Date.now(); let expire!: () => void; let timerScheduled!: () => void; const scheduled = new Promise<void>(resolve => { timerScheduled = resolve; });
     const fixture = await bridgeFixture({ dependencies: {
         completionPersistenceTimeoutMs: 2,
         now: () => now,
@@ -116,7 +153,7 @@ void test("stalled completion persistence shuts down the settled child after a b
     await fixture.emit("message_end", { message: { role: "assistant", content: [{ type: "text", text: "done" }], stopReason: "stop" } });
     const settling = fixture.emit("agent_settled");
     await scheduled; assert.equal(fixture.shutdowns, 0);
-    now = 2; expire(); await settling;
+    now += 2; expire(); await settling;
     assert.equal(fixture.shutdowns, 1);
     await fixture.emit("session_shutdown", { reason: "quit" });
 });

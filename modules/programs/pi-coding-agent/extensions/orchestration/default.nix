@@ -26,6 +26,13 @@
   };
   parentNavigationHint = "${tmux.prefix} ${lib.concatStringsSep "/" (map lib.toUpper parentTmuxKeys)}: parent · /parent";
   parentBinding = key: ''bind-key ${key} if-shell -F '#{==:#{@pi_mesh_schema},1}' 'run-shell "${lib.getExe returnParentCommand} --binding #{q:client_name} #{q:session_id} #{q:window_id}"' 'display-message "No mesh parent for this window"' '';
+  gcRoleType = delib.submodule {
+    options = with delib; {
+      collectAt = intOption 1;
+      retain = intOption 1;
+      pressureFloor = intOption 0;
+    };
+  };
   agentType = delib.submodule {
     options = with delib; {
       model = noDefault (strOption null);
@@ -150,6 +157,15 @@ in
         agents = attrsOfOption agentType {};
         roleSets = attrsOfOption (lib.types.listOf lib.types.str) {};
         budgets = attrsOfOption lib.types.int {};
+        gc = submoduleOption {
+          options = with delib; {
+            contextHeadroomTokens = intOption 32768;
+            periodicIntervalMs = intOption 5000;
+            activityHeartbeatMs = intOption 2000;
+            activityStaleMs = intOption 10000;
+            roles = attrsOfOption gcRoleType {};
+          };
+        } {};
       });
     myconfig.always = {cfg, ...}: {
       programs.pi-coding-agent.orchestration = {
@@ -159,9 +175,25 @@ in
           "mode:ops" = ["explorer" "worker" "validator" "reviewer" "critic" "researcher" "fast-worker" "codex"];
         };
         budgets = {
-          maxLiveAgents = 12;
+          maxLiveAgents = 20;
           maxConcurrentTasks = 6;
           maxTasksPerMesh = 256;
+        };
+        gc = {
+          contextHeadroomTokens = 32768;
+          periodicIntervalMs = 5000;
+          activityHeartbeatMs = 2000;
+          activityStaleMs = 10000;
+          roles = {
+            explorer = { collectAt = 6; retain = 4; pressureFloor = 1; };
+            worker = { collectAt = 6; retain = 3; pressureFloor = 1; };
+            validator = { collectAt = 3; retain = 2; pressureFloor = 1; };
+            reviewer = { collectAt = 3; retain = 1; pressureFloor = 1; };
+            critic = { collectAt = 6; retain = 4; pressureFloor = 1; };
+            researcher = { collectAt = 3; retain = 1; pressureFloor = 1; };
+            fast-worker = { collectAt = 2; retain = 1; pressureFloor = 0; };
+            codex = { collectAt = 3; retain = 2; pressureFloor = 0; };
+          };
         };
       };
       programs.pi-coding-agent.keybindings.contributions = {
@@ -280,9 +312,25 @@ in
         "mode:ops" = ["explorer" "worker" "validator" "reviewer" "critic" "researcher" "fast-worker" "codex"];
       };
       settledBudgets = {
-        maxLiveAgents = 12;
+        maxLiveAgents = 20;
         maxConcurrentTasks = 6;
         maxTasksPerMesh = 256;
+      };
+      settledGc = {
+        contextHeadroomTokens = 32768;
+        periodicIntervalMs = 5000;
+        activityHeartbeatMs = 2000;
+        activityStaleMs = 10000;
+        roles = {
+          explorer = { collectAt = 6; retain = 4; pressureFloor = 1; };
+          worker = { collectAt = 6; retain = 3; pressureFloor = 1; };
+          validator = { collectAt = 3; retain = 2; pressureFloor = 1; };
+          reviewer = { collectAt = 3; retain = 1; pressureFloor = 1; };
+          critic = { collectAt = 6; retain = 4; pressureFloor = 1; };
+          researcher = { collectAt = 3; retain = 1; pressureFloor = 1; };
+          fast-worker = { collectAt = 2; retain = 1; pressureFloor = 0; };
+          codex = { collectAt = 3; retain = 2; pressureFloor = 0; };
+        };
       };
       roleSetsValid = builtins.all (roles: lib.length roles == lib.length (lib.unique roles) && builtins.all (role: builtins.elem role names) roles) (builtins.attrValues cfg.roleSets);
       serialize = _: agent: lib.filterAttrs (name: value: value != null && !(name == "harnessOptions" && value == {})) agent;
@@ -293,8 +341,8 @@ in
           message = "Pi orchestration catalog must exactly match the settled eight-agent models, instructions, tools, skills, thinking, harness options, and role-owned child extension contributions.";
         }
         {
-          assertion = cfg.roleSets == settledRoleSets && roleSetsValid && cfg.budgets == settledBudgets;
-          message = "Pi orchestration role sets and mesh budgets must exactly match the settled recon and ops capabilities.";
+          assertion = cfg.roleSets == settledRoleSets && roleSetsValid && cfg.budgets == settledBudgets && cfg.gc == settledGc;
+          message = "Pi orchestration role sets, mesh budgets, and GC policy must exactly match the settled recon and ops capabilities.";
         }
       ];
       home.file = {
@@ -303,12 +351,12 @@ in
           agents = lib.mapAttrs serialize cfg.agents;
         };
         "${myconfig.programs.pi-coding-agent.configDir}/orchestration.json".text = builtins.toJSON {
-          schemaVersion = 1;
+          schemaVersion = 2;
           stateRoot = "${homeConfig.xdg.stateHome}/pi/orchestration-v2";
           tmux = lib.getExe pkgs.tmux;
           returnParentCommand = lib.getExe returnParentCommand;
           inherit parentNavigationHint historyViewerExtension popupExtension orchestrationExtension childBridgeExtension;
-          inherit (cfg) natureHandleWords roleSets budgets;
+          inherit (cfg) natureHandleWords roleSets budgets gc;
           harnesses = {
             pi = {
               adapter = "pi-native";

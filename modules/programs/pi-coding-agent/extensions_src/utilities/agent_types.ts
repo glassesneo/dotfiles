@@ -7,7 +7,9 @@ export type AgentHarness = "pi" | "cursor-agent" | "codex";
 export interface AgentDefinition { model: string; description: string; thinkingLevel?: ThinkingLevel; tools: string[]; skillOptIns: string[]; instructions: string; harness: AgentHarness; harnessOptions?: Record<string, unknown>; childExtensionContributions: string[] }
 export interface AgentCatalog { schemaVersion: 1; agents: Record<string, AgentDefinition> }
 export interface MeshBudgets { maxLiveAgents: number; maxConcurrentTasks: number; maxTasksPerMesh: number }
-export interface OrchestrationConfig { schemaVersion: 1; stateRoot: string; tmux: string; returnParentCommand: string; parentNavigationHint: string; historyViewerExtension: string; popupExtension: string; orchestrationExtension: string; childBridgeExtension: string; harnesses: Record<string, HarnessRuntimeConfig>; natureHandleWords: string[]; roleSets: Record<string, string[]>; budgets: MeshBudgets }
+export interface RoleGcPolicy { collectAt: number; retain: number; pressureFloor: number }
+export interface MeshGcConfig { contextHeadroomTokens: number; periodicIntervalMs: number; activityHeartbeatMs: number; activityStaleMs: number; roles: Record<string, RoleGcPolicy> }
+export interface OrchestrationConfig { schemaVersion: 2; stateRoot: string; tmux: string; returnParentCommand: string; parentNavigationHint: string; historyViewerExtension: string; popupExtension: string; orchestrationExtension: string; childBridgeExtension: string; harnesses: Record<string, HarnessRuntimeConfig>; natureHandleWords: string[]; roleSets: Record<string, string[]>; budgets: MeshBudgets; gc: MeshGcConfig }
 export interface HarnessRuntimeConfig { adapter: "pi-native" | "cursor-acp" | "codex-acp"; command: string; workerCommand?: string; workerEntrypoint?: string; bridgeReadyTimeoutMs?: number }
 export interface AgentLaunchEnvelope { schemaVersion: 1; marker: "pi-mesh-agent-launch-v1"; meshId: string; agentId: string; epochId: string; identity: string; self: AgentDefinition; roleSet: string[]; catalog: Record<string, AgentDefinition>; policyDigest: string; childExtensions: Record<string, string[]> }
 
@@ -19,6 +21,16 @@ const codexHarnessOptions = { mode: "read-only", permissionPolicy: "reject", web
 const settledRoleSets: Record<string, string[]> = {
     "mode:recon": ["explorer", "reviewer", "critic", "researcher", "codex"],
     "mode:ops": ["explorer", "worker", "validator", "reviewer", "critic", "researcher", "fast-worker", "codex"],
+};
+const settledGcRoles: Record<string, RoleGcPolicy> = {
+    explorer: { collectAt: 6, retain: 4, pressureFloor: 1 },
+    worker: { collectAt: 6, retain: 3, pressureFloor: 1 },
+    validator: { collectAt: 3, retain: 2, pressureFloor: 1 },
+    reviewer: { collectAt: 3, retain: 1, pressureFloor: 1 },
+    critic: { collectAt: 6, retain: 4, pressureFloor: 1 },
+    researcher: { collectAt: 3, retain: 1, pressureFloor: 1 },
+    "fast-worker": { collectAt: 2, retain: 1, pressureFloor: 0 },
+    codex: { collectAt: 3, retain: 2, pressureFloor: 0 },
 };
 const settledAgents: Record<string, AgentDefinition> = {
     explorer: { model: "openai-codex/gpt-5.6-luna", description: "Read-only bounded repository evidence gathering.", thinkingLevel: "medium", tools: ["read", "grep", "find", "ls", "bash"], skillOptIns: ["codebase-exploration"], instructions: "Investigate one bounded repository question and return concise evidence with file references.", harness: "pi", childExtensionContributions: [] },
@@ -39,6 +51,7 @@ const historicalAgentSnapshots: Partial<Record<string, AgentDefinition[]>> = {
 export function settledAgentCatalog(): AgentCatalog { return { schemaVersion: 1, agents: structuredClone(settledAgents) }; }
 export function settledAgentDefinition(name: string): AgentDefinition { const definition = settledAgents[name]; if (!definition) throw new Error(`Unsupported settled agent: ${name}`); return structuredClone(definition); }
 export function settledMeshRoleSets(): Record<string, string[]> { return structuredClone(settledRoleSets); }
+export function settledMeshGcConfig(): MeshGcConfig { return { contextHeadroomTokens: 32768, periodicIntervalMs: 5000, activityHeartbeatMs: 2000, activityStaleMs: 10000, roles: structuredClone(settledGcRoles) }; }
 
 export function canonicalJson(value: unknown): string { if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`; if (value && typeof value === "object") return `{${Object.entries(value as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b)).map(([key, item]) => `${JSON.stringify(key)}:${canonicalJson(item)}`).join(",")}}`; return JSON.stringify(value); }
 function same(left: unknown, right: unknown): boolean { return canonicalJson(left) === canonicalJson(right); }
@@ -47,6 +60,7 @@ function exact(value: Record<string, unknown>, keys: readonly string[], label: s
 function text(value: unknown, label: string): string { if (typeof value !== "string" || !value.trim()) throw new Error(`${label} must be a non-empty string`); return value; }
 function strings(value: unknown, label: string): string[] { if (!Array.isArray(value) || value.some(item => typeof item !== "string" || !item.trim())) throw new Error(`${label} must be an array of non-empty strings`); const out = [...value] as string[]; if (new Set(out).size !== out.length) throw new Error(`${label} must not contain duplicates`); return out; }
 function positiveInteger(value: unknown, label: string): number { if (!Number.isInteger(value) || Number(value) <= 0) throw new Error(`${label} must be a positive integer`); return Number(value); }
+function nonNegativeInteger(value: unknown, label: string): number { if (!Number.isInteger(value) || Number(value) < 0) throw new Error(`${label} must be a non-negative integer`); return Number(value); }
 function uuid(value: unknown, label: string): string { const id = text(value, label); if (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(id)) throw new Error(`${label} must be a UUID`); return id; }
 
 function nixStoreContributionIdentity(path: string): string | undefined { const match = path.match(/^\/nix\/store\/[0-9a-z]{32}-([^/]+)\/(.+)$/u); return match ? `${match[1]}/${match[2]}` : undefined; }
@@ -80,13 +94,17 @@ export function validateAgentDefinitionSnapshot(name: string, value: unknown, la
     return structuredClone(raw) as unknown as AgentDefinition;
 }
 export function validateOrchestrationConfig(value: unknown): OrchestrationConfig {
-    const root = object(value, "orchestration config"); exact(root, ["schemaVersion", "stateRoot", "tmux", "returnParentCommand", "parentNavigationHint", "historyViewerExtension", "popupExtension", "orchestrationExtension", "childBridgeExtension", "harnesses", "natureHandleWords", "roleSets", "budgets"], "orchestration config");
-    if (root.schemaVersion !== 1) throw new Error("Unsupported orchestration config schemaVersion");
+    const root = object(value, "orchestration config"); exact(root, ["schemaVersion", "stateRoot", "tmux", "returnParentCommand", "parentNavigationHint", "historyViewerExtension", "popupExtension", "orchestrationExtension", "childBridgeExtension", "harnesses", "natureHandleWords", "roleSets", "budgets", "gc"], "orchestration config");
+    if (root.schemaVersion !== 2) throw new Error("Unsupported orchestration config schemaVersion");
     const harnesses: Record<string, HarnessRuntimeConfig> = {};
     for (const [name, value] of Object.entries(object(root.harnesses, "harnesses"))) { const item = object(value, `harnesses.${name}`); const keys = ["adapter", "command", ...(item.workerCommand === undefined ? [] : ["workerCommand"]), ...(item.workerEntrypoint === undefined ? [] : ["workerEntrypoint"]), ...(item.bridgeReadyTimeoutMs === undefined ? [] : ["bridgeReadyTimeoutMs"])]; exact(item, keys, `harnesses.${name}`); if (item.adapter !== "pi-native" && item.adapter !== "cursor-acp" && item.adapter !== "codex-acp") throw new Error(`harnesses.${name}.adapter is invalid`); harnesses[name] = { adapter: item.adapter, command: text(item.command, `harnesses.${name}.command`), ...(item.workerCommand === undefined ? {} : { workerCommand: text(item.workerCommand, `harnesses.${name}.workerCommand`) }), ...(item.workerEntrypoint === undefined ? {} : { workerEntrypoint: text(item.workerEntrypoint, `harnesses.${name}.workerEntrypoint`) }), ...(item.bridgeReadyTimeoutMs === undefined ? {} : { bridgeReadyTimeoutMs: positiveInteger(item.bridgeReadyTimeoutMs, `harnesses.${name}.bridgeReadyTimeoutMs`) }) }; }
     const roleSets = Object.fromEntries(Object.entries(object(root.roleSets, "roleSets")).map(([mode, roles]) => [mode, strings(roles, `roleSets.${mode}`)])); if (!same(roleSets, settledRoleSets)) throw new Error("roleSets must exactly match the settled mode role sets");
     const budgetRaw = object(root.budgets, "budgets"); exact(budgetRaw, ["maxLiveAgents", "maxConcurrentTasks", "maxTasksPerMesh"], "budgets"); const budgets = { maxLiveAgents: positiveInteger(budgetRaw.maxLiveAgents, "budgets.maxLiveAgents"), maxConcurrentTasks: positiveInteger(budgetRaw.maxConcurrentTasks, "budgets.maxConcurrentTasks"), maxTasksPerMesh: positiveInteger(budgetRaw.maxTasksPerMesh, "budgets.maxTasksPerMesh") }; if (budgets.maxConcurrentTasks > budgets.maxTasksPerMesh) throw new Error("maxConcurrentTasks must not exceed maxTasksPerMesh");
-    return { schemaVersion: 1, stateRoot: text(root.stateRoot, "stateRoot"), tmux: text(root.tmux, "tmux"), returnParentCommand: text(root.returnParentCommand, "returnParentCommand"), parentNavigationHint: text(root.parentNavigationHint, "parentNavigationHint"), historyViewerExtension: text(root.historyViewerExtension, "historyViewerExtension"), popupExtension: text(root.popupExtension, "popupExtension"), orchestrationExtension: text(root.orchestrationExtension, "orchestrationExtension"), childBridgeExtension: text(root.childBridgeExtension, "childBridgeExtension"), harnesses, natureHandleWords: strings(root.natureHandleWords, "natureHandleWords"), roleSets, budgets };
+    const gcRaw = object(root.gc, "gc"); exact(gcRaw, ["contextHeadroomTokens", "periodicIntervalMs", "activityHeartbeatMs", "activityStaleMs", "roles"], "gc");
+    const gcRolesRaw = object(gcRaw.roles, "gc.roles"); if (!same(Object.keys(gcRolesRaw).sort(), Object.keys(settledGcRoles).sort())) throw new Error("gc.roles must exactly cover the settled agent roles");
+    const roles = Object.fromEntries(Object.entries(gcRolesRaw).map(([name, value]) => { const item = object(value, `gc.roles.${name}`); exact(item, ["collectAt", "retain", "pressureFloor"], `gc.roles.${name}`); const policy = { collectAt: positiveInteger(item.collectAt, `gc.roles.${name}.collectAt`), retain: nonNegativeInteger(item.retain, `gc.roles.${name}.retain`), pressureFloor: nonNegativeInteger(item.pressureFloor, `gc.roles.${name}.pressureFloor`) }; if (policy.collectAt < policy.retain || policy.retain < policy.pressureFloor) throw new Error(`gc.roles.${name} must satisfy collectAt >= retain >= pressureFloor`); return [name, policy]; }));
+    const gc = { contextHeadroomTokens: positiveInteger(gcRaw.contextHeadroomTokens, "gc.contextHeadroomTokens"), periodicIntervalMs: positiveInteger(gcRaw.periodicIntervalMs, "gc.periodicIntervalMs"), activityHeartbeatMs: positiveInteger(gcRaw.activityHeartbeatMs, "gc.activityHeartbeatMs"), activityStaleMs: positiveInteger(gcRaw.activityStaleMs, "gc.activityStaleMs"), roles }; if (gc.activityStaleMs <= gc.activityHeartbeatMs) throw new Error("gc.activityStaleMs must exceed activityHeartbeatMs");
+    return { schemaVersion: 2, stateRoot: text(root.stateRoot, "stateRoot"), tmux: text(root.tmux, "tmux"), returnParentCommand: text(root.returnParentCommand, "returnParentCommand"), parentNavigationHint: text(root.parentNavigationHint, "parentNavigationHint"), historyViewerExtension: text(root.historyViewerExtension, "historyViewerExtension"), popupExtension: text(root.popupExtension, "popupExtension"), orchestrationExtension: text(root.orchestrationExtension, "orchestrationExtension"), childBridgeExtension: text(root.childBridgeExtension, "childBridgeExtension"), harnesses, natureHandleWords: strings(root.natureHandleWords, "natureHandleWords"), roleSets, budgets, gc };
 }
 /** Transitional function name for downstream W2; validation is mesh-v2 only. */
 export const validateDelegationConfig = validateOrchestrationConfig;

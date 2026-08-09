@@ -13,6 +13,11 @@
     defaultModel = "gpt-5.6-sol";
     defaultThinkingLevel = "medium";
   };
+  # Sol alone opts into Pi's long-context tier; requests beyond 272K may price the
+  # whole request at that tier. Luna and Terra deliberately retain provider metadata.
+  modelOverrides = {
+    providers."openai-codex".modelOverrides."gpt-5.6-sol".contextWindow = 1050000;
+  };
 in
   delib.module {
     name = "programs.pi-coding-agent";
@@ -97,6 +102,7 @@ in
           value.source = homeConfig.lib.file.mkOutOfStoreSymlink "${cfg.configDir}/${name}";
         }) [
           "auth.json"
+          "models.json"
           "agent-modes.json"
           "agent-catalog.json"
           "orchestration.json"
@@ -142,7 +148,9 @@ in
         emergencyLauncher
         emergencyFullLauncher
       ];
-      home.file = lib.mkIf cfg.emergency.enable (sharedEmergencyFiles
+      home.file = {
+        "${cfg.configDir}/models.json".text = builtins.toJSON modelOverrides;
+      } // lib.optionalAttrs cfg.emergency.enable (sharedEmergencyFiles
         // {
           "${emergencyConfigDir}/settings.json".text = builtins.toJSON emergencySettings;
         });

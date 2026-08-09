@@ -177,3 +177,11 @@ export function withMeshAgentLock<T>(stateRoot: string, meshId: string, agentId:
     assertUuid(agentId, "agent ID");
     return withMeshLock(stateRoot, meshId, () => withDirectoryLock(join(meshDirectory(stateRoot, meshId), "agents", agentId), operation));
 }
+
+/** Serialize one agent's complete external termination attempt without holding store locks over tmux I/O. */
+export async function withAgentTerminationLock<T>(stateRoot: string, meshId: string, agentId: string, operation: () => Promise<T>): Promise<T> {
+    assertUuid(agentId, "agent ID");
+    const directory = join(meshDirectory(stateRoot, meshId), "agents", agentId, "termination");
+    await mkdir(directory, { recursive: true, mode: 0o700 });
+    return withDirectoryLock(directory, operation);
+}

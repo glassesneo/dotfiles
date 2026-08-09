@@ -11,12 +11,27 @@ import {
 export const MAX_MODEL_VISIBLE_BYTES = 50 * 1024;
 export const MAX_MODEL_VISIBLE_LINES = 2000;
 
+export type ModelVisibleStop = {
+    stopRequestId: string;
+    state: NonNullable<AgentSnapshot["stop"]>["state"];
+    source: NonNullable<AgentSnapshot["stop"]>["source"];
+    reason: string;
+    requestedAt: string;
+    updatedAt: string;
+    terminatingAt: string | null;
+    confirmedAt: string | null;
+    failedAt: string | null;
+    failureCategory: string | null;
+};
+
 export type MinimalAgentTask = {
     agentId: string;
     taskId?: string;
     agent: string;
     summary: string;
     agentState: AgentState;
+    activity: AgentSnapshot["activity"];
+    stop: ModelVisibleStop | null;
     taskState?: TaskState;
     output?: string;
     error?: string;
@@ -34,6 +49,8 @@ export type MinimalSubmitResult = {
     agent: string;
     summary: string;
     agentState: AgentState;
+    activity: AgentSnapshot["activity"];
+    stop: ModelVisibleStop | null;
     taskState: TaskState;
     output?: string;
     error?: string;
@@ -60,6 +77,22 @@ export function sanitizeSnapshot(snapshot: AgentSnapshot): AgentSnapshot {
     return { ...snapshot, task };
 }
 
+export function projectModelVisibleStop(stop: AgentSnapshot["stop"]): ModelVisibleStop | null {
+    if (!stop) return null;
+    return {
+        stopRequestId: stop.stopRequestId,
+        state: stop.state,
+        source: stop.source,
+        reason: stop.reason,
+        requestedAt: stop.requestedAt,
+        updatedAt: stop.updatedAt,
+        terminatingAt: stop.terminatingAt ?? null,
+        confirmedAt: stop.confirmedAt ?? null,
+        failedAt: stop.failedAt ?? null,
+        failureCategory: stop.failureCategory ?? null,
+    };
+}
+
 export function projectMinimalAgentTask(rawSnapshot: AgentSnapshot): MinimalAgentTask {
     const snapshot = sanitizeSnapshot(rawSnapshot);
     const task = snapshot.task;
@@ -68,6 +101,8 @@ export function projectMinimalAgentTask(rawSnapshot: AgentSnapshot): MinimalAgen
         agent: snapshot.agent.agent,
         summary: task ? promptSummary(task.request.prompt) : "No task",
         agentState: snapshot.status.state,
+        activity: snapshot.activity,
+        stop: projectModelVisibleStop(snapshot.stop),
     };
     if (task) {
         projected.taskId = task.request.taskId;
@@ -101,6 +136,8 @@ export function projectMinimalSubmitResult(
         agent: projected.agent,
         summary: projected.summary,
         agentState: projected.agentState,
+        activity: projected.activity,
+        stop: projected.stop,
         taskState: projected.taskState,
         ...(projected.output ? { output: projected.output } : {}),
         ...(projected.error ? { error: projected.error } : {}),
@@ -122,12 +159,16 @@ function statusWithoutAccountingIds(status: AgentStatus): DebugAgentStatus {
 export function projectDebugSnapshot(rawSnapshot: AgentSnapshot): {
     agent: AgentSnapshot["agent"];
     status: DebugAgentStatus;
+    activity: AgentSnapshot["activity"];
+    stop: ModelVisibleStop | null;
     task: AgentSnapshot["task"];
 } {
     const snapshot = sanitizeSnapshot(rawSnapshot);
     return {
         agent: snapshot.agent,
         status: statusWithoutAccountingIds(snapshot.status),
+        activity: snapshot.activity,
+        stop: projectModelVisibleStop(snapshot.stop),
         task: snapshot.task,
     };
 }

@@ -33,10 +33,14 @@ export async function bindMeshEndpoint(stateRoot: string, meshId: string, input:
     if (!input.sessionFile.trim()) throw new Error("Durable mesh endpoint requires a persisted session file");
     if (input.kind === "agent") { if (!input.agentId) throw new Error("Agent endpoint requires agentId"); assertUuid(input.agentId, "agentId"); }
     const endpoint: MeshEndpoint = { schemaVersion: 1, meshId, ...input, online: true, updatedAt: new Date().toISOString() };
-    await atomic(endpointPath(stateRoot, meshId, endpoint.endpointId), endpoint); return endpoint;
+    await withMeshLock(stateRoot, meshId, async () => atomic(endpointPath(stateRoot, meshId, endpoint.endpointId), endpoint)); return endpoint;
 }
-export async function setMeshEndpointOffline(stateRoot: string, meshId: string, endpointId: string): Promise<void> { const path = endpointPath(stateRoot, meshId, endpointId); const raw = await optional<unknown>(path); const endpoint = raw === undefined ? undefined : validateEndpoint(raw, meshId, endpointId); if (endpoint) await atomic(path, { ...endpoint, online: false, updatedAt: new Date().toISOString() }); }
+export async function setMeshEndpointOffline(stateRoot: string, meshId: string, endpointId: string, expected?: Pick<MeshEndpoint, "sessionId" | "sessionFile">): Promise<void> { await withMeshLock(stateRoot, meshId, async () => { const path = endpointPath(stateRoot, meshId, endpointId); const raw = await optional<unknown>(path); const endpoint = raw === undefined ? undefined : validateEndpoint(raw, meshId, endpointId); if (!endpoint || expected && (endpoint.sessionId !== expected.sessionId || endpoint.sessionFile !== expected.sessionFile)) return; await atomic(path, { ...endpoint, online: false, updatedAt: new Date().toISOString() }); }); }
 export async function readMeshEndpoint(stateRoot: string, meshId: string, endpointId: string): Promise<MeshEndpoint> { return validateEndpoint(await json<unknown>(endpointPath(stateRoot, meshId, endpointId)), meshId, endpointId); }
+export async function isLiveMeshEndpointBinding(stateRoot: string, meshId: string, binding: MeshEndpoint): Promise<boolean> {
+    const current = await readMeshEndpoint(stateRoot, meshId, binding.endpointId).catch(() => undefined);
+    return Boolean(current?.online && current.kind === binding.kind && current.agentId === binding.agentId && current.sessionId === binding.sessionId && current.sessionFile === binding.sessionFile);
+}
 
 export async function resolveRouteEndpoint(stateRoot: string, meshId: string, receiver: string, callerAgentId?: string): Promise<MeshEndpoint> {
     let endpointId: string;

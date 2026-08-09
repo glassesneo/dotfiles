@@ -5,6 +5,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { buildLaunchEnvelope, policyDigest, settledAgentCatalog, settledAgentDefinition, validateLaunchEnvelope } from "../extensions_src/utilities/agent_types.ts";
+import { availableContext, publishAgentActivity } from "../extensions_src/utilities/orchestration_activity.ts";
+import { bindAgentRuntime } from "../extensions_src/utilities/orchestration_runtime.ts";
 import {
     attachRootMesh,
     beginMeshClose,
@@ -53,19 +55,46 @@ async function createPublishedAgent(stateRoot: string, meshId: string, epochId: 
     await writeFile(envelopePath, `${JSON.stringify(envelope)}\n`, { mode: 0o600 });
     await publishAgent(stateRoot, meshId, prepared.paths, { agentId: prepared.agentId, epochId, agent: role, harness: definition.harness, cwd: stateRoot, agentSnapshot: definition, launchEnvelope: envelopePath, tmux, capabilities, creatorSessionId: "creator" });
     await patchAgentStatus(stateRoot, meshId, prepared.agentId, { state: "idle", bridgeReady: true });
+    const runtimeId = randomUUID(); await bindAgentRuntime(stateRoot, meshId, prepared.agentId, { runtimeId, kind: "external" }); const now = new Date().toISOString(); await publishAgentActivity(stateRoot, meshId, prepared.agentId, { runtimeId, phase: "idle", acceptingTask: true, pendingMessages: false, phaseSince: now, observedAt: now, heartbeatAt: now, context: availableContext(10, 100_000, 100) });
     return { ...prepared, reservation };
 }
 
 void test("persisted roots reuse an open lease, close durably, and require a fresh mesh after close", async () => withRoot("mesh-lifecycle-", async root => {
     const mesh = await initializeMesh(root, { rootSessionId: "session", rootSessionFile: "/session.jsonl", recoverable: true, budgets });
-    const first = await attachRootMesh(root, mesh.meshId, { rootSessionId: "session", rootSessionFile: "/session.jsonl", pid: 101, tmuxServerPid: "10", tmuxSessionId: "$1" });
-    const reload = await attachRootMesh(root, mesh.meshId, { rootSessionId: "session", rootSessionFile: "/session.jsonl", pid: 101, tmuxServerPid: "10", tmuxSessionId: "$1" });
+    const first = await attachRootMesh(root, mesh.meshId, { rootSessionId: "session", budgets, rootSessionFile: "/session.jsonl", pid: 101, tmuxServerPid: "10", tmuxSessionId: "$1" });
+    const reload = await attachRootMesh(root, mesh.meshId, { rootSessionId: "session", budgets, rootSessionFile: "/session.jsonl", pid: 101, tmuxServerPid: "10", tmuxSessionId: "$1" });
     assert.equal(reload.leaseId, first.leaseId);
     assert.equal((await beginMeshClose(root, mesh.meshId, first.leaseId)).state, "closing");
     assert.equal((await completeMeshClose(root, mesh.meshId, first.leaseId)).state, "closed");
-    await assert.rejects(attachRootMesh(root, mesh.meshId, { rootSessionId: "session", rootSessionFile: "/session.jsonl" }), /closed/u);
+    await assert.rejects(attachRootMesh(root, mesh.meshId, { rootSessionId: "session", budgets, rootSessionFile: "/session.jsonl" }), /closed/u);
     const reopened = await initializeMesh(root, { rootSessionId: "session", rootSessionFile: "/session.jsonl", recoverable: true, budgets });
     assert.notEqual(reopened.meshId, mesh.meshId);
+}));
+
+void test("root attach migrates only the exact legacy budget and rejects visible unexpected mismatches", async () => withRoot("mesh-budget-compatibility-", async root => {
+    const generated = { maxLiveAgents: 20, maxConcurrentTasks: 6, maxTasksPerMesh: 256 };
+    const legacy = await initializeMesh(root, { rootSessionId: "legacy", recoverable: true, budgets: { maxLiveAgents: 12, maxConcurrentTasks: 6, maxTasksPerMesh: 256 } });
+    await attachRootMesh(root, legacy.meshId, { rootSessionId: "legacy", budgets: generated });
+    const migrated = await readMesh(root, legacy.meshId);
+    assert.deepEqual(migrated.budgets, generated);
+    assert.deepEqual(migrated.budgetMigration && { type: migrated.budgetMigration.type, from: migrated.budgetMigration.from, to: migrated.budgetMigration.to }, { type: "mesh_budget_migrated", from: { maxLiveAgents: 12, maxConcurrentTasks: 6, maxTasksPerMesh: 256 }, to: generated });
+    await attachRootMesh(root, legacy.meshId, { rootSessionId: "legacy", budgets: generated });
+    assert.deepEqual((await readMesh(root, legacy.meshId)).budgetMigration, migrated.budgetMigration);
+
+    const current = await initializeMesh(root, { rootSessionId: "current", recoverable: true, budgets: generated });
+    await attachRootMesh(root, current.meshId, { rootSessionId: "current", budgets: generated });
+    assert.equal((await readMesh(root, current.meshId)).budgetMigration, undefined);
+
+    const unexpectedBudgets = { maxLiveAgents: 13, maxConcurrentTasks: 6, maxTasksPerMesh: 256 };
+    const unexpected = await initializeMesh(root, { rootSessionId: "unexpected", recoverable: true, budgets: unexpectedBudgets });
+    await assert.rejects(attachRootMesh(root, unexpected.meshId, { rootSessionId: "unexpected", budgets: generated }), error => {
+        assert.match((error as Error).message, /budget mismatch/u);
+        assert.match((error as Error).message, /maxLiveAgents[^}]*13/u);
+        assert.match((error as Error).message, /maxLiveAgents[^}]*20/u);
+        return true;
+    });
+    assert.deepEqual((await readMesh(root, unexpected.meshId)).budgets, unexpectedBudgets);
+    await assert.rejects(access(meshPaths(root, unexpected.meshId).lease), error => (error as NodeJS.ErrnoException).code === "ENOENT");
 }));
 
 void test("contended mesh locking reclaims a dead owner without losing exclusion or leaking lock paths", async () => withRoot("mesh-lock-reclaim-", async root => {
@@ -107,20 +136,20 @@ void test("an idle agent poll does not queue behind unrelated mesh-wide work", a
 
 void test("stale persisted leases recover only with dead-PID, same-session, and matching-tmux evidence", async () => withRoot("mesh-lease-", async root => {
     const mesh = await initializeMesh(root, { rootSessionId: "session", rootSessionFile: "/session.jsonl", recoverable: true, budgets });
-    const first = await attachRootMesh(root, mesh.meshId, { rootSessionId: "session", rootSessionFile: "/session.jsonl", pid: 101, tmuxServerPid: "10", tmuxSessionId: "$1" });
+    const first = await attachRootMesh(root, mesh.meshId, { rootSessionId: "session", budgets, rootSessionFile: "/session.jsonl", pid: 101, tmuxServerPid: "10", tmuxSessionId: "$1" });
     for (const evidence of [
         { pidAlive: true, sameSession: true, tmuxMatches: true },
         { pidAlive: false, sameSession: false, tmuxMatches: true },
         { pidAlive: false, sameSession: true, tmuxMatches: false },
-    ]) await assert.rejects(attachRootMesh(root, mesh.meshId, { rootSessionId: "session", rootSessionFile: "/session.jsonl", pid: 202, inspectExisting: async () => evidence }), /active root lease/u);
-    const recovered = await attachRootMesh(root, mesh.meshId, { rootSessionId: "session", rootSessionFile: "/session.jsonl", pid: 202, tmuxServerPid: "10", tmuxSessionId: "$1", inspectExisting: async existing => ({ pidAlive: false, sameSession: existing.rootSessionId === "session" && existing.rootSessionFile === "/session.jsonl", tmuxMatches: existing.tmuxServerPid === "10" && existing.tmuxSessionId === "$1" }) });
+    ]) await assert.rejects(attachRootMesh(root, mesh.meshId, { rootSessionId: "session", budgets, rootSessionFile: "/session.jsonl", pid: 202, inspectExisting: async () => evidence }), /active root lease/u);
+    const recovered = await attachRootMesh(root, mesh.meshId, { rootSessionId: "session", budgets, rootSessionFile: "/session.jsonl", pid: 202, tmuxServerPid: "10", tmuxSessionId: "$1", inspectExisting: async existing => ({ pidAlive: false, sameSession: existing.rootSessionId === "session" && existing.rootSessionFile === "/session.jsonl", tmuxMatches: existing.tmuxServerPid === "10" && existing.tmuxSessionId === "$1" }) });
     assert.notEqual(recovered.leaseId, first.leaseId);
 }));
 
 void test("an ephemeral root remains nonrecoverable while supporting the persisted task lifecycle", async () => withRoot("mesh-ephemeral-", async root => {
     const mesh = await initializeMesh(root, { rootSessionId: "memory", recoverable: false, budgets });
-    await attachRootMesh(root, mesh.meshId, { rootSessionId: "memory", pid: 101 });
-    await assert.rejects(attachRootMesh(root, mesh.meshId, { rootSessionId: "other", pid: 202, inspectExisting: async () => ({ pidAlive: false, sameSession: false, tmuxMatches: true }) }), /nonrecoverable/u);
+    await attachRootMesh(root, mesh.meshId, { rootSessionId: "memory", budgets, pid: 101 });
+    await assert.rejects(attachRootMesh(root, mesh.meshId, { rootSessionId: "other", budgets, pid: 202, inspectExisting: async () => ({ pidAlive: false, sameSession: false, tmuxMatches: true }) }), /nonrecoverable/u);
     const roles = { worker: settledAgentDefinition("worker") };
     const epoch = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", roleSet: ["worker"], roles });
     const agent = await createPublishedAgent(root, mesh.meshId, epoch.epochId);
@@ -201,7 +230,7 @@ void test("a released reservation cannot be resurrected by a delayed task commit
 void test("closing admission checkpoints reject preparation, publication, and task commit without leaving reserved capacity", async () => withRoot("mesh-closing-admission-", async root => {
     const definition = settledAgentDefinition("worker");
     const preparationMesh = await initializeMesh(root, { rootSessionId: "prepare", recoverable: true, budgets });
-    const preparationLease = await attachRootMesh(root, preparationMesh.meshId, { rootSessionId: "prepare" });
+    const preparationLease = await attachRootMesh(root, preparationMesh.meshId, { rootSessionId: "prepare", budgets });
     const preparationReservation = await reserveMeshCapacity(root, preparationMesh.meshId, "new-agent-task");
     await beginMeshClose(root, preparationMesh.meshId, preparationLease.leaseId);
     await assert.rejects(prepareAgent(root, preparationMesh.meshId, { reservationId: preparationReservation.reservationId, agent: "worker", harness: "pi", cwd: root, agentSnapshot: definition, launchEnvelope: "pending", epochId: randomUUID(), provenance: { creatorSessionId: "creator" }, capabilities }), /closing/u);
@@ -213,13 +242,13 @@ void test("closing admission checkpoints reject preparation, publication, and ta
     const prepared = await prepareAgent(root, publicationMesh.meshId, { reservationId: publicationReservation.reservationId, agent: "worker", harness: "pi", cwd: root, agentSnapshot: definition, launchEnvelope: "pending", epochId: epoch.epochId, provenance: { creatorSessionId: "creator" }, capabilities });
     const envelope = buildLaunchEnvelope({ meshId: publicationMesh.meshId, agentId: prepared.agentId, epochId: epoch.epochId, agent: "worker", mode: "ops", roleSet: ["worker"], catalog: settledAgentCatalog(), childExtensions: { worker: ["/popup.ts", "/orchestration.ts", "/bridge.ts"] } });
     const envelopePath = join(prepared.paths.directory, "launch-envelope.json"); await writeFile(envelopePath, JSON.stringify(envelope));
-    const publicationLease = await attachRootMesh(root, publicationMesh.meshId, { rootSessionId: "publish" }); await beginMeshClose(root, publicationMesh.meshId, publicationLease.leaseId);
+    const publicationLease = await attachRootMesh(root, publicationMesh.meshId, { rootSessionId: "publish", budgets }); await beginMeshClose(root, publicationMesh.meshId, publicationLease.leaseId);
     await assert.rejects(publishAgent(root, publicationMesh.meshId, prepared.paths, { agentId: prepared.agentId, epochId: epoch.epochId, agent: "worker", harness: "pi", cwd: root, agentSnapshot: definition, launchEnvelope: envelopePath, tmux, capabilities, creatorSessionId: "creator" }), /closing/u);
 
     const taskMesh = await initializeMesh(root, { rootSessionId: "task", recoverable: true, budgets });
     const taskEpoch = await ensurePolicyEpoch(root, taskMesh.meshId, { mode: "ops", roleSet: ["worker"], roles: { worker: definition } });
     const agent = await createPublishedAgent(root, taskMesh.meshId, taskEpoch.epochId); const taskReservation = await reserveMeshCapacity(root, taskMesh.meshId, "existing-agent-task", agent.agentId); const requestedTaskId = randomUUID();
-    const taskLease = await attachRootMesh(root, taskMesh.meshId, { rootSessionId: "task" }); await beginMeshClose(root, taskMesh.meshId, taskLease.leaseId);
+    const taskLease = await attachRootMesh(root, taskMesh.meshId, { rootSessionId: "task", budgets }); await beginMeshClose(root, taskMesh.meshId, taskLease.leaseId);
     await assert.rejects(createTask(root, taskMesh.meshId, agent.agentId, "must not commit", taskReservation.reservationId, requestedTaskId), /closing/u);
     await assert.rejects(access(taskPaths(root, taskMesh.meshId, requestedTaskId).request), error => (error as NodeJS.ErrnoException).code === "ENOENT");
 }));

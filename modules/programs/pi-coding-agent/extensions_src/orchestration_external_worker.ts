@@ -1,11 +1,14 @@
+import { randomUUID } from "node:crypto";
 import { access, readFile } from "node:fs/promises";
 import { basename, dirname, resolve } from "node:path";
 import { launchEnvelopeDigest, validateLaunchEnvelope } from "./utilities/agent_types.ts";
+import { externalContext, publishAgentActivity, type AgentActivityPhase } from "./utilities/orchestration_activity.ts";
+import { bindAgentRuntime } from "./utilities/orchestration_runtime.ts";
 import { agentPaths, claimPendingTask, failAgent, finishTask, markBridgeReady, readAgentSnapshot, readTaskCancellation } from "./utilities/orchestration_store.ts";
 import { emptyUsage, isTerminalAgent } from "./utilities/orchestration_types.ts";
 import { resolveExternalDriver, validateExternalWorkerConfig, type ExternalDriver, type ExternalWorkerConfig, type ExternalWorkerEvent } from "./utilities/orchestration_external_driver.ts";
 
-interface WorkerDependencies { createDriver?: (config: ExternalWorkerConfig, event: (event: ExternalWorkerEvent) => void) => ExternalDriver; sleep?: (ms: number) => Promise<void> }
+interface WorkerDependencies { createDriver?: (config: ExternalWorkerConfig, event: (event: ExternalWorkerEvent) => void) => ExternalDriver; publishAgentActivity?: typeof publishAgentActivity; activityHeartbeatMs?: number; now?: () => number; sleep?: (ms: number) => Promise<void> }
 
 function requireEnv(env: NodeJS.ProcessEnv, name: string): string { const value = env[name]; if (!value?.trim()) throw new Error(`${name} is required`); return value; }
 function sleep(ms: number): Promise<void> { return new Promise(resolve => setTimeout(resolve, ms)); }
@@ -61,19 +64,21 @@ export async function runExternalWorker(env: NodeJS.ProcessEnv = process.env, de
     const view = new TerminalView(agentId, agent, route.display);
     const event = (workerEvent: ExternalWorkerEvent) => view.event(workerEvent);
     const driver = dependencies.createDriver?.(config, event) ?? route.create(event);
+    const runtimeId = randomUUID(); await bindAgentRuntime(stateRoot, meshId, agentId, { runtimeId, kind: "external" }); let activityPhase: AgentActivityPhase = "starting"; let phaseSince = new Date((dependencies.now ?? Date.now)()).toISOString(); let lastHeartbeat = Number.NEGATIVE_INFINITY;
+    const publishActivity = async (phase = activityPhase, heartbeat = false) => { const now = (dependencies.now ?? Date.now)(); if (heartbeat && now - lastHeartbeat < (dependencies.activityHeartbeatMs ?? 2000)) return; if (phase !== activityPhase) { activityPhase = phase; phaseSince = new Date(now).toISOString(); } lastHeartbeat = now; const observedAt = new Date(now).toISOString(); await (dependencies.publishAgentActivity ?? publishAgentActivity)(stateRoot, meshId, agentId, { runtimeId, phase: activityPhase, acceptingTask: activityPhase === "idle", pendingMessages: false, phaseSince, observedAt, heartbeatAt: observedAt, context: externalContext() }); };
     let stopping = false;
     let stopPromise: Promise<void> | undefined;
     let shutdownPromise: Promise<void> | undefined;
     let activeTaskId: string | undefined;
     let parentTerminalOutcome: "stopped" | "failed" | undefined;
     const shutdown = (): Promise<void> => shutdownPromise ??= driver.shutdown().catch(() => {});
-    const stop = (reason: string, preserveTerminalOutcome?: "stopped" | "failed"): Promise<void> => {
+    const stop = (reason: string, preserveTerminalOutcome?: "stopped" | "failed", rootManagedStopping = false): Promise<void> => {
         stopPromise ??= (async () => {
             stopping = true;
             parentTerminalOutcome = preserveTerminalOutcome;
             await driver.cancel().catch(() => {});
-            if (activeTaskId) await finishTask(stateRoot, meshId, activeTaskId, { outcome: preserveTerminalOutcome ?? "stopped", usage: emptyUsage(), turns: 1, error: reason }).catch(() => {});
-            if (!preserveTerminalOutcome) await failAgent(stateRoot, meshId, agentId, reason, true, { overrideTerminalReason: true }).catch(() => {});
+            if (activeTaskId) await finishTask(stateRoot, meshId, activeTaskId, { outcome: preserveTerminalOutcome ?? "stopped", usage: emptyUsage(), turns: 1, error: reason }, runtimeId).catch(() => {});
+            if (!preserveTerminalOutcome && !rootManagedStopping) await failAgent(stateRoot, meshId, agentId, reason, false, { overrideTerminalReason: true, expectedRuntimeId: runtimeId }).catch(() => {});
             await shutdown();
         })();
         return stopPromise;
@@ -83,15 +88,18 @@ export async function runExternalWorker(env: NodeJS.ProcessEnv = process.env, de
     process.once("SIGINT", () => signal("SIGINT"));
     process.once("SIGHUP", () => signal("SIGHUP"));
     try {
+        await publishActivity("starting");
         await driver.start();
         const driverClosed = driver.waitForClose().then(driverError => ({ driverError }));
-        await markBridgeReady(stateRoot, meshId, agentId, launchEnvelopeDigest(envelope));
+        await markBridgeReady(stateRoot, meshId, agentId, launchEnvelopeDigest(envelope), runtimeId);
         view.event({ type: "state", text: "ready" });
+        await publishActivity("idle");
         while (!stopping) {
+            await publishActivity(activityPhase, true).catch(() => {});
             const snapshot = await readAgentSnapshot(stateRoot, meshId, agentId);
             if (isTerminalAgent(snapshot.status.state)) { await stop(snapshot.status.exitReason ?? "Stopped by parent", snapshot.status.state === "failed" ? "failed" : "stopped"); break; }
-            if (snapshot.status.state === "stopping") { await stop(snapshot.status.exitReason ?? "Stopped by parent"); break; }
-            const task = await claimPendingTask(stateRoot, meshId, agentId);
+            if (snapshot.status.state === "stopping") { await stop(snapshot.status.exitReason ?? "Stopped by parent", undefined, true); break; }
+            const task = await claimPendingTask(stateRoot, meshId, agentId, runtimeId);
             if (!task) {
                 const closed = await Promise.race([wait(100).then(() => undefined), driverClosed]);
                 if (closed) throw closed.driverError;
@@ -100,6 +108,7 @@ export async function runExternalWorker(env: NodeJS.ProcessEnv = process.env, de
                 continue;
             }
             activeTaskId = task.request.taskId;
+            await publishActivity("running");
             view.task(task.request.prompt.split(/\r?\n/u).find(Boolean) ?? "Task");
             const prompt = [definition.instructions.trim(), task.request.prompt].filter(Boolean).join("\n\nDelegated task:\n");
             let turnSettled = false;
@@ -108,13 +117,14 @@ export async function runExternalWorker(env: NodeJS.ProcessEnv = process.env, de
             const monitorStop = async (): Promise<void> => {
                 while (!turnSettled) {
                     await wait(50);
+                    await publishActivity(activityPhase, true).catch(() => {});
                     const status = (await readAgentSnapshot(stateRoot, meshId, agentId)).status;
                     if (isTerminalAgent(status.state)) {
                         await stop(status.exitReason ?? "Stopped by parent", status.state === "failed" ? "failed" : "stopped");
                         throw new Error(status.exitReason ?? "Stopped by parent");
                     }
                     if (status.state === "stopping") {
-                        await stop(status.exitReason ?? "Stopped by parent");
+                        await stop(status.exitReason ?? "Stopped by parent", undefined, true);
                         throw new Error(status.exitReason ?? "Stopped by parent");
                     }
                     if (await readTaskCancellation(stateRoot, meshId, activeTaskId!)) {
@@ -134,7 +144,7 @@ export async function runExternalWorker(env: NodeJS.ProcessEnv = process.env, de
                 if (stopping) continue;
                 if (!result) throw new Error("External task monitor settled without a task result");
                 if ("driverError" in result) { driverFailed = true; throw result.driverError; }
-                await finishTask(stateRoot, meshId, activeTaskId, { outcome: "succeeded", output: result.output, usage: emptyUsage(), turns: 1 });
+                await finishTask(stateRoot, meshId, activeTaskId, { outcome: "succeeded", output: result.output, usage: emptyUsage(), turns: 1 }, runtimeId);
                 view.outcome("succeeded", result.stopReason);
             } catch (error) {
                 if (stopPromise) await stopPromise;
@@ -142,21 +152,22 @@ export async function runExternalWorker(env: NodeJS.ProcessEnv = process.env, de
                 if (taskCancelled) await taskPromise.catch(() => undefined);
                 const outcome = parentTerminalOutcome ?? (stopping || taskCancelled ? "stopped" : "failed");
                 const output = taskCancelled ? driver.partialOutput?.() ?? "" : "";
-                await finishTask(stateRoot, meshId, activeTaskId, { outcome, output, usage: emptyUsage(), turns: 1, error: message });
+                await finishTask(stateRoot, meshId, activeTaskId, { outcome, output, usage: emptyUsage(), turns: 1, error: message }, runtimeId);
                 view.outcome(outcome, message);
                 if (!stopping && (driverFailed || driver.fatalError())) {
-                    await failAgent(stateRoot, meshId, agentId, message, false);
+                    await failAgent(stateRoot, meshId, agentId, message, false, { expectedRuntimeId: runtimeId });
                     stopping = true;
                 }
-            } finally { turnSettled = true; activeTaskId = undefined; }
+            } finally { turnSettled = true; activeTaskId = undefined; if (!stopping) await publishActivity("idle").catch(() => {}); }
         }
     } catch (error) {
         if (stopping) return;
         const message = errorText(error);
         view.outcome("failed", message);
-        await failAgent(stateRoot, meshId, agentId, message, false);
+        await failAgent(stateRoot, meshId, agentId, message, false, { expectedRuntimeId: runtimeId });
         throw error;
     } finally {
+        await publishActivity("offline").catch(() => {});
         await shutdown();
     }
 }
