@@ -10,13 +10,11 @@ import { buildLaunchEnvelope, settledAgentDefinition } from "../extensions_src/u
 import { resolveExternalDriver, validateExternalWorkerConfig, type ExternalDriver, type ExternalWorkerConfig } from "../extensions_src/utilities/orchestration_external_driver.ts";
 import { resolveHarnessAdapter } from "../extensions_src/utilities/orchestration_harness.ts";
 import { createTask, ensurePolicyEpoch, initializeMesh, markAgentStopping, prepareAgent, publishAgent, readAgentSnapshot, requestTaskCancellation, reserveMeshCapacity, taskPaths } from "../extensions_src/utilities/orchestration_store.ts";
+import { eventually, yieldToIO } from "./test_helpers.ts";
 
 const capabilities = { nativeScreen: true, taskDelivery: true, taskCompletion: true, taskCancellation: true, usage: false, interactiveInterventions: false, terminalHistory: false };
 const tmux = { socket: "/tmp/tmux", serverPid: "1", sessionId: "$1", sessionName: "main", windowId: "@1", paneId: "%1", windowName: "external" };
 const budgets = { maxLiveAgents: 4, maxConcurrentTasks: 4, maxTasksPerMesh: 20 };
-const yieldToIO = () => new Promise<void>(resolve => setImmediate(resolve));
-async function eventually(predicate: () => Promise<boolean>): Promise<void> { for (let n = 0; n < 500; n += 1) { if (await predicate()) return; await new Promise(resolve => setTimeout(resolve, 1)); } throw new Error("condition did not settle"); }
-
 type ExternalCase = { agent: "fast-worker" | "codex"; harness: "cursor-agent" | "codex"; config: ExternalWorkerConfig };
 const cases: ExternalCase[] = [
     { agent: "fast-worker", harness: "cursor-agent", config: { adapter: "cursor-acp", command: "/cursor", cwd: "/work", permissionPolicy: "allow-always" } },
@@ -103,7 +101,19 @@ void test("Cursor and Codex workers preserve completion, cancellation, and failu
             waitForClose: () => new Promise(() => {}),
             fatalError: () => undefined,
         };
-        const worker = runExternalWorker(fixture.env, { createDriver: () => driver, sleep: yieldToIO, activityHeartbeatMs: 1 });
+        let releaseObsoleteMonitor!: () => void;
+        const obsoleteMonitorGate = new Promise<void>(resolve => { releaseObsoleteMonitor = resolve; });
+        let releaseCancellationMonitor!: () => void;
+        const cancellationMonitorGate = new Promise<void>(resolve => { releaseCancellationMonitor = resolve; });
+        let monitorWaits = 0;
+        const controlledSleep = (milliseconds: number) => {
+            if (milliseconds !== 50) return yieldToIO();
+            monitorWaits += 1;
+            if (monitorWaits === 1) return obsoleteMonitorGate;
+            if (monitorWaits === 2) return cancellationMonitorGate;
+            return yieldToIO();
+        };
+        const worker = runExternalWorker(fixture.env, { createDriver: () => driver, sleep: controlledSleep, activityHeartbeatMs: 1 });
         await eventually(async () => { const snapshot = await readAgentSnapshot(fixture.root, fixture.meshId, fixture.agentId); return snapshot.status.bridgeReady && snapshot.activity.phase === "idle"; });
         const ready = await readAgentSnapshot(fixture.root, fixture.meshId, fixture.agentId);
         assert.deepEqual({ phase: ready.activity.phase, context: ready.activity.context.state, accepting: ready.activity.acceptingTask }, { phase: "idle", context: "unsupported", accepting: true });
@@ -115,9 +125,17 @@ void test("Cursor and Codex workers preserve completion, cancellation, and failu
 
         const cancel = await createTask(fixture.root, fixture.meshId, fixture.agentId, "cancel");
         await eventually(async () => (await readAgentSnapshot(fixture.root, fixture.meshId, fixture.agentId, cancel.request.taskId)).task?.status.state === "running");
-        const runningSequence = (await readAgentActivity(fixture.root, fixture.meshId, fixture.agentId))!.sequence; await eventually(async () => ((await readAgentActivity(fixture.root, fixture.meshId, fixture.agentId))?.sequence ?? 0) > runningSequence);
+        await eventually(async () => monitorWaits >= 2);
         await requestTaskCancellation(fixture.root, fixture.meshId, cancel.request.taskId, "caller cancelled");
-        await eventually(async () => cancels > 0);
+        releaseObsoleteMonitor();
+        await yieldToIO();
+        assert.equal(cancels, 0);
+        assert.equal((await readAgentSnapshot(fixture.root, fixture.meshId, fixture.agentId, cancel.request.taskId)).task?.status.state, "running");
+
+        const runningSequence = (await readAgentActivity(fixture.root, fixture.meshId, fixture.agentId))!.sequence;
+        releaseCancellationMonitor();
+        await eventually(async () => ((await readAgentActivity(fixture.root, fixture.meshId, fixture.agentId))?.sequence ?? 0) > runningSequence);
+        await eventually(async () => cancels === 1);
         rejectCancelled(new Error("cancelled"));
         await eventually(async () => (await readAgentSnapshot(fixture.root, fixture.meshId, fixture.agentId, cancel.request.taskId)).task?.status.state === "stopped");
         assert.equal((await readAgentSnapshot(fixture.root, fixture.meshId, fixture.agentId, cancel.request.taskId)).task?.result?.output, "partial");

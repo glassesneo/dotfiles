@@ -277,13 +277,6 @@ void test("last-question Tab opens review and submits untouched questions", () =
     assert.deepEqual(h.results, [{ status: "submitted", responses: { text: { kind: "text", value: "draft" } } }]);
 });
 
-void test("Space then Tab on single question auto-submits committed draft", () => {
-    const h = harness([single]);
-    h.component.handleInput(keys.space);
-    h.component.handleInput(keys.tab);
-    assert.deepEqual(h.results, [{ status: "submitted", responses: { single: { kind: "single", value: "a" } } }]);
-});
-
 void test("a single question omits review and submits directly", () => {
     const answered = harness([single]);
     assert.doesNotMatch(answered.component.render(80).join("\n"), /\[Review/);

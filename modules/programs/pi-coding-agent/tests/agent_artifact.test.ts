@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { access, mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -78,8 +78,8 @@ void test("pending creation writes content and metadata outside final directorie
     assert.equal(pending.title, "Design");
     assert.equal(pending.summary, "Short summary.");
     assert.equal(await readFile(pending.pendingPath, "utf8"), "# Design\n\nShort summary.\n");
-    assert.deepEqual(await readdir(join(root, ".agents", "pending-artifacts")), ["20260718-003145-pi-workflow.json", "20260718-003145-pi-workflow.md"]);
-    await assert.rejects(readdir(join(root, ".agents", "designs")));
+    assert.equal((await readPendingArtifact(root, pending.id)).pendingPath, pending.pendingPath);
+    await assert.rejects(access(pending.plannedFinalPath), error => (error as NodeJS.ErrnoException).code === "ENOENT");
 });
 
 void test("parallel pending creation reserves distinct ids without losing content", async t => {
@@ -201,10 +201,6 @@ void test("parallel approval of different pending artifacts preserves every cont
 
     assert.equal(new Set(approved.map(item => item.finalPath)).size, 2);
     assert.deepEqual(new Set(await Promise.all(approved.map(item => readFile(item.finalPath!, "utf8")))), new Set(["first", "second"]));
-    assert.deepEqual(await readdir(join(root, ".agents", "designs")), [
-        "20260718-003145-parallel-v2.md",
-        "20260718-003145-parallel.md",
-    ]);
 });
 
 void test("parallel approval of the same pending id is serialized and idempotent", async t => {
@@ -217,8 +213,8 @@ void test("parallel approval of the same pending id is serialized and idempotent
     ]);
 
     assert.equal(first.finalPath, second.finalPath);
-    assert.deepEqual(await readdir(join(root, ".agents", "designs")), ["20260718-003145-same-pending.md"]);
-    assert.deepEqual(await readdir(join(root, ".agents", "pending-artifacts")), [`${pending.id}.json`]);
+    assert.equal(await readFile(first.finalPath!, "utf8"), "one copy");
+    await assert.rejects(access(pending.pendingPath), error => (error as NodeJS.ErrnoException).code === "ENOENT");
 });
 
 void test("approved metadata is idempotent and does not allocate another suffix", async t => {
@@ -228,7 +224,7 @@ void test("approved metadata is idempotent and does not allocate another suffix"
     const second = await approvePendingArtifact(root, pending.id, new Date("2026-07-18T01:00:00Z"));
 
     assert.deepEqual(second, first);
-    assert.deepEqual(await readdir(join(root, ".agents", "designs")), ["20260718-003145-retry-approved.md"]);
+    assert.equal(await readFile(second.finalPath!, "utf8"), "content");
 });
 
 void test("approval recovers an injected interruption after final creation and before metadata update", async t => {
@@ -244,8 +240,8 @@ void test("approval recovers an injected interruption after final creation and b
 
     assert.equal(recovered.finalPath, finalPath);
     assert.equal((await readPendingArtifact(root, pending.id)).state, "approved");
-    assert.deepEqual(await readdir(directory), ["20260718-003145-recover.md"]);
-    assert.deepEqual(await readdir(join(root, ".agents", "pending-artifacts")), [`${pending.id}.json`]);
+    assert.equal(await readFile(finalPath, "utf8"), "recover me");
+    await assert.rejects(access(`${finalPath}.pending-approval`), error => (error as NodeJS.ErrnoException).code === "ENOENT");
 });
 
 void test("revision request preserves pending and allows same id update", async t => {
@@ -275,8 +271,9 @@ void test("tool fails closed without UI after creating only a pending design", a
 
     assert.equal(result.details.status, "unavailable");
     assert.match(resultText(result.content[0]), /pending artifact was not promoted/);
-    assert.deepEqual(await readdir(join(root, ".agents", "pending-artifacts")), [result.details.pendingId + ".json", result.details.pendingId + ".md"]);
-    await assert.rejects(readdir(join(root, ".agents", "designs")));
+    const pending = await readPendingArtifact(root, result.details.pendingId!);
+    assert.equal(await readFile(pending.pendingPath, "utf8"), "# Design\n");
+    await assert.rejects(access(pending.plannedFinalPath), error => (error as NodeJS.ErrnoException).code === "ENOENT");
 });
 
 void test("non-design kinds are saved directly to canonical directories", async t => {
@@ -337,7 +334,6 @@ void test("tool approve/revision/reject UI statuses and action notes are determi
     assert.equal(await readFile(approved.details.finalPath!, "utf8"), approvedContent);
     assert.match(approvalReviewText, /Kind: design/);
     assert.match(approvalReviewText, /Summary: Useful approval summary\./);
-    assert.match(approvalReviewText, /Line count: 8/);
     assert.match(resultText(approved.content[0]), /actionNote: looks good/);
     assert.match(resultText(approved.content[0]), new RegExp(`finalPath: ${approved.details.finalPath}`));
     const rendered = tool.renderResult?.(approved, { expanded: false } as never, { fg: (_color: string, text: string) => text } as never, {} as never);

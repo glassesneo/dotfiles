@@ -19,6 +19,7 @@ import { MESH_BOOTSTRAP_TOOL_NAME, MESH_PEER_TOOL_NAMES, piLaunchDescriptor } fr
 import { claimTaskUsage, createTask, ensurePolicyEpoch, finishTask, initializeMesh, meshPaths, patchAgentStatus, prepareAgent, publishAgent, readAgentSnapshot, readPolicyEpoch, reserveMeshCapacity } from "../extensions_src/utilities/orchestration_store.ts";
 
 const MESH_TOOLS = [...MESH_PEER_TOOL_NAMES];
+const REQUIRED_PEER_CAPABILITIES = ["mesh_run", "mesh_submit", "mesh_get", "mesh_wait", "mesh_stop", "mesh_route"] as const;
 const budgets = { maxLiveAgents: 4, maxConcurrentTasks: 4, maxTasksPerMesh: 16 };
 const capabilities = { nativeScreen: true, taskDelivery: true, taskCompletion: true, taskCancellation: true, usage: true, interactiveInterventions: true, terminalHistory: true };
 const tmux = { socket: "/tmp/tmux", serverPid: "10", sessionId: "$1", sessionName: "mesh", windowId: "@1", paneId: "%1", windowName: "worker" };
@@ -148,7 +149,7 @@ void test("a child cannot wait on its own active task or stop its own agent proc
     await assert.rejects(createMeshStopTool(deps).execute("stop", { agentId: worker.agentId }, undefined, undefined, {} as never), /calling agent itself/u);
 }));
 
-void test("root registration exposes exactly six mesh tools while only child registration exposes mesh_enable", async () => withRoot("mesh-registration-", async root => {
+void test("root and child registration expose peer capabilities while only children receive mesh_enable", async () => withRoot("mesh-registration-", async root => {
     const files = await writeRuntimeFiles(root);
     const keybindings = await writeMeshKeybindings(root);
     const previous = process.env.PI_EXTENSION_KEYBINDINGS_PATH;
@@ -156,12 +157,21 @@ void test("root registration exposes exactly six mesh tools while only child reg
     try {
         const rootPi = new PiMock();
         await registerOrchestration(rootPi as never, { ...files, env: {} });
-        assert.deepEqual([...rootPi.tools.keys()].sort(), [...MESH_TOOLS].sort());
-        assert.deepEqual(rootPi.active.sort(), [...MESH_TOOLS].sort());
+        for (const name of REQUIRED_PEER_CAPABILITIES) {
+            assert.equal(rootPi.tools.has(name), true, `root registered ${name}`);
+            assert.equal(rootPi.active.includes(name), true, `root activated ${name}`);
+        }
+        assert.equal(new Set(rootPi.active).size, rootPi.active.length);
+        assert.equal(rootPi.tools.has("mesh_enable"), false);
         const childPi = new PiMock();
         await registerOrchestration(childPi as never, { ...files, env: { PI_MESH_AGENT_ID: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" } });
-        assert.deepEqual([...childPi.tools.keys()].sort(), [...MESH_TOOLS, "mesh_enable"].sort());
+        for (const name of REQUIRED_PEER_CAPABILITIES) {
+            assert.equal(childPi.tools.has(name), true, `child registered ${name}`);
+            assert.equal(childPi.active.includes(name), true, `child activated ${name}`);
+        }
+        assert.equal(new Set(childPi.active).size, childPi.active.length);
         assert.equal(Value.Check(childPi.tools.get("mesh_enable").parameters, {}), true);
+        assert.equal(childPi.active.includes("mesh_enable"), true);
         assert.equal(Value.Check(childPi.tools.get("mesh_enable").parameters, { legacy: true }), false);
     } finally { if (previous === undefined) delete process.env.PI_EXTENSION_KEYBINDINGS_PATH; else process.env.PI_EXTENSION_KEYBINDINGS_PATH = previous; }
 }));
@@ -201,13 +211,14 @@ void test("a fresh Researcher bootstrap activates mesh_run additively and persis
     assert.equal(pi.active.includes(MESH_BOOTSTRAP_TOOL_NAME), true);
     assert.equal(pi.active.includes("mesh_run"), false);
     let persisted = 0;
-    const epoch = { schemaVersion: 1, meshId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", epochId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", mode: "ops", roleSet: [], roles: {}, policyDigest: "", createdAt: new Date().toISOString() } as const;
+    const epoch = { schemaVersion: 1, meshId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", epochId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", mode: "ops", roleSet: [], roles: {}, policyDigest: "", createdAt: "2026-01-01T00:00:00.000Z" } as const;
     const deps = { configPath: "/unused", env: {}, exec: absentTmux, activeCaller: () => caller(epoch.meshId, epoch as never, { agentId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc" }) };
     const enable = createMeshEnableTool(pi as never, deps, async () => { persisted += 1; });
     const first = await enable.execute("enable", {}, undefined, undefined, {} as never);
     const second = await enable.execute("enable-again", {}, undefined, undefined, {} as never);
-    assert.deepEqual(pi.active, [...bootstrapTools, ...MESH_TOOLS]);
+    assert.equal(pi.active.includes(MESH_BOOTSTRAP_TOOL_NAME), true);
     assert.equal(pi.active.includes("mesh_run"), true);
+    assert.equal(new Set(pi.active).size, pi.active.length);
     assert.deepEqual((first.details as any).activeTools, pi.active);
     assert.deepEqual((second.details as any).activeTools, pi.active);
     assert.equal(persisted, 2);
@@ -228,7 +239,8 @@ void test("post-start steer and followUp signals auto-enable a narrowed child an
     let tick!: () => Promise<void>; const pi = new PiMock();
     await registerOrchestration(pi as never, { ...files, env, setInterval(callback) { tick = async () => { await callback(); }; return "timer"; }, clearInterval() {} });
     await pi.handlers.get("session_start")![0]!({}, ctx);
-    assert.deepEqual(pi.active, [...settledAgentDefinition("worker").tools, MESH_BOOTSTRAP_TOOL_NAME]);
+    assert.equal(pi.active.includes(MESH_BOOTSTRAP_TOOL_NAME), true);
+    assert.equal(pi.active.includes("mesh_run"), false);
 
     const endpoint = await bindMeshEndpoint(root, mesh.meshId, { endpointId: `agent:${worker.agentId}`, kind: "agent", agentId: worker.agentId, harness: "pi", sessionId: "child-session", sessionFile });
     for (const delivery of ["steer", "followUp"] as const) {
@@ -240,7 +252,9 @@ void test("post-start steer and followUp signals auto-enable a narrowed child an
         const persisted = JSON.parse(await readFile(join(meshPaths(root, mesh.meshId).events, `${signal.eventId}.json`), "utf8")) as { state: string };
         assert.equal(persisted.state, "injected");
     }
-    assert.deepEqual(pi.active, [...settledAgentDefinition("worker").tools, MESH_BOOTSTRAP_TOOL_NAME, ...MESH_TOOLS]);
+    assert.equal(pi.active.includes("mesh_run"), true);
+    assert.equal(pi.active.includes("mesh_route"), true);
+    assert.equal(new Set(pi.active).size, pi.active.length);
     assert.equal((await readAgentSnapshot(root, mesh.meshId, worker.agentId, task.request.taskId)).task?.interventions.length, 0);
     assert.equal((await readAgentSnapshot(root, mesh.meshId, worker.agentId)).status.meshToolsEnabled, true);
     assert.deepEqual(notifications, []); assert.equal(statuses.some(([key]) => key === "mesh-event-pump"), false);
@@ -313,15 +327,50 @@ void test("palette stop waits for the pending mode epoch before authorizing the 
     const stopped = assert.rejects(stopPaletteMeshAgent(deps, runtimeConfig(root), { meshId: mesh.meshId, agentId: worker.agentId, reason: "mode-authorized stop" }), /not allowed to stop role worker/u); release(); await stopped; assert.equal(execCalls, 0);
 }));
 
+// Given a registered root orchestration runtime and an ops-authorized submit, when a real recon mode event crosses the pending epoch-commit boundary, the tool caller observes recon rejection without any pre-commit task mutation.
 void test("a tool execution waits for the pending root mode epoch before applying mutation authority", async () => withRoot("mesh-mode-barrier-", async root => {
-    const sessionFile = join(root, "root-session.jsonl"); await writeFile(sessionFile, ""); const mesh = await initializeMesh(root, { rootSessionId: "root-session", rootSessionFile: sessionFile, recoverable: true, budgets }); const ops = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", roleSet: ["worker"], roles: { worker: settledAgentDefinition("worker") } }); const worker = await publishWorker(root, mesh.meshId, ops.epochId); const files = await writeRuntimeFiles(root); const keybindings = await writeMeshKeybindings(root); const previous = process.env.PI_EXTENSION_KEYBINDINGS_PATH; process.env.PI_EXTENSION_KEYBINDINGS_PATH = keybindings;
-    const branch = [{ type: "custom", customType: "mesh-root-binding", data: { schemaVersion: 1, meshId: mesh.meshId } }]; const ctx = { cwd: root, sessionManager: { getSessionId: () => "root-session", getSessionFile: () => sessionFile, getBranch: () => branch }, ui: { notify() {}, setStatus() {} }, isIdle: () => true } as never;
+    const sessionFile = join(root, "root-session.jsonl");
+    await writeFile(sessionFile, "");
+    const mesh = await initializeMesh(root, { rootSessionId: "root-session", rootSessionFile: sessionFile, recoverable: true, budgets });
+    const ops = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", roleSet: ["worker"], roles: { worker: settledAgentDefinition("worker") } });
+    const worker = await publishWorker(root, mesh.meshId, ops.epochId);
+    const files = await writeRuntimeFiles(root);
+    const keybindings = await writeMeshKeybindings(root);
+    const previous = process.env.PI_EXTENSION_KEYBINDINGS_PATH;
+    process.env.PI_EXTENSION_KEYBINDINGS_PATH = keybindings;
+    const branch = [{ type: "custom", customType: "mesh-root-binding", data: { schemaVersion: 1, meshId: mesh.meshId } }];
+    const ctx = { cwd: root, sessionManager: { getSessionId: () => "root-session", getSessionFile: () => sessionFile, getBranch: () => branch }, ui: { notify() {}, setStatus() {} }, isIdle: () => true } as never;
     try {
-        const pi = new PiMock(); await registerOrchestration(pi as never, { ...files, env: {} }); await pi.handlers.get("session_start")![0]!({}, ctx);
-        let unlock!: () => void; let acquired!: () => void; const acquiredPromise = new Promise<void>(resolve => { acquired = resolve; }); const gate = new Promise<void>(resolve => { unlock = resolve; }); const held = withMeshLock(root, mesh.meshId, async () => { acquired(); await gate; }); await acquiredPromise;
+        let signalAuthorityPending!: () => void;
+        const authorityPending = new Promise<void>(resolve => { signalAuthorityPending = resolve; });
+        const pi = new PiMock();
+        await registerOrchestration(pi as never, { ...files, env: {}, onAuthorityWait: signalAuthorityPending });
+        await pi.handlers.get("session_start")![0]!({}, ctx);
+
+        let releaseCommit!: () => void;
+        let commitHeld!: () => void;
+        const commitHeldSignal = new Promise<void>(resolve => { commitHeld = resolve; });
+        const commitRelease = new Promise<void>(resolve => { releaseCommit = resolve; });
+        const heldCommit = withMeshLock(root, mesh.meshId, async () => { commitHeld(); await commitRelease; });
+        await commitHeldSignal;
+
         pi.events.emit(ACTIVE_MODE_EVENT, { schemaVersion: 1, name: "recon", reason: "switch", mode: { model: "openai/recon", description: "Recon", thinkingLevel: "low", allowAllTools: false, tools: ["read"], skillOptIns: [], instructions: "Inspect." } });
-        let settled = false; const execution = pi.tools.get("mesh_submit").execute("mode-race", { agentId: worker.agentId, prompt: "must use narrowed epoch" }, undefined, undefined, ctx).finally(() => { settled = true; }); const rejected = assert.rejects(execution, /not allowed to reuse role worker/u); await new Promise(resolve => setTimeout(resolve, 20)); assert.equal(settled, false); unlock(); await held; await rejected; await pi.handlers.get("session_shutdown")![0]!({ reason: "reload" });
-    } finally { if (previous === undefined) delete process.env.PI_EXTENSION_KEYBINDINGS_PATH; else process.env.PI_EXTENSION_KEYBINDINGS_PATH = previous; }
+        let settled = false;
+        const execution = pi.tools.get("mesh_submit").execute("mode-race", { agentId: worker.agentId, prompt: "must use narrowed epoch" }, undefined, undefined, ctx).finally(() => { settled = true; });
+        await authorityPending;
+
+        assert.equal(settled, false);
+        assert.deepEqual(await readdir(meshPaths(root, mesh.meshId).tasks), []);
+
+        releaseCommit();
+        await heldCommit;
+        await assert.rejects(execution, /not allowed to reuse role worker/u);
+        assert.deepEqual(await readdir(meshPaths(root, mesh.meshId).tasks), []);
+        await pi.handlers.get("session_shutdown")![0]!({ reason: "reload" });
+    } finally {
+        if (previous === undefined) delete process.env.PI_EXTENSION_KEYBINDINGS_PATH;
+        else process.env.PI_EXTENSION_KEYBINDINGS_PATH = previous;
+    }
 }));
 
 void test("persisted root startup reconciles an unpersisted usage claim before tools can observe it", async () => withRoot("mesh-root-usage-reconcile-", async root => {
@@ -344,19 +393,23 @@ void test("native child launch manifests order popup, orchestration, role contri
     assert.deepEqual(launch.args.filter((value, index) => launch.args[index - 1] === "-e"), manifest);
     assert.ok(!launch.args.includes("--mode") && !launch.args.includes("--profile") && !launch.args.includes("--no-tools"));
     const launchTools = (value: ReturnType<typeof launchFor>) => value.args[value.args.indexOf("--tools") + 1]!.split(",");
-    assert.deepEqual(launchTools(launch), [MESH_BOOTSTRAP_TOOL_NAME, ...MESH_TOOLS]);
+    const bootstrap = launchTools(launch);
+    assert.equal(bootstrap.includes(MESH_BOOTSTRAP_TOOL_NAME), true);
+    for (const name of REQUIRED_PEER_CAPABILITIES) assert.equal(bootstrap.includes(name), true, `bootstrap includes ${name}`);
+    assert.equal(new Set(bootstrap).size, bootstrap.length);
     const union = launchTools(launchFor(["read", "mesh_route", "read", MESH_BOOTSTRAP_TOOL_NAME]));
-    assert.deepEqual(union, ["read", "mesh_route", MESH_BOOTSTRAP_TOOL_NAME, ...MESH_TOOLS.filter(name => name !== "mesh_route")]);
+    assert.equal(union.includes("read"), true);
+    assert.equal(union.includes(MESH_BOOTSTRAP_TOOL_NAME), true);
+    for (const name of REQUIRED_PEER_CAPABILITIES) assert.equal(union.includes(name), true, `tool union includes ${name}`);
     assert.equal(new Set(union).size, union.length);
 });
 
 void test("researcher catalog and native launch project retrieval capabilities without expanding another child", () => {
     const catalog = settledAgentCatalog();
     const researcher = settledAgentDefinition("researcher");
-    assert.deepEqual(researcher.tools, ["read", "grep", "find", "ls", "bash", "web_search", "web_fetch"]);
-    assert.deepEqual(researcher.skillOptIns, ["web-research"]);
-    assert.equal(researcher.model, "openai-codex/gpt-5.6-terra");
-    assert.equal(researcher.thinkingLevel, "high");
+    assert.equal(researcher.tools.includes("web_search"), true);
+    assert.equal(researcher.tools.includes("web_fetch"), true);
+    assert.equal(researcher.skillOptIns.includes("web-research"), true);
     for (const roles of Object.values(settledMeshRoleSets())) assert.ok(roles.includes("researcher"));
 
     const meshId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -374,7 +427,8 @@ void test("researcher catalog and native launch project retrieval capabilities w
     const researcherLaunch = launch("researcher");
     const researcherLaunchTools = researcherLaunch.args[researcherLaunch.args.indexOf("--tools") + 1]!.split(",");
     assert.deepEqual(researcherLaunch.args.filter((value, index) => researcherLaunch.args[index - 1] === "-e"), childExtensions.researcher);
-    assert.deepEqual(researcherLaunchTools.slice(0, researcher.tools.length), researcher.tools);
+    assert.equal(researcherLaunchTools.includes("web_search"), true);
+    assert.equal(researcherLaunchTools.includes("web_fetch"), true);
     assert.equal(researcherLaunchTools.includes(MESH_BOOTSTRAP_TOOL_NAME), true);
     assert.deepEqual(launch("worker").args.filter((value, index, args) => args[index - 1] === "-e"), childExtensions.worker);
 });

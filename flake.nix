@@ -163,6 +163,14 @@
               ./secrets
             ];
           };
+          configurationContractsRunner = pkgs.writers.writeNu "configuration-contracts" {
+            makeWrapperArgs = [
+              "--prefix"
+              "PATH"
+              ":"
+              (lib.makeBinPath [pkgs.nix pkgs.nodejs pkgs.coreutils])
+            ];
+          } (builtins.readFile ./checks/configuration-contracts.nu);
           workspaceTestSource = fileset.toSource {
             root = ./modules/services/sketchybar/widgets/workspace;
             fileset = fileset.unions [
@@ -223,8 +231,8 @@
               pname = "configuration-contracts";
               version = "0";
               src = ./modules/programs/pi-coding-agent;
-              nativeBuildInputs = [pkgs.nix pkgs.jq];
               CONFIGURATION_SOURCE = configurationSource;
+              CONFIGURATION_FIXTURE = ./checks/fixtures/configuration-contracts.nix;
 
               npmDepsHash = "sha256-Qw6kEXFEofwWUVieD4Fhf7XhRESbSodTjHxLI1ZPmCI=";
               npmDepsFetcherVersion = 2;
@@ -235,7 +243,7 @@
                 runHook preCheck
                 export HOME="$TMPDIR/home"
                 mkdir -p "$HOME/.cache/nix"
-                PACKAGE_ROOT="$PWD" bash ${./checks/configuration-contracts.sh}
+                PACKAGE_ROOT="$PWD" ${configurationContractsRunner}
                 runHook postCheck
               '';
               installPhase = ''
@@ -288,7 +296,9 @@
               emmylua-ls
               emmylua-check
               emmylua-formatter
+              just
               nickel
+              nushell
             ];
           };
         in {

@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { CodexAcpDriver } from "../extensions_src/utilities/orchestration_codex_acp.ts";
+import { eventually } from "./test_helpers.ts";
 
 const peer = `#!/usr/bin/env node
 const fs=require("fs"); const readline=require("readline");
@@ -119,9 +120,9 @@ void test("Codex ACP cancellation sends session/cancel and retains partial answe
     const f = await fixture("cancel"); const driver = new CodexAcpDriver(options(f, () => {})); await driver.start();
     const task = driver.runTask("task");
     try {
-        while (driver.partialOutput() !== "answer with source") await new Promise(resolve => setTimeout(resolve, 5));
+        await eventually(() => driver.partialOutput() === "answer with source");
         await driver.cancel();
-        while (!(await requests(f.requestsPath)).some(message => message.method === "session/cancel")) await new Promise(resolve => setTimeout(resolve, 5));
+        await eventually(async () => (await requests(f.requestsPath)).some(message => message.method === "session/cancel"));
         assert.equal(driver.partialOutput(), "answer with source");
         assert.ok((await requests(f.requestsPath)).some(message => message.method === "session/cancel" && JSON.stringify(message.params).includes("session-1")));
     } finally {
@@ -132,7 +133,7 @@ void test("Codex ACP cancellation sends session/cancel and retains partial answe
 void test("Codex ACP cancellation resolves a raced permission request as cancelled", async () => {
     const f = await fixture("cancel-permission"); const driver = new CodexAcpDriver(options(f, () => {})); await driver.start();
     const task = driver.runTask("task");
-    while (driver.partialOutput() !== "answer with source") await new Promise(resolve => setTimeout(resolve, 5));
+    await eventually(() => driver.partialOutput() === "answer with source");
     await driver.cancel();
     await assert.rejects(task, /stopped with cancelled/u);
     const response = (await requests(f.requestsPath)).find(message => message.id === "permission-1" && "result" in message);

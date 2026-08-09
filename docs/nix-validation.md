@@ -2,6 +2,19 @@
 
 Use three validation levels so inexpensive flake evaluation remains separate from configuration contracts and representative builds.
 
+## Daily entrypoints
+
+The root `justfile` provides thin names for the Nix-owned validation commands:
+
+| Recipe | Nix command |
+|---|---|
+| `just fmt` | `nix fmt` |
+| `just eval` | `nix flake check --no-build --no-update-lock-file` |
+| `just check <flake-check-name>` | `nix build --no-link .#checks.<current-system>.<flake-check-name>` |
+| `just full` | `nix run .#check-full` |
+
+Run these without global Just or Nushell installations through the Darwin development shell, for example `nix develop .#dotfiles --command just eval`. Check selection, platform availability, and the full-validation policy remain Nix responsibilities; an unavailable system-specific check fails with Nix's normal attribute error.
+
 ## Fast evaluation
 
 Run the cheap evaluation path while iterating:

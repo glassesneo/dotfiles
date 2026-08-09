@@ -107,7 +107,8 @@ export async function runExternalWorker(env: NodeJS.ProcessEnv = process.env, de
                 if (fatal) throw fatal;
                 continue;
             }
-            activeTaskId = task.request.taskId;
+            const taskId = task.request.taskId;
+            activeTaskId = taskId;
             await publishActivity("running");
             view.task(task.request.prompt.split(/\r?\n/u).find(Boolean) ?? "Task");
             const prompt = [definition.instructions.trim(), task.request.prompt].filter(Boolean).join("\n\nDelegated task:\n");
@@ -117,8 +118,11 @@ export async function runExternalWorker(env: NodeJS.ProcessEnv = process.env, de
             const monitorStop = async (): Promise<void> => {
                 while (!turnSettled) {
                     await wait(50);
+                    if (turnSettled) return;
                     await publishActivity(activityPhase, true).catch(() => {});
+                    if (turnSettled) return;
                     const status = (await readAgentSnapshot(stateRoot, meshId, agentId)).status;
+                    if (turnSettled) return;
                     if (isTerminalAgent(status.state)) {
                         await stop(status.exitReason ?? "Stopped by parent", status.state === "failed" ? "failed" : "stopped");
                         throw new Error(status.exitReason ?? "Stopped by parent");
@@ -127,7 +131,9 @@ export async function runExternalWorker(env: NodeJS.ProcessEnv = process.env, de
                         await stop(status.exitReason ?? "Stopped by parent", undefined, true);
                         throw new Error(status.exitReason ?? "Stopped by parent");
                     }
-                    if (await readTaskCancellation(stateRoot, meshId, activeTaskId!)) {
+                    const cancellation = await readTaskCancellation(stateRoot, meshId, taskId);
+                    if (turnSettled) return;
+                    if (cancellation) {
                         taskCancelled = true;
                         await driver.cancel();
                         throw new Error("Task cancelled by parent");
@@ -135,7 +141,6 @@ export async function runExternalWorker(env: NodeJS.ProcessEnv = process.env, de
                     const fatal = driver.fatalError();
                     if (fatal) { driverFailed = true; throw fatal; }
                 }
-                return;
             };
             const taskPromise = driver.runTask(prompt);
             void taskPromise.catch(() => undefined);
@@ -144,7 +149,7 @@ export async function runExternalWorker(env: NodeJS.ProcessEnv = process.env, de
                 if (stopping) continue;
                 if (!result) throw new Error("External task monitor settled without a task result");
                 if ("driverError" in result) { driverFailed = true; throw result.driverError; }
-                await finishTask(stateRoot, meshId, activeTaskId, { outcome: "succeeded", output: result.output, usage: emptyUsage(), turns: 1 }, runtimeId);
+                await finishTask(stateRoot, meshId, taskId, { outcome: "succeeded", output: result.output, usage: emptyUsage(), turns: 1 }, runtimeId);
                 view.outcome("succeeded", result.stopReason);
             } catch (error) {
                 if (stopPromise) await stopPromise;
@@ -152,13 +157,13 @@ export async function runExternalWorker(env: NodeJS.ProcessEnv = process.env, de
                 if (taskCancelled) await taskPromise.catch(() => undefined);
                 const outcome = parentTerminalOutcome ?? (stopping || taskCancelled ? "stopped" : "failed");
                 const output = taskCancelled ? driver.partialOutput?.() ?? "" : "";
-                await finishTask(stateRoot, meshId, activeTaskId, { outcome, output, usage: emptyUsage(), turns: 1, error: message }, runtimeId);
+                await finishTask(stateRoot, meshId, taskId, { outcome, output, usage: emptyUsage(), turns: 1, error: message }, runtimeId);
                 view.outcome(outcome, message);
                 if (!stopping && (driverFailed || driver.fatalError())) {
                     await failAgent(stateRoot, meshId, agentId, message, false, { expectedRuntimeId: runtimeId });
                     stopping = true;
                 }
-            } finally { turnSettled = true; activeTaskId = undefined; if (!stopping) await publishActivity("idle").catch(() => {}); }
+            } finally { turnSettled = true; if (activeTaskId === taskId) activeTaskId = undefined; if (!stopping) await publishActivity("idle").catch(() => {}); }
         }
     } catch (error) {
         if (stopping) return;

@@ -127,17 +127,9 @@ in
       copyWidget = entry: let
         widget = widgetOf entry.widget;
         widgetDir = "widgets/${entry.widget}";
-        materializeRuntimeFile = target: source:
-          pkgs.runCommandLocal "sketchybar-${entry.widget}-${lib.strings.sanitizeDerivationName target}" {
-            src = source;
-          } ''
-            cp "$src" "$out"
-          '';
-        copyRuntimeFile = target: source: let
-          storedSource = materializeRuntimeFile target source;
-        in ''
+        copyRuntimeFile = target: source: ''
           mkdir -p "$out/${widgetDir}/${builtins.dirOf target}"
-          cp ${storedSource} "$out/${widgetDir}/${target}"
+          cp ${source} "$out/${widgetDir}/${target}"
         '';
       in ''
         mkdir -p "$out/${widgetDir}"

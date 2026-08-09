@@ -7,6 +7,7 @@ import test from "node:test";
 import { GC_NOTICE_MAX_AGENTS, NOTICE_REASON_MAX_BYTES, acknowledgeDisplayedTuiNotice, createExplicitStopNotice, createGcStopNotice, listPendingTuiNotices, validateTuiNotice } from "../extensions_src/utilities/orchestration_notices.ts";
 
 const recipient = { endpointId: "root:parent" };
+const displayedAt = "2099-01-01T00:00:00.000Z";
 async function fixture() {
     const root = await mkdtemp(join(tmpdir(), "mesh-notices-")); const meshId = randomUUID();
     const meshDirectory = join(root, "meshes", meshId); await mkdir(meshDirectory, { recursive: true, mode: 0o700 });
@@ -46,7 +47,7 @@ void test("GC notice identity aggregates once per pass and parent", async () => 
         assert.equal(retry.noticeId, parent.noticeId); assert.notEqual(other.noticeId, parent.noticeId);
         assert.equal((await readdir(f.notices)).length, 2);
         const updatedPayload = { ...payload, confirmed: [], failedCount: 0, pendingCount: payload.confirmed.length }; const updated = await createGcStopNotice(f.root, f.meshId, { ...recipient, payload: updatedPayload }, true); assert.deepEqual(updated.payload, updatedPayload);
-        const acknowledged = await acknowledgeDisplayedTuiNotice(f.root, f.meshId, parent.noticeId, recipient, new Date().toISOString()); const preserved = await createGcStopNotice(f.root, f.meshId, { ...recipient, payload }, true); assert.equal(preserved.state, "acknowledged"); assert.deepEqual(preserved.payload, acknowledged.payload);
+        const acknowledged = await acknowledgeDisplayedTuiNotice(f.root, f.meshId, parent.noticeId, recipient, displayedAt); const preserved = await createGcStopNotice(f.root, f.meshId, { ...recipient, payload }, true); assert.equal(preserved.state, "acknowledged"); assert.deepEqual(preserved.payload, acknowledged.payload);
         await assert.rejects(createGcStopNotice(f.root, f.meshId, { ...recipient, payload: gcPayload(payload.gcPassId, GC_NOTICE_MAX_AGENTS + 1) }), /at most/u);
     } finally { await rm(f.root, { recursive: true, force: true }); }
 });
@@ -72,10 +73,10 @@ void test("acknowledgment preserves at-least-once delivery semantics", async () 
         const notice = await createGcStopNotice(f.root, f.meshId, { ...recipient, payload: gcPayload() });
         assert.equal((await listPendingTuiNotices(f.root, f.meshId, recipient)).length, 1);
         assert.equal((await listPendingTuiNotices(f.root, f.meshId, recipient)).length, 1);
-        await assert.rejects(acknowledgeDisplayedTuiNotice(f.root, f.meshId, notice.noticeId, { endpointId: "root:different" }, new Date().toISOString()), /recipient endpoint/u);
-        const acknowledged = await acknowledgeDisplayedTuiNotice(f.root, f.meshId, notice.noticeId, recipient, new Date().toISOString());
+        await assert.rejects(acknowledgeDisplayedTuiNotice(f.root, f.meshId, notice.noticeId, { endpointId: "root:different" }, displayedAt), /recipient endpoint/u);
+        const acknowledged = await acknowledgeDisplayedTuiNotice(f.root, f.meshId, notice.noticeId, recipient, displayedAt);
         assert.equal(acknowledged.state, "acknowledged"); assert.ok(acknowledged.displayedAt); assert.ok(acknowledged.acknowledgedAt);
         assert.deepEqual(await listPendingTuiNotices(f.root, f.meshId, recipient), []);
-        assert.equal((await acknowledgeDisplayedTuiNotice(f.root, f.meshId, notice.noticeId, recipient, new Date().toISOString())).acknowledgedAt, acknowledged.acknowledgedAt);
+        assert.equal((await acknowledgeDisplayedTuiNotice(f.root, f.meshId, notice.noticeId, recipient, displayedAt)).acknowledgedAt, acknowledged.acknowledgedAt);
     } finally { await rm(f.root, { recursive: true, force: true }); }
 });

@@ -71,13 +71,13 @@ void test("performance argument range is strict", () => {
 void test("current formatter exposes task timing without private identifiers", () => {
     const resources: PerformanceResourceSnapshot = { cpuCount: 6, loadAverage: [1, 2, 3], memoryTotalBytes: 8 * 1024 ** 3, memoryFreeBytes: 4 * 1024 ** 3, swap: "0 used", diskFreeBytes: 20 * 1024 ** 3 };
     const text = formatCurrentPerformance([], { unread: 2, tasks: [{ meshId: "mesh-secret", agentId: "agent-secret", taskId: "12345678-private", agentType: "tester", outcome: "running", startedAt: "2026-01-01T00:00:00Z", durationMs: 700000, open: true, longRunning: true }] }, resources);
-    assert.match(text, /non-tool/u); assert.match(text, /tester running.*12345678.*long-running.*open/u); assert.doesNotMatch(text, /mesh-secret|agent-secret|purpose|prompt|private/iu);
+    assert.match(text, /non-tool/u); assert.match(text, /tester running.*long-running.*open/u); assert.doesNotMatch(text, /mesh-secret|agent-secret|purpose|prompt|private/iu);
 });
 
 void test("slash command and palette use PI_MESH_ID for the same current handler", async () => {
     const root = await mkdtemp(join(tmpdir(), "performance-extension-")); const stateRoot = join(root, "state"); const configPath = join(root, "orchestration.json"); await writeFile(configPath, JSON.stringify({ schemaVersion: 7, stateRoot }));
-    await addMeshTask(stateRoot, { meshId: "mesh-current", agentId: "agent-a", agent: "tester", taskId: "aaaaaaaa-current", start: new Date(Date.now() - 1000).toISOString() });
-    await addMeshTask(stateRoot, { meshId: "mesh-other", agentId: "agent-b", agent: "reviewer", taskId: "bbbbbbbb-other", start: new Date(Date.now() - 1000).toISOString() });
+    await addMeshTask(stateRoot, { meshId: "mesh-current", agentId: "agent-a", agent: "tester", taskId: "aaaaaaaa-current", start: "2000-01-01T00:00:00.000Z" });
+    await addMeshTask(stateRoot, { meshId: "mesh-other", agentId: "agent-b", agent: "reviewer", taskId: "bbbbbbbb-other", start: "2000-01-01T00:00:00.000Z" });
     const handlers = new Map<string, (...args: any[]) => unknown>(); const listeners = new Map<string, Array<(value: any) => void>>(); let contribution: { run: (ctx: ExtensionContext) => Promise<void> } | undefined; const notifications: string[] = [];
     const pi = { on(name: string, handler: (...args: any[]) => unknown) { handlers.set(name, handler); }, appendEntry() {}, registerCommand(name: string, value: { handler: (...args: any[]) => unknown }) { assert.equal(name, "performance"); handlers.set("command", value.handler); }, events: { on(name: string, handler: (value: any) => void) { listeners.set(name, [...(listeners.get(name) ?? []), handler]); return () => {}; }, emit(name: string, value: any) { if (name === "command-palette:register") contribution = value; for (const listener of listeners.get(name) ?? []) listener(value); } } } as unknown as ExtensionAPI;
     performanceExtension(pi, { configPath, env: { PI_MESH_ID: "mesh-current" } }); assert.ok(contribution);

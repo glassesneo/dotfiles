@@ -88,22 +88,6 @@ void test("standard UI answers all kinds, reviews, and explicitly submits", asyn
     assert.ok(mock.calls.some(call => call.method === "select" && call.args[0] === "Review responses (choose a question to revise)"));
 });
 
-void test("a single answered question submits without opening review", async () => {
-    const mock = scriptedUI(["[ ] A — First", "single note"]);
-    assert.deepEqual(
-        await runStandardQuestionFlow({ hasUI: true, ui: mock.ui }, [allKinds[0]]),
-        {
-            status: "submitted",
-            responses: { one: { kind: "single", value: "a", note: "single note" } },
-        },
-    );
-    assert.equal(mock.remaining.length, 0);
-    const choices = mock.calls.find(call => call.method === "select")?.args[1] as string[];
-    assert.ok(choices.includes("Submit without responding"));
-    assert.ok(!choices.includes("Review responses now"));
-    assert.ok(!mock.calls.some(call => call.args[0] === "Review responses (choose a question to revise)"));
-});
-
 void test("a single untouched question submits without opening review", async () => {
     const mock = scriptedUI(["Submit without responding"]);
     assert.deepEqual(

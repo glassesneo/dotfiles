@@ -34,6 +34,7 @@ import {
 } from "../extensions_src/utilities/orchestration_store.ts";
 import { withMeshLock } from "../extensions_src/utilities/orchestration_lock.ts";
 import { emptyUsage } from "../extensions_src/utilities/orchestration_types.ts";
+import { settleWithinEventLoopTurns, yieldToIO } from "./test_helpers.ts";
 
 const budgets = { maxLiveAgents: 2, maxConcurrentTasks: 2, maxTasksPerMesh: 8 };
 const tmux = { socket: "/tmp/tmux", serverPid: "10", sessionId: "$1", sessionName: "mesh", windowId: "@1", paneId: "%1", windowName: "worker" };
@@ -102,13 +103,18 @@ void test("contended mesh locking reclaims a dead owner without losing exclusion
     const lockDirectory = join(meshPaths(root, mesh.meshId).directory, ".lock");
     await mkdir(lockDirectory);
     await writeFile(join(lockDirectory, "owner.json"), `${JSON.stringify({ pid: 99_999_999, acquiredAt: new Date().toISOString(), token: randomUUID() })}\n`);
-    let entered = 0; let maximumEntered = 0; let completed = 0;
-    await Promise.all(Array.from({ length: 24 }, () => withMeshLock(root, mesh.meshId, async () => {
+    let started = 0; let entered = 0; let maximumEntered = 0; let completed = 0; let release!: () => void; let acquired!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const acquiredPromise = new Promise<void>(resolve => { acquired = resolve; });
+    const contender = (wait = false) => { started += 1; return withMeshLock(root, mesh.meshId, async () => {
         entered += 1; maximumEntered = Math.max(maximumEntered, entered);
-        await new Promise(resolve => setTimeout(resolve, 2));
+        if (wait) { acquired(); await gate; }
         completed += 1; entered -= 1;
-    })));
-    assert.equal(completed, 24);
+    }); };
+    const first = contender(true); await acquiredPromise;
+    const others = [contender(), contender()]; assert.equal(started, 3); await yieldToIO(); assert.equal(maximumEntered, 1);
+    release(); await Promise.all([first, ...others]);
+    assert.equal(completed, 3);
     assert.equal(maximumEntered, 1);
     assert.deepEqual((await readdir(meshPaths(root, mesh.meshId).directory)).filter(name => name.startsWith(".lock")), []);
 }));
@@ -116,7 +122,7 @@ void test("contended mesh locking reclaims a dead owner without losing exclusion
 void test("an ownerless lock left before owner publication ages into recoverable state", async () => withRoot("mesh-ownerless-lock-", async root => {
     const mesh = await initializeMesh(root, { rootSessionId: "root", recoverable: true, budgets });
     const directory = meshPaths(root, mesh.meshId).directory; const lockDirectory = join(directory, ".lock");
-    await mkdir(lockDirectory); const stale = new Date(Date.now() - 2000); await utimes(lockDirectory, stale, stale);
+    await mkdir(lockDirectory); const stale = new Date("2020-01-01T00:00:00.000Z"); await utimes(lockDirectory, stale, stale);
     let called = false; await withMeshLock(root, mesh.meshId, async () => { called = true; });
     assert.equal(called, true);
     assert.deepEqual((await readdir(directory)).filter(name => name.startsWith(".lock")), []);
@@ -129,7 +135,7 @@ void test("an idle agent poll does not queue behind unrelated mesh-wide work", a
     let release!: () => void; let acquired!: () => void; const acquiredPromise = new Promise<void>(resolve => { acquired = resolve; }); const gate = new Promise<void>(resolve => { release = resolve; });
     const held = withMeshLock(root, mesh.meshId, async () => { acquired(); await gate; });
     await acquiredPromise;
-    const observed = await Promise.race([claimPendingTask(root, mesh.meshId, agent.agentId), new Promise<"blocked">(resolve => setTimeout(() => resolve("blocked"), 100))]);
+    const observed = await settleWithinEventLoopTurns(claimPendingTask(root, mesh.meshId, agent.agentId));
     release(); await held;
     assert.equal(observed, null);
 }));

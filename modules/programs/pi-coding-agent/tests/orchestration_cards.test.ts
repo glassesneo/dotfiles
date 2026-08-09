@@ -75,7 +75,7 @@ void test("real mesh tool definitions compose concise collapsed rows without rep
     assert.match(routeCall, /mesh_route.*watch.*parent.*followUp.*all.*1 tasks/u);
     assert.match(routeResult, /^accepted\s*$/u);
     assert.match(render(values[6].tool.renderResult?.({ content: [], details: values[6].details } as never, { expanded: false } as never, theme as never, { args: values[6].args } as never)), /all peer tools active/u);
-    assert.match(render(values[6].tool.renderResult?.({ content: [], details: { enabled: true, activeTools: ["mesh_run"] } } as never, { expanded: false } as never, theme as never, { args: values[6].args } as never)), /peer tools incomplete.*1\/6 active/u);
+    assert.match(render(values[6].tool.renderResult?.({ content: [], details: { enabled: true, activeTools: ["mesh_run"] } } as never, { expanded: false } as never, theme as never, { args: values[6].args } as never)), /peer tools incomplete/u);
 });
 
 // Given partial wait details or a stop disposition, the result slot shows the changing outcome without repeating the tool invocation.

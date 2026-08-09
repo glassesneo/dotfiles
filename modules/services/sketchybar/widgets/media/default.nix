@@ -25,6 +25,7 @@ in
           inherit name;
           cache-path = artworkCachePath;
           hover-token-path = hoverTokenPath;
+          hover-delay = "500ms";
           media-control = lib.getExe' myconfig.programs.media-control.package "media-control";
         };
       in {
@@ -56,9 +57,8 @@ in
         config = {
           Label = "media-control";
           ProgramArguments = [
-            "${pkgs.writeShellScript "service" ''
-              exec ${lib.getExe parent.nushellPackage} ${service}
-            ''}"
+            (lib.getExe parent.nushellPackage)
+            "${service}"
           ];
           EnvironmentVariables = {
             PATH = "/Users/neo/.nix-profile/bin:/run/current-system/sw/bin:/nix/var/nix/profiles/default/bin:/usr/bin:/bin:/usr/sbin:/sbin";

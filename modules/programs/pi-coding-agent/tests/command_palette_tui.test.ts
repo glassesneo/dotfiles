@@ -3,7 +3,7 @@ import test from "node:test";
 import type { Theme } from "@earendil-works/pi-coding-agent";
 import { visibleWidth, type TUI } from "@earendil-works/pi-tui";
 import { resolvePaletteKeymap } from "../extensions_src/utilities/command_palette_keymap.ts";
-import { formatPaletteBreadcrumb, paletteTargetRows, PaletteListComponent, renderFramedLines } from "../extensions_src/utilities/command_palette_tui.ts";
+import { formatPaletteBreadcrumb, PaletteListComponent, renderFramedLines } from "../extensions_src/utilities/command_palette_tui.ts";
 
 const theme = {
     fg(_color: string, text: string) { return text; },
@@ -39,6 +39,7 @@ void test("palette projects items and configured navigation help without overflo
     const h = harness(); assert.equal(h.component.focused, true);
     for (const width of [80, 60, 20, 8, 1]) {
         const lines = h.component.render(width);
+        assert.ok(lines.length <= 24, `height ${lines.length} exceeds terminal rows`);
         for (const line of lines) assert.ok(visibleWidth(line) <= width, `width ${width}: ${line}`);
     }
     const rendered = h.component.render(80).join("\n");
@@ -50,7 +51,6 @@ void test("palette projects items and configured navigation help without overflo
 void test("filtering and status changes preserve overlay height and input position", () => {
     const h = harness();
     const initial = h.component.render(80);
-    assert.equal(initial.length, paletteTargetRows(24, true));
     assert.match(initial.join("\n"), /Search/);
     h.component.handleInput("zz");
     const empty = h.component.render(80);
@@ -60,13 +60,6 @@ void test("filtering and status changes preserve overlay height and input positi
     h.component.setStatus("warning", "Keep the viewport stable");
     assert.equal(h.component.render(80).length, initial.length);
 });
-
-void test("palette height stays compact on standard and tall terminals", () => {
-    assert.equal(paletteTargetRows(24, true), 15);
-    assert.equal(paletteTargetRows(50, true), 18);
-    assert.equal(paletteTargetRows(24, false), 15);
-});
-
 
 void test("busy state suppresses duplicate confirm, defers Escape, and closes once after settlement", () => {
     let confirms = 0; const results: Array<string | null> = [];

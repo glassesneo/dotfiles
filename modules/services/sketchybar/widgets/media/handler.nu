@@ -3,6 +3,7 @@ use ../../colors.nu
 const name = "@name@"
 const cache_path = "@cache-path@"
 const hover_token_path = "@hover-token-path@"
+const hover_delay = @hover-delay@
 const media_control = "@media-control@"
 
 def main () {
@@ -69,7 +70,7 @@ def show_artwork_after_hover_delay [] {
     return
   }
 
-  sleep 500ms
+  sleep $hover_delay
   let current_token = try {
     open --raw $hover_token_path | str trim
   } catch {

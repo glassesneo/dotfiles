@@ -74,7 +74,7 @@ void test("stop confirmation requires the same non-repeated key before its deadl
     const confirmation = new StopConfirmationController(text => { statuses.push(text); }, timers);
 
     confirmation.handle("escape", false, () => { stops += 1; });
-    assert.deepEqual(statuses, ["Press escape again to stop"]);
+    assert.match(statuses.at(-1) ?? "", /press.*escape.*again.*stop/iu);
     assert.equal(timers.timerCount(), 1);
     confirmation.handle("escape", false, () => { stops += 1; });
     assert.equal(stops, 1);
@@ -90,7 +90,8 @@ void test("different keys replace confirmation and ordinary input clears it", ()
 
     confirmation.handle("escape", false, () => { stops += 1; });
     confirmation.handle("ctrl+c", false, () => { stops += 1; });
-    assert.deepEqual(statuses, ["Press escape again to stop", undefined, "Press ctrl+c again to stop"]);
+    assert.equal(statuses.at(-2), undefined);
+    assert.match(statuses.at(-1) ?? "", /press.*ctrl\+c.*again.*stop/iu);
     confirmation.clear();
     assert.equal(stops, 0);
     assert.equal(statuses.at(-1), undefined);
@@ -108,19 +109,19 @@ void test("expired confirmation starts over and repeated input neither starts no
     timers.advance(1499);
     confirmation.handle("escape", true, () => { stops += 1; });
     assert.equal(stops, 0);
-    assert.equal(statuses.at(-1), "Press escape again to stop");
+    assert.match(statuses.at(-1) ?? "", /press.*escape.*again.*stop/iu);
     timers.advance(1);
     assert.equal(statuses.at(-1), undefined);
     confirmation.handle("escape", false, () => { stops += 1; });
     assert.equal(stops, 0);
-    assert.equal(statuses.at(-1), "Press escape again to stop");
+    assert.match(statuses.at(-1) ?? "", /press.*escape.*again.*stop/iu);
 });
 
 void test("configured app.interrupt is guarded and invokes pi's forwarded escape exactly once", () => {
     const fixture = editorFixture();
     fixture.editor.handleInput("\x1b");
     assert.equal(fixture.forwarded(), 0);
-    assert.equal(fixture.statuses.at(-1), "Press escape again to stop");
+    assert.match(fixture.statuses.at(-1) ?? "", /press.*escape.*again.*stop/iu);
 
     fixture.editor.handleInput("\x1b");
     assert.equal(fixture.forwarded(), 1);
@@ -131,7 +132,7 @@ void test("active Ctrl-C is guarded while idle Ctrl-C keeps the existing policy"
     const fixture = editorFixture();
     fixture.editor.handleInput("\x03");
     assert.equal(fixture.aborts(), 0);
-    assert.equal(fixture.statuses.at(-1), "Press ctrl+c again to stop");
+    assert.match(fixture.statuses.at(-1) ?? "", /press.*ctrl\+c.*again.*stop/iu);
     fixture.editor.handleInput("\x03");
     assert.equal(fixture.aborts(), 1);
 
