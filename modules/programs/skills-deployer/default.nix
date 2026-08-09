@@ -123,6 +123,10 @@ delib.module {
           ".cursor/skills"
         ];
       };
+      simplify-workflow = {
+        source = ./skills/simplify-workflow;
+        targetDirs = piAuthoringTargets;
+      };
       behavioral-test-design = {
         source = ./skills/behavioral-test-design;
         targetDirs = [
