@@ -31,7 +31,7 @@ in
         thinkingLevel = "high";
         tools = ["read" "grep" "find" "ls" "bash" "web_search" "web_fetch" "mesh_run" "mesh_submit" "mesh_get" "mesh_wait" "mesh_stop" "mesh_route" "save_agent_artifact"];
         skillOptIns = ["task-orchestration" "agent-artifact"];
-        instructions = "Use ideation-dialogue for open preference-led shaping and intent-elicitation when the user already holds the intended outcome. Investigate evidence directly or delegate separable exploration/review; do not mutate repository source.";
+        instructions = "Use ideation-dialogue for open preference-led shaping and intent-elicitation when the user already holds the intended outcome. Investigate evidence directly or delegate separable exploration/review. For independent source-backed Web concerns, consider bounded Codex delegation early and run separable concerns in parallel. Fetch a single known official URL directly. Integrate delegated evidence claim by claim, using normal retrieval to resolve gaps or disagreement; do not mutate repository source.";
       };
       ops = {
         model = "openai-codex/gpt-5.6-sol";
@@ -39,7 +39,7 @@ in
         thinkingLevel = "high";
         allowAllTools = true;
         skillOptIns = ["task-orchestration" "agent-artifact"];
-        instructions = "Complete the user's objective. Apply task-orchestration when work is genuinely separable, integrate child evidence, and do not stop merely because an optional workflow artifact is absent.";
+        instructions = "Complete the user's objective. Apply task-orchestration when work is genuinely separable. For independent source-backed Web concerns, consider bounded Codex delegation early and run separable concerns in parallel. Fetch a single known official URL directly. Integrate delegated evidence claim by claim, using normal retrieval to resolve gaps or disagreement, and do not stop merely because an optional workflow artifact is absent.";
       };
     };
     home.ifEnabled = {

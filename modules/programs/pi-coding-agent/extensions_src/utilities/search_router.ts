@@ -106,9 +106,6 @@ function capabilityDiagnostics(
     if (!adapter.capabilities.lanes.includes(lane)) {
         diagnostics.push({ provider: adapter.id, category: "capability", reason: "lane" });
     }
-    if (request.freshness !== undefined && !adapter.capabilities.freshness) {
-        diagnostics.push({ provider: adapter.id, category: "capability", reason: "freshness" });
-    }
     const hasDomains = request.includeDomains !== undefined || request.excludeDomains !== undefined;
     if (hasDomains && !adapter.capabilities.domains) {
         diagnostics.push({ provider: adapter.id, category: "capability", reason: "domains" });
@@ -329,6 +326,10 @@ export function createSearchRouter(deps: SearchRouterDependencies): SearchRouter
                     if ("response" in outcome) {
                         const response = outcome.response;
                         const results = response.results.slice(0, request.maxResults);
+                        const unsupportedHints = [...new Set([
+                            ...(response.unsupportedHints ?? []),
+                            ...(request.freshness !== undefined && !selected.capabilities.freshness ? ["freshness"] : []),
+                        ])];
                         return {
                             requestId: deps.requestId(),
                             lane,
@@ -342,7 +343,7 @@ export function createSearchRouter(deps: SearchRouterDependencies): SearchRouter
                             ...(response.providerSessionId === undefined ? {} : { providerSessionId: response.providerSessionId }),
                             ...(response.warnings === undefined ? {} : { warnings: response.warnings }),
                             ...(response.usage === undefined ? {} : { usage: response.usage }),
-                            ...(response.unsupportedHints === undefined ? {} : { unsupportedHints: response.unsupportedHints }),
+                            ...(unsupportedHints.length === 0 ? {} : { unsupportedHints }),
                             normalizationWarnings: response.normalizationWarnings,
                             providerResultCount: response.providerResultCount,
                             returnedResultCount: results.length,

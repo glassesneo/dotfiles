@@ -246,7 +246,7 @@ PACKAGE_ROOT="$package_root" node --input-type=module -e '
 
     const projections = JSON.parse(process.env.GENERATED_WEB_RETRIEVAL);
     const expectedProviders = secretPaths => [
-      ["parallel-search", "parallel-search", "https://api.parallel.ai/v1beta/search", secretPaths["parallel-api-key"]],
+      ["parallel-search", "parallel-search", "https://api.parallel.ai/v1/search", secretPaths["parallel-api-key"]],
       ["brave-llm-context", "brave-llm-context", "https://api.search.brave.com/res/v1/llm/context", secretPaths["brave-api-key"]],
       ["brave-web-search", "brave-web-search", "https://api.search.brave.com/res/v1/web/search", secretPaths["brave-free-api-key"]],
       ["exa-search", "exa-search", "https://api.exa.ai/search", secretPaths["exa-api-key"]],

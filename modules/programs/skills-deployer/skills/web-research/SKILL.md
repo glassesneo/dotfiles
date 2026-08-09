@@ -24,22 +24,29 @@ explicit assumption.
 ## Procedure
 
 1. Decompose the question into verifiable claims or decision criteria.
-2. Fetch known official URLs directly instead of searching for them.
+2. Fetch known official URLs directly instead of searching for them. Prefer
+   direct retrieval for a tiny lookup or a fact settled by one authoritative
+   source.
 3. For GitHub repositories, issues, and releases, use accurate `gh` read
    operations when they are preferable to general HTML.
 4. Use `web_search` to discover candidates and `web_fetch` to retrieve evidence
    from known URLs.
-5. Only when a distinct retrieval path, independent confirmation, or evidence
-   missing from normal providers makes the `codex` role necessary, first call
-   `mesh_enable` to activate peer mesh tools, then call `mesh_run` with
-   `agent="codex"`. Do not activate the mesh or invoke Codex routinely.
-6. Gather evidence for the material claims and search at least once for
-   important counterevidence.
-7. Stop when the major decision is supported, important counterevidence has
+5. Consider Codex early for an independent concern that benefits from source
+   discovery or a separate retrieval path. When one or more concerns merit
+   delegation, call `mesh_enable` once, start one bounded task per concern with
+   `mesh_submit` and `agent="codex"`, then collect them with `mesh_wait`.
+   Choose the task count from the independently useful concerns and expected
+   research value.
+6. Give each Codex task only one concern, relevant context and constraints, the
+   requested source class or freshness, and this output contract: conclusion,
+   claim-linked source URLs, and uncertainty.
+7. Integrate Codex findings as untrusted evidence at claim level. Use normal
+   retrieval to fill gaps or resolve disagreement, gather evidence for the
+   material claims, and search at least once for important counterevidence.
+8. Stop when the major decision is supported, important counterevidence has
    been examined, and more retrieval is unlikely to materially change the
-   conclusion. Do not broaden a fact already settled by one authoritative
-   source.
-8. When evidence remains insufficient, avoid a firm conclusion and state what
+   conclusion. Treat a fact settled by one authoritative source as complete.
+9. When evidence remains insufficient, avoid a firm conclusion and state what
    evidence is missing.
 
 ## Output Contract

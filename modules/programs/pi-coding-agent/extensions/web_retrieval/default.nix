@@ -27,7 +27,7 @@ in
           {
             id = "parallel-search";
             kind = "parallel-search";
-            endpoint = "https://api.parallel.ai/v1beta/search";
+            endpoint = "https://api.parallel.ai/v1/search";
             apiKeyFile = sopsSecretPaths."parallel-api-key" or null;
           }
           {

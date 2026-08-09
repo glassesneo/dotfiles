@@ -365,6 +365,7 @@ function exaStartDate(freshness: SearchFreshness, nowMs: number): string {
 
 export function buildParallelSearchBody(request: NormalizedSearchRequest): Record<string, unknown> {
     return {
+        mode: "turbo",
         search_queries: [request.query],
         ...(request.objective === undefined ? {} : { objective: request.objective }),
         max_chars_total: 20_000,

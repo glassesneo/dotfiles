@@ -120,6 +120,17 @@ void test("AC2: hierarchical RNG boundaries implement 5:1 then 2:1 routing", () 
     assert.equal(selectSearchAdapter(choices, "general", config(), draws([5 / 6, 2 / 3])).id, "brave-web-search");
 });
 
+// Given a freshness general request at the existing 5:1 boundary, when it crosses routing, the caller observes Parallel with one unsupported freshness hint and no freshness capability diagnostic.
+void test("freshness remains best-effort at the Parallel 5:1 routing boundary", async () => {
+    const router = createSearchRouter(deps({ rng: () => 5 / 6 - Number.EPSILON }));
+
+    const result = await router.search(config(), request({ freshness: "week" }));
+
+    assert.equal(result.provider, "parallel-search");
+    assert.deepEqual(result.unsupportedHints, ["freshness"]);
+    assert.equal(result.eligibilityDiagnostics.some(item => item.reason === "freshness"), false);
+});
+
 void test("AC3: credential and capability eligibility preserve lane and native constraints", async () => {
     const seen: string[] = [];
     const runtime = config("/key");
@@ -336,7 +347,7 @@ void test("AC5-AC7: adapters map native requests and retain safe URL results wit
         maxResults: 4,
     });
     assert.deepEqual(buildParallelSearchBody(nativeRequest), {
-        search_queries: ["web retrieval"], objective: "find primary evidence", max_chars_total: 20_000,
+        mode: "turbo", search_queries: ["web retrieval"], objective: "find primary evidence", max_chars_total: 20_000,
     });
     assert.deepEqual(buildBraveLlmContextBody(nativeRequest), {
         q: "web retrieval", count: 4, maximum_number_of_urls: 4, maximum_number_of_tokens: 4_096,
