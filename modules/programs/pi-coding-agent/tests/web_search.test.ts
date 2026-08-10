@@ -180,6 +180,35 @@ void test("AC3: credential and capability eligibility preserve lane and native c
     );
 });
 
+// Given search providers whose credential reads settle out of order, the router overlaps bounded reads while preserving provider-order diagnostics.
+void test("credential reads overlap without changing provider-order diagnostics", async () => {
+    const runtime = config();
+    const searchProviders = runtime.providers.filter(provider => provider.id.endsWith("search") || provider.id.includes("brave"));
+    for (const provider of searchProviders) provider.apiKeyFile = `/key/${provider.id}`;
+    const started: string[] = [];
+    const releases = new Map<string, (value: string) => void>();
+    const pending = createSearchRouter(deps({
+        readTextFile: path => {
+            started.push(path);
+            return new Promise(resolve => releases.set(path, resolve));
+        },
+    })).search(runtime, request());
+
+    await new Promise<void>(resolve => setImmediate(resolve));
+    assert.deepEqual(started, searchProviders.map(provider => provider.apiKeyFile));
+    for (const path of [...started].reverse()) releases.get(path)!("  \n");
+
+    await assert.rejects(pending, error => {
+        assert.ok(error instanceof SearchRoutingError);
+        assert.deepEqual(error.eligibilityDiagnostics, searchProviders.map(provider => ({
+            provider: provider.id,
+            category: "credential",
+            reason: "empty",
+        })));
+        return true;
+    });
+});
+
 // Given config or credential I/O that never settles, the tool/router boundary observes caller cancellation or its owning deadline without waiting for that I/O.
 void test("delayed config and credential reads obey cancellation and deadlines", async () => {
     const never = new Promise<never>(() => {});

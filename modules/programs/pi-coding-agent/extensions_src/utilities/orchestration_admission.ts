@@ -1,8 +1,8 @@
-import { randomUUID } from "node:crypto";
-import { mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { readFile, readdir } from "node:fs/promises";
+import { join } from "node:path";
 import type { MeshGcConfig } from "./agent_types.ts";
 import { PressureAdmissionStaleError, reserveNewAgentCapacityWithPressure } from "./orchestration_gc.ts";
+import { writeAtomicJson } from "./orchestration_json.ts";
 import { meshDirectory, withMeshLock } from "./orchestration_lock.ts";
 import { assertCurrentAgentRuntime, readAgentRuntimeBinding } from "./orchestration_runtime.ts";
 import { stopMeshAgentWithDisposition } from "./orchestration_management.ts";
@@ -46,7 +46,6 @@ function validate(value: unknown, meshId: string, requestId: string): PressureAd
     return value as PressureAdmission;
 }
 async function optional(stateRoot: string, meshId: string, requestId: string): Promise<PressureAdmission | undefined> { try { return validate(JSON.parse(await readFile(pathFor(stateRoot, meshId, requestId), "utf8")), meshId, requestId); } catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined; throw error; } }
-async function atomic(path: string, value: unknown): Promise<void> { await mkdir(dirname(path), { recursive: true, mode: 0o700 }); const temporary = `${path}.${process.pid}.${randomUUID()}.tmp`; await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 }); await rename(temporary, path); }
 function boundedError(error: unknown): string { const characters = Array.from(error instanceof Error ? error.message : String(error)); while (characters.length && Buffer.byteLength(characters.join(""), "utf8") > 1024) characters.pop(); return characters.join("") || "Pressure admission failed"; }
 
 export async function requestPressureAdmission(stateRoot: string, meshId: string, input: { requestId: string; requesterAgentId: string; requesterRuntimeId: string }): Promise<PressureAdmission> {
@@ -59,7 +58,7 @@ export async function requestPressureAdmission(stateRoot: string, meshId: string
         }
         if ((await readMesh(stateRoot, meshId)).state !== "open") throw new Error(`Mesh ${meshId} is not open`);
         const now = new Date().toISOString(); const request: PressureAdmission = { schemaVersion: 1, meshId, requestId: input.requestId, requesterAgentId: input.requesterAgentId, requesterRuntimeId: input.requesterRuntimeId, state: "requested", requestedAt: now, updatedAt: now, reservationId: null, error: null, completedAt: null };
-        await atomic(pathFor(stateRoot, meshId, input.requestId), request); return request;
+        await writeAtomicJson(pathFor(stateRoot, meshId, input.requestId), request); return request;
     });
 }
 export async function readPressureAdmission(stateRoot: string, meshId: string, requestId: string): Promise<PressureAdmission> { const value = await optional(stateRoot, meshId, requestId); if (!value) throw new Error(`Pressure admission ${requestId} was not found`); return value; }
@@ -69,7 +68,7 @@ async function settle(stateRoot: string, meshId: string, requestId: string, outc
         const now = new Date().toISOString(); const next: PressureAdmission = outcome.reservation
             ? { ...current, state: "succeeded", updatedAt: now, completedAt: now, reservationId: outcome.reservation.reservationId, error: null }
             : { ...current, state: "failed", updatedAt: now, completedAt: now, reservationId: null, error: outcome.error ?? "Pressure admission failed" };
-        await atomic(pathFor(stateRoot, meshId, requestId), next); return true;
+        await writeAtomicJson(pathFor(stateRoot, meshId, requestId), next); return true;
     });
 }
 async function assertPressurePassActive(options: PressureOptions): Promise<void> { if (options.signal?.aborted) throw options.signal.reason; await assertRootLeaseOwner(options.stateRoot, options.meshId, options.leaseId); if (options.signal?.aborted) throw options.signal.reason; }
@@ -160,7 +159,7 @@ export async function processPressureAdmissions(options: PressureOptions, limit 
         const evidence = await inspectRequesterTmux(options, request);
         if (evidence.state === "unavailable") continue;
         if (evidence.state === "dead") { await cancelPressureAdmission(options.stateRoot, options.meshId, requestId, evidence.reason ?? "Pressure admission requester is not live"); processed += 1; continue; }
-        const claimed = await withMeshLock(options.stateRoot, options.meshId, async () => { if (options.signal?.aborted) throw options.signal.reason; const current = await readPressureAdmission(options.stateRoot, options.meshId, requestId); if (current.state !== "requested" && current.state !== "processing") return undefined; if (current.state === "processing") return current; const next = { ...current, state: "processing" as const, updatedAt: new Date().toISOString() }; await atomic(pathFor(options.stateRoot, options.meshId, requestId), next); return next; });
+        const claimed = await withMeshLock(options.stateRoot, options.meshId, async () => { if (options.signal?.aborted) throw options.signal.reason; const current = await readPressureAdmission(options.stateRoot, options.meshId, requestId); if (current.state !== "requested" && current.state !== "processing") return undefined; if (current.state === "processing") return current; const next = { ...current, state: "processing" as const, updatedAt: new Date().toISOString() }; await writeAtomicJson(pathFor(options.stateRoot, options.meshId, requestId), next); return next; });
         if (!claimed) continue; request = claimed;
         const destructiveEvidence = await inspectRequesterTmux(options, request);
         if (destructiveEvidence.state === "unavailable") continue;
@@ -187,8 +186,8 @@ export async function cancelPressureAdmission(stateRoot: string, meshId: string,
         const latest = await readPressureAdmission(stateRoot, meshId, requestId); if (latest.state === "cancelled" || latest.state === "failed") return;
         const reservationId = latest.reservationId ?? requestId; const reservation = await readMeshReservation(stateRoot, meshId, reservationId).catch(() => undefined); if (reservation?.state === "committed") return;
         const now = new Date().toISOString(); const error = boundedError(reason);
-        await atomic(pathFor(stateRoot, meshId, requestId), { ...latest, state: "cancelled", updatedAt: now, completedAt: now, reservationId: null, error });
-        if (reservation?.state === "pending") await atomic(reservationPath(stateRoot, meshId, reservationId), { ...reservation, state: "released", releasedAt: now, releaseReason: error, updatedAt: now });
+        await writeAtomicJson(pathFor(stateRoot, meshId, requestId), { ...latest, state: "cancelled", updatedAt: now, completedAt: now, reservationId: null, error });
+        if (reservation?.state === "pending") await writeAtomicJson(reservationPath(stateRoot, meshId, reservationId), { ...reservation, state: "released", releasedAt: now, releaseReason: error, updatedAt: now });
     });
 }
 export async function reconcilePressureAdmissions(stateRoot: string, meshId: string, requesterPaneLive: (requester: Awaited<ReturnType<typeof readAgentSnapshot>>) => Promise<boolean>): Promise<ReadonlySet<string>> {

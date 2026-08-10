@@ -2,8 +2,8 @@ import { randomUUID } from "node:crypto";
 import { appendFile, link, mkdir, open, readFile, readdir, rm, unlink, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { canonicalJson, launchEnvelopeDigest, policyDigest, validateAgentDefinition, validateAgentDefinitionSnapshot, validateLaunchEnvelope, type AgentDefinition, type AgentHarness, type MeshBudgets } from "./agent_types.ts";
+import { mapConcurrent } from "./concurrency.ts";
 import { projectAgentActivity, readAgentActivity, readProjectedAgentActivity } from "./orchestration_activity.ts";
-import { mapConcurrent } from "./orchestration_concurrency.ts";
 import { writeAtomicJson as atomicJson } from "./orchestration_json.ts";
 import { meshDirectory, withMeshAgentLock, withMeshLock } from "./orchestration_lock.ts";
 import { assertCurrentAgentRuntime, readAgentRuntimeBinding } from "./orchestration_runtime.ts";
@@ -13,6 +13,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{1
 const SHA256 = /^[0-9a-f]{64}$/u;
 const LIVE_AGENT_STATES = new Set(["creating", "idle", "busy", "stopping"]);
 const CONCURRENT_TASK_STATES = new Set(["created", "running"]);
+const ORCHESTRATION_READ_CONCURRENCY = 8;
 export interface MeshPaths { directory: string; mesh: string; lease: string; epochs: string; agents: string; tasks: string; endpoints: string; watches: string; events: string; reservations: string }
 export interface AgentPaths { directory: string; agent: string; status: string; stop: string; events: string; session: string }
 export interface TaskPaths { directory: string; request: string; status: string; result: string; cancel: string; usageClaim: string }
@@ -67,13 +68,51 @@ export async function ensurePolicyEpoch(stateRoot: string, meshId: string, input
         const epochId = randomUUID(); const epoch: PolicyEpoch = { schemaVersion: 1, meshId, epochId, mode: nonempty(input.mode, "mode"), roleSet: strings([...input.roleSet], "roleSet"), roles: Object.fromEntries(Object.entries(input.roles).map(([name, definition]) => [name, validateAgentDefinition(name, definition, `roles.${name}`)])), policyDigest: digest, createdAt: new Date().toISOString() }; validateEpoch(epoch, meshId, epochId); await atomicJson(epochPath(stateRoot, meshId, epochId), epoch); await atomicJson(paths.mesh, { ...mesh, currentEpochId: epochId, updatedAt: new Date().toISOString() }); return epoch; }); }
 
 async function listIds(directory: string): Promise<string[]> { return (await readdir(directory).catch(error => (error as NodeJS.ErrnoException).code === "ENOENT" ? [] : Promise.reject(error))).filter(name => UUID.test(name)); }
-async function listReservationsUnlocked(stateRoot: string, meshId: string): Promise<BudgetReservation[]> { const entries = await readdir(meshPaths(stateRoot, meshId).reservations).catch(error => (error as NodeJS.ErrnoException).code === "ENOENT" ? [] : Promise.reject(error)); return (await mapConcurrent(entries.filter(name => UUID.test(name.replace(/\.json$/u, ""))), 8, async name => { const reservationId = name.replace(/\.json$/u, ""); return validateReservation(await readJson<unknown>(reservationPath(stateRoot, meshId, reservationId)), meshId, reservationId); })); }
-async function reservationMaterialized(stateRoot: string, meshId: string, reservation: BudgetReservation): Promise<{ agent: boolean; task: boolean }> { const agent = reservation.agentId ? await optionalJson(agentPaths(stateRoot, meshId, reservation.agentId).status) !== undefined : false; const task = reservation.taskId ? await optionalJson(taskPaths(stateRoot, meshId, reservation.taskId).request) !== undefined : false; return { agent, task }; }
-async function budgetUsageUnlocked(stateRoot: string, meshId: string): Promise<MeshBudgetUsage> { let liveAgents = 0; for (const agentId of await listIds(meshPaths(stateRoot, meshId).agents)) { const raw = await optionalJson(agentPaths(stateRoot, meshId, agentId).status); if (raw && LIVE_AGENT_STATES.has(validateAgentStatus(raw, meshId, agentId).state)) liveAgents += 1; }
-    let concurrentTasks = 0; const taskIds = await listIds(meshPaths(stateRoot, meshId).tasks); for (const taskId of taskIds) { const raw = await optionalJson(taskPaths(stateRoot, meshId, taskId).status); if (raw) { const requestRaw = await optionalJson(taskPaths(stateRoot, meshId, taskId).request); if (requestRaw) { const request = validateTaskRequest(requestRaw, meshId, taskId); if (CONCURRENT_TASK_STATES.has(validateTaskStatus(raw, meshId, request.agentId, taskId).state)) concurrentTasks += 1; } } }
-    let pendingLiveSlots = 0; let pendingTaskSlots = 0; let pendingLifetimeTasks = 0; for (const reservation of await listReservationsUnlocked(stateRoot, meshId)) { if (reservation.state === "released") continue; const materialized = await reservationMaterialized(stateRoot, meshId, reservation); if (!materialized.agent) pendingLiveSlots += reservation.liveSlots; if (!materialized.task) { pendingTaskSlots += reservation.taskSlots; pendingLifetimeTasks += reservation.lifetimeTasks; } }
-    let lifetimeTasks = 0; for (const taskId of taskIds) if (await optionalJson(taskPaths(stateRoot, meshId, taskId).request) !== undefined) lifetimeTasks += 1;
-    return { liveAgents, concurrentTasks, lifetimeTasks, pendingLiveSlots, pendingTaskSlots, pendingLifetimeTasks }; }
+async function listReservationsUnlocked(stateRoot: string, meshId: string): Promise<BudgetReservation[]> { const entries = await readdir(meshPaths(stateRoot, meshId).reservations).catch(error => (error as NodeJS.ErrnoException).code === "ENOENT" ? [] : Promise.reject(error)); return (await mapConcurrent(entries.filter(name => UUID.test(name.replace(/\.json$/u, ""))), ORCHESTRATION_READ_CONCURRENCY, async name => { const reservationId = name.replace(/\.json$/u, ""); return validateReservation(await readJson<unknown>(reservationPath(stateRoot, meshId, reservationId)), meshId, reservationId); })); }
+async function reservationMaterialized(stateRoot: string, meshId: string, reservation: BudgetReservation): Promise<{ agent: boolean; task: boolean }> {
+    const [agent, task] = await Promise.all([
+        reservation.agentId ? optionalJson(agentPaths(stateRoot, meshId, reservation.agentId).status).then(value => value !== undefined) : false,
+        reservation.taskId ? optionalJson(taskPaths(stateRoot, meshId, reservation.taskId).request).then(value => value !== undefined) : false,
+    ]);
+    return { agent, task };
+}
+async function budgetUsageUnlocked(stateRoot: string, meshId: string): Promise<MeshBudgetUsage> {
+    const agentIds = await listIds(meshPaths(stateRoot, meshId).agents);
+    const liveAgents = (await mapConcurrent(agentIds, ORCHESTRATION_READ_CONCURRENCY, async agentId => {
+        const raw = await optionalJson(agentPaths(stateRoot, meshId, agentId).status);
+        return raw && LIVE_AGENT_STATES.has(validateAgentStatus(raw, meshId, agentId).state) ? 1 : 0;
+    })).reduce<number>((sum, value) => sum + value, 0);
+
+    const taskIds = await listIds(meshPaths(stateRoot, meshId).tasks);
+    const taskUsage = await mapConcurrent(taskIds, ORCHESTRATION_READ_CONCURRENCY, async taskId => {
+        const paths = taskPaths(stateRoot, meshId, taskId);
+        const [statusRaw, requestRaw] = await Promise.all([optionalJson(paths.status), optionalJson(paths.request)]);
+        const lifetimeTasks = requestRaw === undefined ? 0 : 1;
+        if (!statusRaw || !requestRaw) return { concurrentTasks: 0, lifetimeTasks };
+        const request = validateTaskRequest(requestRaw, meshId, taskId);
+        const concurrentTasks = CONCURRENT_TASK_STATES.has(validateTaskStatus(statusRaw, meshId, request.agentId, taskId).state) ? 1 : 0;
+        return { concurrentTasks, lifetimeTasks: 1 };
+    });
+
+    const reservations = (await listReservationsUnlocked(stateRoot, meshId)).filter(reservation => reservation.state !== "released");
+    const reservationUsage = await mapConcurrent(reservations, ORCHESTRATION_READ_CONCURRENCY, async reservation => {
+        const materialized = await reservationMaterialized(stateRoot, meshId, reservation);
+        return {
+            pendingLiveSlots: materialized.agent ? 0 : reservation.liveSlots,
+            pendingTaskSlots: materialized.task ? 0 : reservation.taskSlots,
+            pendingLifetimeTasks: materialized.task ? 0 : reservation.lifetimeTasks,
+        };
+    });
+
+    return {
+        liveAgents,
+        concurrentTasks: taskUsage.reduce((sum, value) => sum + value.concurrentTasks, 0),
+        lifetimeTasks: taskUsage.reduce((sum, value) => sum + value.lifetimeTasks, 0),
+        pendingLiveSlots: reservationUsage.reduce((sum, value) => sum + value.pendingLiveSlots, 0),
+        pendingTaskSlots: reservationUsage.reduce((sum, value) => sum + value.pendingTaskSlots, 0),
+        pendingLifetimeTasks: reservationUsage.reduce((sum, value) => sum + value.pendingLifetimeTasks, 0),
+    };
+}
 export async function readMeshBudgetUsage(stateRoot: string, meshId: string): Promise<MeshBudgetUsage> { return withMeshLock(stateRoot, meshId, () => budgetUsageUnlocked(stateRoot, meshId)); }
 export async function reserveMeshCapacity(stateRoot: string, meshId: string, kind: BudgetReservation["kind"], agentId?: string, requestedReservationId?: string): Promise<BudgetReservation> { return withMeshLock(stateRoot, meshId, async () => { if (requestedReservationId) { assertId(requestedReservationId, "reservation ID"); const existing = await optionalJson(reservationPath(stateRoot, meshId, requestedReservationId)); if (existing !== undefined) { const reservation = validateReservation(existing, meshId, requestedReservationId); if (reservation.kind !== kind || reservation.agentId !== agentId) throw new Error("Reservation ID was reused with different content"); if (reservation.state === "released") throw new Error("Requested reservation was released"); return reservation; } } const mesh = await readMesh(stateRoot, meshId); if (mesh.state !== "open") throw new Error(`Mesh ${meshId} is ${mesh.state}`); if (kind === "existing-agent-task" && !agentId) throw new Error("Existing-agent reservation requires agentId"); if (agentId) assertId(agentId, "agent ID"); const usage = await budgetUsageUnlocked(stateRoot, meshId); const liveSlots = kind === "new-agent-task" ? 1 : 0; if (usage.liveAgents + usage.pendingLiveSlots + liveSlots > mesh.budgets.maxLiveAgents) throw new Error(`Mesh live-agent capacity exhausted (${mesh.budgets.maxLiveAgents})`); if (usage.concurrentTasks + usage.pendingTaskSlots + 1 > mesh.budgets.maxConcurrentTasks) throw new Error(`Mesh concurrent-task capacity exhausted (${mesh.budgets.maxConcurrentTasks})`); if (usage.lifetimeTasks + usage.pendingLifetimeTasks + 1 > mesh.budgets.maxTasksPerMesh) throw new Error(`Mesh lifetime-task capacity exhausted (${mesh.budgets.maxTasksPerMesh})`); const now = new Date().toISOString(); const reservation: BudgetReservation = { schemaVersion: 1, meshId, reservationId: requestedReservationId ?? randomUUID(), kind, state: "pending", ...(agentId ? { agentId } : {}), liveSlots, taskSlots: 1, lifetimeTasks: 1, createdAt: now, updatedAt: now }; await atomicJson(reservationPath(stateRoot, meshId, reservation.reservationId), reservation); return reservation; }); }
 export async function readMeshReservation(stateRoot: string, meshId: string, reservationId: string): Promise<BudgetReservation> { return validateReservation(await readJson<unknown>(reservationPath(stateRoot, meshId, reservationId)), meshId, reservationId); }
@@ -102,7 +141,26 @@ export async function observeAgentLifecycle(stateRoot: string, meshId: string, a
 export async function requestAgentStop(stateRoot: string, meshId: string, agentId: string, input: { source: AgentStopSource; reason: string; requesterEndpointId?: string; terminalState?: "stopped" | "failed"; activitySequence?: number; initialLifecycle?: AgentLifecycleObservation; afterRequestPersisted?: () => Promise<void> }): Promise<{ request: AgentStopRequest; created: boolean; status: AgentStatus }> { const paths = agentPaths(stateRoot, meshId, agentId); return withMeshAgentLock(stateRoot, meshId, agentId, async () => { const status = await readAgentStatus(paths, meshId); const existingRaw = await optionalJson(paths.stop); const existing = existingRaw === undefined ? undefined : validateAgentStop(existingRaw, meshId, agentId); if (existing && (existing.state === "requested" || existing.state === "terminating" || existing.state === "confirmed")) return { request: existing, created: false, status }; if (existing?.state === "failed" && status.state === "stopping") return { request: existing, created: false, status }; if (input.initialLifecycle) { const runtime = await readAgentRuntimeBinding(stateRoot, meshId, agentId); const currentLifecycle = agentLifecycleObservation(status, runtime?.runtimeId, existing?.stopRequestId); if (currentLifecycle.statusUpdatedAt !== input.initialLifecycle.statusUpdatedAt || currentLifecycle.activeTaskId !== input.initialLifecycle.activeTaskId || currentLifecycle.latestTaskId !== input.initialLifecycle.latestTaskId || currentLifecycle.runtimeId !== input.initialLifecycle.runtimeId || currentLifecycle.stopRequestId !== input.initialLifecycle.stopRequestId) throw new Error("Agent lifecycle observation is stale"); } const now = new Date().toISOString(); const terminal = isTerminalAgent(status.state); const reason = terminal ? validateStopReason(status.exitReason ?? input.reason) : validateStopReason(input.reason); if (existing) await appendEventUnlocked(paths, meshId, "stop_request_superseded", { stopRequestId: existing.stopRequestId, state: existing.state, source: existing.source, reason: existing.reason }).catch(() => {}); const request: AgentStopRequest = { schemaVersion: 1, meshId, agentId, stopRequestId: randomUUID(), state: terminal ? "confirmed" : "requested", source: terminal ? "recovery" : input.source, ...(input.requesterEndpointId ? { requesterEndpointId: nonempty(input.requesterEndpointId, "requesterEndpointId") } : {}), reason, ...(input.terminalState && input.terminalState !== "stopped" ? { terminalState: input.terminalState } : {}), ...(input.activitySequence === undefined ? {} : { activitySequence: integer(input.activitySequence, "activitySequence", true) }), previousAgentState: status.state, requestedAt: now, updatedAt: now, ...(terminal ? { confirmedAt: now } : {}) }; await atomicJson(paths.stop, request); await input.afterRequestPersisted?.(); if (!terminal) await atomicJson(paths.status, { ...status, state: "stopping", updatedAt: now }); await appendEventUnlocked(paths, meshId, "agent_stop_requested", { stopRequestId: request.stopRequestId, source: request.source, reason: request.reason }).catch(() => {}); return { request, created: true, status: terminal ? status : { ...status, state: "stopping", updatedAt: now } }; }); }
 export type IdleStopRoleMinimum = { role: string; tier: "retain" | "pressureFloor"; minimum: number };
 type IdleStopClaimInput = { source: "gc-role" | "gc-context" | "gc-pressure"; reason: string; activitySequence: number; gcPassId?: string; staleMs: number; allowContextRetire?: boolean; roleMinimum?: IdleStopRoleMinimum; afterRequestPersisted?: () => Promise<void> };
-async function freshReusableIdleCountUnlocked(stateRoot: string, meshId: string, role: string, staleMs: number): Promise<number> { let count = 0; for (const currentAgentId of await listIds(meshPaths(stateRoot, meshId).agents)) { try { const paths = agentPaths(stateRoot, meshId, currentAgentId); const [agent, status, activity, runtime] = await Promise.all([readAgentRecord(paths.agent, meshId, currentAgentId), readAgentStatus(paths, meshId), readAgentActivity(stateRoot, meshId, currentAgentId), readAgentRuntimeBinding(stateRoot, meshId, currentAgentId)]); if (agent.agent !== role || status.state !== "idle" || status.activeTaskId || !activity || !runtime || activity.runtimeId !== runtime.runtimeId || activity.phase !== "idle" || activity.pendingMessages) continue; const projected = projectAgentActivity(status, activity, { staleMs, expectedRuntimeId: runtime.runtimeId, allowUnsupportedContext: agent.harness !== "pi" }); if (projected.context.health !== "retire" && projected.acceptingTask) count += 1; } catch { /* Invalid or concurrently incomplete records are not reusable. */ } } return count; }
+async function freshReusableIdleCountUnlocked(stateRoot: string, meshId: string, role: string, staleMs: number): Promise<number> {
+    const agentIds = await listIds(meshPaths(stateRoot, meshId).agents);
+    const reusable = await mapConcurrent(agentIds, ORCHESTRATION_READ_CONCURRENCY, async currentAgentId => {
+        try {
+            const paths = agentPaths(stateRoot, meshId, currentAgentId);
+            const [agent, status, activity, runtime] = await Promise.all([
+                readAgentRecord(paths.agent, meshId, currentAgentId),
+                readAgentStatus(paths, meshId),
+                readAgentActivity(stateRoot, meshId, currentAgentId),
+                readAgentRuntimeBinding(stateRoot, meshId, currentAgentId),
+            ]);
+            if (agent.agent !== role || status.state !== "idle" || status.activeTaskId || !activity || !runtime || activity.runtimeId !== runtime.runtimeId || activity.phase !== "idle" || activity.pendingMessages) return 0;
+            const projected = projectAgentActivity(status, activity, { staleMs, expectedRuntimeId: runtime.runtimeId, allowUnsupportedContext: agent.harness !== "pi" });
+            return projected.context.health !== "retire" && projected.acceptingTask ? 1 : 0;
+        } catch {
+            return 0; // Invalid or concurrently incomplete records are not reusable.
+        }
+    });
+    return reusable.reduce<number>((sum, value) => sum + value, 0);
+}
 async function claimIdleAgentForStopUnlocked(stateRoot: string, meshId: string, agentId: string, input: IdleStopClaimInput): Promise<AgentStopRequest | undefined> { const paths = agentPaths(stateRoot, meshId, agentId); const status = await readAgentStatus(paths, meshId); if (status.state !== "idle" || status.activeTaskId) return undefined; const existingRaw = await optionalJson(paths.stop); const existing = existingRaw === undefined ? undefined : validateAgentStop(existingRaw, meshId, agentId); if (existing && ["requested", "terminating", "confirmed"].includes(existing.state)) return undefined; const [activity, runtime] = await Promise.all([readAgentActivity(stateRoot, meshId, agentId).catch(() => undefined), readAgentRuntimeBinding(stateRoot, meshId, agentId)]); if (!activity || !runtime || activity.runtimeId !== runtime.runtimeId || activity.sequence !== input.activitySequence || activity.phase !== "idle" || activity.pendingMessages) return undefined; const projected = projectAgentActivity(status, activity, { staleMs: input.staleMs, expectedRuntimeId: runtime.runtimeId }); const eligible = input.allowContextRetire ? projected.context.health === "retire" : projected.acceptingTask; if (!eligible) return undefined; if (input.roleMinimum) { const role = nonempty(input.roleMinimum.role, "role minimum role"); if (input.roleMinimum.tier !== "retain" && input.roleMinimum.tier !== "pressureFloor") throw new Error("Role minimum tier is invalid"); const minimum = integer(input.roleMinimum.minimum, `role minimum ${input.roleMinimum.tier}`); const victim = await readAgentRecord(paths.agent, meshId, agentId); if (victim.agent !== role) return undefined; if (await freshReusableIdleCountUnlocked(stateRoot, meshId, role, input.staleMs) <= minimum) return undefined; } const now = new Date().toISOString(); if (existing) await appendEventUnlocked(paths, meshId, "stop_request_superseded", { stopRequestId: existing.stopRequestId, state: existing.state, source: existing.source, reason: existing.reason }).catch(() => {}); const request: AgentStopRequest = { schemaVersion: 1, meshId, agentId, stopRequestId: randomUUID(), state: "requested", source: input.source, reason: validateStopReason(input.reason), activitySequence: input.activitySequence, ...(input.gcPassId ? { gcPassId: id(input.gcPassId, "gcPassId") } : {}), previousAgentState: status.state, requestedAt: now, updatedAt: now }; await atomicJson(paths.stop, request); await input.afterRequestPersisted?.(); await atomicJson(paths.status, { ...status, state: "stopping", updatedAt: now }); await appendEventUnlocked(paths, meshId, "agent_stop_requested", { stopRequestId: request.stopRequestId, source: request.source, reason: request.reason }).catch(() => {}); return request; }
 export async function claimIdleAgentForStop(stateRoot: string, meshId: string, agentId: string, input: IdleStopClaimInput): Promise<AgentStopRequest | undefined> { return withMeshAgentLock(stateRoot, meshId, agentId, () => claimIdleAgentForStopUnlocked(stateRoot, meshId, agentId, input)); }
 

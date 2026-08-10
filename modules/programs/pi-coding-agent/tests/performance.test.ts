@@ -44,13 +44,17 @@ void test("mesh metrics scope current tasks by mesh and aggregate recent tasks a
     const root = await mkdtemp(join(tmpdir(), "performance-state-")); const stateRoot = join(root, "state"); const configPath = join(root, "orchestration.json"); const now = Date.parse("2026-08-04T12:00:00.000Z");
     await writeFile(configPath, JSON.stringify({ schemaVersion: 7, stateRoot }));
     await addMeshTask(stateRoot, { meshId: "mesh-current", agentId: "agent-a", agent: "tester", taskId: "task-current", start: "2026-08-04T11:40:00.000Z" });
+    await addMeshTask(stateRoot, { meshId: "mesh-current", agentId: "agent-a", agent: "tester", taskId: "task-prior", start: "2026-08-04T11:00:00.000Z", finish: "2026-08-04T11:05:00.000Z" });
     await addMeshTask(stateRoot, { meshId: "mesh-other", agentId: "agent-b", agent: "reviewer", taskId: "task-other", start: "2026-08-03T10:00:00.000Z", finish: "2026-08-03T10:20:00.000Z" });
 
     const current = await readMeshMetrics(configPath, { meshId: "mesh-current", nowMs: now });
-    assert.deepEqual(current.tasks.map(task => ({ meshId: task.meshId, agentId: task.agentId, taskId: task.taskId, outcome: task.outcome, open: task.open, longRunning: task.longRunning, durationMs: task.durationMs })), [{ meshId: "mesh-current", agentId: "agent-a", taskId: "task-current", outcome: "running", open: true, longRunning: true, durationMs: 20 * 60 * 1000 }]);
+    assert.deepEqual(current.tasks.map(task => ({ taskId: task.taskId, outcome: task.outcome, open: task.open, longRunning: task.longRunning, durationMs: task.durationMs })), [
+        { taskId: "task-current", outcome: "running", open: true, longRunning: true, durationMs: 20 * 60 * 1000 },
+        { taskId: "task-prior", outcome: "succeeded", open: false, longRunning: false, durationMs: 5 * 60 * 1000 },
+    ]);
 
     const recent = await readMeshMetrics(configPath, { sinceMs: now - 2 * 86_400_000, nowMs: now });
-    assert.deepEqual(recent.tasks.map(task => task.taskId), ["task-current", "task-other"]);
+    assert.deepEqual(recent.tasks.map(task => task.taskId), ["task-current", "task-other", "task-prior"]);
     const text = formatRecentPerformance(2, recent); assert.match(text, /median.*p90.*tester.*reviewer.*long-running/su);
 });
 
@@ -59,7 +63,21 @@ void test("mesh metrics report unavailable state and reject future open tasks", 
     await writeFile(configPath, JSON.stringify({ schemaVersion: 7, stateRoot }));
     const missing = await readMeshMetrics(configPath); assert.deepEqual(missing, { tasks: [], unread: 1, unavailable: "mesh state unavailable" });
     await addMeshTask(stateRoot, { meshId: "mesh", agentId: "agent", agent: "tester", taskId: "future-task", start: "2026-08-04T12:01:00.000Z" });
-    const future = await readMeshMetrics(configPath, { meshId: "mesh", nowMs: Date.parse("2026-08-04T12:00:00.000Z") }); assert.deepEqual(future.tasks, []); assert.equal(future.unread, 1); assert.equal(future.unavailable, undefined);
+    const nowMs = Date.parse("2026-08-04T12:00:00.000Z");
+    const future = await readMeshMetrics(configPath, { meshId: "mesh", nowMs }); assert.deepEqual(future.tasks, []); assert.equal(future.unread, 1); assert.equal(future.unavailable, undefined);
+
+    // Given valid and malformed persisted tasks in one mesh, the metrics consumer keeps the valid projection and counts each unread task.
+    await addMeshTask(stateRoot, { meshId: "mesh", agentId: "agent", agent: "tester", taskId: "valid-task", start: "2026-08-04T11:00:00.000Z", finish: "2026-08-04T11:01:00.000Z" });
+    const malformed = join(stateRoot, "meshes", "mesh", "tasks", "malformed-task");
+    await mkdir(malformed, { recursive: true });
+    await writeFile(join(malformed, "request.json"), "not-json");
+    await writeFile(join(malformed, "status.json"), "{}");
+    await addMeshTask(stateRoot, { meshId: "mesh", agentId: "agent", agent: "tester", taskId: "malformed-result", start: "2026-08-04T10:00:00.000Z", finish: "2026-08-04T10:01:00.000Z" });
+    await writeFile(join(stateRoot, "meshes", "mesh", "tasks", "malformed-result", "result.json"), "not-json");
+    const mixed = await readMeshMetrics(configPath, { meshId: "mesh", nowMs });
+    assert.deepEqual(mixed.tasks.map(task => task.taskId), ["valid-task"]);
+    assert.equal(mixed.unread, 3);
+
     await writeFile(configPath, "not-json"); const broken = await readMeshMetrics(configPath); assert.equal(broken.unread, 1); assert.equal(broken.unavailable, "mesh config unavailable");
 });
 

@@ -1,10 +1,14 @@
 import { execFile } from "node:child_process";
-import { readFile, readdir, statfs } from "node:fs/promises";
+import { readFile, statfs } from "node:fs/promises";
 import { cpus, freemem, loadavg, platform, totalmem } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { getAgentDir, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { provideCommandPaletteContribution } from "./utilities/command_palette_contributions.ts";
+import {
+    readOrchestrationMetrics,
+    type OrchestrationTaskMetric,
+} from "./utilities/orchestration_metrics.ts";
 
 export const PERFORMANCE_ENTRY = "pi-performance-run";
 export const PERFORMANCE_SCHEMA_VERSION = 1;
@@ -31,23 +35,13 @@ export interface PerformanceResourceSnapshot {
     swap: string;
     diskFreeBytes: number | "unavailable";
 }
-export interface MeshTaskMetric {
-    meshId: string;
-    agentId: string;
-    taskId: string;
-    agentType: string;
-    outcome: string;
-    startedAt: string;
-    finishedAt?: string;
-    durationMs: number;
-    open: boolean;
+export interface MeshTaskMetric extends OrchestrationTaskMetric {
     longRunning: boolean;
 }
 export interface MeshMetrics { tasks: MeshTaskMetric[]; unread: number; unavailable?: string }
 
 function finite(value: unknown): value is number { return typeof value === "number" && Number.isFinite(value) && value >= 0; }
 function object(value: unknown): Record<string, unknown> | undefined { return value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : undefined; }
-function isoMs(value: unknown): number | undefined { if (typeof value !== "string") return undefined; const parsed = Date.parse(value); return Number.isFinite(parsed) ? parsed : undefined; }
 function shortId(id: string): string { return id.slice(0, 8); }
 function duration(value: number): string {
     if (value < 1000) return `${Math.round(value)}ms`;
@@ -128,52 +122,12 @@ export async function resourceSnapshot(cwd: string): Promise<PerformanceResource
     return { cpuCount: cpus().length, loadAverage: loadavg(), memoryTotalBytes: totalmem(), memoryFreeBytes: freemem(), swap, diskFreeBytes };
 }
 
-async function json(path: string): Promise<unknown> { return JSON.parse(await readFile(path, "utf8")); }
 export async function readMeshMetrics(configPath: string, options: { meshId?: string; sinceMs?: number; nowMs?: number } = {}): Promise<MeshMetrics> {
-    const nowMs = options.nowMs ?? Date.now(); let unread = 0;
-    let config: Record<string, unknown> | undefined;
-    try { config = object(await json(configPath)); } catch { return { tasks: [], unread: 1, unavailable: "mesh config unavailable" }; }
-    if (typeof config?.stateRoot !== "string") return { tasks: [], unread: 1, unavailable: "mesh stateRoot unavailable" };
-    const meshesRoot = join(config.stateRoot, "meshes");
-    let meshIds: string[];
-    if (options.meshId) meshIds = [options.meshId];
-    else {
-        try { meshIds = await readdir(meshesRoot); }
-        catch { return { tasks: [], unread: 1, unavailable: "mesh state unavailable" }; }
-    }
-    const tasks: MeshTaskMetric[] = [];
-    for (const meshId of meshIds) {
-        const meshRoot = join(meshesRoot, meshId);
-        let taskIds: string[];
-        try { taskIds = await readdir(join(meshRoot, "tasks")); }
-        catch {
-            if (options.meshId) return { tasks: [], unread: unread + 1, unavailable: "mesh tasks state unavailable" };
-            unread += 1; continue;
-        }
-        const agents = new Map<string, string | undefined>();
-        for (const taskId of taskIds) {
-            try {
-                const taskDirectory = join(meshRoot, "tasks", taskId);
-                const [requestRaw, statusRaw, resultRaw] = await Promise.all([json(join(taskDirectory, "request.json")), json(join(taskDirectory, "status.json")), json(join(taskDirectory, "result.json")).catch(() => undefined)]);
-                const request = object(requestRaw); const status = object(statusRaw); const result = object(resultRaw);
-                const agentId = typeof request?.agentId === "string" ? request.agentId : undefined;
-                const startedMs = isoMs(result?.startedAt) ?? isoMs(status?.startedAt) ?? isoMs(request?.createdAt); const finishedMs = isoMs(result?.finishedAt) ?? isoMs(status?.finishedAt);
-                if (!request || !status || request.meshId !== meshId || status.meshId !== meshId || typeof request.taskId !== "string" || request.taskId !== taskId || !agentId || status.agentId !== agentId || status.taskId !== taskId || result && (result.meshId !== meshId || result.agentId !== agentId || result.taskId !== taskId) || startedMs === undefined || (finishedMs !== undefined && finishedMs < startedMs)) { unread += 1; continue; }
-                if (!agents.has(agentId)) {
-                    const rawAgent = object(await json(join(meshRoot, "agents", agentId, "agent.json")).catch(() => undefined));
-                    agents.set(agentId, rawAgent?.meshId === meshId && rawAgent.agentId === agentId && typeof rawAgent.agent === "string" ? rawAgent.agent : undefined);
-                }
-                const agentType = agents.get(agentId);
-                if (!agentType) { unread += 1; continue; }
-                const open = finishedMs === undefined;
-                if (open && startedMs > nowMs) { unread += 1; continue; }
-                const elapsed = (finishedMs ?? nowMs) - startedMs;
-                if (options.sinceMs !== undefined && (finishedMs ?? startedMs) < options.sinceMs) continue;
-                tasks.push({ meshId, agentId, taskId: request.taskId, agentType, outcome: typeof result?.outcome === "string" ? result.outcome : typeof status.state === "string" ? status.state : "unknown", startedAt: new Date(startedMs).toISOString(), ...(finishedMs === undefined ? {} : { finishedAt: new Date(finishedMs).toISOString() }), durationMs: elapsed, open, longRunning: elapsed >= LONG_RUNNING_MS });
-            } catch { unread += 1; }
-        }
-    }
-    return { tasks: tasks.toSorted((a, b) => b.durationMs - a.durationMs || a.taskId.localeCompare(b.taskId)), unread };
+    const metrics = await readOrchestrationMetrics(configPath, options);
+    return {
+        ...metrics,
+        tasks: metrics.tasks.map(task => ({ ...task, longRunning: task.durationMs >= LONG_RUNNING_MS })),
+    };
 }
 
 function percentile(values: readonly number[], fraction: number): number { if (values.length === 0) return 0; const sorted = values.toSorted((a, b) => a - b); return sorted[Math.ceil(sorted.length * fraction) - 1] ?? 0; }

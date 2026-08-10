@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { readFile as nodeReadFile } from "node:fs/promises";
+import { mapConcurrent } from "./concurrency.ts";
 import {
     ProviderError,
     type AdapterSearchResponse,
@@ -23,6 +24,8 @@ import { defaultSleep, raceWithSignal } from "./web_retrieval_runtime.ts";
 export { defaultSleep };
 
 export type Sleep = (ms: number, signal: AbortSignal) => Promise<void>;
+
+const CREDENTIAL_READ_CONCURRENCY = 4;
 
 export interface SearchRouterDependencies {
     fetch: FetchLike;
@@ -138,6 +141,10 @@ export function selectSearchAdapter(
     })), rng);
 }
 
+type CredentialLoadResult =
+    | { kind: "adapter"; adapter: SearchAdapter }
+    | { kind: "diagnostic"; diagnostic: SearchEligibilityDiagnostic };
+
 async function loadEligibleAdapters(
     config: WebRetrievalRuntimeConfig,
     deps: SearchRouterDependencies,
@@ -146,30 +153,28 @@ async function loadEligibleAdapters(
     const searchIds = new Set<SearchProviderId>([
         "parallel-search", "brave-llm-context", "brave-web-search", "exa-search",
     ]);
-    const adapters: SearchAdapter[] = [];
-    const diagnostics: SearchEligibilityDiagnostic[] = [];
-    for (const provider of config.providers) {
-        if (!searchIds.has(provider.id as SearchProviderId)) continue;
+    const providers = config.providers.filter(provider => searchIds.has(provider.id as SearchProviderId));
+    const loaded = await mapConcurrent(providers, CREDENTIAL_READ_CONCURRENCY, async (provider): Promise<CredentialLoadResult> => {
         const providerId = provider.id as SearchProviderId;
         if (provider.apiKeyFile === null) {
-            diagnostics.push({ provider: providerId, category: "credential", reason: "not-configured" });
-            continue;
+            return { kind: "diagnostic", diagnostic: { provider: providerId, category: "credential", reason: "not-configured" } };
         }
         let key: string;
         try {
             key = (await raceWithSignal(deps.readTextFile(provider.apiKeyFile, signal), signal)).trim();
         } catch (error) {
             if (signal.aborted) throw signal.reason ?? error;
-            diagnostics.push({ provider: providerId, category: "credential", reason: "unreadable" });
-            continue;
+            return { kind: "diagnostic", diagnostic: { provider: providerId, category: "credential", reason: "unreadable" } };
         }
         if (key === "") {
-            diagnostics.push({ provider: providerId, category: "credential", reason: "empty" });
-            continue;
+            return { kind: "diagnostic", diagnostic: { provider: providerId, category: "credential", reason: "empty" } };
         }
-        adapters.push(createSearchAdapter(provider, key, { fetch: deps.fetch, now: deps.now }, config.retry.defaultWaitMs));
-    }
-    return { adapters, diagnostics };
+        return { kind: "adapter", adapter: createSearchAdapter(provider, key, { fetch: deps.fetch, now: deps.now }, config.retry.defaultWaitMs) };
+    });
+    return {
+        adapters: loaded.flatMap(result => result.kind === "adapter" ? [result.adapter] : []),
+        diagnostics: loaded.flatMap(result => result.kind === "diagnostic" ? [result.diagnostic] : []),
+    };
 }
 
 function providerFailure(error: unknown, provider: SearchProviderId, timedOut: boolean): ProviderError {

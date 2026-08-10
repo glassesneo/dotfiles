@@ -1,6 +1,6 @@
-import { randomUUID } from "node:crypto";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+import { writeAtomicJson } from "./orchestration_json.ts";
 import { meshDirectory, withMeshAgentLock } from "./orchestration_lock.ts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
@@ -39,13 +39,6 @@ async function optionalBinding(stateRoot: string, meshId: string, agentId: strin
     try { return validate(JSON.parse(await readFile(runtimePath(stateRoot, meshId, agentId), "utf8")), meshId, agentId); }
     catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined; throw error; }
 }
-async function atomic(path: string, value: AgentRuntimeBinding): Promise<void> {
-    await mkdir(dirname(path), { recursive: true, mode: 0o700 });
-    const temporary = `${path}.${process.pid}.${randomUUID()}.tmp`;
-    await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
-    await rename(temporary, path);
-}
-
 export async function bindAgentRuntime(stateRoot: string, meshId: string, agentId: string, input: { runtimeId: string; kind: "pi" | "external"; sessionId?: string; sessionFile?: string }): Promise<AgentRuntimeBinding> {
     if (!UUID.test(input.runtimeId)) throw new Error("agent runtime ID must be a UUID");
     return withMeshAgentLock(stateRoot, meshId, agentId, async () => {
@@ -55,7 +48,7 @@ export async function bindAgentRuntime(stateRoot: string, meshId: string, agentI
         if (input.kind === "pi" && (!sessionId || !sessionFile)) throw new Error("Pi runtime binding requires sessionId and sessionFile");
         if (existing?.kind === input.kind && existing.runtimeId === input.runtimeId) return existing;
         const binding: AgentRuntimeBinding = { schemaVersion: 1, meshId, agentId, runtimeId: input.runtimeId, kind: input.kind, sessionId, sessionFile, boundAt: new Date().toISOString() };
-        await atomic(runtimePath(stateRoot, meshId, agentId), binding);
+        await writeAtomicJson(runtimePath(stateRoot, meshId, agentId), binding);
         return binding;
     });
 }

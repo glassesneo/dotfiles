@@ -1,4 +1,4 @@
-import { mapConcurrent } from "./orchestration_concurrency.ts";
+import { mapConcurrent } from "./concurrency.ts";
 import { withAgentTerminationLock } from "./orchestration_lock.ts";
 import { confirmAgentStop, failAgent, failAgentStop, listMeshAgents, markAgentStopTerminating, observeAgentLifecycle, readAgentSnapshot, readAgentStopRequest, requestAgentStop, requestTaskCancellation, type AgentLifecycleObservation } from "./orchestration_store.ts";
 import { isTerminalAgent, isTerminalTask, tmuxOwnership, type AgentSnapshot, type AgentStopRequest, type AgentStopSource } from "./orchestration_types.ts";
