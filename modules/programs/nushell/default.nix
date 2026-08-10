@@ -1,9 +1,9 @@
 {
   delib,
   host,
+  homeConfig,
   lib,
   pkgs,
-  sopsSecretPaths,
   ...
 }:
 delib.module {
@@ -17,7 +17,12 @@ delib.module {
       "query"
     ];
 
-    secretPath = name: sopsSecretPaths.${name} or "/run/secrets/${name}";
+    secretEnv = name: variable:
+      lib.optionalString (builtins.hasAttr name homeConfig.sops.secrets) ''
+        if ("${homeConfig.sops.secrets.${name}.path}" | path exists) {
+          $env.${variable} = (open "${homeConfig.sops.secrets.${name}.path}" | str trim)
+        }
+      '';
   in {
     xdg.configFile = {
       "nushell/completions" = {
@@ -49,17 +54,9 @@ delib.module {
           ${lib.strings.concatMapStrings plugin_dir plugin_names}
         ]
 
-        if ("${secretPath "ai-mop-api-key"}" | path exists) {
-          $env.AI_MOP_API_KEY = (open "${secretPath "ai-mop-api-key"}" | str trim)
-        }
-
-        if ("${secretPath "iniad-id"}" | path exists) {
-          $env.INIAD_ID = (open "${secretPath "iniad-id"}" | str trim)
-        }
-
-        if ("${secretPath "iniad-password"}" | path exists) {
-          $env.INIAD_PASSWORD = (open "${secretPath "iniad-password"}" | str trim)
-        }
+        ${secretEnv "ai-mop-api-key" "AI_MOP_API_KEY"}
+        ${secretEnv "iniad-id" "INIAD_ID"}
+        ${secretEnv "iniad-password" "INIAD_PASSWORD"}
       '';
       settings = {
         show_banner = false;

@@ -1,11 +1,12 @@
 {
-  config,
   delib,
+  homeConfig,
   inputs,
   lib,
-  moduleSystem,
+  pkgs,
   ...
 }: let
+  defaultSopsFile = ../../secrets/shared.yaml;
   sharedSecretNames = [
     "gemini-api-key"
     "ai-mop-api-key"
@@ -20,6 +21,26 @@
     "iniad-id"
     "iniad-password"
   ];
+  secretEntryType = lib.types.submodule ({name, ...}: {
+    options = {
+      source = lib.mkOption {
+        type = lib.types.path;
+        default = defaultSopsFile;
+      };
+      format = lib.mkOption {
+        type = lib.types.enum ["yaml" "json" "ini" "dotenv" "binary"];
+        default = "yaml";
+      };
+      key = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = name;
+      };
+      mode = lib.mkOption {
+        type = lib.types.strMatching "[0-7]{4}";
+        default = "0400";
+      };
+    };
+  });
 in
   delib.module {
     name = "toplevel.secrets";
@@ -27,61 +48,34 @@ in
     options = with delib;
       moduleOptions {
         enable = boolOption true;
-        names = listOfOption (lib.types.enum sharedSecretNames) sharedSecretNames;
+        entries = attrsOfOption secretEntryType (lib.genAttrs sharedSecretNames (_: {}));
       };
 
-    myconfig.always = {cfg, ...}: {
-      args.shared.sopsSecretPaths =
-        if !cfg.enable
-        then {}
-        else if builtins.elem moduleSystem ["darwin" "nixos"]
-        then lib.mapAttrs (_: secret: secret.path) config.sops.secrets
-        # Standalone Home Manager consumes secrets provisioned by the host's
-        # sops-nix configuration rather than declaring a second secret owner.
-        else lib.genAttrs cfg.names (name: "/run/secrets/${name}");
-    };
+    home.always.imports = [inputs.sops-nix.homeManagerModules.sops];
 
-    # Nix module imports cannot depend on config. Keep the upstream module
-    # available and gate only secret provisioning through the typed interface.
-    darwin.always.imports = [inputs.sops-nix.darwinModules.sops];
-
-    darwin.ifEnabled = {
-      cfg,
-      myconfig,
-      ...
-    }: let
-      username = myconfig.constants.username;
-
-      mkSharedSecret = _: {
-        sopsFile = ../../secrets/shared.yaml;
-        owner = username;
-        mode = "0400";
-      };
-    in {
-      sops = {
-        age.keyFile = "/Users/${username}/.config/sops/age/keys.txt";
-        secrets = lib.genAttrs cfg.names mkSharedSecret;
-      };
-    };
-
-    nixos.always.imports = [inputs.sops-nix.nixosModules.sops];
-
-    nixos.ifEnabled = {
-      cfg,
-      myconfig,
-      ...
-    }: let
-      username = myconfig.constants.username;
-
-      mkSharedSecret = _: {
-        sopsFile = ../../secrets/shared.yaml;
-        owner = username;
-        mode = "0400";
-      };
-    in {
-      sops = {
-        age.keyFile = "/home/${username}/.config/sops/age/keys.txt";
-        secrets = lib.genAttrs cfg.names mkSharedSecret;
-      };
-    };
+    home.ifEnabled = {cfg, ...}:
+      lib.mkMerge [
+        {
+          sops = {
+            age.keyFile = "${homeConfig.xdg.configHome}/sops/age/keys.txt";
+            defaultSopsFile = defaultSopsFile;
+            secrets =
+              lib.mapAttrs (_: entry: {
+                sopsFile = entry.source;
+                inherit (entry) format mode;
+                key =
+                  if entry.key == null
+                  then ""
+                  else entry.key;
+              })
+              cfg.entries;
+          };
+        }
+        (lib.mkIf (pkgs.stdenv.isDarwin && cfg.entries != {}) {
+          launchd.agents.sops-nix.domain = "user";
+          home.activation.sops-nix = lib.mkForce (homeConfig.lib.dag.entryAfter ["setupLaunchAgents"] ''
+            /bin/launchctl kickstart -k "user/$(id -u)/org.nix-community.home.sops-nix"
+          '');
+        })
+      ];
   }

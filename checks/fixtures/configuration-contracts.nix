@@ -50,43 +50,70 @@
     modules = [{myconfig.programs.pi-coding-agent.question.enable = false;}];
   };
   darwin = f.darwinConfigurations.seiran;
-  partialHomeSecrets = base.extendModules {
-    modules = [{myconfig.toplevel.secrets.names = lib.mkForce ["parallel-api-key" "exa-api-key"];}];
+  partialSecrets = {
+    myconfig.toplevel.secrets.entries = lib.mkForce {
+      ai-mop-api-key = {};
+      parallel-api-key = {};
+      exa-api-key = {};
+    };
   };
-  partialDarwinSecrets = darwin.extendModules {
-    modules = [{myconfig.toplevel.secrets.names = lib.mkForce ["parallel-api-key" "exa-api-key"];}];
+  disableSecrets = {myconfig.toplevel.secrets.enable = lib.mkForce false;};
+  partialHomeSecrets = base.extendModules {modules = [partialSecrets];};
+  disabledHomeSecrets = base.extendModules {modules = [disableSecrets];};
+  partialDarwinSecrets = darwin.extendModules {modules = [partialSecrets];};
+  disabledDarwinSecrets = darwin.extendModules {modules = [disableSecrets];};
+  emptyDarwinSecrets = darwin.extendModules {
+    modules = [{myconfig.toplevel.secrets.entries = lib.mkForce {};}];
   };
-  disabledDarwinSecrets = darwin.extendModules {
-    modules = [{myconfig.toplevel.secrets.enable = lib.mkForce false;}];
+  approvedSharedSecretSource = f.outPath + "/secrets/shared.yaml";
+  wholeFileSecrets = base.extendModules {
+    modules = [
+      {
+        myconfig.toplevel.secrets.entries = lib.mkForce {
+          synthetic-whole-file = {
+            source = approvedSharedSecretSource;
+            format = "binary";
+            key = null;
+            mode = "0440";
+          };
+        };
+      }
+    ];
   };
   retrievalSecretNames = ["parallel-api-key" "brave-api-key" "brave-free-api-key" "exa-api-key"];
+  nushellCredentials = {
+    ai-mop-api-key = "AI_MOP_API_KEY";
+    iniad-id = "INIAD_ID";
+    iniad-password = "INIAD_PASSWORD";
+  };
 
-  collectDarwinWebRetrieval = system: let
-    c = system.config.home-manager.users.neo;
+  collectHomeWebRetrieval = c: let
     configDir = "${c.home.homeDirectory}/.pi/agent";
   in {
     config = builtins.fromJSON (builtins.unsafeDiscardStringContext c.home.file."${configDir}/web-retrieval.json".text);
     secretPaths = builtins.listToAttrs (map (name: {
         inherit name;
-        value = system.config.sops.secrets.${name}.path or null;
+        value = c.sops.secrets.${name}.path or null;
       })
       retrievalSecretNames);
   };
 
-  collectHomeWebRetrieval = home: let
-    c = home.config;
-    configDir = "${c.home.homeDirectory}/.pi/agent";
-  in {
-    config = builtins.fromJSON (builtins.unsafeDiscardStringContext c.home.file."${configDir}/web-retrieval.json".text);
-    secretPaths = builtins.listToAttrs (map (name: {
-        inherit name;
-        value =
-          if c.myconfig.toplevel.secrets.enable && builtins.elem name c.myconfig.toplevel.secrets.names
-          then "/run/secrets/${name}"
-          else null;
+  collectHomeNushell = c: {
+    extraEnv = c.programs.nushell.extraEnv;
+    credentials =
+      lib.mapAttrs (name: variable: {
+        inherit variable;
+        path = c.sops.secrets.${name}.path or null;
       })
-      retrievalSecretNames);
+      nushellCredentials;
   };
+
+  collectScalarDeclarations = c:
+    lib.mapAttrs (_: secret: {
+      source = secret.sopsFile;
+      inherit (secret) format key mode;
+    })
+    c.sops.secrets;
 
   collectEmergency = home: let
     c = home.config;
@@ -166,11 +193,60 @@ in
         darwinTmux = darwin.config.home-manager.users.neo.programs.tmux.extraConfig;
       };
       webRetrieval = {
-        home = collectHomeWebRetrieval base;
-        homePartial = collectHomeWebRetrieval partialHomeSecrets;
-        darwin = collectDarwinWebRetrieval darwin;
-        darwinPartial = collectDarwinWebRetrieval partialDarwinSecrets;
-        darwinDisabled = collectDarwinWebRetrieval disabledDarwinSecrets;
+        home = collectHomeWebRetrieval base.config;
+        homePartial = collectHomeWebRetrieval partialHomeSecrets.config;
+        homeDisabled = collectHomeWebRetrieval disabledHomeSecrets.config;
+        darwin = collectHomeWebRetrieval darwin.config.home-manager.users.neo;
+        darwinPartial = collectHomeWebRetrieval partialDarwinSecrets.config.home-manager.users.neo;
+        darwinDisabled = collectHomeWebRetrieval disabledDarwinSecrets.config.home-manager.users.neo;
+      };
+      nushellSecrets = {
+        home = collectHomeNushell base.config;
+        homePartial = collectHomeNushell partialHomeSecrets.config;
+        homeDisabled = collectHomeNushell disabledHomeSecrets.config;
+      };
+      secrets = let
+        wholeFile = wholeFileSecrets.config.sops.secrets."synthetic-whole-file";
+      in {
+        defaultScalarDeclarations = {
+          expected = {
+            source = approvedSharedSecretSource;
+            format = "yaml";
+            mode = "0400";
+          };
+          projections = {
+            home = collectScalarDeclarations base.config;
+            darwin = collectScalarDeclarations darwin.config.home-manager.users.neo;
+          };
+        };
+        wholeFile = {
+          requested = {
+            source = approvedSharedSecretSource;
+            format = "binary";
+            key = null;
+            mode = "0440";
+          };
+          upstream = {
+            source = wholeFile.sopsFile;
+            inherit (wholeFile) format key mode;
+          };
+        };
+        darwinRootDeclarationNames = builtins.attrNames (darwin.config.sops.secrets or {});
+        darwinHeadlessActivation = let
+          c = darwin.config.home-manager.users.neo;
+          agent = c.launchd.agents.sops-nix;
+          activation = c.home.activation.sops-nix;
+        in {
+          inherit (agent) domain;
+          sessionType = agent.config.LimitLoadToSessionType;
+          inherit (activation) after data;
+        };
+        darwinEmptyActivation = let
+          c = emptyDarwinSecrets.config.home-manager.users.neo;
+        in {
+          hasLaunchAgent = builtins.hasAttr "sops-nix" c.launchd.agents;
+          hasActivation = builtins.hasAttr "sops-nix" c.home.activation;
+        };
       };
       emergency = {
         enabled = collectEmergency base;

@@ -88,26 +88,98 @@ def main [] {
   pass "generated-pi-behavior"
 
   let web = $result.generated.webRetrieval
-  let full_home_paths = {
-    parallel-api-key: "/run/secrets/parallel-api-key"
-    brave-api-key: "/run/secrets/brave-api-key"
-    brave-free-api-key: "/run/secrets/brave-free-api-key"
-    exa-api-key: "/run/secrets/exa-api-key"
+  for projection in [
+    {id: home, value: $web.home}
+    {id: darwin, value: $web.darwin}
+  ] {
+    assert-contract ($projection.value.secretPaths | values | all {|path| $path != null and ($path | is-not-empty) }) $"($projection.id)-default-secret-projection"
   }
-  let partial_home_paths = {
-    parallel-api-key: "/run/secrets/parallel-api-key"
-    brave-api-key: null
-    brave-free-api-key: null
-    exa-api-key: "/run/secrets/exa-api-key"
+  for projection in [
+    {id: home, value: $web.homePartial}
+    {id: darwin, value: $web.darwinPartial}
+  ] {
+    let paths = $projection.value.secretPaths
+    assert-contract ($paths.parallel-api-key != null and $paths.exa-api-key != null) $"($projection.id)-partial-selected-secrets"
+    assert-contract ($paths.brave-api-key == null and $paths.brave-free-api-key == null) $"($projection.id)-partial-omitted-secrets"
   }
-  assert-contract ($web.home.secretPaths == $full_home_paths) "home-secret-projection"
-  assert-contract ($web.homePartial.secretPaths == $partial_home_paths) "home-partial-secret-projection"
-  assert-contract ($web.darwin.secretPaths | values | all {|path| $path != null and ($path | is-not-empty) }) "darwin-secret-projection"
-  assert-contract ($web.darwinPartial.secretPaths.parallel-api-key == $web.darwin.secretPaths.parallel-api-key) "darwin-partial-selected-parallel"
-  assert-contract ($web.darwinPartial.secretPaths.exa-api-key == $web.darwin.secretPaths.exa-api-key) "darwin-partial-selected-exa"
-  assert-contract ($web.darwinPartial.secretPaths.brave-api-key == null and $web.darwinPartial.secretPaths.brave-free-api-key == null) "darwin-partial-omitted-secrets"
-  assert-contract ($web.darwinDisabled.secretPaths | values | all {|path| $path == null }) "darwin-disabled-secrets"
+  for projection in [
+    {id: home, value: $web.homeDisabled}
+    {id: darwin, value: $web.darwinDisabled}
+  ] {
+    assert-contract ($projection.value.secretPaths | values | all {|path| $path == null }) $"($projection.id)-disabled-secrets"
+  }
   pass "web-secret-projections"
+
+  let nushell = $result.generated.nushellSecrets
+  for projection in [
+    {id: default, selected: [ai-mop-api-key iniad-id iniad-password], value: $nushell.home}
+    {id: partial, selected: [ai-mop-api-key], value: $nushell.homePartial}
+    {id: disabled, selected: [], value: $nushell.homeDisabled}
+  ] {
+    for credential in ($projection.value.credentials | transpose name value) {
+      let selected = $credential.name in $projection.selected
+      let variable_marker = (['$env.' $credential.value.variable] | str join)
+      if $selected {
+        assert-contract ($credential.value.path != null and ($projection.value.extraEnv | str contains $credential.value.path)) $"nushell-($projection.id)-($credential.name)-path"
+        assert-contract ($projection.value.extraEnv | str contains $variable_marker) $"nushell-($projection.id)-($credential.name)-variable"
+      } else {
+        assert-contract ($credential.value.path == null and not ($projection.value.extraEnv | str contains $variable_marker)) $"nushell-($projection.id)-($credential.name)-omitted"
+      }
+    }
+  }
+  pass "nushell-secret-projections"
+
+  let secrets = $result.generated.secrets
+  let expected_default_scalar_secret_names = [
+    gemini-api-key
+    ai-mop-api-key
+    brave-api-key
+    brave-free-api-key
+    parallel-api-key
+    exa-api-key
+    openrouter-api-key
+    cerebras-api-key
+    google-cloud-api-key
+    zai-api-key
+    iniad-id
+    iniad-password
+  ]
+  let default_scalars = $secrets.defaultScalarDeclarations
+  for projection in ($default_scalars.projections | transpose id declarations) {
+    assert-contract (($projection.declarations | columns | sort) == ($expected_default_scalar_secret_names | sort)) $"($projection.id)-default-scalar-secret-names"
+    for declaration in ($projection.declarations | transpose name value) {
+      assert-contract ($declaration.value.key == $declaration.name) $"($projection.id)-default-scalar-secret-key-($declaration.name)"
+      assert-contract (
+        $declaration.value.source == $default_scalars.expected.source
+        and $declaration.value.format == $default_scalars.expected.format
+        and $declaration.value.mode == $default_scalars.expected.mode
+      ) $"($projection.id)-default-scalar-secret-metadata-($declaration.name)"
+    }
+  }
+  pass "default-scalar-secret-declarations"
+
+  assert-contract ($secrets.wholeFile.upstream.source == $secrets.wholeFile.requested.source) "whole-file-source"
+  assert-contract ($secrets.wholeFile.upstream.format == $secrets.wholeFile.requested.format) "whole-file-format"
+  assert-contract ($secrets.wholeFile.upstream.mode == $secrets.wholeFile.requested.mode) "whole-file-mode"
+  assert-contract ($secrets.wholeFile.requested.key == null and $secrets.wholeFile.upstream.key == "") "whole-file-null-key"
+  pass "whole-file-secret-projection"
+
+  let darwin_root_repository_declarations = ($secrets.darwinRootDeclarationNames | where {|name| $name in $expected_default_scalar_secret_names })
+  assert-contract ($darwin_root_repository_declarations | is-empty) "darwin-root-secret-ownership"
+  pass "darwin-secret-ownership"
+
+  let darwin_activation = $secrets.darwinHeadlessActivation
+  assert-contract ($darwin_activation.domain == "user") "darwin-sops-user-domain"
+  assert-contract ($darwin_activation.sessionType == "Background") "darwin-sops-background-session"
+  assert-contract ("setupLaunchAgents" in $darwin_activation.after) "darwin-sops-launchagent-order"
+  assert-contract ($darwin_activation.data | str contains 'launchctl kickstart -k') "darwin-sops-kickstart"
+  assert-contract ($darwin_activation.data | str contains 'user/$(id -u)/org.nix-community.home.sops-nix') "darwin-sops-user-target"
+  assert-contract (not ($darwin_activation.data | str contains "gui/")) "darwin-sops-no-gui-target"
+  pass "darwin-headless-sops-activation"
+
+  let darwin_empty = $secrets.darwinEmptyActivation
+  assert-contract (not $darwin_empty.hasLaunchAgent and not $darwin_empty.hasActivation) "darwin-empty-sops-runtime-outputs"
+  pass "darwin-empty-sops-activation"
 
   let validator_source = r#'
     import assert from "node:assert/strict";

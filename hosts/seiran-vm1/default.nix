@@ -12,15 +12,15 @@ delib.host {
 
   myconfig = {
     darwin.window-manager.enable = false;
-    # Bootstrap without an Age key. Install the key before re-enabling.
+    # Provision only the API keys used by web retrieval on this VM.
     toplevel.secrets = {
       enable = true;
-      names = [
-        "brave-api-key"
-        "brave-free-api-key"
-        "parallel-api-key"
-        "exa-api-key"
-      ];
+      entries = {
+        brave-api-key = {};
+        brave-free-api-key = {};
+        parallel-api-key = {};
+        exa-api-key = {};
+      };
     };
     nix-darwin.preferences = {
       appearance.enable = false;

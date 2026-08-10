@@ -1,6 +1,6 @@
 {
   delib,
-  sopsSecretPaths,
+  homeConfig,
   ...
 }: let
   moduleName = "programs.pi-coding-agent.web_retrieval";
@@ -20,7 +20,12 @@ in
         ]);
       });
 
-    home.ifEnabled = {myconfig, ...}: {
+    home.ifEnabled = {myconfig, ...}: let
+      secretPath = name:
+        if builtins.hasAttr name homeConfig.sops.secrets
+        then homeConfig.sops.secrets.${name}.path
+        else null;
+    in {
       home.file."${myconfig.programs.pi-coding-agent.configDir}/web-retrieval.json".text = builtins.toJSON {
         schemaVersion = 2;
         providers = [
@@ -28,37 +33,37 @@ in
             id = "parallel-search";
             kind = "parallel-search";
             endpoint = "https://api.parallel.ai/v1/search";
-            apiKeyFile = sopsSecretPaths."parallel-api-key" or null;
+            apiKeyFile = secretPath "parallel-api-key";
           }
           {
             id = "brave-llm-context";
             kind = "brave-llm-context";
             endpoint = "https://api.search.brave.com/res/v1/llm/context";
-            apiKeyFile = sopsSecretPaths."brave-api-key" or null;
+            apiKeyFile = secretPath "brave-api-key";
           }
           {
             id = "brave-web-search";
             kind = "brave-web-search";
             endpoint = "https://api.search.brave.com/res/v1/web/search";
-            apiKeyFile = sopsSecretPaths."brave-free-api-key" or null;
+            apiKeyFile = secretPath "brave-free-api-key";
           }
           {
             id = "exa-search";
             kind = "exa-search";
             endpoint = "https://api.exa.ai/search";
-            apiKeyFile = sopsSecretPaths."exa-api-key" or null;
+            apiKeyFile = secretPath "exa-api-key";
           }
           {
             id = "parallel-extract";
             kind = "parallel-extract";
             endpoint = "https://api.parallel.ai/v1beta/extract";
-            apiKeyFile = sopsSecretPaths."parallel-api-key" or null;
+            apiKeyFile = secretPath "parallel-api-key";
           }
           {
             id = "exa-contents";
             kind = "exa-contents";
             endpoint = "https://api.exa.ai/contents";
-            apiKeyFile = sopsSecretPaths."exa-api-key" or null;
+            apiKeyFile = secretPath "exa-api-key";
           }
         ];
         routing = {

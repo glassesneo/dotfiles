@@ -151,6 +151,7 @@
 
         checks = let
           fileset = pkgs.lib.fileset;
+          piNpmDepsHash = "sha256-BL8ZwJc4JSi3SS3nsSpfAnla+tWyNYDOK4UVYJg+f/I=";
           configurationSource = fileset.toSource {
             root = ./.;
             fileset = fileset.unions [
@@ -193,7 +194,7 @@
               version = "0";
               src = ./modules/programs/pi-coding-agent;
 
-              npmDepsHash = "sha256-Qw6kEXFEofwWUVieD4Fhf7XhRESbSodTjHxLI1ZPmCI=";
+              npmDepsHash = piNpmDepsHash;
               npmDepsFetcherVersion = 2;
 
               dontNpmBuild = true;
@@ -234,7 +235,7 @@
               CONFIGURATION_SOURCE = configurationSource;
               CONFIGURATION_FIXTURE = ./checks/fixtures/configuration-contracts.nix;
 
-              npmDepsHash = "sha256-Qw6kEXFEofwWUVieD4Fhf7XhRESbSodTjHxLI1ZPmCI=";
+              npmDepsHash = piNpmDepsHash;
               npmDepsFetcherVersion = 2;
 
               dontNpmBuild = true;
