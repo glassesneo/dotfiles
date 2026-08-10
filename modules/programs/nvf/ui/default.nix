@@ -57,7 +57,7 @@ delib.module {
                 backend = "virtualtext";
                 format = ["{message}"];
                 hl_group = "NoiceVirtualText";
-                virt_text_pos = "right_align";
+                virt_text_pos = "eol_right_align";
               };
             };
           };

@@ -118,7 +118,17 @@ delib.module {
         }
         {
           key = "x";
-          mode = ["n" "x"];
+          mode = ["n"];
+          action = ''"_d'';
+        }
+        {
+          key = "x";
+          mode = ["o"];
+          action = "d";
+        }
+        {
+          key = "x";
+          mode = ["x"];
           action = ''"_x'';
         }
         {

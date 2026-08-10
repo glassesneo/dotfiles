@@ -1,6 +1,7 @@
 {
   delib,
   homeConfig,
+  lib,
   pkgs,
   ...
 }:
@@ -59,6 +60,38 @@ delib.module {
           };
         };
       };
+
+      autocmds = [
+        {
+          event = ["CmdlineLeave"];
+          desc = "Open the Orgmode fold containing a confirmed search match";
+          callback = lib.generators.mkLuaInline ''
+            function(event)
+              local buffer = event.buf
+              if vim.bo[buffer].filetype ~= "org"
+                or (event.match ~= "/" and event.match ~= "?")
+                or vim.v.event.abort
+              then
+                return
+              end
+
+              local window = vim.api.nvim_get_current_win()
+              vim.schedule(function()
+                if not vim.api.nvim_buf_is_valid(buffer)
+                  or not vim.api.nvim_win_is_valid(window)
+                  or vim.api.nvim_win_get_buf(window) ~= buffer
+                then
+                  return
+                end
+
+                vim.api.nvim_win_call(window, function()
+                  vim.cmd("normal! zv")
+                end)
+              end)
+            end
+          '';
+        }
+      ];
     };
   };
 }
