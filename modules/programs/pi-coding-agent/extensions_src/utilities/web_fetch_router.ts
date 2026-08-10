@@ -16,7 +16,8 @@ import {
     normalizeLineEndings,
     type FetchAdapterDependencies,
 } from "./web_fetch_adapters.ts";
-export { defaultSleep } from "./web_retrieval_runtime.ts";
+import { raceWithSignal } from "./web_retrieval_runtime.ts";
+export { defaultSleep, raceWithSignal } from "./web_retrieval_runtime.ts";
 
 export type ReadTextFile = (path: string) => Promise<string>;
 export type Sleep = (ms: number, signal?: AbortSignal) => Promise<void>;
@@ -62,24 +63,6 @@ export function combineSignals(signals: readonly AbortSignal[]): AbortSignal {
         signal.addEventListener("abort", () => controller.abort(signal.reason), { once: true });
     }
     return controller.signal;
-}
-
-export async function raceWithSignal<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
-    if (signal.aborted) throw signal.reason ?? new Error("aborted");
-    return new Promise<T>((resolve, reject) => {
-        const onAbort = () => reject(signal.reason ?? new Error("aborted"));
-        signal.addEventListener("abort", onAbort, { once: true });
-        promise.then(
-            value => {
-                signal.removeEventListener("abort", onAbort);
-                resolve(value);
-            },
-            error => {
-                signal.removeEventListener("abort", onAbort);
-                reject(error);
-            },
-        );
-    });
 }
 
 function retryWaitMs(error: ProviderError, defaultWaitMs: number): number {

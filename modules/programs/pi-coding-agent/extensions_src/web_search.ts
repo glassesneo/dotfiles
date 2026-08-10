@@ -1,5 +1,4 @@
-import { chmod, mkdtemp, readFile, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { StringEnum } from "@earendil-works/pi-ai";
 import {
@@ -30,7 +29,10 @@ import {
     defaultSearchRouterDependencies,
     type SearchRouter,
 } from "./utilities/search_router.ts";
-import { loadWebRetrievalRuntimeConfig } from "./utilities/web_retrieval_runtime.ts";
+import {
+    loadWebRetrievalRuntimeConfig,
+    writePrivateTempOutput,
+} from "./utilities/web_retrieval_runtime.ts";
 
 export const WEB_RETRIEVAL_CONFIG_UNAVAILABLE = "web retrieval configuration is unavailable";
 
@@ -149,15 +151,6 @@ async function awaitWithSignal<T>(promise: Promise<T>, signal: AbortSignal): Pro
     });
 }
 
-async function writePrivateTempOutput(content: string): Promise<string> {
-    const directory = await mkdtemp(join(tmpdir(), "pi-web-search-"));
-    await chmod(directory, 0o700);
-    const filePath = join(directory, "output.txt");
-    await writeFile(filePath, content, { encoding: "utf8", mode: 0o600 });
-    await chmod(filePath, 0o600);
-    return filePath;
-}
-
 export function createWebSearchToolDefinition(
     deps: WebSearchToolDependencies,
 ): ToolDefinition<typeof webSearchParameters, WebSearchDetails> {
@@ -193,7 +186,8 @@ export function createWebSearchToolDefinition(
                 const truncation = truncateHead(fullText, { maxLines: DEFAULT_MAX_LINES, maxBytes: DEFAULT_MAX_BYTES });
                 let content = truncation.content;
                 if (truncation.truncated) {
-                    const writeTemp = deps.writeTempOutput ?? writePrivateTempOutput;
+                    const writeTemp = deps.writeTempOutput
+                        ?? (content => writePrivateTempOutput("pi-web-search-", content));
                     let fullOutputPath: string;
                     try {
                         fullOutputPath = await awaitWithSignal(writeTemp(fullText), wholeTool.signal);

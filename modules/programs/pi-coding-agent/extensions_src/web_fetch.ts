@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { chmod, mkdtemp, readFile, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { StringEnum } from "@earendil-works/pi-ai";
 import {
@@ -30,7 +29,10 @@ import {
     routeWebFetch,
     type FetchRouterDependencies,
 } from "./utilities/web_fetch_router.ts";
-import { loadWebRetrievalRuntimeConfig } from "./utilities/web_retrieval_runtime.ts";
+import {
+    loadWebRetrievalRuntimeConfig,
+    writePrivateTempOutput,
+} from "./utilities/web_retrieval_runtime.ts";
 
 export const WEB_FETCH_CONFIG_UNAVAILABLE = "web_fetch configuration is unavailable";
 
@@ -66,15 +68,6 @@ export async function loadWebFetchConfig(path = DEFAULT_CONFIG_PATH): Promise<We
     } catch {
         throw new Error(WEB_FETCH_CONFIG_UNAVAILABLE);
     }
-}
-
-async function writePrivateTempOutput(content: string): Promise<string> {
-    const directory = await mkdtemp(join(tmpdir(), "pi-web-fetch-"));
-    await chmod(directory, 0o700);
-    const filePath = join(directory, "output.txt");
-    await writeFile(filePath, content, { encoding: "utf8", mode: 0o600 });
-    await chmod(filePath, 0o600);
-    return filePath;
 }
 
 function quoteText(value: string): string {
@@ -156,7 +149,9 @@ export function createWebFetchToolDefinition(
             if (truncation.truncated) {
                 let fullOutputPath: string;
                 try {
-                    fullOutputPath = await raceWithSignal((deps.writeTempOutput ?? writePrivateTempOutput)(fullText), operationSignal);
+                    const writeTemp = deps.writeTempOutput
+                        ?? (content => writePrivateTempOutput("pi-web-fetch-", content));
+                    fullOutputPath = await raceWithSignal(writeTemp(fullText), operationSignal);
                 } catch {
                     const terminal = terminalError();
                     if (terminal !== undefined) throw terminal;

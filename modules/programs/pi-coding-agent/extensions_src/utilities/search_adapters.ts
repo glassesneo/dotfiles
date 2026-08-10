@@ -1,3 +1,4 @@
+import { parseRetryWaitMs } from "./web_retrieval_runtime.ts";
 import {
     ProviderError,
     containsAnyControls,
@@ -304,22 +305,6 @@ function normalizeExa(payload: unknown): AdapterSearchResponse {
     };
 }
 
-function retryWaitMs(headers: Headers, nowMs: number, fallbackMs: number): number {
-    const retryAfter = headers.get("Retry-After")?.trim();
-    if (retryAfter !== undefined && retryAfter !== "") {
-        const seconds = Number(retryAfter);
-        if (Number.isFinite(seconds) && seconds >= 0) return Math.ceil(seconds * 1_000);
-        const at = Date.parse(retryAfter);
-        if (Number.isFinite(at)) return Math.max(0, at - nowMs);
-    }
-    const reset = headers.get("X-RateLimit-Reset")?.split(",")[0]?.trim();
-    if (reset !== undefined && reset !== "") {
-        const seconds = Number(reset);
-        if (Number.isFinite(seconds) && seconds >= 0) return Math.ceil(seconds * 1_000);
-    }
-    return fallbackMs;
-}
-
 async function sendJson(
     provider: SearchProviderId,
     endpoint: string,
@@ -343,7 +328,7 @@ async function sendJson(
             credentialFailure ? "credential" : response.status === 429 ? "rate-limit" : "http",
             response.status,
             retryable,
-            retryable ? retryWaitMs(response.headers, deps.now(), defaultRetryWaitMs) : undefined,
+            retryable ? parseRetryWaitMs(response.headers, defaultRetryWaitMs, deps.now()) : undefined,
         );
     }
     try {

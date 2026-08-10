@@ -226,10 +226,6 @@ export function normalizeQuestionResponse(question: QuestionItem, pending: Pendi
     }
 }
 
-function isAnsweredResponse(response: QuestionResponse): boolean {
-    return response.kind === "single" || response.kind === "multi" || response.kind === "text" || response.kind === "write-in";
-}
-
 export class QuestionProgress {
     readonly #questions: readonly QuestionItem[];
     readonly #responses = new Map<string, QuestionResponse>();
@@ -256,8 +252,7 @@ export class QuestionProgress {
         return this.#responses.get(typeof questionOrId === "string" ? questionOrId : questionOrId.id);
     }
     isAnswered(questionOrId: QuestionItem | string): boolean {
-        const response = this.responseFor(questionOrId);
-        return response !== undefined && isAnsweredResponse(response);
+        return this.responseFor(questionOrId) !== undefined;
     }
     isUntouched(questionOrId: QuestionItem | string): boolean {
         return this.responseFor(questionOrId) === undefined;

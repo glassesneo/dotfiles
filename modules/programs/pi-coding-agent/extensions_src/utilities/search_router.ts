@@ -18,7 +18,7 @@ import {
     createSearchAdapter,
     type FetchLike,
 } from "./search_adapters.ts";
-import { defaultSleep } from "./web_retrieval_runtime.ts";
+import { defaultSleep, raceWithSignal } from "./web_retrieval_runtime.ts";
 
 export { defaultSleep };
 
@@ -138,15 +138,6 @@ export function selectSearchAdapter(
     })), rng);
 }
 
-async function awaitWithSignal<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
-    if (signal.aborted) throw signal.reason ?? new Error("aborted");
-    return new Promise<T>((resolve, reject) => {
-        const onAbort = () => reject(signal.reason ?? new Error("aborted"));
-        signal.addEventListener("abort", onAbort, { once: true });
-        promise.then(resolve, reject).finally(() => signal.removeEventListener("abort", onAbort)).catch(() => {});
-    });
-}
-
 async function loadEligibleAdapters(
     config: WebRetrievalRuntimeConfig,
     deps: SearchRouterDependencies,
@@ -166,7 +157,7 @@ async function loadEligibleAdapters(
         }
         let key: string;
         try {
-            key = (await awaitWithSignal(deps.readTextFile(provider.apiKeyFile, signal), signal)).trim();
+            key = (await raceWithSignal(deps.readTextFile(provider.apiKeyFile, signal), signal)).trim();
         } catch (error) {
             if (signal.aborted) throw signal.reason ?? error;
             diagnostics.push({ provider: providerId, category: "credential", reason: "unreadable" });

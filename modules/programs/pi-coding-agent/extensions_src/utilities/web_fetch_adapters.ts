@@ -1,3 +1,4 @@
+import { parseRetryWaitMs as parseFetchRetryWaitMs } from "./web_retrieval_runtime.ts";
 import {
     containsUnsafeControls,
     isSafeHttpUrl,
@@ -211,21 +212,7 @@ export class FetchHttpError extends ProviderError {
     }
 }
 
-export function parseFetchRetryWaitMs(headers: Headers, defaultWaitMs: number, nowMs = Date.now()): number {
-    const retryAfter = headers.get("Retry-After")?.trim();
-    if (retryAfter) {
-        const seconds = Number(retryAfter);
-        if (Number.isFinite(seconds) && seconds >= 0) return Math.ceil(seconds * 1_000);
-        const retryAt = Date.parse(retryAfter);
-        if (Number.isFinite(retryAt)) return Math.max(0, retryAt - nowMs);
-    }
-    const reset = headers.get("X-RateLimit-Reset")?.split(",")[0]?.trim();
-    if (reset) {
-        const seconds = Number(reset);
-        if (Number.isFinite(seconds) && seconds >= 0) return Math.ceil(seconds * 1_000);
-    }
-    return defaultWaitMs;
-}
+export { parseFetchRetryWaitMs };
 
 function createAdapter(
     provider: FetchProviderId,
