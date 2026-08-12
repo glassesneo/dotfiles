@@ -49,6 +49,10 @@ delib.module {
           ".cursor/skills"
         ];
       };
+      assumption-reversal = {
+        source = ./skills/assumption-reversal;
+        targetDirs = piAuthoringTargets;
+      };
       coherent-growth = {
         source = ./skills/coherent-growth;
         targetDirs = [
