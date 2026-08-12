@@ -1,6 +1,7 @@
 {
   delib,
   host,
+  wrappers,
   ...
 }:
 delib.module {
@@ -8,12 +9,18 @@ delib.module {
 
   options = delib.singleEnableOption host.devCoreFeatured;
 
-  home.ifEnabled = {
+  home.ifEnabled = let
+    package = wrappers.eza {
+      flags = [
+        "--git"
+        "--icons=auto"
+      ];
+    };
+  in {
     programs.eza = {
       enable = true;
+      inherit package;
       enableZshIntegration = true;
-      git = true;
-      icons = "auto";
     };
     home.shellAliases = {
       tree = "eza -T";

@@ -336,6 +336,12 @@
         nix-darwin.follows = "nix-darwin";
       };
     };
+    adios.url = "github:llakala/lladios";
+
+    adios-wrappers = {
+      url = "github:llakala/adios-wrappers";
+      inputs.adios.follows = "adios";
+    };
     nvf = {
       url = "github:notashelf/nvf";
       inputs.nixpkgs.follows = "nixpkgs";

@@ -1,5 +1,40 @@
 {
   "nodes": {
+    "adios": {
+      "locked": {
+        "lastModified": 1785473352,
+        "narHash": "sha256-o6j1bSRT3UL2VyMoJ/LRdlOrLLsj860QKzN0qSYyKxU=",
+        "owner": "llakala",
+        "repo": "lladios",
+        "rev": "f833c80947573515df7c3fa58bf9e18c2a3d83d3",
+        "type": "github"
+      },
+      "original": {
+        "owner": "llakala",
+        "repo": "lladios",
+        "type": "github"
+      }
+    },
+    "adios-wrappers": {
+      "inputs": {
+        "adios": [
+          "adios"
+        ]
+      },
+      "locked": {
+        "lastModified": 1786513506,
+        "narHash": "sha256-dLVaLoDP5384RqGOENyYR1yas97YKIzLkNGl/B8JfWs=",
+        "owner": "llakala",
+        "repo": "adios-wrappers",
+        "rev": "82ef1614e969c660967fd7a8277793a90a329150",
+        "type": "github"
+      },
+      "original": {
+        "owner": "llakala",
+        "repo": "adios-wrappers",
+        "type": "github"
+      }
+    },
     "brew-api": {
       "flake": false,
       "locked": {
@@ -672,6 +707,8 @@
     },
     "root": {
       "inputs": {
+        "adios": "adios",
+        "adios-wrappers": "adios-wrappers",
         "brew-api": "brew-api",
         "brew-nix": "brew-nix",
         "catppuccin": "catppuccin",
