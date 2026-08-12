@@ -13,7 +13,7 @@ or building a configuration that depends on it.
 ## Directory owners
 
 - `hosts/` owns machine facts and host-only bindings, including platform,
-  capabilities, tier, hardware, and explicit host overrides.
+  capabilities, tier, hardware, and explicit machine policy.
 - `modules/config/` owns shared data, registries, constants, and helper exports.
 - `modules/programs/` owns user-facing program integration.
 - `modules/services/` owns desktop and long-running service integration.
@@ -32,8 +32,8 @@ expression is doing.
 - An **aggregation owner** is the sole final writer for a shared target to which
   several features contribute. Keep it with the narrowest subsystem that owns
   that target; use `modules/toplevel/` only for genuinely broad integration.
-- A **host override** is an explicit machine-specific choice. It takes
-  precedence over a rice-provided normal selection.
+- A **host policy** is an explicit machine-specific choice. Keep it disjoint
+  from rice-selected policy; module source order does not establish precedence.
 - A **shared data owner** provides data or helpers without performing end-user
   feature wiring.
 - A **rice policy selector** chooses repository-owned typed policy. It does not
@@ -52,8 +52,10 @@ including the normal window-manager backend. They may assign only typed
 Rices must not import upstream modules, assign Home Manager or nix-darwin
 options directly, resolve packages, contain plugin-specific implementation,
 provide runtime or activation wiring, or implement platform behavior. The
-feature that exposes a rice-facing option owns all such translation. Explicit
-host settings may override rice selections.
+feature that exposes a rice-facing option owns all such translation. Hosts and
+rices must not rely on source order to resolve assignments to the same typed
+policy path; keep their policy disjoint, or use an explicit Nix module priority
+when a documented machine exception requires a collision.
 
 ## Change classes
 
@@ -73,7 +75,8 @@ Classify each declarative change as one of these:
 - Name the current owner, proposed owner, and reason the boundary must change.
 - Identify the single typed interface and the single final upstream writer.
 - Check whether a subsystem-local aggregation owner is sufficient.
-- Trace existing consumers and preserve deliberate host-over-rice precedence.
+- Trace existing consumers and eliminate unintended host/rice policy collisions;
+  document any collision resolved by an explicit Nix module priority.
 - Confirm that no manual import is introduced in a Denix discovery tree.
 - Update this contract only when the durable architecture rule itself changes;
   put implementation details with the feature owner.

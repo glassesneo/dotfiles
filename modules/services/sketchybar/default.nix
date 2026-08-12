@@ -1,4 +1,6 @@
 {
+  colorscheme,
+  colorschemeLib,
   delib,
   homeConfig,
   host,
@@ -6,27 +8,65 @@
   pkgs,
   ...
 }: let
+  inherit (colorscheme) palette;
+  argb = colorschemeLib.toArgb "ff";
+  argbLow = colorschemeLib.toArgb "26";
+  argbBorder = colorschemeLib.toArgb "40";
+  argbIndicator = colorschemeLib.toArgb "50";
+  schemeColors =
+    if colorscheme.name == "catppuccin"
+    then {
+      workspaceActive = palette.base08;
+      accentDatetime = palette.base0C;
+      statusWarning = palette.base0A;
+      statusSuccess = palette.base0B;
+      statusCharging = palette.base09;
+      appArc = palette.base06;
+      activeIndicator = palette.base08;
+      islandSurface = palette.base02;
+    }
+    else if colorscheme.name == "everforest"
+    then {
+      workspaceActive = palette.base0B;
+      accentDatetime = palette.base0C;
+      statusWarning = palette.base0A;
+      statusSuccess = palette.base0B;
+      statusCharging = palette.base09;
+      appArc = palette.base06;
+      activeIndicator = palette.base0B;
+      islandSurface = palette.base02;
+    }
+    else {
+      workspaceActive = palette.base08;
+      accentDatetime = palette.base05;
+      statusWarning = palette.base05;
+      statusSuccess = palette.base05;
+      statusCharging = palette.base0A;
+      appArc = palette.base08;
+      activeIndicator = palette.base08;
+      islandSurface = palette.base01;
+    };
   colorType = lib.types.strMatching "0x[0-9a-fA-F]{8}";
   mkColorOption = name: default:
     with delib;
       description ((strOption default) // {type = colorType;}) "SketchyBar semantic color ${name} in 0xAARRGGBB format.";
   colorOptions = lib.mapAttrs mkColorOption {
-    text_primary = "0xffabb2bf";
-    text_muted = "0xff6c7891";
-    workspace_active = "0xffe06c75";
-    accent_datetime = "0xffabb2bf";
-    status_error = "0xffe06c75";
-    status_warning = "0xffabb2bf";
-    status_caution = "0xffa0a0a0";
-    status_success = "0xffabb2bf";
-    status_charging = "0xffa0a0a0";
-    app_arc = "0xffe06c75";
-    app_ghostty = "0xffa0a0a0";
-    app_obsidian = "0xffe06c75";
-    app_kitty = "0xffa0a0a0";
-    island_surface = "0x26252525";
-    island_border = "0x406c7891";
-    active_indicator = "0x50e06c75";
+    text_primary = argb palette.base05;
+    text_muted = argb palette.base04;
+    workspace_active = argb schemeColors.workspaceActive;
+    accent_datetime = argb schemeColors.accentDatetime;
+    status_error = argb palette.base08;
+    status_warning = argb schemeColors.statusWarning;
+    status_caution = argb palette.base09;
+    status_success = argb schemeColors.statusSuccess;
+    status_charging = argb schemeColors.statusCharging;
+    app_arc = argb schemeColors.appArc;
+    app_ghostty = argb palette.base0D;
+    app_obsidian = argb palette.base0E;
+    app_kitty = argb palette.base0F;
+    island_surface = argbLow schemeColors.islandSurface;
+    island_border = argbBorder palette.base04;
+    active_indicator = argbIndicator schemeColors.activeIndicator;
   };
   sectionOrder = ["a" "b" "c" "x" "y" "z"];
   leftSections = ["a" "b" "c"];

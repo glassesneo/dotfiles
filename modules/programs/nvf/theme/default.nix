@@ -70,11 +70,11 @@
     "F"
   ];
   hexColor = lib.types.strMatching "#[0-9a-fA-F]{6}";
-  base16Module = {
+  mkBase16Module = defaults: {
     options = lib.genAttrs base16Names (name:
       lib.mkOption {
         type = lib.types.nullOr hexColor;
-        default = null;
+        default = defaults.${name} or null;
         description = "Base16 color ${name} in #RRGGBB format.";
       });
   };
@@ -83,14 +83,32 @@ in
     name = "programs.nvf.theme";
 
     options = with delib;
-      moduleOptions {
+      moduleOptions ({myconfig, ...}: let
+        colorscheme = myconfig.args.shared.colorscheme;
+        automaticTheme =
+          if colorscheme.name == "catppuccin"
+          then {
+            name = "catppuccin";
+            style = colorscheme.variant;
+          }
+          else if colorscheme.name == "everforest"
+          then {
+            name = "everforest";
+            style = lib.removePrefix "dark-" colorscheme.variant;
+          }
+          else {
+            name = "mini-base16";
+            style = "darker";
+          };
+        automaticBase16Colors = lib.genAttrs base16Names (name: colorscheme.palette.${name});
+      in {
         enable = description (boolOption false) "Enable nvf theming.";
-        name = description (enumOption (builtins.attrNames supportedThemes) "onedark") "Built-in nvf theme to use.";
-        style = description (enumOption allStyles "darker") "Theme-specific style. Ignored when the selected theme has no styles.";
+        name = description (enumOption (builtins.attrNames supportedThemes) automaticTheme.name) "Built-in nvf theme to use.";
+        style = description (enumOption allStyles automaticTheme.style) "Theme-specific style. Ignored when the selected theme has no styles.";
         transparent = description (boolOption false) "Enable background transparency when supported by the selected theme.";
         extraConfig = description ((strOption "") // {type = lib.types.lines;}) "Lua inserted before the selected theme's setup.";
-        base16-colors = description (submoduleOption base16Module {}) "Base16 palette used by the base16 themes.";
-      };
+        base16-colors = description (submoduleOption (mkBase16Module automaticBase16Colors) {}) "Base16 palette used by the base16 themes.";
+      });
 
     home.ifEnabled = {cfg, ...}: let
       selectedStyles = supportedThemes.${cfg.name};

@@ -1,6 +1,5 @@
 {
   delib,
-  inputs,
   moduleSystem,
   homeManagerUser,
   config,
@@ -14,11 +13,6 @@ in
   delib.module {
     name = "home-manager";
 
-    options.theme.catppuccin = with delib; {
-      enable = boolOption false;
-      flavor = enumOption ["latte" "frappe" "macchiato" "mocha"] "macchiato";
-    };
-
     myconfig.always.args.shared.homeConfig =
       if moduleSystem == "home"
       then config
@@ -30,15 +24,6 @@ in
     home.always = {myconfig, ...}: let
       inherit (myconfig.constants) username;
     in {
-      imports = [inputs.catppuccin.homeModules.catppuccin];
-      catppuccin = {
-        enable = true;
-        autoEnable = myconfig.theme.catppuccin.enable;
-        inherit (myconfig.theme.catppuccin) flavor;
-        nvim.enable = false;
-        tmux.enable = false;
-        firefox.enable = false;
-      };
       home = {
         inherit username;
         homeDirectory =

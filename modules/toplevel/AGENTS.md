@@ -10,4 +10,3 @@
 
 - Toplevel modules own broad system/user aggregation and shared upstream integrations, not feature-local behavior.
 - Feature modules own their Darwin-specific policy and contribute through typed aggregation interfaces instead of writing centralized system lists directly.
-- Shared Catppuccin Home Manager import and global integration belong here; feature and rice modules select typed theme policy without importing the upstream module.

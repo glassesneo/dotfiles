@@ -1,6 +1,7 @@
 {
   colorschemeLib,
   delib,
+  lib,
   ...
 }: let
   mkColorOption = name:
@@ -31,6 +32,35 @@
     };
   };
   paletteType = delib.submodule paletteModule;
+  selectorModule = {
+    options = with delib; {
+      name = description (noDefault (strOption null)) "Colorscheme registry name.";
+      variant = description (noDefault (strOption null)) "Variant within the selected colorscheme.";
+    };
+  };
+  selection = myconfig: let
+    inherit (myconfig.colorscheme) name variant;
+    exists =
+      builtins.hasAttr name myconfig.colorschemes
+      && builtins.hasAttr variant myconfig.colorschemes.${name};
+    message = "myconfig.colorscheme selector '${name}/${variant}' does not exist in myconfig.colorschemes.";
+  in {
+    inherit exists message name variant;
+    resolved =
+      if exists
+      then myconfig.colorschemes.${name}.${variant}
+      else throw message;
+  };
+  validateSelection = {myconfig, ...}: let
+    selected = selection myconfig;
+  in {
+    assertions = [
+      {
+        assertion = selected.exists;
+        message = selected.message;
+      }
+    ];
+  };
 in
   delib.module {
     name = "config.colorschemes";
@@ -38,10 +68,23 @@ in
     options = with delib; {
       colorschemes = description (attrsOfOption (attrsOf paletteType) {}) "Colorscheme registry keyed by scheme name and variant.";
 
-      colorscheme = description (allowNull (submoduleOption paletteModule null)) "Active colorscheme selected by the current rice.";
+      colorscheme = description (noDefault (submoduleOption selectorModule null)) "Required colorscheme selector resolved against the registry.";
     };
 
-    myconfig.always = {myconfig, ...}: {
-      args.shared.colorscheme = myconfig.colorscheme;
+    myconfig.always = {myconfig, ...}: let
+      selected = selection myconfig;
+    in {
+      args.shared.colorscheme =
+        if selected.exists
+        then {
+          inherit (selected) name variant;
+          inherit (selected.resolved) polarity;
+          palette = lib.removeAttrs selected.resolved ["polarity"];
+        }
+        else throw selected.message;
     };
+
+    home.always = validateSelection;
+    darwin.always = validateSelection;
+    nixos.always = validateSelection;
   }

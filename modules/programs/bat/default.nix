@@ -9,13 +9,20 @@
 delib.module {
   name = "programs.bat";
 
-  options = delib.singleEnableOption host.devCoreFeatured;
+  options = with delib;
+    moduleOptions ({myconfig, ...}: {
+      enable = boolOption host.devCoreFeatured;
+      theme = strOption (
+        if myconfig.args.shared.colorscheme.name == "catppuccin"
+        then "Catppuccin ${lib.toSentenceCase myconfig.args.shared.colorscheme.variant}"
+        else "ansi"
+      );
+    });
 
-  home.ifEnabled = {myconfig, ...}: let
-    theme = "Catppuccin ${lib.toSentenceCase myconfig.theme.catppuccin.flavor}";
+  home.ifEnabled = {cfg, ...}: let
     configFile = pkgs.writeText "bat.conf" ''
       ${builtins.readFile ./bat.conf}
-      --theme=${lib.escapeShellArg theme}
+      --theme=${lib.escapeShellArg cfg.theme}
     '';
     package = wrappers.bat {
       inherit configFile;
@@ -26,6 +33,5 @@ delib.module {
     ];
   in {
     home.packages = [package] ++ extraPackages;
-    catppuccin.bat.enable = false;
   };
 }

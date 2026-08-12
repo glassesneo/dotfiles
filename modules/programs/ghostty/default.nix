@@ -1,5 +1,6 @@
 {
   brewCasks,
+  colorschemeLib,
   delib,
   host,
   lib,
@@ -29,26 +30,32 @@ in
     name = "programs.ghostty";
 
     options = with delib;
-      moduleOptions {
+      moduleOptions ({myconfig, ...}: let
+        palette = myconfig.args.shared.colorscheme.palette;
+      in {
         enable = boolOption host.guiShellFeatured;
         appearance = {
           font-family = strOption "";
           font-size = allowNull (numberOption null);
           background-opacity = allowNull (numberOption null);
           background-blur = allowNull (intOption null);
-          background = strOption "";
-          foreground = strOption "";
-          cursor = strOption "";
-          selection-background = strOption "";
-          selection-foreground = strOption "";
+          background = strOption palette.base00;
+          foreground = strOption palette.base05;
+          cursor = strOption palette.base05;
+          selection-background = strOption palette.base02;
+          selection-foreground = strOption palette.base05;
           padding-x = allowNull (intOption null);
           padding-y = allowNull (intOption null);
           minimum-contrast = allowNull (numberOption null);
           animate-shaders = boolOption false;
-          palette = description ((listOfOption str []) // {type = paletteType;}) "ANSI terminal palette colors in index order; empty uses Ghostty defaults.";
+          palette = description ((listOfOption str (colorschemeLib.toTerminalPalette palette)) // {type = paletteType;}) "ANSI terminal palette colors in index order; empty uses Ghostty defaults.";
         };
         shader-profile = allowNull (enumOption (builtins.attrNames shaderProfiles) null);
-      };
+      });
+
+    myconfig.always = {myconfig, ...}: {
+      programs.ghostty.quick-terminal.background = lib.mkDefault myconfig.args.shared.colorscheme.palette.base01;
+    };
 
     home.ifEnabled = {
       cfg,

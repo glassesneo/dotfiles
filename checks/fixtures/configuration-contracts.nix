@@ -5,6 +5,7 @@
   f = builtins.getFlake configurationSource;
   lib = f.inputs.nixpkgs.lib;
   base = f.homeConfigurations."neo@seiran";
+  clean = f.homeConfigurations."neo@seiran-clean";
   invalidKeybindings = base.extendModules {
     modules = [
       {
@@ -30,7 +31,12 @@
   };
 
   reject = module:
-    builtins.tryEval ((base.extendModules {modules = [module];}).activationPackage.drvPath);
+    builtins.tryEval (base.extendModules {modules = [module];}).activationPackage.drvPath;
+
+  contract = concern: condition:
+    if condition
+    then true
+    else throw "configuration contract failed: ${concern}";
 
   aliasOverride = base.extendModules {
     modules = [{myconfig.programs.pi-coding-agent.keybindings.overrides.pi."app.exit" = ["f12"];}];
@@ -174,8 +180,44 @@ in
       budgetMutation = reject {
         myconfig.programs.pi-coding-agent.orchestration.budgets.maxLiveAgents = lib.mkForce 13;
       };
+      absentColorschemeVariant = reject {
+        myconfig.colorscheme = lib.mkForce {
+          name = "catppuccin";
+          variant = "absent-variant";
+        };
+      };
+      ordinaryColorschemeCollision = reject {
+        myconfig.colorscheme = {
+          name = "everforest";
+          variant = "dark-medium";
+        };
+      };
     };
     generated = {
+      colorschemeSelectors = {
+        vividToNvf = let
+          selected = base.config.myconfig.args.shared.colorscheme;
+          theme = base.config.programs.nvf.settings.vim.theme;
+        in
+          contract "the seiran vivid selector resolves Catppuccin Macchiato through nvf" (
+            selected.name
+            == "catppuccin"
+            && selected.variant == "macchiato"
+            && theme.name == "catppuccin"
+            && theme.style == "macchiato"
+          );
+        cleanToNvf = let
+          selected = clean.config.myconfig.args.shared.colorscheme;
+          theme = clean.config.programs.nvf.settings.vim.theme;
+        in
+          contract "the clean selector resolves Monochrome default through nvf Base16" (
+            selected.name
+            == "monochrome"
+            && selected.variant == "default"
+            && theme.name == "mini-base16"
+            && theme.base16-colors.base00 == selected.palette.base00
+          );
+      };
       pi = {
         defaultExtensionNames = base.config.myconfig.programs.pi-coding-agent.defaultExtensions;
         defaultExtensionPaths = base.config.programs.pi-coding-agent.settings.extensions;

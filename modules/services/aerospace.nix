@@ -20,7 +20,8 @@ delib.module {
       ]) "App bundle IDs that should use tiling layout by default";
       # Which screen edge gets the large bar reserve. Defaults follow host.hasNotch
       # so notched hosts reserve the top (where SketchyBar sits) and non-notched
-      # hosts reserve the bottom. Rices can override via myconfig.services.aerospace.reservedEdge.
+      # hosts reserve the bottom. A rice assignment can override this owner-derived
+      # option default; it does not override host policy on the same path.
       reservedEdge = description (enumOption ["top" "bottom"] (
         if host.hasNotch
         then "top"

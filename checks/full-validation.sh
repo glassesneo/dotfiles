@@ -16,7 +16,7 @@ aarch64-darwin)
   nix build --no-link \
     .#darwinConfigurations.seiran.system \
     .#darwinConfigurations.seiran-vm1.system \
-    '.#homeConfigurations."neo@seiran-everforest".activationPackage'
+    '.#homeConfigurations."neo@seiran-clean".activationPackage'
 
   ;;
 aarch64-linux)

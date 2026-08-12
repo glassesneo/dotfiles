@@ -9,7 +9,7 @@
   }: let
     inherit (nixpkgs) lib;
     homeManagerUser = "neo";
-    riceNames = ["catppuccin" "everforest" "monochrome"];
+    riceNames = ["vivid" "clean"];
 
     filterConfigurationsByHostNames = hostNames: configs: let
       hostConfigurationNames = hostName:
@@ -410,10 +410,6 @@
     };
     denops-plugins = {
       url = "github:glassesneo/denops-plugins.nix";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-    catppuccin = {
-      url = "github:catppuccin/nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
