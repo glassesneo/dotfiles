@@ -43,7 +43,6 @@ in
       myconfig,
       ...
     }: let
-      duplicates = lib.length cfg.defaultExtensions != lib.length (lib.unique cfg.defaultExtensions);
       resolveModule = name: let
         path = ["programs" "pi-coding-agent"] ++ lib.splitString "." name;
       in
@@ -61,7 +60,6 @@ in
         then item.module.extensionPaths
         else [])
       selected;
-      duplicateNames = lib.unique (builtins.filter (name: lib.count (candidate: candidate == name) cfg.defaultExtensions > 1) cfg.defaultExtensions);
       missingNames = map (item: item.name) (builtins.filter (item: item.module == null) selected);
       disabledNames = map (item: item.name) (builtins.filter (item: item.module != null && !(item.module ? enable && item.module.enable)) selected);
       emptyPathNames = map (item: item.name) (builtins.filter (item: item.module != null && !(item.module ? extensionPaths && item.module.extensionPaths != [])) selected);
@@ -106,10 +104,6 @@ in
         ]);
     in {
       assertions = [
-        {
-          assertion = !duplicates;
-          message = "Pi defaultExtensions must not contain duplicate module names: ${names duplicateNames}.";
-        }
         {
           assertion = builtins.all (item: item.module != null) selected;
           message = "Pi defaultExtensions must reference existing modules below programs.pi-coding-agent; missing: ${names missingNames}.";

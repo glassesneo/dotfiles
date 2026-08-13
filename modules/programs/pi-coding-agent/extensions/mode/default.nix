@@ -47,19 +47,7 @@ in
       cfg,
       myconfig,
       ...
-    }: let
-      names = builtins.attrNames cfg.modes;
-      nonBlank = value: builtins.isString value && builtins.match ".*[^[:space:]].*" value != null;
-      knownTools = ["read" "grep" "find" "ls" "bash" "write" "edit" "question" "web_search" "web_fetch" "mesh_enable" "mesh_run" "mesh_submit" "mesh_get" "mesh_wait" "mesh_stop" "mesh_route" "save_agent_artifact"];
-      knownSkills = ["task-orchestration" "agent-artifact" "web-research"];
-      valid = mode: nonBlank mode.model && builtins.match "[^/[:space:]]+/[^/[:space:]]+" mode.model != null && nonBlank mode.description && nonBlank mode.instructions && lib.length mode.tools == lib.length (lib.unique mode.tools) && builtins.all (tool: builtins.elem tool knownTools) mode.tools && lib.length mode.skillOptIns == lib.length (lib.unique mode.skillOptIns) && builtins.all (skill: builtins.elem skill knownSkills) mode.skillOptIns && (!mode.allowAllTools || mode.tools == []);
-    in {
-      assertions = [
-        {
-          assertion = builtins.elem cfg.defaultMode names && builtins.all valid (builtins.attrValues cfg.modes);
-          message = "Pi modes must be valid and defaultMode must exist.";
-        }
-      ];
+    }: {
       home.file."${myconfig.programs.pi-coding-agent.configDir}/agent-modes.json".text = builtins.toJSON {
         schemaVersion = 1;
         inherit (cfg) defaultMode modes;

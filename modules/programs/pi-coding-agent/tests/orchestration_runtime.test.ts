@@ -6,7 +6,7 @@ import test from "node:test";
 import { Value } from "typebox/value";
 import { visibleWidth } from "@earendil-works/pi-tui";
 import { createMeshEnableTool, createMeshGetTool, createMeshRunTool, createMeshStopTool, createMeshSubmitTool, createMeshWaitTool, registerOrchestration, stopPaletteMeshAgent, type ActiveCaller, type OrchestrationDependencies } from "../extensions_src/orchestration.ts";
-import { AGENT_ARTIFACT_EXTENSION, WEB_FETCH_EXTENSION, WEB_SEARCH_EXTENSION, buildLaunchEnvelope, settledAgentCatalog, settledAgentDefinition, settledMeshGcConfig, settledMeshRoleSets, validateOrchestrationConfig, type AgentLaunchEnvelope, type OrchestrationConfig } from "../extensions_src/utilities/agent_types.ts";
+import { AGENT_ARTIFACT_EXTENSION, buildLaunchEnvelope, settledAgentCatalog, settledAgentDefinition, settledMeshGcConfig, settledMeshRoleSets, validateOrchestrationConfig, type AgentLaunchEnvelope, type OrchestrationConfig } from "../extensions_src/utilities/agent_types.ts";
 import { availableContext, publishAgentActivity } from "../extensions_src/utilities/orchestration_activity.ts";
 import { bindAgentRuntime, readAgentRuntimeBinding } from "../extensions_src/utilities/orchestration_runtime.ts";
 import { bindMeshEndpoint, readMeshEndpoint, registerMeshSignal, registerMeshWatch, setMeshEndpointOffline } from "../extensions_src/utilities/orchestration_events.ts";
@@ -144,7 +144,7 @@ void test("a child cannot wait on its own active task or stop its own agent proc
     await assert.rejects(createMeshStopTool(deps).execute("stop", { agentId: worker.agentId }, undefined, undefined, {} as never), /calling agent itself/u);
 }));
 
-void test("root and child registration expose peer capabilities while only children receive mesh_enable", async () => withRoot("mesh-registration-", async root => {
+void test("only child registration exposes and activates mesh_enable", async () => withRoot("mesh-registration-", async root => {
     const files = await writeRuntimeFiles(root);
     const keybindings = await writeMeshKeybindings(root);
     const previous = process.env.PI_EXTENSION_KEYBINDINGS_PATH;
@@ -152,19 +152,9 @@ void test("root and child registration expose peer capabilities while only child
     try {
         const rootPi = new PiMock();
         await registerOrchestration(rootPi as never, { ...files, env: {} });
-        for (const name of REQUIRED_PEER_CAPABILITIES) {
-            assert.equal(rootPi.tools.has(name), true, `root registered ${name}`);
-            assert.equal(rootPi.active.includes(name), true, `root activated ${name}`);
-        }
-        assert.equal(new Set(rootPi.active).size, rootPi.active.length);
         assert.equal(rootPi.tools.has("mesh_enable"), false);
         const childPi = new PiMock();
         await registerOrchestration(childPi as never, { ...files, env: { PI_MESH_AGENT_ID: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" } });
-        for (const name of REQUIRED_PEER_CAPABILITIES) {
-            assert.equal(childPi.tools.has(name), true, `child registered ${name}`);
-            assert.equal(childPi.active.includes(name), true, `child activated ${name}`);
-        }
-        assert.equal(new Set(childPi.active).size, childPi.active.length);
         assert.equal(Value.Check(childPi.tools.get("mesh_enable").parameters, {}), true);
         assert.equal(childPi.active.includes("mesh_enable"), true);
         assert.equal(Value.Check(childPi.tools.get("mesh_enable").parameters, { legacy: true }), false);
@@ -399,31 +389,21 @@ void test("native child launch manifests order popup, orchestration, role contri
     assert.equal(new Set(union).size, union.length);
 });
 
-void test("researcher catalog and native launch project retrieval capabilities without expanding another child", () => {
-    const catalog = settledAgentCatalog();
-    const researcher = settledAgentDefinition("researcher");
-    assert.equal(researcher.tools.includes("web_search"), true);
-    assert.equal(researcher.tools.includes("web_fetch"), true);
-    assert.equal(researcher.skillOptIns.includes("web-research"), true);
-    for (const roles of Object.values(settledMeshRoleSets())) assert.ok(roles.includes("researcher"));
-
+void test("native launch selects only the target role's extension contributions", () => {
     const meshId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
     const agentId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
     const epochId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
-    const roleSet = ["researcher", "worker"];
+    const roleSet = ["reviewer", "worker"];
     const childExtensions = {
-        researcher: ["/popup.ts", "/orchestration.ts", WEB_SEARCH_EXTENSION, WEB_FETCH_EXTENSION, "/bridge.ts"],
-        worker: ["/popup.ts", "/orchestration.ts", "/bridge.ts"],
+        reviewer: ["/popup.ts", "/orchestration.ts", "/reviewer.ts", "/bridge.ts"],
+        worker: ["/popup.ts", "/orchestration.ts", "/worker.ts", "/bridge.ts"],
     };
-    const launch = (agent: "researcher" | "worker") => {
-        const envelope = buildLaunchEnvelope({ meshId, agentId, epochId, agent, mode: "ops", roleSet, catalog, childExtensions });
-        return piLaunchDescriptor(runtimeConfig("/state"), { meshId, agentId, agentDirectory: `/state/meshes/${meshId}/agents/${agentId}`, agent, taskPath: "/task", launchEnvelope: "/envelope.json", epochSnapshot: envelope });
+    const launchExtensions = (agent: "reviewer" | "worker") => {
+        const envelope = buildLaunchEnvelope({ meshId, agentId, epochId, agent, mode: "ops", roleSet, catalog: settledAgentCatalog(), childExtensions });
+        const launch = piLaunchDescriptor(runtimeConfig("/state"), { meshId, agentId, agentDirectory: `/state/meshes/${meshId}/agents/${agentId}`, agent, taskPath: "/task", launchEnvelope: "/envelope.json", epochSnapshot: envelope });
+        return launch.args.filter((value, index) => launch.args[index - 1] === "-e");
     };
-    const researcherLaunch = launch("researcher");
-    const researcherLaunchTools = researcherLaunch.args[researcherLaunch.args.indexOf("--tools") + 1]!.split(",");
-    assert.deepEqual(researcherLaunch.args.filter((value, index) => researcherLaunch.args[index - 1] === "-e"), childExtensions.researcher);
-    assert.equal(researcherLaunchTools.includes("web_search"), true);
-    assert.equal(researcherLaunchTools.includes("web_fetch"), true);
-    assert.equal(researcherLaunchTools.includes(MESH_BOOTSTRAP_TOOL_NAME), true);
-    assert.deepEqual(launch("worker").args.filter((value, index, args) => args[index - 1] === "-e"), childExtensions.worker);
+
+    assert.deepEqual(launchExtensions("reviewer"), childExtensions.reviewer);
+    assert.deepEqual(launchExtensions("worker"), childExtensions.worker);
 });

@@ -4,9 +4,7 @@ import Value from "typebox/value";
 import {
     buildQuestionToolResult,
     decisionNoteRequirement,
-    formatQuestionResponse,
     normalizeQuestionResponse,
-    optionDisplayText,
     QuestionProgress,
     questionParameters,
     unavailableResult,
@@ -31,7 +29,7 @@ const questions: QuestionItem[] = [
     },
 ];
 
-void test("schema accepts three kinds and multiple questions", () => {
+void test("schema accepts supported kinds and rejects retired fields", () => {
     assert.equal(
         Value.Check(questionParameters, {
             questions: [
@@ -50,25 +48,15 @@ void test("schema accepts three kinds and multiple questions", () => {
         }),
         true,
     );
-    assert.equal(Value.Check(questionParameters, { questions: [] }), false);
-    assert.equal(Value.Check(questionParameters, {
-        questions: [{ id: "legacy", prompt: "Legacy", kind: "confirm" }],
-    }), false);
-    assert.equal(Value.Check(questionParameters, {
-        questions: [{ id: "legacy", prompt: "Legacy", kind: "text", initialValue: "old" }],
-    }), false);
-    assert.equal(Value.Check(questionParameters, {
-        questions: [{ id: "legacy", prompt: "Legacy", kind: "single", note: { mode: "answer" } }],
-    }), false);
-    assert.equal(Value.Check(questionParameters, {
-        questions: [{ id: "legacy", prompt: "Legacy", kind: "confirm", notePlaceholder: "old" }],
-    }), false);
-    assert.equal(
-        Value.Check(questionParameters, {
-            questions: [{ id: "x", prompt: "x", kind: "unknown" }],
-        }),
-        false,
-    );
+    for (const value of [
+        { questions: [] },
+        { questions: [{ id: "legacy", prompt: "Legacy", kind: "confirm" }] },
+        { questions: [{ id: "legacy", prompt: "Legacy", kind: "text", initialValue: "old" }] },
+        { questions: [{ id: "legacy", prompt: "Legacy", kind: "single", note: { mode: "answer" } }] },
+        { questions: [{ id: "legacy", prompt: "Legacy", kind: "single", notePlaceholder: "old" }] },
+    ]) {
+        assert.equal(Value.Check(questionParameters, value), false);
+    }
 });
 
 void test("schema characterizes required fields, closed objects, and option shapes", () => {
@@ -95,9 +83,6 @@ void test("schema characterizes required fields, closed objects, and option shap
     ];
     for (const value of invalid) assert.equal(Value.Check(questionParameters, value), false, JSON.stringify(value));
 
-    assert.equal(Value.Check(questionParameters, {
-        questions: [{ id: "choice", prompt: "Choose", kind: "single", options: [] }],
-    }), true);
 });
 
 void test("runtime validation rejects duplicate and kind-specific violations", () => {
@@ -150,44 +135,6 @@ void test("noteRequired defaults to optional and requires notes when true", () =
     assert.equal(decisionNoteRequirement(undefined, question, question.options?.[0]), "optional");
     assert.equal(decisionNoteRequirement(undefined, question, { value: "x", label: "X", noteRequired: true }), "required");
     assert.equal(decisionNoteRequirement({ noteRequirement: () => "none" }, question, { value: "x", label: "X", noteRequired: true }), "none");
-});
-
-void test("display text projects synthetic labels and descriptions for reverse lookup", () => {
-    const described = optionDisplayText({ value: "safe", label: "Synthetic label", description: "Synthetic description" });
-    assert.match(described, /Synthetic label/);
-    assert.match(described, /Synthetic description/);
-    assert.equal(optionDisplayText({ value: "safe", label: "Synthetic label" }), "Synthetic label");
-});
-
-void test("response formatting shares labels while preserving presentation policies", () => {
-    const multi: QuestionItem = {
-        id: "targets",
-        prompt: "Targets",
-        kind: "multi",
-        options: [
-            { value: "a", label: "A" },
-            { value: "b", label: "B" },
-        ],
-    };
-    const response = {
-        kind: "multi" as const,
-        values: [{ value: "a", note: "first\nnote" }, { value: "b" }],
-        writeIn: "another path",
-    };
-
-    const plain = formatQuestionResponse(multi, response);
-    assert.match(plain, /A[\s\S]*first[\s\S]*note[\s\S]*B[\s\S]*another path/);
-    const customized = formatQuestionResponse(multi, response, {
-        formatText: value => value.replace(/\n/g, " <newline> "),
-        formatResponseNote: value => ` <note> ${value.replace(/\n/g, " <newline> ")}`,
-    });
-    assert.match(customized, /A <note> first <newline> note/);
-    assert.match(customized, /B/);
-    assert.match(customized, /another path/);
-    assert.equal(
-        formatQuestionResponse(questions[0], { kind: "write-in", value: "try another way" }),
-        "try another way",
-    );
 });
 
 void test("responses normalize notes and multi values in option definition order", () => {

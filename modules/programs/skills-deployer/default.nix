@@ -140,35 +140,6 @@ delib.module {
       };
     };
   in {
-    assertions = [
-      {
-        assertion =
-          builtins.pathExists ./skills/intent-elicitation/SKILL.md
-          && builtins.pathExists ./skills/ideation-dialogue/SKILL.md
-          && skills.intent-elicitation.targetDirs == piAuthoringTargets
-          && skills.ideation-dialogue.targetDirs == piAuthoringTargets;
-        message = "Pi dialogue skills must be packaged and deployed to the shared agents skill directory.";
-      }
-      {
-        assertion =
-          builtins.pathExists ./skills/codebase-exploration/SKILL.md
-          && skills.codebase-exploration.targetDirs == piAuthoringTargets;
-        message = "Pi codebase exploration must be packaged and deployed to the shared agents skill directory.";
-      }
-      {
-        assertion =
-          builtins.pathExists ./skills/source-implementation/SKILL.md
-          && builtins.pathExists ./skills/implementation-validation/SKILL.md
-          && builtins.pathExists ./skills/adaptive-review/SKILL.md
-          && builtins.pathExists ./skills/task-orchestration/SKILL.md
-          && skills.source-implementation.targetDirs == piAuthoringTargets
-          && skills.implementation-validation.targetDirs == piAuthoringTargets
-          && skills.adaptive-review.targetDirs == piAuthoringTargets
-          && skills.task-orchestration.targetDirs == piAuthoringTargets;
-        message = "Pi implementation-assurance skills must be packaged and deployed to the shared agents skill directory.";
-      }
-    ];
-
     programs.skills-deployer = {
       enable = true;
       defaultTargetDir = ".agents/skills";

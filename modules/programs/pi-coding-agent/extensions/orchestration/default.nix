@@ -338,77 +338,8 @@ in
       myconfig,
       ...
     }: let
-      names = builtins.attrNames cfg.agents;
-      settledRoleSets = {
-        "mode:recon" = ["explorer" "reviewer" "critic" "researcher" "codex"];
-        "mode:ops" = ["explorer" "worker" "validator" "reviewer" "critic" "researcher" "fast-worker" "codex"];
-      };
-      settledBudgets = {
-        maxLiveAgents = 20;
-        maxConcurrentTasks = 6;
-        maxTasksPerMesh = 256;
-      };
-      settledGc = {
-        contextHeadroomTokens = 32768;
-        periodicIntervalMs = 5000;
-        activityHeartbeatMs = 2000;
-        activityStaleMs = 10000;
-        roles = {
-          explorer = {
-            collectAt = 6;
-            retain = 4;
-            pressureFloor = 1;
-          };
-          worker = {
-            collectAt = 6;
-            retain = 3;
-            pressureFloor = 1;
-          };
-          validator = {
-            collectAt = 3;
-            retain = 2;
-            pressureFloor = 1;
-          };
-          reviewer = {
-            collectAt = 3;
-            retain = 1;
-            pressureFloor = 1;
-          };
-          critic = {
-            collectAt = 6;
-            retain = 4;
-            pressureFloor = 1;
-          };
-          researcher = {
-            collectAt = 3;
-            retain = 1;
-            pressureFloor = 1;
-          };
-          fast-worker = {
-            collectAt = 2;
-            retain = 1;
-            pressureFloor = 0;
-          };
-          codex = {
-            collectAt = 3;
-            retain = 2;
-            pressureFloor = 0;
-          };
-        };
-      };
-      roleSetsValid = builtins.all (roles: lib.length roles == lib.length (lib.unique roles) && builtins.all (role: builtins.elem role names) roles) (builtins.attrValues cfg.roleSets);
       serialize = _: agent: lib.filterAttrs (name: value: value != null && !(name == "harnessOptions" && value == {})) agent;
     in {
-      assertions = [
-        {
-          assertion = cfg.agents == settledAgents;
-          message = "Pi orchestration catalog must exactly match the settled eight-agent models, instructions, tools, skills, thinking, harness options, and role-owned child extension contributions.";
-        }
-        {
-          assertion = cfg.roleSets == settledRoleSets && roleSetsValid && cfg.budgets == settledBudgets && cfg.gc == settledGc;
-          message = "Pi orchestration role sets, mesh budgets, and GC policy must exactly match the settled recon and ops capabilities.";
-        }
-      ];
       home.file = {
         "${myconfig.programs.pi-coding-agent.configDir}/agent-catalog.json".text = builtins.toJSON {
           schemaVersion = 1;

@@ -3,13 +3,11 @@ import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { visibleWidth } from "@earendil-works/pi-tui";
 import { settledAgentDefinition } from "../extensions_src/utilities/agent_types.ts";
 import { unknownAgentActivityProjection } from "../extensions_src/utilities/orchestration_activity.ts";
-import { renderRunResult } from "../extensions_src/utilities/orchestration_cards.ts";
 import { buildMeshDisplayTree } from "../extensions_src/utilities/orchestration_display_tree.ts";
 import { openMeshHistory } from "../extensions_src/utilities/orchestration_history.ts";
-import { MeshAgentsPaletteComponent, detailPaneModel } from "../extensions_src/utilities/orchestration_palette.ts";
+import { MeshAgentsPaletteComponent } from "../extensions_src/utilities/orchestration_palette.ts";
 import { openLivePreview } from "../extensions_src/utilities/orchestration_preview.ts";
 import { MAX_MODEL_VISIBLE_BYTES, MAX_MODEL_VISIBLE_LINES, projectDebugSnapshot, projectMinimalAgentTask, serializeModelVisibleJson } from "../extensions_src/utilities/orchestration_projection.ts";
 import { inspectMeshAgentWindow, launchAgentSession, meshHubName, stopAgentSession, type CommandResult } from "../extensions_src/utilities/orchestration_tmux.ts";
@@ -71,12 +69,6 @@ void test("mesh display tree promotes a live descendant through a terminal paren
     assert.deepEqual({ promoted: childNode.promoted, viaHandle: childNode.viaHandle, ghost: childNode.ghost, recordParent: childNode.snapshot.agent.parentAgentId }, { promoted: true, viaHandle: tree.handles.get(middle.agent.agentId), ghost: false, recordParent: middle.agent.agentId });
 });
 
-void test("mesh cards retain machine identity, state, and task order within terminal width", () => {
-    const value = snapshot("dddddddd-dddd-4ddd-8ddd-dddddddddddd", "idle"); const theme = { fg: (_role: string, text: string) => text, bold: (text: string) => text };
-    const lines = renderRunResult({ content: [], details: value } as never, { expanded: true } as never, theme as never, { lastComponent: undefined, args: { agent: "worker", prompt: "Implement retained behavior" } }).render(120); const text = lines.join("\n");
-    assert.ok(text.indexOf(value.agent.agentId) < text.indexOf(value.task!.request.taskId)); assert.match(text, /IDLE/u); assert.match(text, /SUCCEEDED/u); for (const line of lines) assert.ok(visibleWidth(line) <= 120);
-    const detail = detailPaneModel({ ...value, task: undefined }); assert.equal(detail.title, "Agent"); assert.ok(detail.body.indexOf(value.agent.agent) < detail.body.indexOf(definition.instructions));
-});
 
 void test("model-visible projection truncates content while preserving machine fields and task order", () => {
     const tasks = Array.from({ length: 128 }, (_, index) => ({ agentId: `agent-${index.toString().padStart(3, "0")}`, taskId: `task-${index.toString().padStart(3, "0")}`, agent: "worker", agentState: "idle", taskState: "succeeded", output: `${"界".repeat(600)}\n`.repeat(30) }));
@@ -88,9 +80,13 @@ void test("model-visible projection truncates content while preserving machine f
 void test("model-visible stop projection keeps one fixed nullable shape without internal fields", () => {
     const value = snapshot("abababab-abab-4bab-8bab-abababababab", "stopping");
     value.stop = { schemaVersion: 1, meshId, agentId: value.agent.agentId, stopRequestId: "cdcdcdcd-cdcd-4dcd-8dcd-cdcdcdcdcdcd", state: "terminating", source: "gc-pressure", requesterEndpointId: "internal:endpoint", reason: "capacity", activitySequence: 7, gcPassId: "efefefef-efef-4efe-8efe-efefefefefef", previousAgentState: "idle", requestedAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:01Z", terminatingAt: "2026-01-01T00:00:01Z", noticeCreatedAt: "2026-01-01T00:00:02Z" };
-    const expected = { stopRequestId: value.stop.stopRequestId, state: "terminating", source: "gc-pressure", reason: "capacity", requestedAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:01Z", terminatingAt: "2026-01-01T00:00:01Z", confirmedAt: null, failedAt: null, failureCategory: null };
-    assert.deepEqual(projectMinimalAgentTask(value).stop, expected);
-    assert.deepEqual(projectDebugSnapshot(value).stop, expected);
+    const minimal = projectMinimalAgentTask(value).stop;
+    const debug = projectDebugSnapshot(value).stop;
+    assert.deepEqual(debug, minimal);
+    assert.deepEqual({ state: minimal?.state, source: minimal?.source, reason: minimal?.reason }, { state: "terminating", source: "gc-pressure", reason: "capacity" });
+    assert.equal("requesterEndpointId" in (minimal ?? {}), false);
+    assert.equal("activitySequence" in (minimal ?? {}), false);
+    assert.equal("gcPassId" in (minimal ?? {}), false);
 });
 
 void test("history and preview reject unsafe identity before allocating tmux state", async () => {

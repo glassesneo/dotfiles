@@ -15,8 +15,8 @@
 
 ## Guidance Policy
 
-- Tests define how variable input crossing an execution boundary changes the result observed by the nearest consumer; preserve the smallest contract covering the normal path and material edge cases, without duplicate assertions or implementation-detail guarantees.
-- Use the `behavioral-test-design` Skill whenever designing, adding, changing, reviewing, or auditing tests or automated checks. Running already-defined validation commands and reporting their results does not require it.
+- Use the `behavioral-test-design` Skill whenever designing, adding, changing, reviewing, or auditing tests or automated checks. Do not add a committed test merely because a feature changed.
+- Choose the lowest responsible validation layer defined in `docs/nix-validation.md`; multiple layers must observe distinct failures.
 - Use narrow checks while iterating and the applicable full gate before completion.
 - Keep local guidance to durable ownership, invariants, and decision rules not already owned by an ancestor or canonical document.
 - Do not use guidance files as directory inventories or duplicate human-facing documentation.

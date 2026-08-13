@@ -1,10 +1,24 @@
 # Nix validation
 
-Use three validation levels so inexpensive flake evaluation remains separate from configuration contracts and representative builds.
+This document owns the repository-specific validation policy for Nix and dotfiles changes. Use the `behavioral-test-design` Skill to decide whether a durable behavioral test is warranted; this document selects the lowest repository mechanism that can observe the material failure.
+
+## Validation ladder
+
+Escalate only until the failure is reliably observable. Multiple layers are justified only when they detect different failure concerns.
+
+1. **Declaration validation** — Nix option types and narrow module assertions reject invalid input and enforce universal relationships every consumer must satisfy.
+2. **Evaluation** — flake and output evaluation checks expression validity and explicitly forced configuration surfaces.
+3. **Realization or semantic consumer validation** — targeted builds, generated-artifact parsers, upstream check commands, and representative configuration closures validate realized outputs.
+4. **Repository-owned behavior** — focused tests cover scripts, parsers, adapters, protocols, state transitions, persistence, cancellation, and other executable behavior not established by lower layers.
+5. **Runtime or system observation** — platform-appropriate smoke or integration checks observe activation, permissions, services, networking, GUI or hardware behavior, and other live effects.
+
+Exact defaults, complete inventories, retired-name absence, disablement, and generated text are not automatically compatibility contracts. Retain them only when an active documented consumer commitment exists and no lower semantic validation expresses it. Prefer a real consumer parser or checker over a text snapshot.
+
+A flake evaluation does not force every Home Manager, nix-darwin, or NixOS configuration, and realizing a derivation does not prove live runtime behavior. Record an unavailable platform check as unavailable rather than passed.
 
 ## Daily entrypoints
 
-The root `justfile` provides thin names for the Nix-owned validation commands:
+The root `justfile` provides thin names for Nix-owned commands:
 
 | Recipe | Nix command |
 |---|---|
@@ -13,36 +27,29 @@ The root `justfile` provides thin names for the Nix-owned validation commands:
 | `just check <flake-check-name>` | `nix build --no-link .#checks.<current-system>.<flake-check-name>` |
 | `just full` | `nix run .#check-full` |
 
-Run these without global Just or Nushell installations through the Darwin development shell, for example `nix develop .#dotfiles --command just eval`. Check selection, platform availability, and the full-validation policy remain Nix responsibilities; an unavailable system-specific check fails with Nix's normal attribute error.
+Run them without global Just or Nushell installations through the Darwin development shell, for example `nix develop .#dotfiles --command just eval`. Check selection and platform availability remain Nix responsibilities; selecting an unavailable system-specific check fails with Nix's normal attribute error.
 
-## Fast evaluation
+## Focused validation
 
-Run the cheap evaluation path while iterating:
+Use the narrowest applicable command while iterating:
 
 ```sh
 nix flake check --no-build --no-update-lock-file
-```
-
-This checks the flake output shape and evaluates cheap check derivations. It does not evaluate every Home Manager, nix-darwin, or NixOS configuration derivation.
-
-## Focused build
-
-Inspect available checks before selecting the one owned by the changed area:
-
-```sh
 nix flake show
 nix build .#checks.<system>.<name> --no-link
 ```
 
-Common mappings are:
+Current focused check owners are:
 
-- Pi TypeScript, lint, or Node tests: `pi-customizations`
-- Pi Nix projections or any Home Manager, nix-darwin, NixOS, host, rice, or shared module change: `configuration-contracts` on `aarch64-darwin`
-- Sketchybar workspace providers: `sketchybar-workspace-adapter-tests`
-- Sketchybar media behavior: `sketchybar-media-hover-tests`
-- repository-owned paths and links: `repository-consistency`
+- `pi-customizations`: Pi TypeScript typechecking, linting, and admitted Node behavioral tests;
+- `configuration-contracts` on `aarch64-darwin`: cross-owner Nix configuration projection and semantic consumer validation;
+- `sketchybar-workspace-adapter-tests` on `aarch64-darwin`: workspace-provider normalization behavior;
+- `sketchybar-media-hover-tests` on `aarch64-darwin`: media hover state transitions and concurrency;
+- `repository-consistency`: repository-owned path, documentation-link, and Skill-package integrity;
+- `treefmt`: repository formatting conformance;
+- `nixos-seiran-vm0` on `aarch64-linux`: representative NixOS system closure realization.
 
-An unavailable check on an incompatible system is not a successful build. Run it on its owning system or record that only evaluation was performed.
+A Home Manager, nix-darwin, NixOS, host, rice, or shared module change normally needs `configuration-contracts` when its owned projection is exercised there; otherwise use evaluation and the most representative available closure build.
 
 ## Full validation
 
