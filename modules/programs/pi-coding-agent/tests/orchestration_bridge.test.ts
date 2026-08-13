@@ -12,7 +12,7 @@ import { createTask, ensurePolicyEpoch, initializeMesh, markAgentStopping, prepa
 
 const capabilities = { nativeScreen: true, taskDelivery: true, taskCompletion: true, taskCancellation: true, usage: true, interactiveInterventions: true, terminalHistory: true };
 const tmux = { socket: "/tmp/tmux", serverPid: "1", sessionId: "$1", sessionName: "main", windowId: "@1", paneId: "%1", windowName: "worker" };
-const syntheticRole = (name = "worker") => ({ description: `Synthetic ${name}`, tools: [], skillOptIns: [], instructions: "Return the bounded result.", defaultProfile: "pi-medium", contextPolicy: "project" as const, childExtensionContributions: [] });
+const syntheticRole = (name = "worker", contextPolicy: "project" | "prompt-only" = "project") => ({ description: `Synthetic ${name}`, tools: [], skillOptIns: [], instructions: "Return the bounded result.", defaultProfile: "pi-medium", contextPolicy, childExtensionContributions: [] });
 const syntheticProfile = { model: "provider/model", thinkingLevel: "medium" as const, harness: "pi" as const };
 const syntheticCatalog = (roles: Record<string, ReturnType<typeof syntheticRole>>) => ({ schemaVersion: 2 as const, roles });
 const syntheticEpochInput = (mode: string, roles: Record<string, ReturnType<typeof syntheticRole>>) => ({
@@ -21,8 +21,6 @@ const syntheticEpochInput = (mode: string, roles: Record<string, ReturnType<type
     profiles: { schemaVersion: 1 as const, profiles: { "pi-medium": syntheticProfile } },
     callPolicy: { modes: { [mode]: { roles: Object.keys(roles) } }, roles: {} },
 });
-const definition = syntheticRole("worker");
-
 const budgets = { maxLiveAgents: 4, maxConcurrentTasks: 4, maxTasksPerMesh: 20 };
 
 function reverseKeyInsertionOrder(value: unknown): unknown {
@@ -31,18 +29,19 @@ function reverseKeyInsertionOrder(value: unknown): unknown {
     return value;
 }
 
-async function bridgeFixture(options: { publish?: boolean; dependencies?: MeshChildBridgeDependencies } = {}) {
+async function bridgeFixture(options: { publish?: boolean; contextPolicy?: "project" | "prompt-only"; dependencies?: MeshChildBridgeDependencies } = {}) {
     const root = await mkdtemp(join(tmpdir(), "orchestration-bridge-"));
     const mesh = await initializeMesh(root, { rootSessionId: "root", recoverable: false, budgets });
-    const roles = { worker: definition };
+    const worker = syntheticRole("worker", options.contextPolicy);
+    const roles = { worker };
     const epoch = await ensurePolicyEpoch(root, mesh.meshId, syntheticEpochInput("ops", roles));
     const reservation = await reserveMeshCapacity(root, mesh.meshId, "new-agent-task");
     const agentId = randomUUID();
     const envelope = buildLaunchEnvelope({ meshId: mesh.meshId, agentId, epochId: epoch.epochId, role: "worker", snapshot: epoch, childExtensions: { worker: ["/popup", "/orchestration", "/bridge"] } });
-    const prepared = await prepareAgent(root, mesh.meshId, { reservationId: reservation.reservationId, agentId, role: "worker", selectedProfile: "pi-medium", harness: "pi", cwd: "/work", roleSnapshot: definition, profileSnapshot: syntheticProfile, launchEnvelope: "pending", epochId: epoch.epochId, provenance: { creatorSessionId: "parent" }, capabilities });
+    const prepared = await prepareAgent(root, mesh.meshId, { reservationId: reservation.reservationId, agentId, role: "worker", selectedProfile: "pi-medium", harness: "pi", cwd: "/work", roleSnapshot: worker, profileSnapshot: syntheticProfile, launchEnvelope: "pending", epochId: epoch.epochId, provenance: { creatorSessionId: "parent" }, capabilities });
     const envelopePath = join(prepared.paths.directory, "launch-envelope.json");
     await writeFile(envelopePath, JSON.stringify(envelope));
-    const publish = () => publishAgent(root, mesh.meshId, prepared.paths, { agentId, epochId: epoch.epochId, role: "worker", selectedProfile: "pi-medium", harness: "pi", cwd: "/work", roleSnapshot: definition, profileSnapshot: syntheticProfile, launchEnvelope: envelopePath, creatorSessionId: "parent", tmux, capabilities });
+    const publish = () => publishAgent(root, mesh.meshId, prepared.paths, { agentId, epochId: epoch.epochId, role: "worker", selectedProfile: "pi-medium", harness: "pi", cwd: "/work", roleSnapshot: worker, profileSnapshot: syntheticProfile, launchEnvelope: envelopePath, creatorSessionId: "parent", tmux, capabilities });
     if (options.publish !== false) await publish();
 
     const handlers = new Map<string, (...args: any[]) => any>();
@@ -73,6 +72,17 @@ void test("child readiness accepts the activated immutable epoch snapshot indepe
     const reordered = reverseKeyInsertionOrder(fixture.envelope);
     assert.notEqual(JSON.stringify(reordered), JSON.stringify(fixture.envelope));
     fixture.activate(reordered);
+    await fixture.start();
+    const ready = await readAgentSnapshot(fixture.root, fixture.meshId, fixture.agentId);
+    assert.equal(ready.status.bridgeReady, true);
+    assert.equal(ready.status.state, "idle");
+});
+
+// Admission: prompt-only child startup is repository-owned, failure prevents the role from running, and existing launch/runtime tests do not exercise bridge readiness for this policy.
+// Given a prompt-only launch envelope, when the child bridge starts, the mesh caller observes a ready idle child without the bridge taking ownership of runtime tool policy.
+void test("prompt-only child bridge reaches readiness under launch-owned isolation", async () => {
+    const fixture = await bridgeFixture({ contextPolicy: "prompt-only" });
+    fixture.activate();
     await fixture.start();
     const ready = await readAgentSnapshot(fixture.root, fixture.meshId, fixture.agentId);
     assert.equal(ready.status.bridgeReady, true);
