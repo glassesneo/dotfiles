@@ -18,6 +18,14 @@
   modelOverrides = {
     providers."openai-codex".modelOverrides."gpt-5.6-sol".contextWindow = 1050000;
   };
+  profileType = delib.submodule {
+    options = with delib; {
+      model = noDefault (strOption null);
+      thinkingLevel = allowNull (enumOption ["off" "minimal" "low" "medium" "high" "xhigh" "max"] null);
+      harness = enumOption ["pi" "cursor-agent" "codex"] "pi";
+      harnessOptions = attrsOfOption lib.types.anything {};
+    };
+  };
 in
   delib.module {
     name = "programs.pi-coding-agent";
@@ -29,6 +37,7 @@ in
         emergency = submoduleOption {
           options.enable = boolOption true;
         } {};
+        profiles = attrsOfOption profileType {};
         defaultExtensions = readOnly (listOfOption str [
           "popup"
           "mode"
@@ -37,6 +46,51 @@ in
           "web_retrieval"
         ]);
       };
+
+    myconfig.always.programs.pi-coding-agent.profiles = lib.mapAttrs (_: profile: lib.mapAttrs (_: lib.mkDefault) profile) {
+      sol-high = {
+        model = "openai-codex/gpt-5.6-sol";
+        thinkingLevel = "high";
+      };
+      sol-medium = {
+        model = "openai-codex/gpt-5.6-sol";
+        thinkingLevel = "medium";
+      };
+      luna-medium = {
+        model = "openai-codex/gpt-5.6-luna";
+        thinkingLevel = "medium";
+      };
+      terra-medium = {
+        model = "openai-codex/gpt-5.6-terra";
+        thinkingLevel = "medium";
+      };
+      terra-high = {
+        model = "openai-codex/gpt-5.6-terra";
+        thinkingLevel = "high";
+      };
+      cursor-fast = {
+        model = "cursor/cursor-grok-4.5-high-fast";
+        thinkingLevel = null;
+        harness = "cursor-agent";
+        harnessOptions = {
+          mode = "agent";
+          permissionPolicy = "allow-always";
+          sandbox = "disabled";
+          trustWorkspace = true;
+          worktree = false;
+        };
+      };
+      codex-search = {
+        model = "codex/gpt-5.6-luna";
+        thinkingLevel = "high";
+        harness = "codex";
+        harnessOptions = {
+          mode = "read-only";
+          permissionPolicy = "reject";
+          webSearch = "cached";
+        };
+      };
+    };
 
     home.ifEnabled = {
       cfg,
@@ -96,8 +150,9 @@ in
         }) [
           "auth.json"
           "models.json"
+          "execution-profiles.json"
           "agent-modes.json"
-          "agent-catalog.json"
+          "role-catalog.json"
           "orchestration.json"
           "web-retrieval.json"
           "extension-keybindings.json"
@@ -140,6 +195,10 @@ in
       home.file =
         {
           "${cfg.configDir}/models.json".text = builtins.toJSON modelOverrides;
+          "${cfg.configDir}/execution-profiles.json".text = builtins.toJSON {
+            schemaVersion = 1;
+            profiles = lib.mapAttrs (_: profile: lib.filterAttrs (_name: value: value != null && value != {}) profile) cfg.profiles;
+          };
         }
         // lib.optionalAttrs cfg.emergency.enable (sharedEmergencyFiles
           // {

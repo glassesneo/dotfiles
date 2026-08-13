@@ -1,6 +1,7 @@
 import { readFile, readdir } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { mapConcurrent } from "./concurrency.ts";
+import { readTask } from "./orchestration_store.ts";
 
 const METRICS_READ_CONCURRENCY = 8;
 
@@ -44,15 +45,6 @@ async function json(path: string): Promise<unknown> {
     return JSON.parse(await readFile(path, "utf8"));
 }
 
-async function optionalJson(path: string): Promise<unknown> {
-    try {
-        return await json(path);
-    } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
-        throw error;
-    }
-}
-
 async function readTaskCandidate(
     meshRoot: string,
     meshId: string,
@@ -60,32 +52,20 @@ async function readTaskCandidate(
     nowMs: number,
 ): Promise<TaskReadResult> {
     try {
-        const taskDirectory = join(meshRoot, "tasks", taskId);
-        const [requestRaw, statusRaw, resultRaw] = await Promise.all([
-            json(join(taskDirectory, "request.json")),
-            json(join(taskDirectory, "status.json")),
-            optionalJson(join(taskDirectory, "result.json")),
-        ]);
-        const request = object(requestRaw);
-        const status = object(statusRaw);
-        const result = object(resultRaw);
-        const agentId = typeof request?.agentId === "string" ? request.agentId : undefined;
-        const startedMs = isoMs(result?.startedAt) ?? isoMs(status?.startedAt) ?? isoMs(request?.createdAt);
-        const finishedMs = isoMs(result?.finishedAt) ?? isoMs(status?.finishedAt);
-        if (!request || !status || request.meshId !== meshId || status.meshId !== meshId || typeof request.taskId !== "string" || request.taskId !== taskId || !agentId || status.agentId !== agentId || status.taskId !== taskId || result && (result.meshId !== meshId || result.agentId !== agentId || result.taskId !== taskId) || startedMs === undefined || finishedMs !== undefined && finishedMs < startedMs) {
-            return { unread: 1 };
-        }
+        const snapshot = await readTask(dirname(dirname(meshRoot)), meshId, taskId);
+        const { request, status, result } = snapshot;
+        const startedMs = isoMs(result?.startedAt) ?? isoMs(status.startedAt) ?? isoMs(request.createdAt);
+        const finishedMs = isoMs(result?.finishedAt) ?? isoMs(status.finishedAt);
+        if (startedMs === undefined || finishedMs !== undefined && finishedMs < startedMs) return { unread: 1 };
         const open = finishedMs === undefined;
         if (open && startedMs > nowMs) return { unread: 1 };
         return {
             unread: 0,
             candidate: {
                 meshId,
-                agentId,
+                agentId: request.agentId,
                 taskId: request.taskId,
-                outcome: typeof result?.outcome === "string"
-                    ? result.outcome
-                    : typeof status.state === "string" ? status.state : "unknown",
+                outcome: result?.outcome ?? status.state,
                 startedAt: new Date(startedMs).toISOString(),
                 ...(finishedMs === undefined ? {} : { finishedAt: new Date(finishedMs).toISOString() }),
                 durationMs: (finishedMs ?? nowMs) - startedMs,
@@ -100,8 +80,8 @@ async function readTaskCandidate(
 async function readAgentTypes(meshRoot: string, meshId: string, agentIds: readonly string[]): Promise<Map<string, string>> {
     const entries = await mapConcurrent([...new Set(agentIds)], METRICS_READ_CONCURRENCY, async agentId => {
         const rawAgent = object(await json(join(meshRoot, "agents", agentId, "agent.json")).catch(() => undefined));
-        const agentType = rawAgent?.meshId === meshId && rawAgent.agentId === agentId && typeof rawAgent.agent === "string"
-            ? rawAgent.agent
+        const agentType = rawAgent?.schemaVersion === 2 && rawAgent.meshId === meshId && rawAgent.agentId === agentId && typeof rawAgent.role === "string"
+            ? rawAgent.role
             : undefined;
         return [agentId, agentType] as const;
     });

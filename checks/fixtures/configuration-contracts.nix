@@ -167,7 +167,8 @@ in
           extensionPaths = questionDisabled.config.programs.pi-coding-agent.settings.extensions;
           modes = builtins.fromJSON (builtins.unsafeDiscardStringContext questionDisabled.config.home.file."${questionDisabled.config.home.homeDirectory}/.pi/agent/agent-modes.json".text);
         };
-        catalog = builtins.fromJSON (builtins.unsafeDiscardStringContext base.config.home.file."${base.config.home.homeDirectory}/.pi/agent/agent-catalog.json".text);
+        catalog = builtins.fromJSON (builtins.unsafeDiscardStringContext base.config.home.file."${base.config.home.homeDirectory}/.pi/agent/role-catalog.json".text);
+        profiles = builtins.fromJSON (builtins.unsafeDiscardStringContext base.config.home.file."${base.config.home.homeDirectory}/.pi/agent/execution-profiles.json".text);
         orchestration = builtins.fromJSON (builtins.unsafeDiscardStringContext base.config.home.file."${base.config.home.homeDirectory}/.pi/agent/orchestration.json".text);
         extensionKeybindings = builtins.fromJSON (builtins.unsafeDiscardStringContext aliasOverride.config.home.file."${aliasOverride.config.home.homeDirectory}/.pi/agent/extension-keybindings.json".text);
         navigationTmux = navigation.config.programs.tmux.extraConfig;

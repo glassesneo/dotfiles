@@ -13,6 +13,9 @@ interface WorkerDependencies { createDriver?: (config: ExternalWorkerConfig, eve
 function requireEnv(env: NodeJS.ProcessEnv, name: string): string { const value = env[name]; if (!value?.trim()) throw new Error(`${name} is required`); return value; }
 function sleep(ms: number): Promise<void> { return new Promise(resolve => setTimeout(resolve, ms)); }
 function errorText(error: unknown): string { return error instanceof Error ? error.message : String(error); }
+export function externalTaskPrompt(roleInstructions: string, callerTask: string): string {
+    return [roleInstructions.trim(), callerTask].filter(Boolean).join("\n\nDelegated task:\n");
+}
 
 class TerminalView {
     constructor(agentId: string, agent: string, harness: string) {
@@ -57,8 +60,9 @@ export async function runExternalWorker(env: NodeJS.ProcessEnv = process.env, de
     const config = validateExternalWorkerConfig(JSON.parse(requireEnv(env, "PI_MESH_EXTERNAL_CONFIG")));
     const envelope = validateLaunchEnvelope(JSON.parse(await readFile(requireEnv(env, "PI_AGENT_RESOLVED_AGENT"), "utf8")));
     if (envelope.meshId !== meshId || envelope.agentId !== agentId || envelope.epochId !== epochId) throw new Error("External worker metadata does not match the immutable epoch snapshot");
-    const agent = envelope.identity.slice(6); const definition = envelope.self;
-    const route = resolveExternalDriver(config, definition);
+    const launch = envelope;
+    const agent = launch.role;
+    const route = resolveExternalDriver(config, launch.executionProfile);
     const wait = dependencies.sleep ?? sleep;
     await waitForAgent(stateRoot, meshId, agentId, wait);
     const view = new TerminalView(agentId, agent, route.display);
@@ -111,7 +115,7 @@ export async function runExternalWorker(env: NodeJS.ProcessEnv = process.env, de
             activeTaskId = taskId;
             await publishActivity("running");
             view.task(task.request.prompt.split(/\r?\n/u).find(Boolean) ?? "Task");
-            const prompt = [definition.instructions.trim(), task.request.prompt].filter(Boolean).join("\n\nDelegated task:\n");
+            const prompt = externalTaskPrompt(launch.selfRole.instructions, task.request.prompt);
             let turnSettled = false;
             let taskCancelled = false;
             let driverFailed = false;

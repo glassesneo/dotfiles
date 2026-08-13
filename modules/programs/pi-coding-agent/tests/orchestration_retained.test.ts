@@ -3,7 +3,6 @@ import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { settledAgentDefinition } from "../extensions_src/utilities/agent_types.ts";
 import { unknownAgentActivityProjection } from "../extensions_src/utilities/orchestration_activity.ts";
 import { buildMeshDisplayTree } from "../extensions_src/utilities/orchestration_display_tree.ts";
 import { openMeshHistory } from "../extensions_src/utilities/orchestration_history.ts";
@@ -13,7 +12,9 @@ import { MAX_MODEL_VISIBLE_BYTES, MAX_MODEL_VISIBLE_LINES, projectDebugSnapshot,
 import { inspectMeshAgentWindow, launchAgentSession, meshHubName, stopAgentSession, type CommandResult } from "../extensions_src/utilities/orchestration_tmux.ts";
 import { emptyUsage, type AgentSnapshot, type AgentState, type TaskState } from "../extensions_src/utilities/orchestration_types.ts";
 
-const definition = settledAgentDefinition("worker");
+const syntheticRole = (name = "worker") => ({ description: `Synthetic ${name}`, tools: [], skillOptIns: [], instructions: "Return the bounded result.", defaultProfile: "pi-medium", contextPolicy: "project" as const, childExtensionContributions: [] });
+const syntheticProfile = { model: "provider/model", thinkingLevel: "medium" as const, harness: "pi" as const };
+const definition = syntheticRole("worker");
 const meshId = "11111111-1111-4111-8111-111111111111";
 const epochId = "22222222-2222-4222-8222-222222222222";
 const capabilities = { nativeScreen: true, taskDelivery: true, taskCompletion: true, taskCancellation: true, usage: true, interactiveInterventions: true, terminalHistory: true };
@@ -22,11 +23,11 @@ const tmux = { socket: "/tmp/tmux", serverPid: "10", sessionId: "$hub", sessionN
 function snapshot(id: string, state: AgentState, options: { parentAgentId?: string; taskState?: TaskState; createdAt?: string; sessionFile?: string; sessionId?: string } = {}): AgentSnapshot {
     const taskId = id.replace(/^./u, "b"); const prompt = "Implement retained behavior\nfull detail"; const taskState = options.taskState ?? (state === "failed" ? "failed" : "succeeded"); const terminal = taskState === "succeeded" || taskState === "failed" || taskState === "stopped";
     return {
-        agent: { schemaVersion: 1, meshId, agentId: id, epochId, agent: "worker", harness: "pi", cwd: "/work", createdAt: options.createdAt ?? id, agentSnapshot: definition, launchEnvelope: "/envelope", launchEnvelopeDigest: "digest", tmux, capabilities, creatorSessionId: "creator", ...(options.parentAgentId ? { parentAgentId: options.parentAgentId } : {}) },
+        agent: { schemaVersion: 2, meshId, agentId: id, epochId, role: "worker", selectedProfile: "pi-medium", harness: "pi", cwd: "/work", createdAt: options.createdAt ?? id, roleSnapshot: definition, profileSnapshot: syntheticProfile, agent: "worker", agentSnapshot: definition, launchEnvelope: "/envelope", launchEnvelopeDigest: "digest", tmux, capabilities, creatorSessionId: "creator", ...(options.parentAgentId ? { parentAgentId: options.parentAgentId } : {}) },
         status: { schemaVersion: 1, meshId, agentId: id, state, bridgeReady: true, meshToolsEnabled: true, agentUsage: emptyUsage(), accountedTaskIds: [], updatedAt: options.createdAt ?? id, ...(options.sessionFile ? { childSessionFile: options.sessionFile } : {}), ...(options.sessionId ? { childSessionId: options.sessionId } : {}) },
         activity: unknownAgentActivityProjection(),
         stop: null,
-        task: { request: { schemaVersion: 1, meshId, agentId: id, taskId, prompt, createdAt: options.createdAt ?? id }, status: { schemaVersion: 1, meshId, agentId: id, taskId, state: taskState, createdAt: options.createdAt ?? id, ...(terminal ? { finishedAt: options.createdAt ?? id } : {}) }, result: terminal ? { schemaVersion: 1, meshId, agentId: id, taskId, outcome: taskState, output: "done", usage: emptyUsage(), turns: 1, interventions: [], startedAt: options.createdAt ?? id, finishedAt: options.createdAt ?? id } : null, interventions: [], claimed: false, directory: "/task" },
+        task: { request: { schemaVersion: 2, meshId, agentId: id, taskId, prompt, requesterEndpointId: "root:test", createdAt: options.createdAt ?? id }, status: { schemaVersion: 1, meshId, agentId: id, taskId, state: taskState, createdAt: options.createdAt ?? id, ...(terminal ? { finishedAt: options.createdAt ?? id } : {}) }, result: terminal ? { schemaVersion: 1, meshId, agentId: id, taskId, outcome: taskState, output: "done", usage: emptyUsage(), turns: 1, interventions: [], startedAt: options.createdAt ?? id, finishedAt: options.createdAt ?? id } : null, interventions: [], claimed: false, directory: "/task" },
     };
 }
 

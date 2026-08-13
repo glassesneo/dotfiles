@@ -1,5 +1,6 @@
 import type { Usage } from "@earendil-works/pi-ai";
-import type { AgentDefinition, AgentHarness, HarnessRuntimeConfig, MeshBudgets, OrchestrationConfig } from "./agent_types.ts";
+import type { AgentHarness, CallerPolicy, HarnessRuntimeConfig, MeshBudgets, OrchestrationConfig, RoleDefinition } from "./agent_types.ts";
+import type { ExecutionProfile } from "./mode_types.ts";
 import type { AgentActivityProjection } from "./orchestration_activity.ts";
 export type { HarnessRuntimeConfig, MeshBudgets, OrchestrationConfig } from "./agent_types.ts";
 
@@ -26,16 +27,16 @@ export type SubagentRuntimeConfig = OrchestrationConfig;
 export interface MeshBudgetMigration { type: "mesh_budget_migrated"; from: MeshBudgets; to: MeshBudgets; migratedAt: string }
 export interface MeshRecord { schemaVersion: 1; meshId: string; state: MeshState; recoverable: boolean; rootSessionId: string; rootSessionFile?: string; budgets: MeshBudgets; createdAt: string; updatedAt: string; rootAttachedAt?: string; currentEpochId?: string; closedAt?: string; budgetMigration?: MeshBudgetMigration }
 export interface RootLease { schemaVersion: 1; meshId: string; leaseId: string; rootSessionId: string; rootSessionFile?: string; pid: number; acquiredAt: string; heartbeatAt: string; tmuxServerPid?: string; tmuxSessionId?: string }
-export interface PolicyEpoch { schemaVersion: 1; meshId: string; epochId: string; mode: string; roleSet: string[]; roles: Record<string, AgentDefinition>; policyDigest: string; createdAt: string }
+export interface PolicyEpoch { schemaVersion: 2; meshId: string; epochId: string; mode: string; directRoles: string[]; roles: Record<string, RoleDefinition>; profiles: Record<string, ExecutionProfile>; policies: Record<string, CallerPolicy>; policyDigest: string; createdAt: string; /** Transitional runtime alias. */ readonly roleSet: string[] }
 export interface BudgetReservation { schemaVersion: 1; meshId: string; reservationId: string; kind: "new-agent-task" | "existing-agent-task"; state: ReservationState; agentId?: string; taskId?: string; liveSlots: 0 | 1; taskSlots: 1; lifetimeTasks: 1; createdAt: string; updatedAt: string; committedAt?: string; releasedAt?: string; releaseReason?: string }
 export interface MeshBudgetUsage { liveAgents: number; concurrentTasks: number; lifetimeTasks: number; pendingLiveSlots: number; pendingTaskSlots: number; pendingLifetimeTasks: number }
 
 /** Creation provenance only. It is never an authority or lookup boundary. */
 export interface AgentProvenance { parentAgentId?: string; creatorSessionId: string; creatorSessionFile?: string }
-export interface AgentRecord extends AgentProvenance { schemaVersion: 1; meshId: string; agentId: string; epochId: string; agent: string; harness: AgentHarness; cwd: string; createdAt: string; agentSnapshot: AgentDefinition; launchEnvelope: string; launchEnvelopeDigest: string; tmux: TmuxAgentReference; tmuxOwnership?: TmuxOwnership; capabilities: NativeCapabilities }
+export interface AgentRecord extends AgentProvenance { schemaVersion: 2; meshId: string; agentId: string; epochId: string; role: string; selectedProfile: string; harness: AgentHarness; cwd: string; createdAt: string; roleSnapshot: RoleDefinition; profileSnapshot: ExecutionProfile; launchEnvelope: string; launchEnvelopeDigest: string; tmux: TmuxAgentReference; tmuxOwnership?: TmuxOwnership; capabilities: NativeCapabilities; /** Transitional runtime aliases. */ readonly agent: string; readonly agentSnapshot: RoleDefinition }
 export interface AgentStatus { schemaVersion: 1; meshId: string; agentId: string; state: AgentState; activeTaskId?: string; latestTaskId?: string; bridgeReady: boolean; meshToolsEnabled: boolean; childSessionId?: string; childSessionFile?: string; agentUsage: Usage; accountedTaskIds: string[]; updatedAt: string; exitReason?: string }
 export interface AgentStopRequest { schemaVersion: 1; meshId: string; agentId: string; stopRequestId: string; state: AgentStopState; source: AgentStopSource; requesterEndpointId?: string; reason: string; terminalState?: AgentStopTerminalState; activitySequence?: number; gcPassId?: string; previousAgentState: AgentState; requestedAt: string; updatedAt: string; terminatingAt?: string; confirmedAt?: string; failedAt?: string; failureCategory?: string; noticeCreatedAt?: string }
-export interface TaskRequest { schemaVersion: 1; meshId: string; agentId: string; taskId: string; prompt: string; createdAt: string }
+export interface TaskRequest { schemaVersion: 2; meshId: string; agentId: string; taskId: string; prompt: string; requesterEndpointId: string; requesterAgentId?: string; createdAt: string }
 export interface TaskCancelRequest { schemaVersion: 1; meshId: string; agentId: string; taskId: string; requestedAt: string; reason: string }
 export interface Intervention { sequence: number; timestamp: string; taskId?: string; text: string; deliveryMode: "steer" | "followUp" | "idle"; images: string[] }
 export interface TaskStatus { schemaVersion: 1; meshId: string; agentId: string; taskId: string; state: TaskState; createdAt: string; startedAt?: string; finishedAt?: string; error?: string }

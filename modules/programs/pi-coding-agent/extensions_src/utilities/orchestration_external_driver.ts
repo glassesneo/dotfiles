@@ -1,4 +1,4 @@
-import type { AgentDefinition } from "./agent_types.ts";
+import type { ExecutionProfile } from "./mode_types.ts";
 import { CodexAcpDriver } from "./orchestration_codex_acp.ts";
 import { CursorAcpDriver } from "./orchestration_cursor_acp.ts";
 
@@ -46,17 +46,21 @@ export function validateExternalWorkerConfig(value: unknown): ExternalWorkerConf
     throw new Error(`Unsupported external worker adapter: ${String(raw.adapter)}`);
 }
 
-export function resolveExternalDriver(config: ExternalWorkerConfig, definition: AgentDefinition): ExternalDriverRoute {
-    if (definition.tools.length || definition.childExtensionContributions.length) throw new Error("External ACP harnesses are leaf-only and cannot receive Pi, inbox, or mesh tools");
+function exactHarnessOptions(actual: Record<string, unknown> | undefined, expected: Record<string, unknown>): boolean {
+    if (!actual || Object.keys(actual).length !== Object.keys(expected).length) return false;
+    return Object.entries(expected).every(([key, value]) => actual[key] === value);
+}
+
+export function resolveExternalDriver(config: ExternalWorkerConfig, profile: ExecutionProfile): ExternalDriverRoute {
     if (config.adapter === "cursor-acp") {
-        if (definition.harness !== "cursor-agent" || !definition.model.startsWith("cursor/")) throw new Error("cursor-acp requires a Cursor launch envelope");
+        if (profile.harness !== "cursor-agent" || !profile.model.startsWith("cursor/") || profile.thinkingLevel !== undefined) throw new Error("cursor-acp requires a Cursor selected execution profile");
+        if (!exactHarnessOptions(profile.harnessOptions, { mode: "agent", permissionPolicy: "allow-always", sandbox: "disabled", trustWorkspace: true, worktree: false })) throw new Error("cursor-acp selected execution profile has invalid harnessOptions");
         return {
             display: "cursor-agent",
-            create: event => new CursorAcpDriver({ command: config.command, cwd: config.cwd, model: definition.model.slice(7), permissionPolicy: config.permissionPolicy, event }),
+            create: event => new CursorAcpDriver({ command: config.command, cwd: config.cwd, model: profile.model.slice(7), permissionPolicy: config.permissionPolicy, event }),
         };
     }
-    const harnessOptions = definition.harnessOptions;
-    if (definition.harness !== "codex" || !definition.model.startsWith("codex/") || !definition.thinkingLevel || harnessOptions?.mode !== "read-only" || harnessOptions.permissionPolicy !== "reject" || harnessOptions.webSearch !== "cached") throw new Error("codex-acp requires a Codex launch envelope");
-    const options = { command: config.command, cwd: config.cwd, model: definition.model.slice("codex/".length), reasoning: definition.thinkingLevel, mode: config.mode, permissionPolicy: config.permissionPolicy, webSearch: config.webSearch } as const;
+    if (profile.harness !== "codex" || !profile.model.startsWith("codex/") || !profile.thinkingLevel || !exactHarnessOptions(profile.harnessOptions, { mode: "read-only", permissionPolicy: "reject", webSearch: "cached" })) throw new Error("codex-acp requires a Codex selected execution profile");
+    const options = { command: config.command, cwd: config.cwd, model: profile.model.slice("codex/".length), reasoning: profile.thinkingLevel, mode: config.mode, permissionPolicy: config.permissionPolicy, webSearch: config.webSearch } as const;
     return { display: "codex", create: event => new CodexAcpDriver({ ...options, event }) };
 }

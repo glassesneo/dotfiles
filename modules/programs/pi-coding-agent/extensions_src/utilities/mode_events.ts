@@ -16,7 +16,7 @@ export function validateActiveModeEvent(value: unknown): ActiveModeEvent {
     if (raw.schemaVersion !== 1) throw new Error("Unsupported active-mode event schemaVersion");
     if (raw.reason !== "startup" && raw.reason !== "switch" && raw.reason !== "restore") throw new Error("active-mode event reason is invalid");
     if (typeof raw.name !== "string" || !raw.name.trim()) throw new Error("active-mode event name must be non-empty");
-    const config = validateModeConfig({ schemaVersion: 1, defaultMode: raw.name, modes: { [raw.name]: raw.mode } });
+    const config = validateModeConfig({ schemaVersion: 2, defaultMode: raw.name, modes: { [raw.name]: raw.mode } });
     return { schemaVersion: 1, name: raw.name, mode: config.modes[raw.name]!, reason: raw.reason };
 }
 export interface ActiveModeBarrier {

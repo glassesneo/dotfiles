@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { writeAtomicJson } from "./orchestration_json.ts";
 import { meshDirectory, withMeshAgentLock } from "./orchestration_lock.ts";
@@ -54,6 +54,12 @@ export async function bindAgentRuntime(stateRoot: string, meshId: string, agentI
 }
 export async function readAgentRuntimeBinding(stateRoot: string, meshId: string, agentId: string): Promise<AgentRuntimeBinding | undefined> {
     return optionalBinding(stateRoot, meshId, agentId);
+}
+export async function unbindAgentRuntime(stateRoot: string, meshId: string, agentId: string, expectedRuntimeId: string): Promise<void> {
+    await withMeshAgentLock(stateRoot, meshId, agentId, async () => {
+        const binding = await optionalBinding(stateRoot, meshId, agentId);
+        if (binding?.runtimeId === expectedRuntimeId) await rm(runtimePath(stateRoot, meshId, agentId), { force: true });
+    });
 }
 export async function readCurrentPiRuntimeGeneration(stateRoot: string, meshId: string, agentId: string, sessionId: string, sessionFile: string): Promise<AgentRuntimeBinding> {
     const binding = await optionalBinding(stateRoot, meshId, agentId);

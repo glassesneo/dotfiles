@@ -6,13 +6,23 @@ import { join } from "node:path";
 import test from "node:test";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { registerMeshChildBridge, type MeshChildBridgeDependencies } from "../extensions_src/orchestration_child_bridge.ts";
-import { buildLaunchEnvelope, settledAgentDefinition } from "../extensions_src/utilities/agent_types.ts";
+import { buildLaunchEnvelope } from "../extensions_src/utilities/agent_types.ts";
 import { readAgentActivity } from "../extensions_src/utilities/orchestration_activity.ts";
 import { createTask, ensurePolicyEpoch, initializeMesh, markAgentStopping, prepareAgent, publishAgent, readAgentSnapshot, requestTaskCancellation, reserveMeshCapacity } from "../extensions_src/utilities/orchestration_store.ts";
 
-const definition = settledAgentDefinition("worker");
 const capabilities = { nativeScreen: true, taskDelivery: true, taskCompletion: true, taskCancellation: true, usage: true, interactiveInterventions: true, terminalHistory: true };
 const tmux = { socket: "/tmp/tmux", serverPid: "1", sessionId: "$1", sessionName: "main", windowId: "@1", paneId: "%1", windowName: "worker" };
+const syntheticRole = (name = "worker") => ({ description: `Synthetic ${name}`, tools: [], skillOptIns: [], instructions: "Return the bounded result.", defaultProfile: "pi-medium", contextPolicy: "project" as const, childExtensionContributions: [] });
+const syntheticProfile = { model: "provider/model", thinkingLevel: "medium" as const, harness: "pi" as const };
+const syntheticCatalog = (roles: Record<string, ReturnType<typeof syntheticRole>>) => ({ schemaVersion: 2 as const, roles });
+const syntheticEpochInput = (mode: string, roles: Record<string, ReturnType<typeof syntheticRole>>) => ({
+    mode,
+    catalog: syntheticCatalog(roles),
+    profiles: { schemaVersion: 1 as const, profiles: { "pi-medium": syntheticProfile } },
+    callPolicy: { modes: { [mode]: { roles: Object.keys(roles) } }, roles: {} },
+});
+const definition = syntheticRole("worker");
+
 const budgets = { maxLiveAgents: 4, maxConcurrentTasks: 4, maxTasksPerMesh: 20 };
 
 function reverseKeyInsertionOrder(value: unknown): unknown {
@@ -25,14 +35,14 @@ async function bridgeFixture(options: { publish?: boolean; dependencies?: MeshCh
     const root = await mkdtemp(join(tmpdir(), "orchestration-bridge-"));
     const mesh = await initializeMesh(root, { rootSessionId: "root", recoverable: false, budgets });
     const roles = { worker: definition };
-    const epoch = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", roleSet: ["worker"], roles });
+    const epoch = await ensurePolicyEpoch(root, mesh.meshId, syntheticEpochInput("ops", roles));
     const reservation = await reserveMeshCapacity(root, mesh.meshId, "new-agent-task");
     const agentId = randomUUID();
-    const envelope = buildLaunchEnvelope({ meshId: mesh.meshId, agentId, epochId: epoch.epochId, agent: "worker", mode: "ops", roleSet: ["worker"], catalog: { schemaVersion: 1, agents: roles }, childExtensions: { worker: ["/popup", "/orchestration", "/bridge"] } });
-    const prepared = await prepareAgent(root, mesh.meshId, { reservationId: reservation.reservationId, agentId, agent: "worker", harness: "pi", cwd: "/work", agentSnapshot: definition, launchEnvelope: "pending", epochId: epoch.epochId, provenance: { creatorSessionId: "parent" }, capabilities });
+    const envelope = buildLaunchEnvelope({ meshId: mesh.meshId, agentId, epochId: epoch.epochId, role: "worker", snapshot: epoch, childExtensions: { worker: ["/popup", "/orchestration", "/bridge"] } });
+    const prepared = await prepareAgent(root, mesh.meshId, { reservationId: reservation.reservationId, agentId, role: "worker", selectedProfile: "pi-medium", harness: "pi", cwd: "/work", roleSnapshot: definition, profileSnapshot: syntheticProfile, launchEnvelope: "pending", epochId: epoch.epochId, provenance: { creatorSessionId: "parent" }, capabilities });
     const envelopePath = join(prepared.paths.directory, "launch-envelope.json");
     await writeFile(envelopePath, JSON.stringify(envelope));
-    const publish = () => publishAgent(root, mesh.meshId, prepared.paths, { agentId, epochId: epoch.epochId, agent: "worker", harness: "pi", cwd: "/work", agentSnapshot: definition, launchEnvelope: envelopePath, creatorSessionId: "parent", tmux, capabilities });
+    const publish = () => publishAgent(root, mesh.meshId, prepared.paths, { agentId, epochId: epoch.epochId, role: "worker", selectedProfile: "pi-medium", harness: "pi", cwd: "/work", roleSnapshot: definition, profileSnapshot: syntheticProfile, launchEnvelope: envelopePath, creatorSessionId: "parent", tmux, capabilities });
     if (options.publish !== false) await publish();
 
     const handlers = new Map<string, (...args: any[]) => any>();
@@ -146,7 +156,7 @@ void test("stalled completion persistence shuts down the settled child after a b
     } });
     fixture.activate();
     await fixture.start();
-    await createTask(fixture.root, fixture.meshId, fixture.agentId, "complete before store failure");
+    await createTask(fixture.root, fixture.meshId, fixture.agentId, "complete before store failure", `root:${fixture.meshId}`);
     await fixture.tick();
     await fixture.emit("before_agent_start", { prompt: "complete before store failure" });
     await fixture.emit("agent_start");
@@ -163,7 +173,7 @@ void test("Pi child tasks preserve completion, cancellation, and failure outcome
     fixture.activate();
     await fixture.start();
 
-    const complete = await createTask(fixture.root, fixture.meshId, fixture.agentId, "complete");
+    const complete = await createTask(fixture.root, fixture.meshId, fixture.agentId, "complete", `root:${fixture.meshId}`);
     await fixture.tick();
     assert.deepEqual(fixture.delivered, ["complete"]);
     await fixture.emit("before_agent_start", { prompt: "complete" });
@@ -174,14 +184,14 @@ void test("Pi child tasks preserve completion, cancellation, and failure outcome
     assert.equal(completed.task?.result?.outcome, "succeeded");
     assert.equal(completed.task?.result?.output, "done");
 
-    const cancel = await createTask(fixture.root, fixture.meshId, fixture.agentId, "cancel");
+    const cancel = await createTask(fixture.root, fixture.meshId, fixture.agentId, "cancel", `root:${fixture.meshId}`);
     await fixture.tick();
     await requestTaskCancellation(fixture.root, fixture.meshId, cancel.request.taskId, "caller cancelled");
     await fixture.tick();
     const cancelled = await readAgentSnapshot(fixture.root, fixture.meshId, fixture.agentId, cancel.request.taskId);
     assert.equal(cancelled.task?.result?.outcome, "stopped");
 
-    const fail = await createTask(fixture.root, fixture.meshId, fixture.agentId, "fail");
+    const fail = await createTask(fixture.root, fixture.meshId, fixture.agentId, "fail", `root:${fixture.meshId}`);
     await fixture.tick();
     await fixture.emit("before_agent_start", { prompt: "fail" });
     await fixture.emit("agent_start");

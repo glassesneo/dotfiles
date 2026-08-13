@@ -109,21 +109,24 @@ def main [] {
     import assert from "node:assert/strict";
     import { pathToFileURL } from "node:url";
 
-    const catalog = JSON.parse(process.env.GENERATED_AGENT_CATALOG);
+    const catalog = JSON.parse(process.env.GENERATED_ROLE_CATALOG);
+    const profiles = JSON.parse(process.env.GENERATED_EXECUTION_PROFILES);
     const orchestration = JSON.parse(process.env.GENERATED_ORCHESTRATION);
     const keybindings = JSON.parse(process.env.GENERATED_EXTENSION_KEYBINDINGS);
     const enabledModes = JSON.parse(process.env.GENERATED_ENABLED_MODES);
     const disabledModes = JSON.parse(process.env.GENERATED_DISABLED_MODES);
     const projections = JSON.parse(process.env.GENERATED_WEB_RETRIEVAL);
     const utilities = `${process.env.PACKAGE_ROOT}/extensions_src/utilities`;
-    const { validateAgentCatalog, validateOrchestrationConfig } = await import(pathToFileURL(process.env.AGENT_TYPES_VALIDATOR).href);
+    const { validateExecutionProfileConfig, validateRoleCatalog, validateOrchestrationConfig, validateOrchestrationReferences } = await import(pathToFileURL(process.env.AGENT_TYPES_VALIDATOR).href);
     const { validateModeConfig } = await import(pathToFileURL(`${utilities}/mode_types.ts`).href);
     const { validateExtensionKeybindings } = await import(pathToFileURL(`${utilities}/extension_keybindings.ts`).href);
     const { validateWebRetrievalRuntimeConfig } = await import(pathToFileURL(`${utilities}/web_retrieval_types.ts`).href);
 
-    validateAgentCatalog(catalog);
-    validateOrchestrationConfig(orchestration);
-    validateModeConfig(enabledModes);
+    const roleCatalog = validateRoleCatalog(catalog);
+    const executionProfiles = validateExecutionProfileConfig(profiles);
+    const orchestrationConfig = validateOrchestrationConfig(orchestration);
+    const enabledModeConfig = validateModeConfig(enabledModes);
+    validateOrchestrationReferences(orchestrationConfig, roleCatalog, executionProfiles, Object.keys(enabledModeConfig.modes));
     validateModeConfig(disabledModes);
     validateExtensionKeybindings(keybindings, "generated extension-keybindings.json");
 
@@ -145,13 +148,14 @@ def main [] {
   let validator_path = ($env.TMPDIR | path join configuration-contract-validator.mjs)
   $validator_source | save --force $validator_path
   let agent_types_validator = (
-    $pi.catalog.agents.reviewer.childExtensionContributions
+    $pi.catalog.roles.reviewer.childExtensionContributions
     | first
     | str replace --regex 'agent_artifact\.ts$' 'utilities/agent_types.ts'
   )
   let validator = with-env {
     AGENT_TYPES_VALIDATOR: $agent_types_validator
-    GENERATED_AGENT_CATALOG: ($pi.catalog | to json --raw)
+    GENERATED_ROLE_CATALOG: ($pi.catalog | to json --raw)
+    GENERATED_EXECUTION_PROFILES: ($pi.profiles | to json --raw)
     GENERATED_ORCHESTRATION: ($pi.orchestration | to json --raw)
     GENERATED_EXTENSION_KEYBINDINGS: ($pi.extensionKeybindings | to json --raw)
     GENERATED_ENABLED_MODES: ($pi.enabledQuestion.modes | to json --raw)

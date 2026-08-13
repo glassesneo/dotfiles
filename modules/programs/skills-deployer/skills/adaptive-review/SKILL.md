@@ -8,10 +8,26 @@ description: >-
 
 # Adaptive Review
 
-Require a defined target and any available design, diff, or validation context. Act as the review consolidator. Review directly when one reviewer can trace the behavior coherently. Request only a concrete independent lens or bounded dissent dossier when evidence shows that separation will improve the verdict; the independent peer owns that lens, not the consolidated review.
+Require a defined target and any available design, diff, or validation context.
+Own the consolidated review judgment. Review directly when the behavior can be
+traced coherently in one context. Request a bounded `review-lens` or validation
+objective only when its independent evidence can materially improve the
+verdict. A review-lens owns only its supplied lens or dossier; it does not own
+the whole review.
 
-When validation or another review runs as a peer task, choose blocking wait or a watch according to whether its result is the next dependency. Keep the monitoring owner explicit for background work. A watch reports terminal state, not success or task details; use `mesh_get` for the outcome and evidence. On failed or blocked evidence, decide whether to stop, limit, continue, or escalate affected review claims from the retrieved evidence. External harness agents are not durable route endpoints, so a Pi peer must monitor them.
+Review read-only. Trace relevant behavior and contracts, verify claims against
+concrete evidence, merge duplicates, reject unsupported or preference-only
+claims, and preserve uncertainty. Decide which findings are admitted to the
+review verdict and at what severity. Admission to the verdict is not a decision
+to change source: the parent owns whether to adopt, reject, defer, or escalate
+each finding in the requester-facing outcome.
 
-Do not change source. Merge duplicate findings, reject unsupported claims, preserve uncertainty, and distinguish correctness defects from preferences. Persist a review report only when the requester asks for a durable review.
+Use additional evidence only while it can change the verdict or a material
+risk. Stop when the verdict is supported and residual uncertainty can be
+stated. Persist a review report only when the requester asks for a durable
+review.
 
-Return severity-ordered findings with precise evidence, followed by the verdict, verification gaps, skipped areas, and residual risks. Include task handles, monitoring ownership, and pending retrieval or follow-up only when the requester or a new monitoring owner must act; do not expose all internal peer detail by default. When a durable review was requested, return the saved review-report path.
+Return severity-ordered findings with precise evidence, followed by the
+verdict, verification gaps, skipped areas, and residual risks. Include pending
+evidence or follow-up only when it limits the verdict or another owner must act.
+When a durable review was requested, also return its saved path.

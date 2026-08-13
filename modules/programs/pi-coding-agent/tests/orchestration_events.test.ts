@@ -2,12 +2,22 @@ import assert from "node:assert/strict";
 import { readFile, readdir, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import test from "node:test";
-import { buildLaunchEnvelope, settledAgentCatalog, settledAgentDefinition } from "../extensions_src/utilities/agent_types.ts";
+import { buildLaunchEnvelope } from "../extensions_src/utilities/agent_types.ts";
 import { availableContext, publishAgentActivity } from "../extensions_src/utilities/orchestration_activity.ts";
 import { bindAgentRuntime } from "../extensions_src/utilities/orchestration_runtime.ts";
 import { acknowledgeMeshEvents, bindMeshEndpoint, markMeshEventInjected, pollMeshEvents, registerMeshSignal, registerMeshWatch, setMeshEndpointOffline } from "../extensions_src/utilities/orchestration_events.ts";
 import { createTask, ensurePolicyEpoch, finishTask, initializeMesh, meshPaths, patchAgentStatus, prepareAgent, publishAgent, readPolicyEpoch, reserveMeshCapacity } from "../extensions_src/utilities/orchestration_store.ts";
 import { withTemporaryRoot as withRoot } from "./test_helpers.ts";
+
+const syntheticRole = (name = "worker") => ({ description: `Synthetic ${name}`, tools: [], skillOptIns: [], instructions: "Return the bounded result.", defaultProfile: "pi-medium", contextPolicy: "project" as const, childExtensionContributions: [] });
+const syntheticProfile = { model: "provider/model", thinkingLevel: "medium" as const, harness: "pi" as const };
+const syntheticCatalog = (roles: Record<string, ReturnType<typeof syntheticRole>>) => ({ schemaVersion: 2 as const, roles });
+const syntheticEpochInput = (mode: string, roles: Record<string, ReturnType<typeof syntheticRole>>) => ({
+    mode,
+    catalog: syntheticCatalog(roles),
+    profiles: { schemaVersion: 1 as const, profiles: { "pi-medium": syntheticProfile } },
+    callPolicy: { modes: { [mode]: { roles: Object.keys(roles) } }, roles: {} },
+});
 
 const budgets = { maxLiveAgents: 2, maxConcurrentTasks: 3, maxTasksPerMesh: 8 };
 const capabilities = { nativeScreen: true, taskDelivery: true, taskCompletion: true, taskCancellation: true, usage: true, interactiveInterventions: true, terminalHistory: true };
@@ -15,16 +25,16 @@ const tmux = { socket: "/tmp/tmux", serverPid: "10", sessionId: "$1", sessionNam
 
 async function eventFixture(root: string) {
     const mesh = await initializeMesh(root, { rootSessionId: "root", rootSessionFile: "/root.jsonl", recoverable: true, budgets });
-    const roles = { worker: settledAgentDefinition("worker") };
-    const epoch = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", roleSet: ["worker"], roles });
+    const roles = { worker: syntheticRole("worker") };
+    const epoch = await ensurePolicyEpoch(root, mesh.meshId, syntheticEpochInput("ops", roles));
     const reservation = await reserveMeshCapacity(root, mesh.meshId, "new-agent-task");
     const definition = roles.worker;
-    const prepared = await prepareAgent(root, mesh.meshId, { reservationId: reservation.reservationId, agent: "worker", harness: "pi", cwd: root, agentSnapshot: definition, launchEnvelope: "pending", epochId: epoch.epochId, provenance: { creatorSessionId: "root" }, capabilities });
+    const prepared = await prepareAgent(root, mesh.meshId, { reservationId: reservation.reservationId, role: "worker", selectedProfile: "pi-medium", harness: "pi", cwd: root, roleSnapshot: definition, profileSnapshot: syntheticProfile, launchEnvelope: "pending", epochId: epoch.epochId, provenance: { creatorSessionId: "root" }, capabilities });
     const persistedEpoch = await readPolicyEpoch(root, mesh.meshId, epoch.epochId);
-    const envelope = buildLaunchEnvelope({ meshId: mesh.meshId, agentId: prepared.agentId, epochId: epoch.epochId, agent: "worker", mode: epoch.mode, roleSet: epoch.roleSet, catalog: settledAgentCatalog(), childExtensions: Object.fromEntries(persistedEpoch.roleSet.map(name => [name, ["/popup.ts", "/orchestration.ts", "/bridge.ts"]])) });
+    const envelope = buildLaunchEnvelope({ meshId: mesh.meshId, agentId: prepared.agentId, epochId: epoch.epochId, role: "worker", snapshot: epoch, childExtensions: Object.fromEntries(persistedEpoch.roleSet.map(name => [name, ["/popup.ts", "/orchestration.ts", "/bridge.ts"]])) });
     const envelopePath = join(prepared.paths.directory, "launch-envelope.json");
     await writeFile(envelopePath, JSON.stringify(envelope), { mode: 0o600 });
-    await publishAgent(root, mesh.meshId, prepared.paths, { agentId: prepared.agentId, epochId: epoch.epochId, agent: "worker", harness: "pi", cwd: root, agentSnapshot: definition, launchEnvelope: envelopePath, tmux, capabilities, creatorSessionId: "root" });
+    await publishAgent(root, mesh.meshId, prepared.paths, { agentId: prepared.agentId, epochId: epoch.epochId, role: "worker", selectedProfile: "pi-medium", harness: "pi", cwd: root, roleSnapshot: definition, profileSnapshot: syntheticProfile, launchEnvelope: envelopePath, tmux, capabilities, creatorSessionId: "root" });
     await patchAgentStatus(root, mesh.meshId, prepared.agentId, { state: "idle", bridgeReady: true });
     await bindAgentRuntime(root, mesh.meshId, prepared.agentId, { runtimeId: prepared.agentId, kind: "external" }); const now = new Date().toISOString(); await publishAgentActivity(root, mesh.meshId, prepared.agentId, { runtimeId: prepared.agentId, phase: "idle", acceptingTask: true, pendingMessages: false, phaseSince: now, observedAt: now, heartbeatAt: now, context: availableContext(10, 100_000, 100) });
     const endpoint = await bindMeshEndpoint(root, mesh.meshId, { endpointId: `root:${mesh.meshId}`, kind: "root", harness: "pi", sessionId: "root", sessionFile: "/root.jsonl" });
@@ -33,9 +43,9 @@ async function eventFixture(root: string) {
 
 void test("an any watch freezes one approved completion payload when the first watched task is terminal", async () => withRoot("mesh-watch-freeze-", async root => {
     const fixture = await eventFixture(root);
-    const first = await createTask(root, fixture.mesh.meshId, fixture.agentId, "first prompt");
+    const first = await createTask(root, fixture.mesh.meshId, fixture.agentId, "first prompt", `root:${fixture.mesh.meshId}`);
     await finishTask(root, fixture.mesh.meshId, first.request.taskId, { outcome: "succeeded", output: "secret output" });
-    const second = await createTask(root, fixture.mesh.meshId, fixture.agentId, "second prompt");
+    const second = await createTask(root, fixture.mesh.meshId, fixture.agentId, "second prompt", `root:${fixture.mesh.meshId}`);
     const route = await registerMeshWatch(root, fixture.mesh.meshId, { callerEndpointId: "agent:sender", toolCallId: "watch-any", endpoint: fixture.endpoint, delivery: "followUp", taskIds: [first.request.taskId, second.request.taskId], condition: "any", canonicalArguments: { action: "watch", receiver: "root", delivery: "followUp", taskIds: [first.request.taskId, second.request.taskId], condition: "any" } });
     assert.ok(route.eventId);
     const [event] = await pollMeshEvents(root, fixture.mesh.meshId, fixture.endpoint);
@@ -51,7 +61,7 @@ void test("an any watch freezes one approved completion payload when the first w
 
 void test("a pre-completion all watch creates one logical event under concurrent polling", async () => withRoot("mesh-watch-race-", async root => {
     const fixture = await eventFixture(root);
-    const task = await createTask(root, fixture.mesh.meshId, fixture.agentId, "finish later");
+    const task = await createTask(root, fixture.mesh.meshId, fixture.agentId, "finish later", `root:${fixture.mesh.meshId}`);
     const watch = await registerMeshWatch(root, fixture.mesh.meshId, { callerEndpointId: "agent:sender", toolCallId: "watch-all", endpoint: fixture.endpoint, delivery: "steer", taskIds: [task.request.taskId], condition: "all", canonicalArguments: { action: "watch", receiver: "root", delivery: "steer", taskIds: [task.request.taskId], condition: "all" } });
     assert.equal(watch.eventId, undefined);
     assert.deepEqual(await pollMeshEvents(root, fixture.mesh.meshId, fixture.endpoint), []);
@@ -66,7 +76,7 @@ void test("a pre-completion all watch creates one logical event under concurrent
 
 void test("signal retries return one frozen event for equal arguments and reject a changed retry", async () => withRoot("mesh-signal-", async root => {
     const fixture = await eventFixture(root);
-    const task = await createTask(root, fixture.mesh.meshId, fixture.agentId, "sender remains active");
+    const task = await createTask(root, fixture.mesh.meshId, fixture.agentId, "sender remains active", `root:${fixture.mesh.meshId}`);
     const canonicalArguments = { action: "signal", receiver: "root", delivery: "steer", topic: "validation", text: "Contract mismatch", taskIds: [task.request.taskId] };
     const input = { callerEndpointId: "agent:sender", toolCallId: "signal-call", endpoint: fixture.endpoint, delivery: "steer" as const, topic: "validation", text: "Contract mismatch", taskIds: [task.request.taskId], canonicalArguments };
     const first = await registerMeshSignal(root, fixture.mesh.meshId, input);

@@ -81,7 +81,7 @@ function isRenderableAgentSnapshot(value: unknown): value is AgentSnapshot {
     const record = value as Record<string, unknown>;
     const agent = record.agent as Record<string, unknown> | undefined;
     const status = record.status as Record<string, unknown> | undefined;
-    if (!agent || !status || typeof agent.agentId !== "string" || typeof agent.agent !== "string" || typeof status.state !== "string") return false;
+    if (!agent || !status || typeof agent.agentId !== "string" || typeof agent.role !== "string" || typeof status.state !== "string") return false;
     const task = record.task;
     if (task === undefined || task === null) return true;
     if (typeof task !== "object") return false;
@@ -113,7 +113,7 @@ function compactAgentLine(theme: Theme, snapshot: AgentSnapshot, handles?: Map<s
     const acceptance = snapshot.activity.acceptingTask ? theme.fg("success", "ACCEPTING") : theme.fg("muted", "NOT ACCEPTING");
     return joinParts([
         theme.bold(handleFor(snapshot.agent.agentId, handles)),
-        agentTypeText(theme, snapshot.agent.agent),
+        agentTypeText(theme, snapshot.agent.role),
         agentStateText(theme, snapshot.status.state),
         theme.fg("muted", `activity:${snapshot.activity.phase}`),
         acceptance,
@@ -127,7 +127,7 @@ function expandedAgentCard(theme: Theme, snapshot: AgentSnapshot, argsPrompt?: s
     const lines = [
         labeled(theme, "handle", handleFor(snapshot.agent.agentId, handles)),
         labeled(theme, "agentId", snapshot.agent.agentId),
-        labeled(theme, "role", agentTypeText(theme, snapshot.agent.agent)),
+        labeled(theme, "role", agentTypeText(theme, snapshot.agent.role)),
         labeled(theme, "agentState", agentStateText(theme, snapshot.status.state)),
         labeled(theme, "activity", snapshot.activity.phase),
         labeled(theme, "acceptingTask", String(snapshot.activity.acceptingTask)),
