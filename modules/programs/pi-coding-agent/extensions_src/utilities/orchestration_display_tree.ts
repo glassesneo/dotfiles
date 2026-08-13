@@ -47,12 +47,6 @@ export const TASK_STATE_BADGES: Record<TaskState, AgentStateBadge> = {
     stopped: { symbol: "■", label: "STOPPED", role: "muted" },
 };
 
-export const WAIT_OUTCOME_BADGES = {
-    waiting: { symbol: "…", label: "WAITING", role: "warning" as ThemeColor },
-    completed: { symbol: "✓", label: "COMPLETED", role: "success" as ThemeColor },
-    timeout: { symbol: "◷", label: "TIMEOUT", role: "warning" as ThemeColor },
-} as const;
-
 export interface MeshDisplayNode {
     agentId: string;
     snapshot: AgentSnapshot;
@@ -128,11 +122,6 @@ export function formatStateBadge(state: AgentState): string {
 
 export function formatTaskStateBadge(state: TaskState): string {
     const badge = TASK_STATE_BADGES[state];
-    return `${badge.symbol} ${badge.label}`;
-}
-
-export function formatWaitOutcomeBadge(kind: keyof typeof WAIT_OUTCOME_BADGES): string {
-    const badge = WAIT_OUTCOME_BADGES[kind];
     return `${badge.symbol} ${badge.label}`;
 }
 

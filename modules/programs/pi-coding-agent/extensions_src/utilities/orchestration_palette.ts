@@ -1,6 +1,7 @@
 import { type ExtensionUIContext, type Theme, type ThemeColor } from "@earendil-works/pi-coding-agent";
 import { truncateToWidth, visibleWidth, wrapTextWithAnsi, type Component, type Focusable, type TUI } from "@earendil-works/pi-tui";
 import type { CommandPaletteDisposition } from "./command_palette_contributions.ts";
+import type { ChannelCardProjection } from "./orchestration_cards.ts";
 import { paletteHelp, paletteKeyAction, type ResolvedPaletteKeymap } from "./command_palette_keymap.ts";
 import { actionHint } from "./extension_keybindings.ts";
 import { formatPaletteBreadcrumb, renderFramedLines } from "./command_palette_tui.ts";
@@ -38,6 +39,8 @@ export interface MeshPaletteDependencies extends MeshIdentity {
     clearTimeout?: typeof clearTimeout;
     /** Mesh-wide data and authority boundaries supplied by the orchestration owner. */
     discover: (identity: MeshIdentity) => Promise<{ agents: AgentSnapshot[]; malformedCount: number }>;
+    /** Caller/session-scoped current completion channels. */
+    discoverChannels?: () => Promise<ChannelCardProjection[]>;
     stopAgent: (request: MeshIdentity & { agentId: string; reason: string }) => Promise<AgentSnapshot>;
     /** Optional test/harness overrides for open paths. */
     openHistory?: typeof openMeshHistory;
@@ -280,6 +283,15 @@ export function composeDetailSections(options: {
     return out.slice(0, height);
 }
 
+type PaletteRow =
+    | { id: string; kind: "channel"; channel: ChannelCardProjection }
+    | { id: string; kind: "channel-task"; channel: ChannelCardProjection; task: ChannelCardProjection["tasks"][number] }
+    | { id: string; kind: "agent"; node: MeshDisplayNode; connector: string };
+
+function channelRowId(channel: string): string { return `channel:${channel}`; }
+function channelTaskRowId(channel: string, taskId: string): string { return `channel:${channel}:task:${taskId}`; }
+function agentRowId(agentId: string): string { return `agent:${agentId}`; }
+
 export class MeshAgentsPaletteComponent implements Component, Focusable {
     readonly #tui: TUI;
     readonly #theme: Theme;
@@ -288,7 +300,10 @@ export class MeshAgentsPaletteComponent implements Component, Focusable {
     readonly #deps: MeshPaletteDependencies;
     readonly #done: (value: MeshPaletteResult) => void;
     #tree: MeshDisplayTree = { roots: [], byId: new Map(), handles: new Map() };
+    #channels: ChannelCardProjection[] = [];
     #collapsed = new Set<string>();
+    #collapsedChannels = new Set<ChannelCardProjection["channel"]>();
+    #selectedRowId?: string;
     #selectedAgentId?: string;
     #previousVisibleIds: string[] = [];
     #focused = false;
@@ -325,6 +340,7 @@ export class MeshAgentsPaletteComponent implements Component, Focusable {
     get focused() { return this.#focused; }
     set focused(value: boolean) { this.#focused = value; }
     get selectedAgentId() { return this.#selectedAgentId; }
+    get selectedRowId() { return this.#selectedRowId; }
     get collapsedIds() { return new Set(this.#collapsed); }
     get acting() { return this.#acting; }
     selected(): AgentSnapshot | undefined {
@@ -333,9 +349,42 @@ export class MeshAgentsPaletteComponent implements Component, Focusable {
     visibleNodes(): MeshDisplayNode[] {
         return flattenVisibleDisplayNodes(this.#tree.roots, this.#collapsed);
     }
+    #rows(): PaletteRow[] {
+        const channelRows = this.#channels.flatMap(channel => [
+            { id: channelRowId(channel.channel), kind: "channel" as const, channel },
+            ...(this.#collapsedChannels.has(channel.channel) ? [] : channel.tasks.map(task => ({ id: channelTaskRowId(channel.channel, task.taskId), kind: "channel-task" as const, channel, task }))),
+        ]);
+        const agents = this.visibleNodes();
+        const connectors = treeConnectors(agents, this.#tree.byId);
+        return [...channelRows, ...agents.map(node => ({ id: agentRowId(node.agentId), kind: "agent" as const, node, connector: connectors.get(node.agentId) ?? "" }))];
+    }
+    #selectRow(row: PaletteRow | undefined): void {
+        this.#selectedRowId = row?.id;
+        this.#selectedAgentId = row?.kind === "agent" ? row.node.agentId : undefined;
+    }
+    #selectAgent(agentId: string): void {
+        this.#selectedRowId = agentRowId(agentId);
+        this.#selectedAgentId = agentId;
+    }
+    #normalizeSelection(): void {
+        const rows = this.#rows();
+        const selected = rows.find(row => row.id === this.#selectedRowId);
+        if (selected) { this.#selectRow(selected); return; }
+        const agent = this.#selectedAgentId ? rows.find(row => row.kind === "agent" && row.node.agentId === this.#selectedAgentId) : undefined;
+        this.#selectRow(agent ?? rows[0]);
+    }
     /** Test/harness seam: replace the display tree without tmux reconciliation. */
     replaceAgents(agents: readonly AgentSnapshot[], malformedCount = 0): void {
         this.#applySnapshots(agents, malformedCount);
+        this.invalidate();
+        this.#tui.requestRender();
+    }
+    /** Test/harness seam: replace caller-scoped channel projections. */
+    replaceChannels(channels: readonly ChannelCardProjection[]): void {
+        this.#channels = [...channels];
+        const known = new Set(this.#channels.map(channel => channel.channel));
+        this.#collapsedChannels = new Set([...this.#collapsedChannels].filter(channel => known.has(channel)));
+        this.#normalizeSelection();
         this.invalidate();
         this.#tui.requestRender();
     }
@@ -373,7 +422,12 @@ export class MeshAgentsPaletteComponent implements Component, Focusable {
         const known = new Set(this.#tree.byId.keys());
         this.#collapsed = new Set([...this.#collapsed].filter(id => known.has(id) && (this.#tree.byId.get(id)?.children.length ?? 0) > 0));
         const visible = this.visibleNodes();
-        this.#selectedAgentId = retainSelection(this.#selectedAgentId, visible, previousVisible.length ? previousVisible : this.#previousVisibleIds);
+        if (this.#selectedRowId?.startsWith("channel:")) this.#normalizeSelection();
+        else {
+            const retained = retainSelection(this.#selectedAgentId, visible, previousVisible.length ? previousVisible : this.#previousVisibleIds);
+            if (retained) this.#selectAgent(retained);
+            else this.#normalizeSelection();
+        }
         this.#previousVisibleIds = visible.map(node => node.agentId);
         this.#statusKind = malformedCount ? "warning" : "dim";
         this.#status = malformedCount ? `${malformedCount} incomplete agent record(s)` : `${agents.length} agent session(s)`;
@@ -386,7 +440,7 @@ export class MeshAgentsPaletteComponent implements Component, Focusable {
         if (index >= 0) agents[index] = snapshot;
         else agents.push(snapshot);
         this.#applySnapshots(agents, 0);
-        this.#selectedAgentId = snapshot.agent.agentId;
+        this.#selectAgent(snapshot.agent.agentId);
         this.invalidate();
         this.#tui.requestRender();
     }
@@ -408,9 +462,16 @@ export class MeshAgentsPaletteComponent implements Component, Focusable {
             do {
                 this.#refreshQueued = false;
                 try {
-                    const found = await this.#deps.discover({ meshId: this.#deps.meshId });
+                    const [found, channels] = await Promise.all([
+                        this.#deps.discover({ meshId: this.#deps.meshId }),
+                        this.#deps.discoverChannels?.() ?? Promise.resolve([]),
+                    ]);
                     if (this.#disposed) return false;
                     this.#applySnapshots(found.agents, found.malformedCount);
+                    this.#channels = channels;
+                    const knownChannels = new Set(channels.map(channel => channel.channel));
+                    this.#collapsedChannels = new Set([...this.#collapsedChannels].filter(channel => knownChannels.has(channel)));
+                    this.#normalizeSelection();
                     this.#lastRefreshApplied = true;
                 } catch (error) {
                     this.#lastRefreshApplied = false;
@@ -443,45 +504,55 @@ export class MeshAgentsPaletteComponent implements Component, Focusable {
     }
 
     #move(delta: number): void {
-        const visible = this.visibleNodes();
-        if (visible.length === 0) return;
-        const current = Math.max(0, visible.findIndex(node => node.agentId === this.#selectedAgentId));
-        const next = Math.max(0, Math.min(visible.length - 1, current + delta));
-        this.#selectedAgentId = visible[next]?.agentId;
+        const rows = this.#rows();
+        if (rows.length === 0) return;
+        const current = Math.max(0, rows.findIndex(row => row.id === this.#selectedRowId));
+        const next = Math.max(0, Math.min(rows.length - 1, current + delta));
+        this.#selectRow(rows[next]);
         this.invalidate();
         this.#tui.requestRender();
     }
 
     #collapse(): void {
-        const node = this.#selectedAgentId ? this.#tree.byId.get(this.#selectedAgentId) : undefined;
+        const selected = this.#rows().find(row => row.id === this.#selectedRowId);
+        if (selected?.kind === "channel") {
+            if (selected.channel.tasks.length > 0 && !this.#collapsedChannels.has(selected.channel.channel)) this.#collapsedChannels.add(selected.channel.channel);
+            this.invalidate(); this.#tui.requestRender(); return;
+        }
+        if (selected?.kind === "channel-task") {
+            this.#selectRow(this.#rows().find(row => row.id === channelRowId(selected.channel.channel)));
+            this.invalidate(); this.#tui.requestRender(); return;
+        }
+        const node = selected?.kind === "agent" ? selected.node : undefined;
         if (!node) return;
         if (node.children.length > 0 && !this.#collapsed.has(node.agentId)) {
             this.#collapsed.add(node.agentId);
-            this.invalidate();
-            this.#tui.requestRender();
-            return;
+            this.invalidate(); this.#tui.requestRender(); return;
         }
         const parent = [...this.#tree.byId.values()].find(candidate => candidate.children.some(child => child.agentId === node.agentId));
-        if (parent) {
-            this.#selectedAgentId = parent.agentId;
-            this.invalidate();
-            this.#tui.requestRender();
-        }
+        if (parent) { this.#selectAgent(parent.agentId); this.invalidate(); this.#tui.requestRender(); }
     }
 
     #expand(): void {
-        const node = this.#selectedAgentId ? this.#tree.byId.get(this.#selectedAgentId) : undefined;
-        if (!node) return;
+        const selected = this.#rows().find(row => row.id === this.#selectedRowId);
+        if (selected?.kind === "channel") {
+            if (this.#collapsedChannels.has(selected.channel.channel)) {
+                this.#collapsedChannels.delete(selected.channel.channel);
+                this.invalidate(); this.#tui.requestRender(); return;
+            }
+            const first = selected.channel.tasks[0];
+            if (first) this.#selectRow(this.#rows().find(row => row.id === channelTaskRowId(selected.channel.channel, first.taskId)));
+            this.invalidate(); this.#tui.requestRender(); return;
+        }
+        if (selected?.kind !== "agent") return;
+        const node = selected.node;
         if (node.children.length > 0 && this.#collapsed.has(node.agentId)) {
             this.#collapsed.delete(node.agentId);
-            this.invalidate();
-            this.#tui.requestRender();
-            return;
+            this.invalidate(); this.#tui.requestRender(); return;
         }
-        if (node.children.length > 0) {
-            this.#selectedAgentId = node.children[0]?.agentId;
-            this.invalidate();
-            this.#tui.requestRender();
+        if (node.children.length > 0 && node.children[0]) {
+            this.#selectAgent(node.children[0].agentId);
+            this.invalidate(); this.#tui.requestRender();
         }
     }
 
@@ -504,7 +575,7 @@ export class MeshAgentsPaletteComponent implements Component, Focusable {
             if (kind === "stop") {
                 const selection = selected.agent.agentId;
                 const rawReason = await this.#ui.input(`Reason for stopping ${node.handle}`, "Required: 1–512 UTF-8 bytes");
-                if (this.#tree.byId.has(selection)) this.#selectedAgentId = selection;
+                if (this.#tree.byId.has(selection)) this.#selectAgent(selection);
                 const reason = rawReason?.trim();
                 if (!reason) {
                     if (this.#cancelRequested) { this.close("return"); return; }
@@ -516,7 +587,7 @@ export class MeshAgentsPaletteComponent implements Component, Focusable {
                     return;
                 }
                 const confirmed = await this.#ui.confirm(`Stop ${node.handle}?`, `Reason: ${reason}\n\nThis kills the agent window and every linked view. Use Unlink to close only this view.`);
-                if (this.#tree.byId.has(selection)) this.#selectedAgentId = selection;
+                if (this.#tree.byId.has(selection)) this.#selectAgent(selection);
                 if (!confirmed) {
                     if (this.#cancelRequested) { this.close("return"); return; }
                     this.#setStatus("dim", `Stop cancelled for ${node.handle}`);
@@ -576,7 +647,7 @@ export class MeshAgentsPaletteComponent implements Component, Focusable {
                 }
                 const refreshed = await this.#reloadAfterMutation();
                 if (this.#disposed) return;
-                if (this.#tree.byId.has(selected.agent.agentId)) this.#selectedAgentId = selected.agent.agentId;
+                if (this.#tree.byId.has(selected.agent.agentId)) this.#selectAgent(selected.agent.agentId);
                 if (refreshed) this.#setStatus("dim", `Preview closed for ${node.handle}`);
                 if (this.#cancelRequested) this.close("return");
                 return;
@@ -649,14 +720,25 @@ export class MeshAgentsPaletteComponent implements Component, Focusable {
         return padToWidth(truncateToWidth(this.#theme.bg("selectedBg", padded), width, ""), width);
     }
 
-    #listViewport(visible: readonly MeshDisplayNode[], connectors: Map<string, string>, width: number, rows: number): string[] {
-        if (visible.length === 0) {
-            const lines = [padToWidth(truncateToWidth(this.#theme.fg("warning", " No agents in this mesh."), width, ""), width)];
+    #channelRowLine(row: Extract<PaletteRow, { kind: "channel" | "channel-task" }>, selected: boolean, width: number): string {
+        const marker = selected ? "> " : "  ";
+        const raw = row.kind === "channel"
+            ? `${marker}${row.channel.tasks.length > 0 ? (this.#collapsedChannels.has(row.channel.channel) ? "▸ " : "▾ ") : "  "}${this.#theme.bold(`Channel ${row.channel.channel}`)} · ${row.channel.terminal}/${row.channel.total} terminal · ${row.channel.tasks.length} current`
+            : `${marker}    ${row.task.agent} · task ${row.task.state} · agent ${row.task.agentState} · ${row.task.taskId.slice(0, 8)} / ${row.task.agentId.slice(0, 8)}`;
+        const padded = padToWidth(truncateToWidth(raw, width, ""), width);
+        return selected ? padToWidth(truncateToWidth(this.#theme.bg("selectedBg", padded), width, ""), width) : padded;
+    }
+
+    #listViewport(allRows: readonly PaletteRow[], width: number, rows: number): string[] {
+        if (allRows.length === 0) {
+            const lines = [padToWidth(truncateToWidth(this.#theme.fg("warning", " No agents or active channels in this mesh."), width, ""), width)];
             while (lines.length < rows) lines.push(padToWidth("", width));
             return lines.slice(0, rows);
         }
-        const flat = visible.map(node => this.#nodeLine(node, node.agentId === this.#selectedAgentId, connectors.get(node.agentId) ?? "", width));
-        const selectedIndex = Math.max(0, visible.findIndex(node => node.agentId === this.#selectedAgentId));
+        const flat = allRows.map(row => row.kind === "agent"
+            ? this.#nodeLine(row.node, row.id === this.#selectedRowId, row.connector, width)
+            : this.#channelRowLine(row, row.id === this.#selectedRowId, width));
+        const selectedIndex = Math.max(0, allRows.findIndex(row => row.id === this.#selectedRowId));
         let start = selectedIndex - Math.floor(Math.max(0, rows - 1) / 2);
         start = Math.max(0, Math.min(start, Math.max(0, flat.length - rows)));
         if (selectedIndex >= start + rows) start = selectedIndex - rows + 1;
@@ -665,8 +747,27 @@ export class MeshAgentsPaletteComponent implements Component, Focusable {
         return lines.slice(0, rows);
     }
 
+    #channelDetailModel(row: Extract<PaletteRow, { kind: "channel" | "channel-task" }>): DetailPaneModel {
+        if (row.kind === "channel-task") return {
+            role: row.task.state === "succeeded" ? "success" : row.task.state === "failed" ? "error" : row.task.state === "stopped" ? "warning" : "accent",
+            title: `Channel ${row.channel.channel} task`,
+            badgeState: row.task.state,
+            body: [`role: ${row.task.agent}`, `task state: ${row.task.state}`, `agent state: ${row.task.agentState}`, `taskId: ${row.task.taskId}`, `agentId: ${row.task.agentId}`].join("\n"),
+            notices: [{ text: `${row.channel.terminal}/${row.channel.total} terminal in current channel`, role: "muted" }],
+        };
+        return {
+            role: "accent",
+            title: `Channel ${row.channel.channel}`,
+            body: row.channel.tasks.map(task => [`role: ${task.agent}`, `task state: ${task.state}`, `agent state: ${task.agentState}`, `taskId: ${task.taskId}`, `agentId: ${task.agentId}`].join(" · ")).join("\n"),
+            notices: [{ text: `${row.channel.terminal}/${row.channel.total} terminal · ${row.channel.tasks.length} current task(s)`, role: "muted" }],
+        };
+    }
+
     #detailLines(width: number, height: number): string[] {
-        const model = detailPaneModel(this.selected());
+        const selectedRow = this.#rows().find(row => row.id === this.#selectedRowId);
+        const model = selectedRow?.kind === "channel" || selectedRow?.kind === "channel-task"
+            ? this.#channelDetailModel(selectedRow)
+            : detailPaneModel(this.selected());
         const noticeLines = model.notices.map(notice => this.#theme.fg(notice.role, notice.text));
         if (model.body.length === 0 && model.notices.length === 1 && model.title === "Detail") {
             return composeDetailSections({
@@ -696,10 +797,10 @@ export class MeshAgentsPaletteComponent implements Component, Focusable {
         });
     }
 
-    #viewport(visible: readonly MeshDisplayNode[], connectors: Map<string, string>, width: number, viewportRows: number): string[] {
+    #viewport(allRows: readonly PaletteRow[], width: number, viewportRows: number): string[] {
         const rows = Math.max(1, viewportRows);
         const columns = splitPaletteColumns(width);
-        const list = this.#listViewport(visible, connectors, columns.listWidth, rows);
+        const list = this.#listViewport(allRows, columns.listWidth, rows);
         if (columns.detailWidth === undefined) {
             return list.map(line => truncateToWidth(line, width, ""));
         }
@@ -716,8 +817,7 @@ export class MeshAgentsPaletteComponent implements Component, Focusable {
         if (this.#cachedLines && this.#cachedWidth === w) return this.#cachedLines;
         const rows = Math.max(10, Math.min(22, Math.floor(this.#tui.terminal.rows * 0.7)));
         const inner = Math.max(1, w - 2);
-        const visible = this.visibleNodes();
-        const connectors = treeConnectors(visible, this.#tree.byId);
+        const allRows = this.#rows();
         const help = paletteHelp(this.#keymap, ["moveUp", "moveDown", "collapse", "expand", "confirm", "stop", "refresh", "preview", "unlink", "cancel"]);
         const confirmHint = actionHint(this.#keymap, "confirm");
         const terminalPreviewMessage = `Live preview is available only for live agents. Press ${confirmHint} for history.`;
@@ -725,9 +825,9 @@ export class MeshAgentsPaletteComponent implements Component, Focusable {
             ? ["Live preview is available only for live agents.", `Press ${confirmHint} for history.`]
             : [this.#acting ? "WORKING" : this.#status];
         const body: string[] = [
-            truncateToWidth(` ${this.#theme.fg("muted", `${paletteHelp(this.#keymap, ["confirm", "preview", "unlink"])} · Stop ends a live agent`)}`, inner, ""),
+            truncateToWidth(` ${this.#theme.fg("muted", `${paletteHelp(this.#keymap, ["confirm", "preview", "unlink"])} · Agent actions apply only to agent rows`)}`, inner, ""),
             "",
-            ...this.#viewport(visible, connectors, inner, Math.max(2, rows - 5 - statusLines.length)),
+            ...this.#viewport(allRows, inner, Math.max(2, rows - 5 - statusLines.length)),
             ...statusLines.map(line => truncateToWidth(` ${this.#theme.fg(this.#statusKind, line)}`, inner, "")),
             truncateToWidth(` ${this.#theme.fg("dim", help)}`, inner, ""),
         ];

@@ -3,6 +3,7 @@ import { join } from "node:path";
 import type { MeshGcConfig } from "./agent_types.ts";
 import { PressureAdmissionStaleError, reserveNewAgentCapacityWithPressure } from "./orchestration_gc.ts";
 import { writeAtomicJson } from "./orchestration_json.ts";
+import { assertExpectedEndpointBindingUnlocked, type ExpectedEndpointBinding } from "./orchestration_binding.ts";
 import { meshDirectory, withMeshLock } from "./orchestration_lock.ts";
 import { assertCurrentAgentRuntime, readAgentRuntimeBinding } from "./orchestration_runtime.ts";
 import { stopMeshAgentWithDisposition } from "./orchestration_management.ts";
@@ -19,6 +20,8 @@ export interface PressureAdmission {
     requestId: string;
     requesterAgentId: string;
     requesterRuntimeId: string;
+    requesterEndpointId?: string;
+    requesterEndpointSessionFile?: string;
     state: PressureAdmissionState;
     requestedAt: string;
     updatedAt: string;
@@ -32,9 +35,10 @@ function directory(stateRoot: string, meshId: string): string { return join(mesh
 function pathFor(stateRoot: string, meshId: string, requestId: string): string { if (!UUID.test(requestId)) throw new Error("pressure admission request ID must be a UUID"); return join(directory(stateRoot, meshId), `${requestId}.json`); }
 function validate(value: unknown, meshId: string, requestId: string): PressureAdmission {
     if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("pressure admission must be an object");
-    const raw = value as Record<string, unknown>; const keys = ["schemaVersion", "meshId", "requestId", "requesterAgentId", "requesterRuntimeId", "state", "requestedAt", "updatedAt", "reservationId", "error", "completedAt"];
-    if (Object.keys(raw).length !== keys.length || keys.some(key => !(key in raw))) throw new Error("pressure admission has invalid keys");
+    const raw = value as Record<string, unknown>; const required = ["schemaVersion", "meshId", "requestId", "requesterAgentId", "requesterRuntimeId", "state", "requestedAt", "updatedAt", "reservationId", "error", "completedAt"]; const optionalKeys = ["requesterEndpointId", "requesterEndpointSessionFile"];
+    if (Object.keys(raw).some(key => !required.includes(key) && !optionalKeys.includes(key)) || required.some(key => !(key in raw))) throw new Error("pressure admission has invalid keys");
     if (raw.schemaVersion !== 1 || raw.meshId !== meshId || raw.requestId !== requestId || typeof raw.requesterAgentId !== "string" || !UUID.test(raw.requesterAgentId) || typeof raw.requesterRuntimeId !== "string" || !UUID.test(raw.requesterRuntimeId)) throw new Error("pressure admission identity is invalid");
+    if ((raw.requesterEndpointId === undefined) !== (raw.requesterEndpointSessionFile === undefined) || raw.requesterEndpointId !== undefined && (raw.requesterEndpointId !== `agent:${raw.requesterAgentId as string}` || typeof raw.requesterEndpointSessionFile !== "string" || !raw.requesterEndpointSessionFile)) throw new Error("pressure admission endpoint binding is invalid");
     if (!STATES.includes(raw.state as PressureAdmissionState)) throw new Error("pressure admission state is invalid");
     for (const key of ["requestedAt", "updatedAt"] as const) if (typeof raw[key] !== "string" || !Number.isFinite(Date.parse(raw[key] as string))) throw new Error(`pressure admission ${key} is invalid`);
     if (raw.completedAt !== null && (typeof raw.completedAt !== "string" || !Number.isFinite(Date.parse(raw.completedAt)))) throw new Error("pressure admission completedAt is invalid");
@@ -47,17 +51,19 @@ function validate(value: unknown, meshId: string, requestId: string): PressureAd
 }
 async function optional(stateRoot: string, meshId: string, requestId: string): Promise<PressureAdmission | undefined> { try { return validate(JSON.parse(await readFile(pathFor(stateRoot, meshId, requestId), "utf8")), meshId, requestId); } catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined; throw error; } }
 function boundedError(error: unknown): string { const characters = Array.from(error instanceof Error ? error.message : String(error)); while (characters.length && Buffer.byteLength(characters.join(""), "utf8") > 1024) characters.pop(); return characters.join("") || "Pressure admission failed"; }
+function staleEndpointBinding(error: unknown): error is Error { return error instanceof Error && /caller endpoint\/session binding is stale or offline/u.test(error.message); }
 
-export async function requestPressureAdmission(stateRoot: string, meshId: string, input: { requestId: string; requesterAgentId: string; requesterRuntimeId: string }): Promise<PressureAdmission> {
-    await assertCurrentAgentRuntime(stateRoot, meshId, input.requesterAgentId, input.requesterRuntimeId);
+export async function requestPressureAdmission(stateRoot: string, meshId: string, input: { requestId: string; requesterAgentId: string; requesterRuntimeId: string; expectedBinding?: ExpectedEndpointBinding }): Promise<PressureAdmission> {
     return withMeshLock(stateRoot, meshId, async () => {
+        if (input.expectedBinding) await assertExpectedEndpointBindingUnlocked(stateRoot, meshId, input.expectedBinding);
+        await assertCurrentAgentRuntime(stateRoot, meshId, input.requesterAgentId, input.requesterRuntimeId);
         const existing = await optional(stateRoot, meshId, input.requestId);
         if (existing) {
-            if (existing.requesterAgentId !== input.requesterAgentId || existing.requesterRuntimeId !== input.requesterRuntimeId) throw new Error("pressure admission request ID was reused with different content");
+            if (existing.requesterAgentId !== input.requesterAgentId || existing.requesterRuntimeId !== input.requesterRuntimeId || existing.requesterEndpointId !== input.expectedBinding?.endpointId || existing.requesterEndpointSessionFile !== input.expectedBinding?.endpointSessionFile) throw new Error("pressure admission request ID was reused with different content");
             return existing;
         }
         if ((await readMesh(stateRoot, meshId)).state !== "open") throw new Error(`Mesh ${meshId} is not open`);
-        const now = new Date().toISOString(); const request: PressureAdmission = { schemaVersion: 1, meshId, requestId: input.requestId, requesterAgentId: input.requesterAgentId, requesterRuntimeId: input.requesterRuntimeId, state: "requested", requestedAt: now, updatedAt: now, reservationId: null, error: null, completedAt: null };
+        const now = new Date().toISOString(); const request: PressureAdmission = { schemaVersion: 1, meshId, requestId: input.requestId, requesterAgentId: input.requesterAgentId, requesterRuntimeId: input.requesterRuntimeId, ...(input.expectedBinding ? { requesterEndpointId: input.expectedBinding.endpointId, requesterEndpointSessionFile: input.expectedBinding.endpointSessionFile } : {}), state: "requested", requestedAt: now, updatedAt: now, reservationId: null, error: null, completedAt: null };
         await writeAtomicJson(pathFor(stateRoot, meshId, input.requestId), request); return request;
     });
 }
@@ -91,6 +97,7 @@ async function inspectRequesterTmux(options: PressureOptions, admission: Pressur
     });
 }
 async function assertRequesterLive(options: PressureOptions, admission: PressureAdmission): Promise<void> {
+    if (admission.requesterEndpointId && admission.requesterEndpointSessionFile) await assertExpectedEndpointBindingUnlocked(options.stateRoot, options.meshId, { endpointId: admission.requesterEndpointId, endpointSessionFile: admission.requesterEndpointSessionFile });
     const evidence = await inspectRequesterTmux(options, admission);
     if (evidence.state === "unavailable") throw new RequesterUnavailableError("Pressure admission requester liveness is unavailable");
     if (evidence.state === "dead") throw new RequesterDeadError(evidence.reason ?? "Pressure admission requester is not live");
@@ -156,10 +163,14 @@ export async function processPressureAdmissions(options: PressureOptions, limit 
             continue;
         }
         if (request.state !== "requested" && request.state !== "processing") continue;
+        if (request.requesterEndpointId && request.requesterEndpointSessionFile) try { await withMeshLock(options.stateRoot, options.meshId, () => assertExpectedEndpointBindingUnlocked(options.stateRoot, options.meshId, { endpointId: request.requesterEndpointId!, endpointSessionFile: request.requesterEndpointSessionFile! })); }
+        catch (error) { if (!staleEndpointBinding(error)) throw error; await cancelPressureAdmission(options.stateRoot, options.meshId, requestId, error.message); processed += 1; continue; }
         const evidence = await inspectRequesterTmux(options, request);
         if (evidence.state === "unavailable") continue;
         if (evidence.state === "dead") { await cancelPressureAdmission(options.stateRoot, options.meshId, requestId, evidence.reason ?? "Pressure admission requester is not live"); processed += 1; continue; }
-        const claimed = await withMeshLock(options.stateRoot, options.meshId, async () => { if (options.signal?.aborted) throw options.signal.reason; const current = await readPressureAdmission(options.stateRoot, options.meshId, requestId); if (current.state !== "requested" && current.state !== "processing") return undefined; if (current.state === "processing") return current; const next = { ...current, state: "processing" as const, updatedAt: new Date().toISOString() }; await writeAtomicJson(pathFor(options.stateRoot, options.meshId, requestId), next); return next; });
+        let claimed: PressureAdmission | undefined;
+        try { claimed = await withMeshLock(options.stateRoot, options.meshId, async () => { if (options.signal?.aborted) throw options.signal.reason; if (request.requesterEndpointId && request.requesterEndpointSessionFile) await assertExpectedEndpointBindingUnlocked(options.stateRoot, options.meshId, { endpointId: request.requesterEndpointId, endpointSessionFile: request.requesterEndpointSessionFile }); const current = await readPressureAdmission(options.stateRoot, options.meshId, requestId); if (current.state !== "requested" && current.state !== "processing") return undefined; if (current.state === "processing") return current; const next = { ...current, state: "processing" as const, updatedAt: new Date().toISOString() }; await writeAtomicJson(pathFor(options.stateRoot, options.meshId, requestId), next); return next; }); }
+        catch (error) { if (!staleEndpointBinding(error)) throw error; await cancelPressureAdmission(options.stateRoot, options.meshId, requestId, error.message); processed += 1; continue; }
         if (!claimed) continue; request = claimed;
         const destructiveEvidence = await inspectRequesterTmux(options, request);
         if (destructiveEvidence.state === "unavailable") continue;
@@ -167,10 +178,11 @@ export async function processPressureAdmissions(options: PressureOptions, limit 
         const requesterGuard = async () => { await assertPressurePassActive(options); await assertRequesterLive(options, request); };
         let reservation: BudgetReservation | undefined;
         try {
-            reservation = await reserveNewAgentCapacityWithPressure(options, request.requestId, requesterGuard, { agentId: request.requesterAgentId, runtimeId: request.requesterRuntimeId });
+            reservation = await reserveNewAgentCapacityWithPressure(options, request.requestId, requesterGuard, { agentId: request.requesterAgentId, runtimeId: request.requesterRuntimeId, ...(request.requesterEndpointId && request.requesterEndpointSessionFile ? { endpointId: request.requesterEndpointId, endpointSessionFile: request.requesterEndpointSessionFile } : {}) });
             if (!await settle(options.stateRoot, options.meshId, requestId, { reservation }, requesterGuard)) await releaseMeshReservation(options.stateRoot, options.meshId, reservation.reservationId, "pressure admission caller no longer waiting");
         } catch (error) {
             const durableReservation = reservation ?? await readMeshReservation(options.stateRoot, options.meshId, requestId).catch(() => undefined);
+            if (staleEndpointBinding(error)) { await cancelPressureAdmission(options.stateRoot, options.meshId, requestId, error.message); processed += 1; continue; }
             if (error instanceof RequesterUnavailableError) continue;
             if (error instanceof RequesterDeadError || error instanceof PressureAdmissionStaleError) { await cancelPressureAdmission(options.stateRoot, options.meshId, requestId, error.message); processed += 1; continue; }
             if (durableReservation?.state === "pending") await releasePendingMeshReservation(options.stateRoot, options.meshId, durableReservation.reservationId, "pressure admission failed after reservation").catch(() => {});
@@ -218,8 +230,8 @@ export async function failOpenPressureAdmissions(stateRoot: string, meshId: stri
     for (const name of names.filter(name => name.endsWith(".json"))) { const requestId = name.slice(0, -5); if (!UUID.test(requestId)) continue; const before = await readPressureAdmission(stateRoot, meshId, requestId); await cancelPressureAdmission(stateRoot, meshId, requestId, reason); const after = await readPressureAdmission(stateRoot, meshId, requestId); if (after.state !== before.state && after.state === "cancelled") failed += 1; }
     return failed;
 }
-export async function awaitPressureAdmission(stateRoot: string, meshId: string, input: { requestId: string; requesterAgentId: string; requesterRuntimeId: string; timeoutMs?: number; signal?: AbortSignal; sleep?: (ms: number) => Promise<void>; now?: () => number }): Promise<BudgetReservation> {
+export async function awaitPressureAdmission(stateRoot: string, meshId: string, input: { requestId: string; requesterAgentId: string; requesterRuntimeId: string; expectedBinding?: ExpectedEndpointBinding; timeoutMs?: number; signal?: AbortSignal; sleep?: (ms: number) => Promise<void>; now?: () => number }): Promise<BudgetReservation> {
     await requestPressureAdmission(stateRoot, meshId, input); const now = input.now ?? Date.now; const deadline = now() + (input.timeoutMs ?? 10_000); const wait = input.sleep ?? (ms => new Promise(resolve => setTimeout(resolve, ms)));
-    while (now() < deadline && !input.signal?.aborted) { const current = await readPressureAdmission(stateRoot, meshId, input.requestId); if (current.state === "succeeded") { await assertCurrentAgentRuntime(stateRoot, meshId, input.requesterAgentId, input.requesterRuntimeId); const reservation = await readMeshReservation(stateRoot, meshId, current.reservationId!); if (reservation.reservationId !== current.reservationId || reservation.meshId !== meshId || reservation.kind !== "new-agent-task" || reservation.state !== "pending" || reservation.agentId !== undefined || reservation.taskId !== undefined) { await cancelPressureAdmission(stateRoot, meshId, input.requestId, "Pressure admission reservation is released or mismatched"); throw new Error("Pressure admission reservation is released or mismatched"); } return reservation; } if (current.state === "failed" || current.state === "cancelled") throw new Error(current.error ?? "Pressure admission failed"); await wait(50); }
+    while (now() < deadline && !input.signal?.aborted) { const current = await readPressureAdmission(stateRoot, meshId, input.requestId); if (current.state === "succeeded") { if (input.expectedBinding) await withMeshLock(stateRoot, meshId, () => assertExpectedEndpointBindingUnlocked(stateRoot, meshId, input.expectedBinding!)); await assertCurrentAgentRuntime(stateRoot, meshId, input.requesterAgentId, input.requesterRuntimeId); const reservation = await readMeshReservation(stateRoot, meshId, current.reservationId!); if (reservation.reservationId !== current.reservationId || reservation.meshId !== meshId || reservation.kind !== "new-agent-task" || reservation.state !== "pending" || reservation.agentId !== undefined || reservation.taskId !== undefined) { await cancelPressureAdmission(stateRoot, meshId, input.requestId, "Pressure admission reservation is released or mismatched"); throw new Error("Pressure admission reservation is released or mismatched"); } return reservation; } if (current.state === "failed" || current.state === "cancelled") throw new Error(current.error ?? "Pressure admission failed"); await wait(50); }
     const reason = input.signal?.aborted ? "Pressure admission caller aborted" : "Pressure admission timed out waiting for the mesh root"; await cancelPressureAdmission(stateRoot, meshId, input.requestId, reason); throw input.signal?.aborted ? input.signal.reason : new Error(reason);
 }

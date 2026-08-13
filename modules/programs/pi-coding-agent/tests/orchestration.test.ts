@@ -77,18 +77,21 @@ void test("persisted roots reuse an open lease, close durably, and require a fre
 }));
 
 void test("root attach migrates only the exact legacy budget and rejects visible unexpected mismatches", async () => withRoot("mesh-budget-compatibility-", async root => {
-    const generated = { maxLiveAgents: 20, maxConcurrentTasks: 6, maxTasksPerMesh: 256 };
-    const legacy = await initializeMesh(root, { rootSessionId: "legacy", recoverable: true, budgets: { maxLiveAgents: 12, maxConcurrentTasks: 6, maxTasksPerMesh: 256 } });
+    const generated = { maxLiveAgents: 20, maxConcurrentTasks: 20, maxTasksPerMesh: 256 };
+    const legacy = await initializeMesh(root, { rootSessionId: "legacy", recoverable: true, budgets: { maxLiveAgents: 20, maxConcurrentTasks: 6, maxTasksPerMesh: 256 } });
     await attachRootMesh(root, legacy.meshId, { rootSessionId: "legacy", budgets: generated });
     const migrated = await readMesh(root, legacy.meshId);
     assert.deepEqual(migrated.budgets, generated);
-    assert.deepEqual(migrated.budgetMigration && { type: migrated.budgetMigration.type, from: migrated.budgetMigration.from, to: migrated.budgetMigration.to }, { type: "mesh_budget_migrated", from: { maxLiveAgents: 12, maxConcurrentTasks: 6, maxTasksPerMesh: 256 }, to: generated });
+    assert.deepEqual(migrated.budgetMigration && { type: migrated.budgetMigration.type, from: migrated.budgetMigration.from, to: migrated.budgetMigration.to }, { type: "mesh_budget_migrated", from: { maxLiveAgents: 20, maxConcurrentTasks: 6, maxTasksPerMesh: 256 }, to: generated });
     await attachRootMesh(root, legacy.meshId, { rootSessionId: "legacy", budgets: generated });
     assert.deepEqual((await readMesh(root, legacy.meshId)).budgetMigration, migrated.budgetMigration);
 
     const current = await initializeMesh(root, { rootSessionId: "current", recoverable: true, budgets: generated });
     await attachRootMesh(root, current.meshId, { rootSessionId: "current", budgets: generated });
     assert.equal((await readMesh(root, current.meshId)).budgetMigration, undefined);
+
+    const retiredLegacy = await initializeMesh(root, { rootSessionId: "retired", recoverable: true, budgets: { maxLiveAgents: 12, maxConcurrentTasks: 6, maxTasksPerMesh: 256 } });
+    await assert.rejects(attachRootMesh(root, retiredLegacy.meshId, { rootSessionId: "retired", budgets: generated }), /budget mismatch/u);
 
     const unexpectedBudgets = { maxLiveAgents: 13, maxConcurrentTasks: 6, maxTasksPerMesh: 256 };
     const unexpected = await initializeMesh(root, { rootSessionId: "unexpected", recoverable: true, budgets: unexpectedBudgets });

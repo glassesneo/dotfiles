@@ -187,7 +187,7 @@ in
         };
         budgets = {
           maxLiveAgents = 20;
-          maxConcurrentTasks = 6;
+          maxConcurrentTasks = 20;
           maxTasksPerMesh = 256;
         };
         gc = {

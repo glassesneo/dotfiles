@@ -5,21 +5,21 @@ import { join } from "node:path";
 import test from "node:test";
 import { Value } from "typebox/value";
 import { visibleWidth } from "@earendil-works/pi-tui";
-import { MESH_PROFILE_TOOL_NAME, createMeshEnableTool, createMeshGetTool, createMeshProfileRunTool, createMeshRouteTool, createMeshRunTool, createMeshStopTool, createMeshSubmitTool, createMeshWaitTool, registerOrchestration, stopPaletteMeshAgent, type ActiveCaller, type OrchestrationDependencies } from "../extensions_src/orchestration.ts";
+import { createMeshEnableTool, createMeshGetTool, createMeshSignalTool, createMeshStopTool, createMeshSubmitTool, registerOrchestration, stopPaletteMeshAgent, type ActiveCaller, type OrchestrationDependencies } from "../extensions_src/orchestration.ts";
 import { buildLaunchEnvelope as buildLaunchEnvelopeV3, buildPolicySnapshot, validateOrchestrationConfig, type AgentLaunchEnvelope, type CallPolicy, type OrchestrationConfig, type RoleCatalog, type RoleDefinition } from "../extensions_src/utilities/agent_types.ts";
 import type { ExecutionProfileConfig } from "../extensions_src/utilities/mode_types.ts";
 import { availableContext, publishAgentActivity } from "../extensions_src/utilities/orchestration_activity.ts";
 import { bindAgentRuntime, readAgentRuntimeBinding } from "../extensions_src/utilities/orchestration_runtime.ts";
-import { bindMeshEndpoint, readMeshEndpoint, registerMeshSignal, registerMeshWatch, resolveRouteEndpoint, setMeshEndpointOffline } from "../extensions_src/utilities/orchestration_events.ts";
+import { bindMeshEndpoint, readMeshEndpoint, registerMeshSignal, resolveRouteEndpoint, setMeshEndpointOffline } from "../extensions_src/utilities/orchestration_events.ts";
 import { createExplicitStopNotice, listPendingTuiNotices } from "../extensions_src/utilities/orchestration_notices.ts";
 import { readPressureAdmission, requestPressureAdmission } from "../extensions_src/utilities/orchestration_admission.ts";
 import { withMeshLock } from "../extensions_src/utilities/orchestration_lock.ts";
 import { MESH_BOOTSTRAP_TOOL_NAME, MESH_PEER_TOOL_NAMES, piLaunchDescriptor } from "../extensions_src/utilities/orchestration_pi.ts";
-import { claimTaskUsage, createTask as createTaskStore, ensurePolicyEpoch as ensurePolicyEpochStore, finishTask, initializeMesh, meshPaths, patchAgentStatus, prepareAgent, publishAgent, readAgentSnapshot, readPolicyEpoch, reserveMeshCapacity } from "../extensions_src/utilities/orchestration_store.ts";
+import { claimTaskUsage, createTask as createTaskStore, ensurePolicyEpoch as ensurePolicyEpochStore, finishTask, initializeMesh, meshPaths, patchAgentStatus, prepareAgent, publishAgent, readAgentSnapshot, readPolicyEpoch, readTask, reconcileMeshUsageClaims, reserveMeshCapacity, taskPaths } from "../extensions_src/utilities/orchestration_store.ts";
 import { withTemporaryRoot as withRoot } from "./test_helpers.ts";
 
-const MESH_TOOLS = [...MESH_PEER_TOOL_NAMES, MESH_PROFILE_TOOL_NAME];
-const REQUIRED_PEER_CAPABILITIES = ["mesh_run", "mesh_submit", "mesh_get", "mesh_wait", "mesh_stop", "mesh_route"] as const;
+const MESH_TOOLS = [...MESH_PEER_TOOL_NAMES];
+const REQUIRED_PEER_CAPABILITIES = ["mesh_submit", "mesh_get", "mesh_channel", "mesh_stop", "mesh_signal"] as const;
 const AGENT_ARTIFACT_EXTENSION = "/agent_artifact.ts";
 const budgets = { maxLiveAgents: 4, maxConcurrentTasks: 4, maxTasksPerMesh: 16 };
 const capabilities = { nativeScreen: true, taskDelivery: true, taskCompletion: true, taskCancellation: true, usage: true, interactiveInterventions: true, terminalHistory: true };
@@ -98,12 +98,14 @@ class PiMock {
     messages: Array<{ message: unknown; options: unknown }> = [];
     entries: Array<{ customType: string; data: unknown }> = [];
     entryRenderers = new Map<string, (...args: any[]) => unknown>();
+    messageRenderers = new Map<string, (...args: any[]) => unknown>();
     registerTool(tool: any) { this.tools.set(tool.name, tool); if (!this.active.includes(tool.name)) this.active.push(tool.name); }
     getAllTools() { return [...this.tools.values()]; }
     getActiveTools() { return [...this.active]; }
     setActiveTools(names: string[]) { this.active = [...names]; }
     registerCommand() {}
     registerEntryRenderer(customType: string, renderer: (...args: any[]) => unknown) { this.entryRenderers.set(customType, renderer); }
+    registerMessageRenderer(customType: string, renderer: (...args: any[]) => unknown) { this.messageRenderers.set(customType, renderer); }
     appendEntry(customType: string, data: unknown) { this.entries.push({ customType, data }); }
     sendMessage(message: unknown, options: unknown) { this.messages.push({ message, options }); }
     exec = async () => ({ stdout: "", stderr: "", code: 1 });
@@ -114,12 +116,12 @@ void test("core tool schemas and execution require exactly one selector at each 
     const targets = { worker: settledAgentDefinition("worker") };
     const inactive = () => undefined;
     const deps = { configPath: "/missing", env: {}, exec: absentTmux, activeCaller: inactive } as OrchestrationDependencies;
-    const run = createMeshRunTool(deps, targets);
-    const submit = createMeshSubmitTool(deps, targets);
-    assert.equal(Value.Check(run.parameters, { agent: "worker", prompt: "work" }), true);
+    const submit = createMeshSubmitTool(deps, targets, ["cursor-fast"]);
+    assert.equal(Value.Check(submit.parameters, { agent: "worker", prompt: "work", channel: "A" }), true);
     assert.equal(Value.Check(submit.parameters, { agentId: "agent-id", prompt: "work" }), true);
-    assert.equal(Value.Check(run.parameters, { agent: "unknown", prompt: "work" }), false);
-    await assert.rejects(run.execute("call", { agent: "worker", agentId: "id", prompt: "work" }, undefined, undefined, {} as never), /exactly one/u);
+    assert.equal(Value.Check(submit.parameters, { profile: "cursor-fast", prompt: "work" }), true);
+    assert.equal(Value.Check(submit.parameters, { agent: "unknown", prompt: "work" }), false);
+    await assert.rejects(submit.execute("call", { agent: "worker", agentId: "id", prompt: "work" }, undefined, undefined, {} as never), /exactly one/u);
     await assert.rejects(createMeshGetTool(deps).execute("call", { taskId: "task", agentId: "agent" }, undefined, undefined, {} as never), /exactly one/u);
     await assert.rejects(createMeshStopTool(deps).execute("call", {}, undefined, undefined, {} as never), /exactly one/u);
     await assert.rejects(createMeshStopTool(deps).execute("call", { taskId: "task", reason: "must not alter task-stop semantics" }, undefined, undefined, {} as never), /taskId rejects reason/u);
@@ -127,8 +129,30 @@ void test("core tool schemas and execution require exactly one selector at each 
 
 // Given a narrowing epoch committed before the reservation lock, dispatch rejects without any lifecycle mutation.
 void test("new-agent dispatch rejects stale authority before reservation",  async () => withRoot("mesh-dispatch-reauthorize-", async root => {
-    const mesh = await initializeMesh(root, { rootSessionId: "root", recoverable: true, budgets }); const initial = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", roleSet: ["worker"], roles: { worker: settledAgentDefinition("worker") } }); const narrowed = await ensurePolicyEpoch(root, mesh.meshId, { mode: "recon", roleSet: ["explorer"], roles: { explorer: settledAgentDefinition("explorer") } }); const files = await writeRuntimeFiles(root); let current = caller(mesh.meshId, initial, { identity: "mode:ops" }); let crossings = 0; const deps = { ...files, env: {}, exec: absentTmux, activeCaller: () => current, authorityBarrier: async () => { crossings += 1; if (crossings === 3) current = caller(mesh.meshId, narrowed, { identity: "mode:recon" }); } }; const ctx = { cwd: root, sessionManager: { getSessionId: () => "root", getSessionFile: () => undefined } } as never;
+    const mesh = await initializeMesh(root, { rootSessionId: "root", recoverable: true, budgets }); const initial = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", roleSet: ["worker"], roles: { worker: settledAgentDefinition("worker") } }); const narrowed = await ensurePolicyEpoch(root, mesh.meshId, { mode: "recon", roleSet: ["explorer"], roles: { explorer: settledAgentDefinition("explorer") } }); const files = await writeRuntimeFiles(root); const sessionFile = join(root, "root.jsonl"); await writeFile(sessionFile, ""); await bindMeshEndpoint(root, mesh.meshId, { endpointId: `root:${mesh.meshId}`, kind: "root", harness: "pi", sessionId: "root", sessionFile }); let current = caller(mesh.meshId, initial, { identity: "mode:ops", sessionFile }); let crossings = 0; const deps = { ...files, env: {}, exec: absentTmux, activeCaller: () => current, authorityBarrier: async () => { crossings += 1; if (crossings === 3) current = caller(mesh.meshId, narrowed, { identity: "mode:recon", sessionFile }); } }; const ctx = { cwd: root, sessionManager: { getSessionId: () => "root", getSessionFile: () => sessionFile } } as never;
     await assert.rejects(createMeshSubmitTool(deps, { worker: settledAgentDefinition("worker") }).execute("stale-dispatch", { agent: "worker", prompt: "must not launch" }, undefined, undefined, ctx), /authority changed before reservation/u); assert.equal(crossings, 2); const paths = meshPaths(root, mesh.meshId); assert.deepEqual(await readdir(paths.reservations), []); assert.deepEqual(await readdir(paths.agents), []); assert.deepEqual(await readdir(paths.tasks), []);
+}));
+
+// Given a caller endpoint that goes offline or rotates session after initial lookup, reservation fencing rejects with no reservation, agent, admission, or task state.
+void test("stale or offline caller binding at reservation has zero lifecycle mutation", async () => {
+    for (const mode of ["offline", "rotated"] as const) await withRoot(`mesh-dispatch-binding-${mode}-`, async root => {
+        const mesh = await initializeMesh(root, { rootSessionId: "root", recoverable: true, budgets });
+        const epoch = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", roleSet: ["worker"], roles: { worker: settledAgentDefinition("worker") } });
+        const files = await writeRuntimeFiles(root); const sessionFile = join(root, "root.jsonl"); await writeFile(sessionFile, "");
+        const endpointId = `root:${mesh.meshId}`; const endpoint = await bindMeshEndpoint(root, mesh.meshId, { endpointId, kind: "root", harness: "pi", sessionId: "root", sessionFile });
+        let crossings = 0; const deps = { ...files, env: {}, exec: absentTmux, activeCaller: () => caller(mesh.meshId, epoch, { identity: "mode:ops", sessionFile }), authorityBarrier: async () => { crossings += 1; if (crossings !== 2) return; if (mode === "offline") await setMeshEndpointOffline(root, mesh.meshId, endpointId, endpoint); else await bindMeshEndpoint(root, mesh.meshId, { endpointId, kind: "root", harness: "pi", sessionId: "rotated", sessionFile: join(root, "rotated.jsonl") }); } };
+        const ctx = { cwd: root, sessionManager: { getSessionId: () => "root", getSessionFile: () => sessionFile } } as never;
+        await assert.rejects(createMeshSubmitTool(deps, { worker: settledAgentDefinition("worker") }).execute("stale-binding", { agent: "worker", prompt: "must not mutate" }, undefined, undefined, ctx), /stale or offline/u);
+        const paths = meshPaths(root, mesh.meshId); assert.deepEqual(await readdir(paths.reservations), []); assert.deepEqual(await readdir(paths.agents), []); assert.deepEqual(await readdir(paths.tasks), []); assert.deepEqual(await readdir(join(paths.directory, "pressure-admissions")).catch(() => []), []);
+    });
+});
+
+// Given nested pressure demand with a stale durable session binding, admission rejects before persisting its request.
+void test("stale nested caller binding creates no pressure admission", async () => withRoot("mesh-pressure-binding-", async root => {
+    const mesh = await initializeMesh(root, { rootSessionId: "root", recoverable: true, budgets }); const epoch = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", roleSet: ["worker"], roles: { worker: settledAgentDefinition("worker") } }); const worker = await publishWorker(root, mesh.meshId, epoch.epochId); const runtime = await readAgentRuntimeBinding(root, mesh.meshId, worker.agentId); assert.ok(runtime);
+    const endpoint = await bindMeshEndpoint(root, mesh.meshId, { endpointId: `agent:${worker.agentId}`, kind: "agent", agentId: worker.agentId, harness: "pi", sessionId: "child", sessionFile: join(root, "child.jsonl") }); await setMeshEndpointOffline(root, mesh.meshId, endpoint.endpointId, endpoint);
+    await assert.rejects(requestPressureAdmission(root, mesh.meshId, { requestId: randomUUID(), requesterAgentId: worker.agentId, requesterRuntimeId: runtime.runtimeId, expectedBinding: { endpointId: endpoint.endpointId, endpointSessionFile: endpoint.sessionFile } }), /stale or offline/u);
+    assert.deepEqual(await readdir(join(meshPaths(root, mesh.meshId).directory, "pressure-admissions")).catch(() => []), []);
 }));
 
 void test("root manages same-mesh tasks and agents across mode epochs while dispatch remains edge-bound", async () => withRoot("mesh-authority-", async root => {
@@ -142,9 +166,7 @@ void test("root manages same-mesh tasks and agents across mode epochs while disp
     const deps = { ...files, env: {}, exec: absentTmux, activeCaller: () => caller(mesh.meshId, observerEpoch), sleep: async () => {} };
     const got = await createMeshGetTool(deps).execute("get", { taskId: task.request.taskId }, undefined, undefined, {} as never);
     assert.equal((got.details as any).task.result.output, "observed");
-    const waited = await createMeshWaitTool(deps).execute("wait", { taskIds: [task.request.taskId], condition: "all" }, undefined, undefined, {} as never);
-    assert.equal((waited.details as any).outcome, "completed");
-    await assert.rejects(createMeshRunTool(deps, { explorer: settledAgentDefinition("explorer") }).execute("reuse", { agentId: worker.agentId, prompt: "not authorized" }, undefined, undefined, {} as never), /not allowed to reuse role worker/u);
+    await assert.rejects(createMeshSubmitTool(deps, { explorer: settledAgentDefinition("explorer") }).execute("reuse", { agentId: worker.agentId, prompt: "not authorized" }, undefined, undefined, {} as never), /durable caller session/u);
     const stopped = await createMeshStopTool(deps).execute("stop", { agentId: worker.agentId }, undefined, undefined, {} as never); assert.equal((stopped.details as any).stopDisposition, "already-terminal");
 }));
 
@@ -158,9 +180,9 @@ void test("child authority is requester- and direct-parent-scoped", async () => 
 
 // Given a lateral endpoint and task, child routing rejects both before event persistence.
 void test("child route allows root and direct descendants only", async () => withRoot("mesh-child-route-", async root => {
-    const mesh = await initializeMesh(root, { rootSessionId: "root", rootSessionFile: "/root.jsonl", recoverable: true, budgets }); const epoch = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", roleSet: ["worker"], roles: { worker: settledAgentDefinition("worker") } }); const owner = await publishWorker(root, mesh.meshId, epoch.epochId); const lateral = await publishWorker(root, mesh.meshId, epoch.epochId); await bindMeshEndpoint(root, mesh.meshId, { endpointId: `root:${mesh.meshId}`, kind: "root", harness: "pi", sessionId: "root", sessionFile: "/root.jsonl" }); await bindMeshEndpoint(root, mesh.meshId, { endpointId: `agent:${lateral.agentId}`, kind: "agent", agentId: lateral.agentId, harness: "pi", sessionId: "lateral", sessionFile: "/lateral.jsonl" }); const task = await createTaskStore(root, mesh.meshId, lateral.agentId, "lateral", `root:${mesh.meshId}`); const files = await writeRuntimeFiles(root); const deps = { ...files, env: {}, exec: absentTmux, activeCaller: () => caller(mesh.meshId, epoch, { identity: "agent:worker", agentId: owner.agentId, endpointId: `agent:${owner.agentId}` }) }; const route = createMeshRouteTool(deps);
-    await assert.rejects(route.execute("route-lateral", { action: "signal", receiver: lateral.agentId, delivery: "steer", topic: "x", text: "x" }, undefined, undefined, {} as never), /not its direct parent/u);
-    await assert.rejects(route.execute("route-task", { action: "signal", receiver: "root", delivery: "steer", topic: "x", text: "x", taskIds: [task.request.taskId] }, undefined, undefined, {} as never), /not allowed to route task/u);
+    const mesh = await initializeMesh(root, { rootSessionId: "root", rootSessionFile: "/root.jsonl", recoverable: true, budgets }); const epoch = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", roleSet: ["worker"], roles: { worker: settledAgentDefinition("worker") } }); const owner = await publishWorker(root, mesh.meshId, epoch.epochId); const lateral = await publishWorker(root, mesh.meshId, epoch.epochId); await bindMeshEndpoint(root, mesh.meshId, { endpointId: `root:${mesh.meshId}`, kind: "root", harness: "pi", sessionId: "root", sessionFile: "/root.jsonl" }); await bindMeshEndpoint(root, mesh.meshId, { endpointId: `agent:${lateral.agentId}`, kind: "agent", agentId: lateral.agentId, harness: "pi", sessionId: "lateral", sessionFile: "/lateral.jsonl" }); const task = await createTaskStore(root, mesh.meshId, lateral.agentId, "lateral", `root:${mesh.meshId}`); const files = await writeRuntimeFiles(root); const deps = { ...files, env: {}, exec: absentTmux, activeCaller: () => caller(mesh.meshId, epoch, { identity: "agent:worker", agentId: owner.agentId, endpointId: `agent:${owner.agentId}` }) }; const route = createMeshSignalTool(deps);
+    await assert.rejects(route.execute("route-lateral", { receiver: lateral.agentId, delivery: "steer", topic: "x", text: "x" }, undefined, undefined, {} as never), /not its direct parent/u);
+    await assert.rejects(route.execute("route-task", { receiver: "root", delivery: "steer", topic: "x", text: "x", taskIds: [task.request.taskId] }, undefined, undefined, {} as never), /not allowed to signal task/u);
 }));
 
 // Given a prompt-only Pi child, session startup creates no route endpoint or management surface, and root routing cannot deliver a message.
@@ -170,25 +192,35 @@ void test("prompt-only child session is isolated from routed events and manageme
     await assert.rejects(readMeshEndpoint(root, mesh.meshId, `agent:${gyaru.agentId}`), /ENOENT/u); await assert.rejects(resolveRouteEndpoint(root, mesh.meshId, gyaru.agentId), /not a durable Pi endpoint/u); await tick(); assert.deepEqual(pi.messages, []); await pi.handlers.get("session_shutdown")![0]!({ reason: "reload" });
 }));
 
-void test("same-purpose profile tool exposes only authorized profile names and rejects forged profiles before launch", async () => withRoot("mesh-profile-schema-", async root => {
+void test("mesh_submit profile selector exposes only authorized names and rejects forged profiles before launch", async () => withRoot("mesh-profile-schema-", async root => {
     const meshId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"; const agentId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"; const epochId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"; const snapshot = buildPolicySnapshot({ mode: "ops", catalog, profiles, callPolicy }); const envelope = buildLaunchEnvelopeV3({ meshId, agentId, epochId, role: "worker", snapshot, childExtensions: Object.fromEntries(Object.keys(snapshot.roles).map(name => [name, []])) }); const epoch = { schemaVersion: 2, meshId, epochId, ...snapshot, policyDigest: envelope.policyDigest, createdAt: new Date().toISOString(), roleSet: snapshot.directRoles } as const; const configPath = join(root, "orchestration.json"); await writeFile(configPath, JSON.stringify(runtimeConfig(root))); const deps = { configPath, env: {}, exec: absentTmux, activeCaller: () => caller(meshId, epoch as never, { identity: "agent:worker", agentId, envelope, endpointId: `agent:${agentId}` }) };
-    const tool = createMeshProfileRunTool(deps, ["cursor-fast"]); assert.equal(Value.Check(tool.parameters, { profile: "cursor-fast", prompt: "same purpose" }), true); assert.equal(Value.Check(tool.parameters, { profile: "pi-default", prompt: "forged" }), false); await assert.rejects(tool.execute("forged", { profile: "pi-default", prompt: "forged" }, undefined, undefined, {} as never), /not allowed to use profile/u);
+    const tool = createMeshSubmitTool(deps, {}, ["cursor-fast"]); assert.equal(Value.Check(tool.parameters, { profile: "cursor-fast", prompt: "same purpose" }), true); assert.equal(Value.Check(tool.parameters, { profile: "pi-default", prompt: "forged" }), false);
+}));
+
+// Given a live reusable agent, mesh_submit returns its durable nonterminal handle before the task is terminal and that same handle later observes successful completion.
+void test("mesh_submit existing-agent reuse succeeds immediately before terminal completion", async () => withRoot("mesh-reuse-success-", async root => {
+    const sessionFile = join(root, "root.jsonl"); await writeFile(sessionFile, ""); const mesh = await initializeMesh(root, { rootSessionId: "root", rootSessionFile: sessionFile, recoverable: true, budgets });
+    const epoch = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", roleSet: ["worker"], roles: { worker: settledAgentDefinition("worker") } }); const worker = await publishWorker(root, mesh.meshId, epoch.epochId);
+    await bindMeshEndpoint(root, mesh.meshId, { endpointId: `root:${mesh.meshId}`, kind: "root", harness: "pi", sessionId: "root", sessionFile }); const files = await writeRuntimeFiles(root);
+    const exec = async (_command: string, args: string[]) => { if (args.includes("display-message")) return { stdout: "10\n", stderr: "", code: 0 }; if (args.includes("list-panes")) return { stdout: `${tmux.paneId}\t0\n`, stderr: "", code: 0 }; if (args.includes("has-session")) return { stdout: "", stderr: "", code: 0 }; return { stdout: "", stderr: "", code: 0 }; };
+    const deps = { ...files, env: {}, exec, activeCaller: () => caller(mesh.meshId, epoch, { identity: "mode:ops", sessionFile }) };
+    const submitted = await createMeshSubmitTool(deps, { worker: settledAgentDefinition("worker") }).execute("reuse-success", { agentId: worker.agentId, prompt: "complete after submit returns" }, undefined, undefined, { cwd: root } as never);
+    const taskId = (submitted.details as any).task.request.taskId as string; assert.equal((submitted.details as any).task.status.state, "created"); assert.equal((await readTask(root, mesh.meshId, taskId)).status.state, "created");
+    await finishTask(root, mesh.meshId, taskId, { outcome: "succeeded", output: "done after immediate return" }); assert.equal((await readTask(root, mesh.meshId, taskId)).status.state, "succeeded");
 }));
 
 void test("existing-agent submit rejects conservative unknown activity without creating a task", async () => withRoot("mesh-reuse-activity-", async root => {
-    const mesh = await initializeMesh(root, { rootSessionId: "root", recoverable: true, budgets }); const epoch = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", roleSet: ["worker"], roles: { worker: settledAgentDefinition("worker") } }); const worker = await publishWorker(root, mesh.meshId, epoch.epochId, { activity: false }); const files = await writeRuntimeFiles(root); const deps = { ...files, env: {}, exec: absentTmux, activeCaller: () => caller(mesh.meshId, epoch, { identity: "mode:ops" }) };
+    const mesh = await initializeMesh(root, { rootSessionId: "root", recoverable: true, budgets }); const epoch = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", roleSet: ["worker"], roles: { worker: settledAgentDefinition("worker") } }); const worker = await publishWorker(root, mesh.meshId, epoch.epochId, { activity: false }); const files = await writeRuntimeFiles(root); const sessionFile = join(root, "root.jsonl"); await writeFile(sessionFile, ""); await bindMeshEndpoint(root, mesh.meshId, { endpointId: `root:${mesh.meshId}`, kind: "root", harness: "pi", sessionId: "root", sessionFile }); const deps = { ...files, env: {}, exec: absentTmux, activeCaller: () => caller(mesh.meshId, epoch, { identity: "mode:ops", sessionFile }) };
     await assert.rejects(createMeshSubmitTool(deps, { worker: settledAgentDefinition("worker") }).execute("submit", { agentId: worker.agentId, prompt: "must not reroute" }, undefined, undefined, { cwd: root } as never), /not accepting tasks.*activity=unknown/iu);
     assert.deepEqual(await readdir(meshPaths(root, mesh.meshId).tasks), []);
 }));
 
-void test("a child cannot wait on its own active task or stop its own agent process", async () => withRoot("mesh-self-", async root => {
+void test("a child cannot stop its own agent process", async () => withRoot("mesh-self-", async root => {
     const mesh = await initializeMesh(root, { rootSessionId: "root", recoverable: true, budgets });
     const epoch = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", roleSet: ["worker"], roles: { worker: settledAgentDefinition("worker") } });
     const worker = await publishWorker(root, mesh.meshId, epoch.epochId);
-    const task = await createTask(root, mesh.meshId, worker.agentId, "active self task");
     const files = await writeRuntimeFiles(root);
-    const deps = { ...files, env: {}, exec: absentTmux, activeCaller: () => caller(mesh.meshId, epoch, { identity: "agent:worker", agentId: worker.agentId }), sleep: async () => {} };
-    await assert.rejects(createMeshWaitTool(deps).execute("wait", { taskIds: [task.request.taskId], condition: "all" }, undefined, undefined, {} as never), /not allowed to wait/u);
+    const deps = { ...files, env: {}, exec: absentTmux, activeCaller: () => caller(mesh.meshId, epoch, { identity: "agent:worker", agentId: worker.agentId }) };
     await assert.rejects(createMeshStopTool(deps).execute("stop", { agentId: worker.agentId }, undefined, undefined, {} as never), /calling agent itself/u);
 }));
 
@@ -227,13 +259,13 @@ void test("a fresh root session silently ignores retained v1 state without modif
     } finally { if (previous === undefined) delete process.env.PI_EXTENSION_KEYBINDINGS_PATH; else process.env.PI_EXTENSION_KEYBINDINGS_PATH = previous; }
 }));
 
-void test("a fresh Researcher bootstrap activates mesh_run additively and persists only complete activation", async () => {
+void test("a fresh Researcher bootstrap activates all five capabilities additively and persists only complete activation", async () => {
     const pi = new PiMock();
     for (const name of MESH_TOOLS) pi.registerTool({ name });
     const bootstrapTools = [...settledAgentDefinition("researcher").tools, MESH_BOOTSTRAP_TOOL_NAME];
     pi.active = [...bootstrapTools];
     assert.equal(pi.active.includes(MESH_BOOTSTRAP_TOOL_NAME), true);
-    assert.equal(pi.active.includes("mesh_run"), false);
+    assert.equal(pi.active.includes("mesh_submit"), false);
     let persisted = 0;
     const meshId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"; const epochId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"; const agentId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"; const snapshot = buildPolicySnapshot({ mode: "ops", catalog, profiles, callPolicy }); const envelope = buildLaunchEnvelopeV3({ meshId, agentId, epochId, role: "researcher", snapshot, childExtensions: Object.fromEntries(Object.keys(snapshot.roles).map(name => [name, []])) }); const epoch = { schemaVersion: 2, meshId, epochId, ...snapshot, policyDigest: envelope.policyDigest, createdAt: "2026-01-01T00:00:00.000Z", roleSet: snapshot.directRoles } as const;
     const deps = { configPath: "/unused", env: {}, exec: absentTmux, activeCaller: () => caller(meshId, epoch as never, { identity: "agent:researcher", agentId, envelope, endpointId: `agent:${agentId}` }) };
@@ -241,13 +273,13 @@ void test("a fresh Researcher bootstrap activates mesh_run additively and persis
     const first = await enable.execute("enable", {}, undefined, undefined, {} as never);
     const second = await enable.execute("enable-again", {}, undefined, undefined, {} as never);
     assert.equal(pi.active.includes(MESH_BOOTSTRAP_TOOL_NAME), true);
-    assert.equal(pi.active.includes("mesh_run"), true);
+    assert.deepEqual(MESH_TOOLS.filter(name => !pi.active.includes(name)), []);
     assert.equal(new Set(pi.active).size, pi.active.length);
     assert.deepEqual((first.details as any).activeTools, pi.active);
     assert.deepEqual((second.details as any).activeTools, pi.active);
     assert.equal(persisted, 2);
-    pi.tools.delete("mesh_route");
-    await assert.rejects(enable.execute("incomplete", {}, undefined, undefined, {} as never), /not registered.*mesh_route/u);
+    pi.tools.delete("mesh_signal");
+    await assert.rejects(enable.execute("incomplete", {}, undefined, undefined, {} as never), /not registered.*mesh_signal/u);
     assert.equal(persisted, 2);
 });
 
@@ -264,7 +296,7 @@ void test("post-start steer and followUp signals reach a leaf without granting m
     await registerOrchestration(pi as never, { ...files, env, setInterval(callback) { tick = async () => { await callback(); }; return "timer"; }, clearInterval() {} });
     await pi.handlers.get("session_start")![0]!({}, ctx);
     assert.equal(pi.active.includes(MESH_BOOTSTRAP_TOOL_NAME), true);
-    assert.equal(pi.active.includes("mesh_run"), false);
+    assert.equal(pi.active.includes("mesh_submit"), false);
 
     const endpoint = await bindMeshEndpoint(root, mesh.meshId, { endpointId: `agent:${worker.agentId}`, kind: "agent", agentId: worker.agentId, harness: "pi", sessionId: "child-session", sessionFile });
     for (const delivery of ["steer", "followUp"] as const) {
@@ -276,12 +308,23 @@ void test("post-start steer and followUp signals reach a leaf without granting m
         const persisted = JSON.parse(await readFile(join(meshPaths(root, mesh.meshId).events, `${signal.eventId}.json`), "utf8")) as { state: string };
         assert.equal(persisted.state, "injected");
     }
-    assert.equal(pi.active.includes("mesh_run"), false);
-    assert.equal(pi.active.includes("mesh_route"), false);
+    assert.deepEqual(MESH_TOOLS.filter(name => !pi.active.includes(name)), []);
     assert.equal(new Set(pi.active).size, pi.active.length);
     assert.equal((await readAgentSnapshot(root, mesh.meshId, worker.agentId, task.request.taskId)).task?.interventions.length, 0);
     assert.equal((await readAgentSnapshot(root, mesh.meshId, worker.agentId)).status.meshToolsEnabled, true);
     assert.deepEqual(notifications, []); assert.equal(statuses.some(([key]) => key === "mesh-event-pump"), false);
+    await pi.handlers.get("session_shutdown")![0]!({ reason: "reload" });
+}));
+
+// Given direct task completions while the Pi runtime is idle and busy, the completion pump requests a turn only for the idle delivery while preserving follow-up delivery in both cases.
+void test("completion pump triggers an idle turn but leaves busy follow-up non-triggering", async () => withRoot("mesh-completion-trigger-", async root => {
+    const mesh = await initializeMesh(root, { rootSessionId: "root", recoverable: true, budgets }); const epoch = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", roleSet: ["worker"], roles: { worker: settledAgentDefinition("worker") } });
+    const receiver = await publishWorker(root, mesh.meshId, epoch.epochId); const peer = await publishWorker(root, mesh.meshId, epoch.epochId); const files = await writeRuntimeFiles(root); const sessionFile = join(root, "completion-session.jsonl"); await writeFile(sessionFile, ""); const endpointId = `agent:${receiver.agentId}`; const completion = { endpointId, endpointSessionFile: sessionFile, mode: "direct" as const };
+    const requester = { requesterEndpointId: endpointId, requesterAgentId: receiver.agentId, completion }; const first = await createTaskStore(root, mesh.meshId, receiver.agentId, "idle completion", requester); const second = await createTaskStore(root, mesh.meshId, peer.agentId, "busy completion", requester);
+    let idle = true; const ctx = { sessionManager: { getSessionId: () => "completion-session", getSessionFile: () => sessionFile, getBranch: () => [] }, ui: { setStatus() {}, notify() {} }, isIdle: () => idle } as never; let tick!: () => Promise<void>; const pi = new PiMock();
+    await registerOrchestration(pi as never, { ...files, env: { PI_MESH_ID: mesh.meshId, PI_MESH_AGENT_ID: receiver.agentId, PI_AGENT_RESOLVED_AGENT: receiver.envelopePath }, setInterval(callback) { tick = async () => { await callback(); }; return "timer"; }, clearInterval() {} }); await pi.handlers.get("session_start")![0]!({}, ctx);
+    await finishTask(root, mesh.meshId, first.request.taskId, { outcome: "succeeded", output: "idle done" }); await tick(); assert.deepEqual(pi.messages.at(-1)!.options, { deliverAs: "followUp", triggerTurn: true });
+    idle = false; await finishTask(root, mesh.meshId, second.request.taskId, { outcome: "failed", error: "busy done" }); await tick(); assert.deepEqual(pi.messages.at(-1)!.options, { deliverAs: "followUp", triggerTurn: false }); assert.equal(pi.messages.length, 2);
     await pi.handlers.get("session_shutdown")![0]!({ reason: "reload" });
 }));
 
@@ -303,13 +346,6 @@ void test("same-session reload rotates the Pi runtime once and fences the old ge
 // Given a notice whose UI notification fails, when timer polling retries, the timer remains contained, the notice stays pending, and already-rendered output is not duplicated before recovery acknowledges it.
 void test("notice pump contains failures, deduplicates presentation, and retains pending delivery", async () => withRoot("mesh-notice-failure-", async root => { const mesh = await initializeMesh(root, { rootSessionId: "root", recoverable: true, budgets }); const epoch = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", roleSet: ["worker"], roles: { worker: settledAgentDefinition("worker") } }); const worker = await publishWorker(root, mesh.meshId, epoch.epochId); const files = await writeRuntimeFiles(root); const sessionFile = join(root, "notice-failure.jsonl"); await writeFile(sessionFile, ""); const endpointId = `agent:${worker.agentId}`; const notice = await createExplicitStopNotice(root, mesh.meshId, { endpointId, requesterEndpointId: `root:${mesh.meshId}`, payload: { stopRequestId: randomUUID(), agentId: randomUUID(), role: "worker", source: "peer", reason: "retry display" } }); assert.ok(notice); let fail = true; const diagnostics: string[] = []; const ctx: any = { mode: "tui", sessionManager: { getSessionId: () => "notice-failure", getSessionFile: () => sessionFile, getBranch: () => [] }, ui: { setStatus() {}, notify(text: string) { if (fail && text.includes("retry display")) throw new Error("notice UI unavailable"); diagnostics.push(text); } }, isIdle: () => true }; let tick!: () => Promise<void>; const pi = new PiMock(); await registerOrchestration(pi as never, { ...files, env: { PI_MESH_ID: mesh.meshId, PI_MESH_AGENT_ID: worker.agentId, PI_AGENT_RESOLVED_AGENT: worker.envelopePath }, setInterval(callback) { tick = async () => { await callback(); }; return "timer"; }, clearInterval() {} }); await pi.handlers.get("session_start")![0]!({}, ctx); await tick(); assert.equal(pi.entries.length, 1); assert.equal((await listPendingTuiNotices(root, mesh.meshId, { endpointId })).length, 1); assert.equal(diagnostics.filter(text => text.includes("notice UI unavailable")).length, 1); fail = false; await tick(); assert.equal(pi.entries.length, 1); assert.deepEqual(await listPendingTuiNotices(root, mesh.meshId, { endpointId }), []); await pi.handlers.get("session_shutdown")![0]!({ reason: "reload" }); }));
 
-void test("a post-start watch injects exactly one completion after its task becomes terminal", async () => withRoot("mesh-post-start-watch-", async root => {
-    const mesh = await initializeMesh(root, { rootSessionId: "root", recoverable: true, budgets }); const epoch = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", roleSet: ["worker"], roles: { worker: settledAgentDefinition("worker") } }); const worker = await publishWorker(root, mesh.meshId, epoch.epochId); const task = await createTask(root, mesh.meshId, worker.agentId, "finish after watch"); const files = await writeRuntimeFiles(root); const sessionFile = join(root, "watch-session.jsonl"); await writeFile(sessionFile, ""); const env = { PI_MESH_ID: mesh.meshId, PI_MESH_AGENT_ID: worker.agentId, PI_AGENT_RESOLVED_AGENT: worker.envelopePath }; const ctx = { sessionManager: { getSessionId: () => "watch-session", getSessionFile: () => sessionFile, getBranch: () => [] }, ui: { setStatus() {}, notify() {} }, isIdle: () => true } as never;
-    let tick!: () => Promise<void>; const pi = new PiMock(); await registerOrchestration(pi as never, { ...files, env, setInterval(callback) { tick = async () => { await callback(); }; return "timer"; }, clearInterval() {} }); await pi.handlers.get("session_start")![0]!({}, ctx);
-    const endpoint = await bindMeshEndpoint(root, mesh.meshId, { endpointId: `agent:${worker.agentId}`, kind: "agent", agentId: worker.agentId, harness: "pi", sessionId: "watch-session", sessionFile }); const watch = await registerMeshWatch(root, mesh.meshId, { callerEndpointId: `root:${mesh.meshId}`, toolCallId: "watch", endpoint, delivery: "followUp", taskIds: [task.request.taskId], condition: "all", canonicalArguments: { action: "watch", receiver: worker.agentId, delivery: "followUp", taskIds: [task.request.taskId], condition: "all" } }); assert.equal(watch.eventId, undefined); await tick(); assert.equal(pi.messages.length, 0);
-    await finishTask(root, mesh.meshId, task.request.taskId, { outcome: "succeeded", output: "done" }); await tick(); await tick(); assert.equal(pi.messages.length, 1); assert.equal((pi.messages[0]!.options as { deliverAs: string }).deliverAs, "followUp"); assert.match(JSON.stringify(pi.messages[0]!.message), /completion/u); await pi.handlers.get("session_shutdown")![0]!({ reason: "reload" });
-}));
-
 void test("session shutdown fences an in-flight event pump before message injection", async () => withRoot("mesh-pump-shutdown-", async root => {
     const mesh = await initializeMesh(root, { rootSessionId: "root", recoverable: true, budgets }); const epoch = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", roleSet: ["worker"], roles: { worker: settledAgentDefinition("worker") } }); const worker = await publishWorker(root, mesh.meshId, epoch.epochId); const files = await writeRuntimeFiles(root); const sessionFile = join(root, "shutdown-session.jsonl"); await writeFile(sessionFile, ""); const env = { PI_MESH_ID: mesh.meshId, PI_MESH_AGENT_ID: worker.agentId, PI_AGENT_RESOLVED_AGENT: worker.envelopePath }; const ctx = { sessionManager: { getSessionId: () => "shutdown-session", getSessionFile: () => sessionFile, getBranch: () => [] }, ui: { setStatus() {}, notify() {} }, isIdle: () => true } as never;
     let tick!: () => Promise<void>; const pi = new PiMock(); await registerOrchestration(pi as never, { ...files, env, setInterval(callback) { tick = async () => { await callback(); }; return "timer"; }, clearInterval() {} }); await pi.handlers.get("session_start")![0]!({}, ctx); const endpoint = await bindMeshEndpoint(root, mesh.meshId, { endpointId: `agent:${worker.agentId}`, kind: "agent", agentId: worker.agentId, harness: "pi", sessionId: "shutdown-session", sessionFile }); const signal = await registerMeshSignal(root, mesh.meshId, { callerEndpointId: `root:${mesh.meshId}`, toolCallId: "shutdown", endpoint, delivery: "steer", topic: "shutdown", text: "Do not inject after shutdown", canonicalArguments: { action: "signal", receiver: worker.agentId, delivery: "steer", topic: "shutdown", text: "Do not inject after shutdown" } });
@@ -325,7 +361,7 @@ void test("root shutdown quiesces a held maintenance pass before admission cance
 void test("failed pre-publication cleanup retains prepared capacity when process death cannot be confirmed", async () => withRoot("mesh-launch-cleanup-", async root => {
     const mesh = await initializeMesh(root, { rootSessionId: "root", recoverable: true, budgets }); const epoch = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", roleSet: ["worker"], roles: { worker: settledAgentDefinition("worker") } }); const files = await writeRuntimeFiles(root); let cleanupInspection = false;
     const exec = async (_command: string, args: string[]) => { if (args.includes("display-message") && args.at(-1)?.includes("#{session_id}")) return { stdout: "10\t$root\tmain\t@root\t%root\tclient\n", stderr: "", code: 0 }; if (args.at(-1) === "#{pid}") return cleanupInspection ? { stdout: "", stderr: "temporary inspection failure", code: 2 } : { stdout: "10\n", stderr: "", code: 0 }; if (args.includes("has-session")) return { stdout: "", stderr: "missing", code: 1 }; if (args.includes("new-session")) return { stdout: "$hub\t@agent\t%agent\n", stderr: "", code: 0 }; if (args.includes("@pi_mesh_schema")) { cleanupInspection = true; return { stdout: "", stderr: "metadata write failed", code: 2 }; } return { stdout: "", stderr: "", code: 0 }; };
-    const deps = { ...files, env: { TMUX: "/tmp/tmux,1,0" }, exec, activeCaller: () => caller(mesh.meshId, epoch, { identity: "mode:ops" }) }; const ctx = { cwd: root, sessionManager: { getSessionId: () => "root", getSessionFile: () => undefined } } as never;
+    const sessionFile = join(root, "root.jsonl"); await writeFile(sessionFile, ""); await bindMeshEndpoint(root, mesh.meshId, { endpointId: `root:${mesh.meshId}`, kind: "root", harness: "pi", sessionId: "root", sessionFile }); const deps = { ...files, env: { TMUX: "/tmp/tmux,1,0" }, exec, activeCaller: () => caller(mesh.meshId, epoch, { identity: "mode:ops", sessionFile }) }; const ctx = { cwd: root, sessionManager: { getSessionId: () => "root", getSessionFile: () => sessionFile } } as never;
     await assert.rejects(createMeshSubmitTool(deps, { worker: settledAgentDefinition("worker") }).execute("launch", { agent: "worker", prompt: "work" }, undefined, undefined, ctx), /cleanup.*remains incomplete/iu);
     const paths = meshPaths(root, mesh.meshId); const reservations = await readdir(paths.reservations); const agents = await readdir(paths.agents); assert.equal(reservations.length, 1); assert.equal(agents.length, 1); const reservation = JSON.parse(await readFile(join(paths.reservations, reservations[0]!), "utf8")) as { state: string }; assert.equal(reservation.state, "committed");
 }));
@@ -334,7 +370,7 @@ void test("failed pre-publication cleanup retains prepared capacity when process
 void test("published launch failure durably confirms a failed agent outcome", async () => withRoot("mesh-published-launch-failure-", async root => {
     const mesh = await initializeMesh(root, { rootSessionId: "root", recoverable: true, budgets }); const epoch = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", roleSet: ["worker"], roles: { worker: settledAgentDefinition("worker") } }); const files = await writeRuntimeFiles(root); let clock = -6000;
     const exec = async (_command: string, args: string[]) => { if (args.includes("display-message") && args.at(-1)?.includes("#{session_id}")) return { stdout: "10\t$root\tmain\t@root\t%root\tclient\n", stderr: "", code: 0 }; if (args.at(-1) === "#{pid}") return { stdout: "10\n", stderr: "", code: 0 }; if (args.includes("has-session")) return { stdout: "", stderr: "missing", code: 1 }; if (args.includes("new-session")) return { stdout: "$hub\t@agent\t%agent\n", stderr: "", code: 0 }; return { stdout: "", stderr: "", code: 0 }; };
-    const deps = { ...files, env: { TMUX: "/tmp/tmux,1,0" }, exec, now: () => clock += 6000, activeCaller: () => caller(mesh.meshId, epoch, { identity: "mode:ops" }) }; const ctx = { cwd: root, sessionManager: { getSessionId: () => "root", getSessionFile: () => undefined } } as never;
+    const sessionFile = join(root, "root.jsonl"); await writeFile(sessionFile, ""); await bindMeshEndpoint(root, mesh.meshId, { endpointId: `root:${mesh.meshId}`, kind: "root", harness: "pi", sessionId: "root", sessionFile }); const deps = { ...files, env: { TMUX: "/tmp/tmux,1,0" }, exec, now: () => clock += 6000, activeCaller: () => caller(mesh.meshId, epoch, { identity: "mode:ops", sessionFile }) }; const ctx = { cwd: root, sessionManager: { getSessionId: () => "root", getSessionFile: () => sessionFile } } as never;
     await assert.rejects(createMeshSubmitTool(deps, { worker: settledAgentDefinition("worker") }).execute("launch", { agent: "worker", prompt: "work" }, undefined, undefined, ctx), /bridge readiness timed out/iu);
     const agentIds = await readdir(meshPaths(root, mesh.meshId).agents); assert.equal(agentIds.length, 1); const failed = await readAgentSnapshot(root, mesh.meshId, agentIds[0]!); assert.deepEqual({ lifecycle: failed.status.state, reason: failed.status.exitReason, stop: failed.stop?.state, terminalState: failed.stop?.terminalState }, { lifecycle: "failed", reason: "Agent bridge readiness timed out", stop: "confirmed", terminalState: "failed" });
 }));
@@ -344,10 +380,30 @@ void test("root palette management survives a mode switch", async () => withRoot
     const stopped = stopPaletteMeshAgent(deps, runtimeConfig(root), { meshId: mesh.meshId, agentId: worker.agentId, reason: "root lifecycle stop" }); release(); assert.equal((await stopped).status.state, "stopping"); assert.ok(execCalls >= 0);
 }));
 
+// Given a terminal task, mesh_stop exposes only lifecycle projection while mesh_get remains the full result and usage owner.
+void test("mesh_stop omits terminal result ownership that mesh_get retains", async () => withRoot("mesh-stop-get-projection-", async root => {
+    const sessionFile = join(root, "root.jsonl"); await writeFile(sessionFile, ""); const mesh = await initializeMesh(root, { rootSessionId: "root", rootSessionFile: sessionFile, recoverable: true, budgets });
+    const epoch = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", roleSet: ["worker"], roles: { worker: settledAgentDefinition("worker") } }); const worker = await publishWorker(root, mesh.meshId, epoch.epochId);
+    await bindMeshEndpoint(root, mesh.meshId, { endpointId: `root:${mesh.meshId}`, kind: "root", harness: "pi", sessionId: "root", sessionFile });
+    const task = await createTask(root, mesh.meshId, worker.agentId, "projection ownership"); await finishTask(root, mesh.meshId, task.request.taskId, { outcome: "failed", output: "terminal output", error: "terminal error", usage: { input: 3, output: 5, cacheRead: 0, cacheWrite: 0, totalTokens: 8, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } } });
+    const files = await writeRuntimeFiles(root); const deps = { ...files, env: {}, exec: absentTmux, activeCaller: () => caller(mesh.meshId, epoch, { identity: "mode:ops", sessionFile }) };
+    const stopped = await createMeshStopTool(deps).execute("stop", { taskId: task.request.taskId }, undefined, undefined, {} as never); const stopText = (stopped.content[0] as { text: string }).text;
+    assert.doesNotMatch(stopText, /terminal output|terminal error|usage/u);
+    const got = await createMeshGetTool(deps).execute("get", { taskId: task.request.taskId }, undefined, undefined, {} as never); const getText = (got.content[0] as { text: string }).text;
+    assert.match(getText, /terminal output/u); assert.match(getText, /terminal error/u); assert.deepEqual((got.details as any).accounting.claimedTaskIds, [task.request.taskId]); assert.ok(got.usage);
+}));
+
+// Given a retained v1-era claim written by a retired tool, reads and startup reconciliation accept it while current claim creation remains mesh_get-only by type and runtime call sites.
+void test("historical retired-tool usage claim remains readable and reconcilable", async () => withRoot("mesh-historical-usage-claim-", async root => {
+    const sessionFile = join(root, "root.jsonl"); await writeFile(sessionFile, ""); const mesh = await initializeMesh(root, { rootSessionId: "root", recoverable: true, budgets }); const epoch = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", roleSet: ["worker"], roles: { worker: settledAgentDefinition("worker") } }); const worker = await publishWorker(root, mesh.meshId, epoch.epochId); const task = await createTask(root, mesh.meshId, worker.agentId, "historical claim"); await finishTask(root, mesh.meshId, task.request.taskId, { outcome: "succeeded", output: "done" });
+    await writeFile(taskPaths(root, mesh.meshId, task.request.taskId).usageClaim, JSON.stringify({ schemaVersion: 1, meshId: mesh.meshId, claimantSessionFile: sessionFile, toolCallId: "retained-call", toolName: "mesh_wait", agentId: worker.agentId, taskId: task.request.taskId, claimedAt: new Date().toISOString() }));
+    assert.equal((await readTask(root, mesh.meshId, task.request.taskId)).claimed, true); assert.equal(await reconcileMeshUsageClaims(root, mesh.meshId, sessionFile), 1); assert.equal((await readTask(root, mesh.meshId, task.request.taskId)).claimed, false);
+}));
+
 void test("persisted root startup reconciles an unpersisted usage claim before tools can observe it", async () => withRoot("mesh-root-usage-reconcile-", async root => {
     const sessionFile = join(root, "root-session.jsonl"); await writeFile(sessionFile, ""); const mesh = await initializeMesh(root, { rootSessionId: "root-session", rootSessionFile: sessionFile, recoverable: true, budgets }); const epoch = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", roleSet: ["worker"], roles: { worker: settledAgentDefinition("worker") } }); const worker = await publishWorker(root, mesh.meshId, epoch.epochId); const task = await createTask(root, mesh.meshId, worker.agentId, "account once"); await finishTask(root, mesh.meshId, task.request.taskId, { outcome: "succeeded", output: "done" }); assert.equal((await claimTaskUsage(root, mesh.meshId, task.request.taskId, sessionFile, "lost-call", "mesh_get")).created, true);
     const files = await writeRuntimeFiles(root); const keybindings = await writeMeshKeybindings(root); const previous = process.env.PI_EXTENSION_KEYBINDINGS_PATH; process.env.PI_EXTENSION_KEYBINDINGS_PATH = keybindings; const branch = [{ type: "custom", customType: "mesh-root-binding", data: { schemaVersion: 1, meshId: mesh.meshId } }]; const ctx = { sessionManager: { getSessionId: () => "root-session", getSessionFile: () => sessionFile, getBranch: () => branch }, ui: { notify() {}, setStatus() {} }, isIdle: () => true } as never;
-    try { const pi = new PiMock(); await registerOrchestration(pi as never, { ...files, env: {} }); await pi.handlers.get("session_start")![0]!({}, ctx); assert.equal((await claimTaskUsage(root, mesh.meshId, task.request.taskId, sessionFile, "recovered-call", "mesh_get")).created, true); await pi.handlers.get("session_shutdown")![0]!({ reason: "reload" }); }
+    try { const pi = new PiMock(); await registerOrchestration(pi as never, { ...files, env: {} }); assert.equal(pi.messageRenderers.has("mesh-event"), true); await pi.handlers.get("session_start")![0]!({}, ctx); assert.equal((await claimTaskUsage(root, mesh.meshId, task.request.taskId, sessionFile, "recovered-call", "mesh_get")).created, true); await pi.handlers.get("session_shutdown")![0]!({ reason: "reload" }); }
     finally { if (previous === undefined) delete process.env.PI_EXTENSION_KEYBINDINGS_PATH; else process.env.PI_EXTENSION_KEYBINDINGS_PATH = previous; }
 }));
 
@@ -368,7 +424,7 @@ void test("native child launch manifests order popup, orchestration, role contri
     assert.equal(bootstrap.includes(MESH_BOOTSTRAP_TOOL_NAME), true);
     for (const name of REQUIRED_PEER_CAPABILITIES) assert.equal(bootstrap.includes(name), false, `bootstrap excludes inactive ${name}`);
     assert.equal(new Set(bootstrap).size, bootstrap.length);
-    const union = launchTools(launchFor(["read", "mesh_route", "read", MESH_BOOTSTRAP_TOOL_NAME]));
+    const union = launchTools(launchFor(["read", "mesh_signal", "read", MESH_BOOTSTRAP_TOOL_NAME]));
     assert.equal(union.includes("read"), true);
     assert.equal(union.includes(MESH_BOOTSTRAP_TOOL_NAME), true);
     for (const name of REQUIRED_PEER_CAPABILITIES) assert.equal(union.includes(name), false, `launch strips inactive ${name}`);

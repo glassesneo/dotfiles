@@ -38,30 +38,14 @@ export type MinimalAgentTask = {
     outputTruncated?: true;
 };
 
-export type MinimalWaitResult = {
-    outcome: "completed";
-    tasks: MinimalAgentTask[];
-};
-
 export type MinimalSubmitResult = {
     agentId: string;
     taskId: string;
     agent: string;
-    summary: string;
+    profile: string;
+    route: "direct" | `channel ${string}`;
     agentState: AgentState;
-    activity: AgentSnapshot["activity"];
-    stop: ModelVisibleStop | null;
     taskState: TaskState;
-    output?: string;
-    error?: string;
-    outputTruncated?: true;
-};
-
-export type WaitDetails = {
-    condition: "any" | "all";
-    outcome?: "completed";
-    agents: AgentSnapshot[];
-    accounting: { usage?: Usage; claimedTaskIds: string[] };
 };
 
 export type AgentToolDetails = AgentSnapshot & {
@@ -115,33 +99,21 @@ export function projectMinimalAgentTask(rawSnapshot: AgentSnapshot): MinimalAgen
     return projected;
 }
 
-export function projectMinimalWaitResult(
-    snapshots: readonly AgentSnapshot[],
-    outcome: "completed",
-): MinimalWaitResult {
-    return {
-        outcome,
-        tasks: snapshots.map(projectMinimalAgentTask),
-    };
-}
-
 export function projectMinimalSubmitResult(
     rawSnapshot: AgentSnapshot,
 ): MinimalSubmitResult {
     const projected = projectMinimalAgentTask(rawSnapshot);
     if (!projected.taskId || !projected.taskState) throw new Error(`Mesh agent ${projected.agentId} has no submitted task`);
+    const completion = rawSnapshot.task?.request.completion;
+    if (!completion) throw new Error(`Mesh task ${projected.taskId} has no durable completion route`);
     return {
         agentId: projected.agentId,
         taskId: projected.taskId,
         agent: projected.agent,
-        summary: projected.summary,
+        profile: rawSnapshot.agent.selectedProfile,
+        route: completion.mode === "direct" ? "direct" : `channel ${completion.channel}`,
         agentState: projected.agentState,
-        activity: projected.activity,
-        stop: projected.stop,
         taskState: projected.taskState,
-        ...(projected.output ? { output: projected.output } : {}),
-        ...(projected.error ? { error: projected.error } : {}),
-        ...(projected.outputTruncated ? { outputTruncated: true } : {}),
     };
 }
 
