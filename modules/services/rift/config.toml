@@ -1,6 +1,6 @@
 [settings]
 animate = true
-animation_duration = 1.5
+animation_duration = 0.30
 animation_fps = 100.0
 default_disable = false
 focus_follows_mouse = true
@@ -25,15 +25,15 @@ haptics_enabled = false
 haptic_pattern = "level_change"
 
 [settings.layout]
-mode = "traditional"
+mode = "scrolling"
 
 [settings.layout.scrolling]
 animate = true
 
-column_width_ratio = 0.5
+column_width_ratio = 0.7
 min_column_width_ratio = 0.3
 max_column_width_ratio = 1.0
-alignment = "left"
+# alignment = "right"
 focus_navigation_style = "niri"
 
 [settings.layout.stack]
@@ -63,13 +63,14 @@ preserve_focus_per_workspace = true
 workspace_auto_back_and_forth = false
 reapply_app_rules_on_title_change = false
 workspace_rules = [
-  { workspace = 0, layout = "master_stack" },
+  { workspace = 0, layout = "scrolling" },
   { workspace = 1, layout = "stack" },
 ]
 workspace_names = ["1", "2", "3", "4", "5"]
 app_rules = [
-  { app_id = "com.apple.finder", manage = false },
-  { app_id = "com.apple.systempreferences", manage = false },
+  { app_id = "com.apple.finder", floating = true },
+  { app_id = "com.apple.systempreferences", floating = true },
+  { ax_subrole = "AXDialog", floating = true },
 ]
 
 [modifier_combinations]
@@ -98,6 +99,11 @@ move = "Alt + Shift"
 "Alt + Space" = "toggle_focus_floating"
 "Alt + Shift + Space" = "toggle_window_floating"
 "Alt + F" = "toggle_fullscreen_within_gaps"
+
+"Alt + C" = "center_selection"
+
+"Alt + Equal" = { scroll_strip = { delta = 0.3 } }
+"Alt + Minus" = { scroll_strip = { delta = -0.3 } }
 
 "Alt + Shift + Equal" = "resize_window_grow"
 "Alt + Shift + Minus" = "resize_window_shrink"
