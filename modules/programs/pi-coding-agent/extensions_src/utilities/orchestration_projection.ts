@@ -1,4 +1,5 @@
 import type { Usage } from "@earendil-works/pi-ai";
+import { canonicalJson } from "./agent_types.ts";
 import {
     isTerminalTask,
     promptSummary,
@@ -48,8 +49,15 @@ export type MinimalSubmitResult = {
     taskState: TaskState;
 };
 
+export type RetrievalAccounting = {
+    usage?: Usage;
+    claimedTaskIds: string[];
+    receiptIds: string[];
+    receivedTaskIds: string[];
+};
+
 export type AgentToolDetails = AgentSnapshot & {
-    accounting: { usage?: Usage; claimedTaskIds: string[] };
+    accounting: RetrievalAccounting;
 };
 
 export type SubmitDetails = AgentToolDetails;
@@ -462,4 +470,60 @@ export function omitUndefined<T extends Record<string, unknown>>(value: T): T {
         if (next[key] === undefined) delete next[key];
     }
     return next;
+}
+
+const EVENT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
+
+export function receiptIdsFromToolResults(messages: readonly unknown[]): string[] {
+    const receiptIds = new Set<string>();
+    for (const value of messages) {
+        if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+        const message = value as Record<string, unknown>;
+        if (message.role !== "toolResult" || !message.details || typeof message.details !== "object" || Array.isArray(message.details)) continue;
+        const accounting = (message.details as Record<string, unknown>).accounting;
+        if (!accounting || typeof accounting !== "object" || Array.isArray(accounting)) continue;
+        const ids = (accounting as Record<string, unknown>).receiptIds;
+        if (!Array.isArray(ids)) continue;
+        for (const id of ids) if (typeof id === "string" && EVENT_ID.test(id)) receiptIds.add(id);
+    }
+    return [...receiptIds];
+}
+
+export function projectMeshCompletionContext<T>(messages: readonly T[], receivedTaskIds: ReadonlySet<string>): { messages: T[]; eventIds: string[] } {
+    const projected: T[] = [];
+    const eventIds: string[] = [];
+    const identities = new Map<string, string>();
+    for (const value of messages) {
+        if (!value || typeof value !== "object" || Array.isArray(value)) { projected.push(value); continue; }
+        const message = value as Record<string, unknown>;
+        const details = message.details && typeof message.details === "object" && !Array.isArray(message.details) ? message.details as Record<string, unknown> : undefined;
+        if (message.customType !== "mesh-event" || details?.kind !== "completion") { projected.push(value); continue; }
+        const eventId = details.eventId;
+        const payload = details.payload;
+        if (typeof eventId !== "string" || !EVENT_ID.test(eventId) || !payload || typeof payload !== "object" || Array.isArray(payload)) throw new Error("Malformed mesh completion event in model context");
+        const completion = payload as Record<string, unknown>;
+        if (completion.eventId !== eventId || completion.route !== "direct" && completion.route !== "channel" || completion.route === "channel" && (typeof completion.channel !== "string" || !/^[A-Z]$/u.test(completion.channel)) || completion.route === "direct" && completion.channel !== undefined || typeof completion.batchId !== "string" || !EVENT_ID.test(completion.batchId) || typeof completion.settledAt !== "string" || !Number.isFinite(Date.parse(completion.settledAt)) || !Array.isArray(completion.tasks) || completion.tasks.length < 1) throw new Error(`Malformed mesh completion event ${eventId}`);
+        const tasks = completion.tasks.map(task => {
+            if (!task || typeof task !== "object" || Array.isArray(task)) throw new Error(`Malformed mesh completion event ${eventId}`);
+            const record = task as Record<string, unknown>;
+            if (typeof record.taskId !== "string" || !EVENT_ID.test(record.taskId) || record.state !== "succeeded" && record.state !== "failed" && record.state !== "stopped") throw new Error(`Malformed mesh completion event ${eventId}`);
+            for (const key of ["createdAt", "startedAt", "finishedAt"] as const) if (record[key] !== undefined && (typeof record[key] !== "string" || !Number.isFinite(Date.parse(record[key] as string)))) throw new Error(`Malformed mesh completion event ${eventId}`);
+            return record;
+        });
+        if (new Set(tasks.map(task => task.taskId)).size !== tasks.length) throw new Error(`Malformed mesh completion event ${eventId}`);
+        const identity = canonicalJson(payload);
+        const existing = identities.get(eventId);
+        if (existing !== undefined) {
+            if (existing !== identity) throw new Error(`Conflicting duplicate mesh completion event ${eventId}`);
+            continue;
+        }
+        identities.set(eventId, identity);
+        eventIds.push(eventId);
+        const residual = tasks.filter(task => !receivedTaskIds.has(task.taskId as string));
+        if (!residual.length) continue;
+        const nextPayload = { ...completion, tasks: residual };
+        const nextDetails = { ...details, payload: nextPayload };
+        projected.push({ ...message, content: `[mesh-event ${eventId}] completion\n${serializeModelVisibleJson(nextPayload)}`, details: nextDetails } as T);
+    }
+    return { messages: projected, eventIds };
 }

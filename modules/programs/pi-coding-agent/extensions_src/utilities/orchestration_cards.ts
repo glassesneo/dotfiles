@@ -9,7 +9,6 @@ import {
     formatTaskStateBadge,
 } from "./orchestration_display_tree.ts";
 import type { SubmitDetails } from "./orchestration_projection.ts";
-import { MESH_PEER_TOOL_NAMES } from "./orchestration_pi.ts";
 import { promptSummary, type AgentSnapshot, type AgentState, type ChannelKey, type TaskState } from "./orchestration_types.ts";
 
 /** Subset of Pi ToolRenderContext used by mesh cards (not re-exported by the package). */
@@ -22,6 +21,7 @@ export type CardRenderContext = {
 
 export type SubmitCardArgs = { agent?: string; agentId?: string; profile?: string; prompt: string; channel?: ChannelKey };
 export type ChannelCardArgs = { action: "inspect" | "flush"; channel?: ChannelKey };
+export type WaitCardArgs = { taskIds: string[] };
 export type SignalCardArgs = { receiver: string; delivery: "steer" | "followUp"; taskIds?: string[]; topic: string; text: string };
 export type ChannelCardTask = { taskId: string; agentId: string; agent: string; agentState: AgentState; state: TaskState };
 export type ChannelCardProjection = { channel: ChannelKey; terminal: number; total: number; tasks: ChannelCardTask[] };
@@ -184,6 +184,11 @@ export function renderGetCall(args: { agentId?: string; taskId?: string; debug?:
     if (context.expanded) { if (args.agentId) lines.push(labeled(theme, "agentId", args.agentId)); if (args.taskId) lines.push(labeled(theme, "taskId", args.taskId)); }
     return textFromComponent(context.lastComponent, lines.join("\n"));
 }
+export function renderWaitCall(args: WaitCardArgs, theme: Theme, context: CardRenderContext): Component {
+    const lines = [`mesh_wait · all ${args.taskIds.length} tasks`];
+    if (context.expanded) lines.push(labeled(theme, "taskIds", args.taskIds.join(", ")));
+    return textFromComponent(context.lastComponent, lines.join("\n"));
+}
 export function renderStopCall(args: { agentId?: string; taskId?: string; reason?: string }, theme: Theme, context: CardRenderContext): Component {
     const lines = [`mesh_stop · ${args.taskId ? "task" : "agent"}`];
     if (context.expanded) { lines.push(labeled(theme, args.taskId ? "taskId" : "agentId", args.taskId ?? args.agentId ?? "missing")); if (args.reason) lines.push(labeled(theme, "reason", previewText(args.reason, 4, 512))); }
@@ -204,8 +209,6 @@ export function renderSignalCall(args: SignalCardArgs, theme: Theme, context: Ca
     }
     return textFromComponent(context.lastComponent, lines.join("\n"));
 }
-export function renderEnableCall(_args: object, _theme: Theme, context: CardRenderContext): Component { return textFromComponent(context.lastComponent, "mesh_enable · activate all peer tools"); }
-
 export function renderAgentToolResult(result: AgentToolResult<unknown>, options: ToolRenderResultOptions, theme: Theme, context: CardRenderContext, _argsPrompt?: string, debug?: boolean, words?: readonly string[]): Component { return renderAgentResult(result, options, theme, context, words, undefined, debug); }
 export function renderSubmitResult(result: AgentToolResult<unknown>, options: ToolRenderResultOptions, theme: Theme, context: CardRenderContext, words?: readonly string[]): Component {
     if (!isSubmitDetails(result.details) || !result.details.task) return textFromComponent(context.lastComponent, resultProblem(result, options, theme, context));
@@ -213,6 +216,14 @@ export function renderSubmitResult(result: AgentToolResult<unknown>, options: To
     const route = completion?.mode === "channel" ? `channel ${completion.channel}` : "direct";
     const heading = joinParts(["mesh_submit", route, `agent ${result.details.status.state}`, `task ${result.details.task.status.state}`]);
     return renderAgentResult(result, options, theme, context, words, heading);
+}
+export function renderWaitResult(result: AgentToolResult<unknown>, options: ToolRenderResultOptions, theme: Theme, context: CardRenderContext, words?: readonly string[]): Component {
+    const details = result.details as { tasks?: unknown } | undefined;
+    if (!Array.isArray(details?.tasks) || !details.tasks.every(isRenderableAgentSnapshot)) return textFromComponent(context.lastComponent, resultProblem(result, options, theme, context));
+    const snapshots = details.tasks as AgentSnapshot[];
+    const handles = assignNatureHandles(snapshots.map(snapshot => snapshot.agent.agentId), words);
+    const lines = [`all ${snapshots.length} tasks terminal`, ...snapshots.flatMap(snapshot => options.expanded ? [compactAgentLine(theme, snapshot, handles), expandedAgentCard(theme, snapshot, undefined, handles)] : [compactAgentLine(theme, snapshot, handles)])];
+    return textFromComponent(context.lastComponent, lines.join("\n"));
 }
 export function renderStopResult(result: AgentToolResult<unknown>, options: ToolRenderResultOptions, theme: Theme, context: CardRenderContext, words?: readonly string[]): Component {
     const snapshot = isRenderableAgentSnapshot(result.details) ? result.details : undefined;
@@ -258,16 +269,6 @@ export function renderSignalResult(result: AgentToolResult<unknown>, options: To
     if (options.expanded) { if (args?.receiver) lines.push(labeled(theme, "receiver", args.receiver)); lines.push(labeled(theme, "eventId", details.eventId)); }
     return textFromComponent(context.lastComponent, lines.join("\n"));
 }
-export function renderEnableResult(result: AgentToolResult<unknown>, options: ToolRenderResultOptions, theme: Theme, context: CardRenderContext): Component {
-    const details = result.details as { enabled?: unknown; activeTools?: unknown } | undefined;
-    if (!details || details.enabled !== true || !Array.isArray(details.activeTools) || !details.activeTools.every(tool => typeof tool === "string")) return textFromComponent(context.lastComponent, resultProblem(result, options, theme, context));
-    const active = new Set(details.activeTools as string[]);
-    const enabled = MESH_PEER_TOOL_NAMES.filter(tool => active.has(tool)).length;
-    const lines = [enabled === MESH_PEER_TOOL_NAMES.length ? "all peer tools active" : `peer tools incomplete (${enabled}/${MESH_PEER_TOOL_NAMES.length} active)`];
-    if (options.expanded) lines.push(labeled(theme, "activeTools", details.activeTools.join(", ")));
-    return textFromComponent(context.lastComponent, lines.join("\n"));
-}
-
 type CompletionMessage = { customType: string; content: unknown; details?: unknown };
 function completionPayload(message: CompletionMessage): { route: "direct" | "channel"; channel?: string; tasks: Array<{ taskId: string; state: TaskState; createdAt?: string; startedAt?: string; finishedAt?: string }> } | undefined {
     const details = message.details as Record<string, unknown> | undefined;

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { visibleWidth } from "@earendil-works/pi-tui";
-import { createMeshChannelTool, createMeshGetTool, createMeshSignalTool, createMeshSubmitTool, type OrchestrationDependencies } from "../extensions_src/orchestration.ts";
+import { createMeshChannelTool, createMeshGetTool, createMeshSignalTool, createMeshSubmitTool, createMeshWaitTool, type OrchestrationDependencies } from "../extensions_src/orchestration.ts";
 import { renderMeshEventMessage } from "../extensions_src/utilities/orchestration_cards.ts";
 import type { RoleDefinition } from "../extensions_src/utilities/agent_types.ts";
 import { unknownAgentActivityProjection } from "../extensions_src/utilities/orchestration_activity.ts";
@@ -79,11 +79,20 @@ void test("mesh_submit cards project selector route and states width-safely", ()
     assert.doesNotMatch(reused, new RegExp(agentId, "u"));
     const details = snapshot();
     details.task!.request.completion = { endpointId: "root:test", endpointSessionFile: "/session.jsonl", mode: "channel", channel: "A" };
-    const result = render(tool.renderResult?.({ content: [], details: { ...details, accounting: { claimedTaskIds: [] } } } as never, { expanded: false } as never, theme as never, { args: { agent: "worker", prompt: "bounded", channel: "A" }, lastComponent: undefined } as never), 34);
+    const result = render(tool.renderResult?.({ content: [], details: { ...details, accounting: { claimedTaskIds: [], receiptIds: [], receivedTaskIds: [] } } } as never, { expanded: false } as never, theme as never, { args: { agent: "worker", prompt: "bounded", channel: "A" }, lastComponent: undefined } as never), 34);
     assert.match(result, /channel A/u);
     const semantic = result.replace(/\s+/gu, " ");
     assert.match(semantic, /agent idle/u);
     assert.match(semantic, /task succeeded/u);
+});
+
+// Given an all-task wait result, its card exposes terminal progress and expanded identifiers without freezing decoration.
+void test("mesh_wait cards expose all-terminal state and full task identifiers width-safely", () => {
+    const wait = createMeshWaitTool(deps); const args = { taskIds: [taskId, agentId] };
+    assert.match(render(wait.renderCall?.(args as never, theme as never, { expanded: false, lastComponent: undefined } as never), 24), /all 2 tasks/u);
+    const first = snapshot(); const second = structuredClone(first); second.agent.agentId = agentId; second.task!.request.taskId = agentId; second.task!.status.state = "failed"; second.task!.result!.outcome = "failed";
+    const collapsed = render(wait.renderResult?.({ content: [], details: { tasks: [first, second], accounting: { claimedTaskIds: [], receiptIds: [], receivedTaskIds: [] } } } as never, { expanded: false } as never, theme as never, { args, lastComponent: undefined } as never), 32); assert.match(collapsed, /all 2 tasks terminal/u); assert.match(collapsed, /SUCCEEDED/u); assert.match(collapsed, /FAILED/u);
+    const expanded = render(wait.renderResult?.({ content: [], details: { tasks: [first, second] } } as never, { expanded: true } as never, theme as never, { args, lastComponent: undefined } as never), 32); assert.match(expanded.replace(/\s+/gu, ""), new RegExp(taskId, "u")); assert.match(expanded.replace(/\s+/gu, ""), new RegExp(agentId, "u"));
 });
 
 // Given inspect/flush and signal projections, their cards retain channel counts, role/lifecycle semantics, and expanded identifiers within width.

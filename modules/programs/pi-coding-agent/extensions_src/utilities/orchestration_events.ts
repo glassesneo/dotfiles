@@ -67,7 +67,7 @@ async function evaluateCompletionRoutes(stateRoot: string, meshId: string, optio
             endpointId: item.ledger.endpointId,
             endpointSessionFile: item.ledger.endpointSessionFile,
             senderEndpointId: item.ledger.endpointId,
-            delivery: "followUp",
+            delivery: "steer",
             kind: "completion",
             payload: {
                 route: item.batch.route,

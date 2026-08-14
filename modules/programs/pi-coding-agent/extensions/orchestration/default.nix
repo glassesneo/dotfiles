@@ -65,7 +65,7 @@
     };
     worker = {
       description = "Use for one bounded source implementation or repair whose scope and acceptance are already defined.";
-      tools = ["read" "grep" "find" "ls" "bash" "write" "edit" "mesh_enable"];
+      tools = ["read" "grep" "find" "ls" "bash" "write" "edit"];
       skillOptIns = ["source-implementation" "prompt-interface-design"];
       instructions = "Complete the bounded source objective, inspect the diff, run proportionate focused diagnostics, and return outcome, changed files, alignment/deviations, evidence, and remaining risk. Report material scope or authority gaps instead of expanding the task.";
       defaultProfile = "sol-medium";
@@ -83,7 +83,7 @@
     };
     reviewer = {
       description = "Use when a defined target needs independent review judgment consolidated into evidence the caller can act on.";
-      tools = ["read" "grep" "find" "ls" "bash" "mesh_enable" "save_agent_artifact"];
+      tools = ["read" "grep" "find" "ls" "bash" "save_agent_artifact"];
       skillOptIns = ["adaptive-review" "task-orchestration" "prompt-interface-design" "agent-artifact"];
       instructions = "Review read-only; obtain bounded independent lenses or validation evidence only when they can materially improve the verdict; consolidate supported severity-ordered findings, verdict, gaps, and residual risk. Decide what belongs in the review, not whether the parent changes source.";
       defaultProfile = "sol-high";
@@ -101,7 +101,7 @@
     };
     researcher = {
       description = "Use when a question needs codebase and/or multiple external evidence paths integrated into one supported conclusion.";
-      tools = ["read" "grep" "find" "ls" "bash" "web_search" "web_fetch" "mesh_enable"];
+      tools = ["read" "grep" "find" "ls" "bash" "web_search" "web_fetch"];
       skillOptIns = ["web-research" "task-orchestration" "prompt-interface-design"];
       instructions = "Determine the evidence needed, integrate codebase and external sources, examine material counterevidence, and return the best-supported conclusion with claim-linked sources and uncertainty. Searcher results are evidence to evaluate, not output to relay unchanged.";
       defaultProfile = "terra-high";

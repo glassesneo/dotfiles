@@ -9,7 +9,7 @@ import type { ExecutionProfile, ExecutionProfileConfig } from "../extensions_src
 import { readAgentActivity } from "../extensions_src/utilities/orchestration_activity.ts";
 import { resolveExternalDriver, validateExternalWorkerConfig, type ExternalDriver, type ExternalWorkerConfig } from "../extensions_src/utilities/orchestration_external_driver.ts";
 import { resolveHarnessAdapter } from "../extensions_src/utilities/orchestration_harness.ts";
-import { MESH_BOOTSTRAP_TOOL_NAME, MESH_PEER_TOOL_NAMES, piLaunchDescriptor } from "../extensions_src/utilities/orchestration_pi.ts";
+import { MESH_PEER_TOOL_NAMES, piLaunchDescriptor } from "../extensions_src/utilities/orchestration_pi.ts";
 import { createTask, ensurePolicyEpoch, initializeMesh, markAgentStopping, prepareAgent, publishAgent, readAgentSnapshot, requestTaskCancellation, reserveMeshCapacity, taskPaths } from "../extensions_src/utilities/orchestration_store.ts";
 import { withTemporaryRoot, yieldToIO } from "./test_helpers.ts";
 
@@ -77,7 +77,7 @@ async function externalFixture(root: string) {
 
 // Admission: launch isolation is repository-owned, a leaked context/tool/resource flag materially violates the gyaru boundary, and neither types nor schema validation observes the final Pi argv.
 // Given project and prompt-only role envelopes, when they cross the native launch-descriptor boundary, the Pi process observes only the selected profile and resources authorized for that context/direct policy.
-void test("Pi launch descriptors isolate prompt-only roles and expose bootstrap only to direct callers", () => {
+void test("Pi launch descriptors isolate prompt-only roles and configure peer tools only for direct callers", () => {
     const piProfile: ExecutionProfile = { model: "openai-codex/gpt-5.6-terra", thinkingLevel: "high", harness: "pi" };
     const promptOnly = envelope({ role: "gyaru", selfRole: role({ contextPolicy: "prompt-only", defaultProfile: "terra-high", tools: [], skillOptIns: [] }), selectedProfile: "terra-high", executionProfile: piProfile });
     const isolated = piLaunchDescriptor(runtime, launchInput("gyaru", promptOnly));
@@ -89,8 +89,7 @@ void test("Pi launch descriptors isolate prompt-only roles and expose bootstrap 
 
     const caller = envelope({ role: "reviewer", selfRole: role({ tools: ["read", "save_agent_artifact"], defaultProfile: "sol-high" }), selectedProfile: "sol-high", executionProfile: { model: "openai-codex/gpt-5.6-sol", thinkingLevel: "high", harness: "pi" }, policy: { roles: ["review-lens"], profiles: [] } });
     const callerTools = option(piLaunchDescriptor(runtime, launchInput("reviewer", caller)).args, "--tools")!.split(",");
-    assert.deepEqual(callerTools, ["read", "save_agent_artifact", MESH_BOOTSTRAP_TOOL_NAME]);
-    assert.equal(MESH_PEER_TOOL_NAMES.some(name => callerTools.includes(name)), false);
+    assert.deepEqual(callerTools, ["read", "save_agent_artifact", ...MESH_PEER_TOOL_NAMES]);
 
     const leaf = envelope({ role: "validator", selfRole: role({ tools: ["read", "bash"], defaultProfile: "luna-medium" }), selectedProfile: "luna-medium", executionProfile: { model: "openai-codex/gpt-5.6-luna", thinkingLevel: "medium", harness: "pi" } });
     assert.deepEqual(option(piLaunchDescriptor(runtime, launchInput("validator", leaf)).args, "--tools")!.split(","), ["read", "bash"]);

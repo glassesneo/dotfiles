@@ -5,7 +5,7 @@ import test from "node:test";
 import { buildLaunchEnvelope } from "../extensions_src/utilities/agent_types.ts";
 import { availableContext, publishAgentActivity } from "../extensions_src/utilities/orchestration_activity.ts";
 import { bindAgentRuntime } from "../extensions_src/utilities/orchestration_runtime.ts";
-import { readCompletionLedger } from "../extensions_src/utilities/orchestration_channel.ts";
+import { createCompletionReceipt, readCompletionLedger } from "../extensions_src/utilities/orchestration_channel.ts";
 import { acknowledgeMeshEvents, bindMeshEndpoint, markMeshEventInjected, pollMeshEvents, registerMeshSignal, setMeshEndpointOffline } from "../extensions_src/utilities/orchestration_events.ts";
 import { createTask, ensurePolicyEpoch, finishTask, initializeMesh, meshPaths, patchAgentStatus, prepareAgent, publishAgent, readPolicyEpoch, reserveMeshCapacity } from "../extensions_src/utilities/orchestration_store.ts";
 import { withTemporaryRoot as withRoot } from "./test_helpers.ts";
@@ -46,19 +46,27 @@ async function eventFixture(root: string) {
     return { mesh, epoch, definition: roles.worker, agentId, endpoint };
 }
 
-void test("routed direct completion persists one minimal follow-up event and repairs ledger-first interruption", async () => withRoot("mesh-completion-repair-", async root => {
+void test("routed direct completion persists one minimal steer event and repairs ledger-first interruption", async () => withRoot("mesh-completion-repair-", async root => {
     const fixture = await eventFixture(root);
     const completion = { endpointId: fixture.endpoint.endpointId, endpointSessionFile: fixture.endpoint.sessionFile, mode: "direct" as const };
     const task = await createTask(root, fixture.mesh.meshId, fixture.agentId, "direct completion", { requesterEndpointId: fixture.endpoint.endpointId, completion });
     await finishTask(root, fixture.mesh.meshId, task.request.taskId, { outcome: "succeeded", output: "secret output" });
     await assert.rejects(pollMeshEvents(root, fixture.mesh.meshId, fixture.endpoint, { afterLedgerPersisted: () => { throw new Error("injected materialization failure"); } }), /injected materialization failure/u);
     const [event] = await pollMeshEvents(root, fixture.mesh.meshId, fixture.endpoint);
-    assert.equal(event!.delivery, "followUp");
+    assert.equal(event!.delivery, "steer");
     assert.equal(event!.payload.route, "direct");
     assert.deepEqual((event!.payload.tasks as Array<Record<string, unknown>>).map(item => ({ taskId: item.taskId, state: item.state })), [{ taskId: task.request.taskId, state: "succeeded" }]);
     assert.doesNotMatch(JSON.stringify(event!.payload), /prompt|output|error|usage/u);
     const [again] = await pollMeshEvents(root, fixture.mesh.meshId, fixture.endpoint);
     assert.equal(again!.eventId, event!.eventId);
+}));
+
+// Given retrieval on either side of assignment persistence, completion settlement suppresses receipt-first work while retaining frozen batch payloads for ledger-first repair.
+void test("receipt ordering suppresses new assignment without corrupting frozen event repair", async () => withRoot("mesh-receipt-order-", async root => {
+    const fixture = await eventFixture(root); const completion = { endpointId: fixture.endpoint.endpointId, endpointSessionFile: fixture.endpoint.sessionFile, mode: "direct" as const };
+    const before = await createTask(root, fixture.mesh.meshId, fixture.agentId, "received before assignment", { requesterEndpointId: fixture.endpoint.endpointId, completion }); await finishTask(root, fixture.mesh.meshId, before.request.taskId, { outcome: "succeeded" }); await createCompletionReceipt(root, fixture.mesh.meshId, { endpointId: fixture.endpoint.endpointId, endpointSessionFile: fixture.endpoint.sessionFile, claimantSessionFile: fixture.endpoint.sessionFile, toolCallId: "before-assignment", toolName: "mesh_get", canonicalArguments: { taskId: before.request.taskId }, taskIds: [before.request.taskId], maxTasksPerMesh: budgets.maxTasksPerMesh }); assert.deepEqual(await pollMeshEvents(root, fixture.mesh.meshId, fixture.endpoint), []);
+    const after = await createTask(root, fixture.mesh.meshId, fixture.agentId, "received after batch", { requesterEndpointId: fixture.endpoint.endpointId, completion }); await finishTask(root, fixture.mesh.meshId, after.request.taskId, { outcome: "failed" }); await assert.rejects(pollMeshEvents(root, fixture.mesh.meshId, fixture.endpoint, { afterLedgerPersisted: () => { throw new Error("hold materialization"); } }), /hold materialization/u); await createCompletionReceipt(root, fixture.mesh.meshId, { endpointId: fixture.endpoint.endpointId, endpointSessionFile: fixture.endpoint.sessionFile, claimantSessionFile: fixture.endpoint.sessionFile, toolCallId: "after-batch", toolName: "mesh_get", canonicalArguments: { taskId: after.request.taskId }, taskIds: [after.request.taskId], maxTasksPerMesh: budgets.maxTasksPerMesh }); const repaired = await pollMeshEvents(root, fixture.mesh.meshId, fixture.endpoint); assert.deepEqual((repaired[0]!.payload.tasks as Array<{ taskId: string }>).map(task => task.taskId), [after.request.taskId]);
+    const ledger = await readCompletionLedger(root, fixture.mesh.meshId, fixture.endpoint.endpointId, fixture.endpoint.sessionFile); assert.deepEqual(ledger!.batches.flatMap(batch => batch.taskIds), [after.request.taskId]); assert.deepEqual(ledger!.receipts.flatMap(receipt => receipt.taskIds).sort(), [after.request.taskId, before.request.taskId].sort());
 }));
 
 // Given a three-task channel cohort, when the last completion, another registration, and polling genuinely contend for the mesh lock, every admitted task is assigned to exactly one eventual cohort without duplicate or loss.
