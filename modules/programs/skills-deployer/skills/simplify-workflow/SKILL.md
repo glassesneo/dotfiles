@@ -10,94 +10,130 @@ description: >-
 
 # Simplify Workflow
 
-## Purpose
+## Purpose and Authority
 
 Improve an implemented change without changing its intended behavior. The
-parent owns the requester-facing outcome, finding disposition, source edits,
-verification judgment, and stopping decision.
-
-Use `refactor-maintainability` to assess behavior preservation and whether a
-candidate belongs now. Use the single `reviewer` entrypoint for independent
-review evidence when it can materially improve the cleanup judgment. The
-reviewer decides whether reuse, simplification, efficiency, altitude, or another
-bounded lens warrants separate attention and returns one consolidated verdict.
-The parent does not require a predetermined lens count or execution sequence.
-
-## Preconditions and Scope
+parent owns the scope, integration of independent evidence, finding disposition,
+source edits, verification judgment, stopping decision, and requester-facing
+handoff.
 
 Confirm source mutation is authorized before requesting cleanup review or
-editing. If it is not, return `Outcome: blocked` with the required authority.
+editing. If it is not, return `Outcome: blocked` and identify the required
+authority. Use `refactor-maintainability` when behavior-preservation risk or
+fix-now versus defer judgment needs deeper analysis.
 
-Use the caller-supplied target. Otherwise scope the work to current worktree
-changes, including staged, unstaged, and relevant untracked content. If the
-scope is empty, return `Outcome: no-op`.
+## Scope Dossier
 
-Record the Git or request boundary, in-scope files, implementation intent,
-relevant interfaces and observable behavior, and available verification. Keep
-enough source-state evidence to recognize whether review findings have become
-stale. Review may inspect supporting code, but every cleanup candidate must
-trace back to the implemented change.
+Use the caller-supplied target. Otherwise scope the work to staged, unstaged,
+and relevant untracked worktree changes. If the scope is empty, do not run the
+review passes; return `Outcome: no-op`.
 
-## Review and Decide
+Before review, record one shared scope dossier containing:
 
-Seek concrete opportunities that reduce present maintenance cost while
-preserving behavior, including:
+- the Git or request boundary and a source-state marker;
+- in-scope files or paths and the changed-code boundary;
+- implementation intent and non-goals;
+- observable behavior, including relevant interfaces, side effects, errors,
+  ordering, persistence, permissions, concurrency, and performance;
+- available tests, designs, issues, and runtime evidence.
 
-- reuse of an existing helper, type, constant, abstraction, or repository
-  pattern that prevents duplication or semantic drift;
-- removal of unnecessary branching, state, indirection, plumbing, or copy-paste
-  variation;
-- removal of avoidable computation, I/O, retrieval, serialization, or blocking
-  work without changing observable timing or ordering;
-- a small correction to ownership, dependency direction, or abstraction level
-  justified by the current change.
+Supporting code may be inspected, but every cleanup candidate must trace to the
+implemented change. Keep the in-scope source unchanged until all four review
+results are available.
 
-Require evidence, a changed-code location, the smallest cleanup direction,
-behavior risk, and feasible verification for each material finding. Keep
-suspected correctness defects separate from cleanup candidates.
+## Four Separate Perspectives
 
-Before editing, verify findings against the current source state and merge those
-with the same root cause. The parent then disposes each candidate:
+For every non-empty scope, examine all four perspectives as separate review
+passes. A `no-op` result is valid. This fixed-four protocol is an explicit,
+workflow-scoped exception to adaptive delegation guidance.
 
-- **adopt** when evidence supports a small behavior-preserving improvement to
-  the current outcome;
-- **reject** when unsupported, duplicate, preference-only, stale, behavior
-  changing, or outside the governing goal;
-- **defer** when valuable but unnecessary for current acceptance or too broad
-  for this change;
-- **escalate** when it changes the contract, scope, or requires user-owned
-  input.
+When the execution environment provides independent contexts, run each
+perspective in a separate context with the same dossier and live source state.
+Otherwise perform four clearly separated passes in one context and disclose the
+weaker independence in the final handoff. Each pass examines only its assigned
+perspective, does not consolidate the overall review, and does not edit source.
 
-Apply only adopted candidates as small reviewable patches. A cleanup may reach
-the nearest owner and necessary callers, but defer redesign, migration,
-speculative abstraction, or changes spanning responsibilities without a
-bounded justification.
+- **Reuse**: Find reimplemented helpers, utilities, types, constants,
+  abstractions, or repository patterns. Return only candidates where reuse
+  materially reduces duplication, semantic drift, or maintenance surface.
+- **Simplification**: Find unnecessary branching, nesting, state, indirection,
+  parameter plumbing, redundant abstraction, or copy-paste variation. Return
+  only candidates that express the same behavior more directly, not style or
+  line-count preferences.
+- **Efficiency**: Find avoidable computation, I/O, duplicate retrieval,
+  serialization, blocking, or serial execution of independent work. Exclude
+  micro-optimizations and candidates that change observable timing, ordering,
+  or resource contracts.
+- **Altitude**: Check whether the change sits with the appropriate existing
+  owner and at the appropriate abstraction level. A small correction to the
+  nearest owner may qualify; cross-responsibility redesign, migration, or a new
+  generalized API must be deferred or escalated.
+
+## Perspective Result Contract
+
+Return each perspective result as Markdown with:
+
+- `Lens`: the assigned perspective;
+- `Verdict`: `findings`, `no-op`, or `blocked`;
+- `Findings`: for each material candidate, a lens-local ID, changed-code
+  location, concrete evidence and supporting-code reference, present
+  maintenance or work cost, smallest cleanup direction, behavior-preserving
+  invariant and risk, feasible verification, and confidence;
+- `Correctness escapes`: suspected defects that are not cleanup candidates, or
+  `none`;
+- `Gaps and uncertainty`: unexamined areas, unknown contracts, and staleness
+  risk.
+
+Do not report unsupported, preference-only, speculative, or untraceable
+candidates as findings.
+
+## Integrate and Edit
+
+After all four results arrive, compare the current source state with the dossier
+marker. If in-scope source changed during review, do not adopt stale findings;
+rerun all four perspectives for the affected scope against the current state.
+Keep unrelated out-of-scope changes separate and disclose them.
+
+Merge findings with the same root cause, then assign every material candidate:
+
+- **adopt** when evidence supports a small, behavior-preserving, verifiable
+  improvement that belongs to the current change;
+- **reject** when unsupported, duplicate, preference-only, stale,
+  behavior-changing, or outside the governing goal;
+- **defer** when useful but unnecessary for current acceptance or broader than
+  cleanup scope;
+- **escalate** when it changes the contract or scope or requires a user-owned
+  decision.
+
+Only the parent makes these dispositions. Apply only adopted candidates as
+small reviewable patches. Keep correctness defects, redesign, migration,
+API or schema changes, security-boundary changes, and unrelated broad cleanup
+out of the simplify edit.
 
 ## Verify and Stop
 
-Run proportionate repository-defined checks and inspect the cleanup delta
-against the pre-application state. Confirm each edit maps to an adopted
-candidate and look for behavior change, accidental edits, stale evidence, and
-scope drift. If a cleanup causes a failure, decide whether a bounded correction
-or revert is justified; add another review or check only when it can change a
-material claim.
+Run the repository-defined lowest responsible checks that can observe failures
+the cleanup could introduce. Use independent validation only when isolating
+long output or failure diagnosis would materially improve the decision. Inspect
+the final delta and confirm every edit maps to an adopted candidate without
+behavior change or scope drift.
 
-Stop when the adopted cleanup is supported by the available evidence and
-residual risk can be stated, or when a blocker makes further editing unsafe.
-Finding count, complete lens coverage, and repeated approval are not completion
-conditions.
+Stop when adopted cleanup is supported and residual risk can be stated, or when
+a blocker makes further editing unsafe.
 
 ## Final Handoff
 
 Return:
 
 - `Outcome`: changed, no-op, blocked, or failed;
-- `Scope`: reviewed boundary and files;
-- `Applied`: adopted cleanups and their evidence;
-- `Deferred, rejected, or escalated`: material candidates and reasons;
+- `Scope`: boundary and in-scope files;
+- `Review evidence`: receipt status and material results for all four
+  perspectives, plus any reduced-independence disclosure;
+- `Applied`: adopted cleanup and evidence;
+- `Deferred, rejected, escalated`: material candidates and reasons;
 - `Correctness escapes`: only when present;
-- `Verification`: commands, results, and material skipped checks;
-- `Residual risk`: unresolved failures, weak behavior evidence, stale scope, or
-  incomplete review evidence.
+- `Verification`: commands, results, and skipped checks;
+- `Residual risk`: weak behavior oracles, unavailable checks, or remaining
+  uncertainty.
 
-Do not create a durable artifact unless the user separately requests one.
+Do not create a durable artifact unless the requester separately asks for one.

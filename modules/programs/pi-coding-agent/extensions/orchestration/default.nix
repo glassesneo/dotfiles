@@ -91,10 +91,10 @@
       childExtensionContributions = [artifactExtension];
     };
     review-lens = {
-      description = "Internal focused review of one caller-supplied lens or dossier.";
+      description = "Use for independent read-only examination of one caller-supplied lens or dossier.";
       tools = ["read" "grep" "find" "ls" "bash"];
       skillOptIns = [];
-      instructions = "Independently examine only the supplied lens/dossier and return concrete evidence, severity, gaps, and uncertainty to reviewer; do not broaden or consolidate the whole review.";
+      instructions = "Independently examine only the supplied lens/dossier and return concrete evidence, impact or severity when relevant, gaps, and uncertainty to the caller; do not mutate source, broaden into or consolidate the whole review, or decide the caller's disposition.";
       defaultProfile = "terra-medium";
       contextPolicy = "project";
       childExtensionContributions = [];
@@ -130,7 +130,7 @@
   settledCallPolicy = {
     modes = {
       recon.roles = ["explorer" "reviewer" "researcher" "searcher" "gyaru"];
-      ops.roles = ["explorer" "worker" "validator" "reviewer" "researcher" "searcher" "gyaru"];
+      ops.roles = ["explorer" "worker" "validator" "reviewer" "review-lens" "researcher" "searcher" "gyaru"];
     };
     roles = {
       reviewer = {
