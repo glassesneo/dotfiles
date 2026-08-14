@@ -34,6 +34,12 @@ delib.module {
           "com.apple.swipescrolldirection" = true; # Enable natural scrolling(default to true)
           "com.apple.trackpad.scaling" = 3.0;
         };
+        CustomUserPreferences = {
+          "com.apple.symbolichotkeys".AppleSymbolicHotKeys = {
+            "32".enabled = false; # Mission Control: Ctrl + Up
+            "34".enabled = false; # Slow Mission Control
+          };
+        };
         trackpad = {
           ActuationStrength = 1;
           Clicking = false;
