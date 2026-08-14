@@ -4,7 +4,7 @@
   ...
 }:
 delib.module {
-  name = "nix-darwin.preferences.input";
+  name = "system.input";
 
   options = delib.singleEnableOption pkgs.stdenv.isDarwin;
 

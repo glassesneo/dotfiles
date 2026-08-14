@@ -4,7 +4,7 @@
   ...
 }:
 delib.module {
-  name = "nix-darwin.preferences.accessibility.hot-corner";
+  name = "system.hot-corners";
 
   options = delib.singleEnableOption pkgs.stdenv.isDarwin;
 

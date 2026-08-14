@@ -4,7 +4,7 @@
   ...
 }:
 delib.module {
-  name = "nix-darwin.preferences.dock";
+  name = "system.dock";
 
   options = delib.singleEnableOption pkgs.stdenv.isDarwin;
 

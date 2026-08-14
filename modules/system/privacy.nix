@@ -4,7 +4,7 @@
   ...
 }:
 delib.module {
-  name = "nix-darwin.preferences.privacy";
+  name = "system.privacy";
 
   options = delib.singleEnableOption pkgs.stdenv.isDarwin;
 

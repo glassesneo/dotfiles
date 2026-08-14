@@ -22,7 +22,7 @@ delib.host {
         exa-api-key = {};
       };
     };
-    nix-darwin.preferences = {
+    system = {
       appearance.enable = false;
       dock.enable = false;
       feedback.enable = false;
@@ -30,6 +30,7 @@ delib.host {
       language.enable = false;
       spaces.enable = false;
       accessibility.zoom.enable = false;
+      user.uid = 502;
     };
     programs = {
       orbstack.enable = false;
@@ -42,7 +43,6 @@ delib.host {
       };
       sketchybar.enable = false;
     };
-    user.uid = 502;
   };
 
   home = {

@@ -55,14 +55,14 @@ in
     }: {
       # Rift requires macOS "Displays have separate Spaces" enabled (i.e.
       # com.apple.spaces.spans-displays = 0). That preference is owned by
-      # nix-darwin.preferences.spaces, which writes the key when enabled. This
-      # assertion guards only the preference module's enable flag — it does not
-      # verify the final key/value. If the preferences module changes which key
-      # it writes, this check must be tightened.
+      # system.spaces, which writes the key when enabled. This assertion guards
+      # only the policy module's enable flag — it does not verify the final
+      # key/value. If the module changes which key it writes, this check must be
+      # tightened.
       assertions = [
         {
-          assertion = myconfig.nix-darwin.preferences.spaces.enable;
-          message = "services.rift requires nix-darwin.preferences.spaces.enable = true so that 'Displays have separate Spaces' (com.apple.spaces.spans-displays = 0) stays applied.";
+          assertion = myconfig.system.spaces.enable;
+          message = "services.rift requires system.spaces.enable = true so that 'Displays have separate Spaces' (com.apple.spaces.spans-displays = 0) stays applied.";
         }
       ];
 

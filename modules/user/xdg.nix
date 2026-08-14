@@ -1,8 +1,8 @@
 {delib, ...}:
 delib.module {
-  name = "xdg";
+  name = "user.xdg";
 
-  options.xdg = with delib; {
+  options.user.xdg = with delib; {
     enable = boolOption true;
   };
 

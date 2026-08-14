@@ -4,7 +4,7 @@
   ...
 }:
 delib.module {
-  name = "nix-darwin.preferences.appearance";
+  name = "system.appearance";
 
   options = delib.singleEnableOption pkgs.stdenv.isDarwin;
 

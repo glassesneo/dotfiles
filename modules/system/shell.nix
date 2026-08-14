@@ -4,9 +4,9 @@
   ...
 }:
 delib.module {
-  name = "shell";
+  name = "system.shell";
 
-  options.shell.enable = delib.boolOption true;
+  options.system.shell.enable = delib.boolOption true;
 
   darwin.ifEnabled = {myconfig, ...}: {
     users.users.${myconfig.constants.username}.shell = pkgs.zsh;

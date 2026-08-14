@@ -1,6 +1,6 @@
 {delib, ...}:
 delib.module {
-  name = "user";
+  name = "system.user";
 
   options = with delib;
     moduleOptions ({myconfig, ...}: {

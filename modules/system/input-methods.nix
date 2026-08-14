@@ -4,7 +4,7 @@
   ...
 }:
 delib.module {
-  name = "nix-darwin.system.ime";
+  name = "system.input-methods";
 
   options = with delib;
     moduleOptions {

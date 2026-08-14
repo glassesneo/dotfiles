@@ -15,11 +15,20 @@ or building a configuration that depends on it.
 - `hosts/` owns machine facts and host-only bindings, including platform,
   capabilities, tier, hardware, and explicit machine policy.
 - `modules/config/` owns shared data, registries, constants, and helper exports.
-- `modules/programs/` owns user-facing program integration.
-- `modules/services/` owns desktop and long-running service integration.
-- `modules/toplevel/` owns broad system/user policy and shared integration
-  surfaces.
+- `modules/system/` owns host-wide OS policy and translates that policy to
+  platform-specific system options.
+- `modules/user/` owns broad user-environment policy that can be applied fully
+  by standalone Home Manager.
+- `modules/programs/` owns application integration.
+- `modules/services/` owns desktop, background, and long-running runtime service
+  integration.
+- `modules/toplevel/` owns module-system adapters and genuinely cross-cutting
+  final integration surfaces.
 - `rices/` owns ricing-oriented desktop-experience policy and selection data.
+
+A directory identifies concern ownership, not an evaluation layer. Standalone
+Home Manager includes a module's `home` output; `darwin` and `nixos` outputs
+remain with the same concern owner when that concern also needs system wiring.
 
 The directory identifies the physical owner; the role below identifies what an
 expression is doing.
@@ -40,7 +49,7 @@ expression is doing.
   implement the selected behavior.
 
 For example, AquaSKK contributes input-source entries through
-`modules/toplevel/nix-darwin/system/ime.nix`; the IME module alone writes the
+`modules/system/input-methods.nix`; the input-methods module alone writes the
 shared HIToolbox arrays.
 
 ## Rice and feature boundary
@@ -84,10 +93,12 @@ Classify each declarative change as one of these:
 
 ## Placement guide
 
-Put machine-only facts in `hosts/`, reusable program or service behavior in its
-feature module, shared pure data in `modules/config/`, broad or multi-feature
-integration in the appropriate aggregation owner, and rice selections in
-`rices/`. A child module is useful only when disabling the child represents a
-meaningful choice and leaves its parent valid.
+Put machine-only facts in `hosts/`, host-wide OS policy in `modules/system/`,
+standalone Home Manager user policy in `modules/user/`, reusable application or
+service behavior in its concern owner, shared pure data in `modules/config/`,
+and rice selections in `rices/`. Put module-system adapters and only genuinely
+cross-cutting final integration in `modules/toplevel/`. A child module is useful
+only when disabling the child represents a meaningful choice and leaves its
+parent valid.
 
 Related policy: `docs/documentation-policy.md`.

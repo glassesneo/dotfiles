@@ -39,7 +39,7 @@ defaults read jp.sourceforge.inputmethod.aquaskk user_dictionary_path
 
 The AquaSKK feature contributes its enabled, selected, and history entries to
 the central IME aggregation interface in
-`modules/toplevel/nix-darwin/system/ime.nix`. That module is the sole writer of
+`modules/system/input-methods.nix`. That module is the sole writer of
 the shared `com.apple.HIToolbox` arrays.
 
 After activation, log out and back in so macOS discovers the input method. If

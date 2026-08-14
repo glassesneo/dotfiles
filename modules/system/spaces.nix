@@ -4,7 +4,7 @@
   ...
 }:
 delib.module {
-  name = "nix-darwin.preferences.spaces";
+  name = "system.spaces";
 
   options = delib.singleEnableOption pkgs.stdenv.isDarwin;
 

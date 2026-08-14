@@ -4,7 +4,7 @@
   ...
 }:
 delib.module {
-  name = "nix-darwin.system.security";
+  name = "system.security";
 
   options = delib.singleEnableOption pkgs.stdenv.isDarwin;
 

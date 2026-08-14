@@ -4,7 +4,7 @@
   ...
 }:
 delib.module {
-  name = "nix-darwin.preferences.files";
+  name = "system.files";
 
   options = delib.singleEnableOption pkgs.stdenv.isDarwin;
 

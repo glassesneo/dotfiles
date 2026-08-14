@@ -132,9 +132,9 @@ delib.module {
   };
 
   # Declare AquaSKK-owned input-source entries via the central HIToolbox
-  # aggregation interface in ime.nix. This replaces the former best-effort
+  # aggregation interface in system/input-methods.nix. This replaces the former best-effort
   # activation-time `defaults write ... -array-add` registration.
-  myconfig.ifEnabled.nix-darwin.system.ime = {
+  myconfig.ifEnabled.system.input-methods = {
     extraEnabledInputSources = [
       {
         "Bundle ID" = "jp.sourceforge.inputmethod.aquaskk";

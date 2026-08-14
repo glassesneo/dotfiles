@@ -30,7 +30,47 @@ in
   delib.module {
     name = "nix";
 
-    nixos.always = shared;
     home.always = shared;
-    darwin.always = shared;
+
+    darwin.always =
+      shared
+      // {
+        nix =
+          shared.nix
+          // {
+            gc = {
+              automatic = true;
+              interval = {
+                Weekday = 0;
+                Hour = 0;
+                Minute = 0;
+              };
+              options = "--delete-older-than 3d";
+            };
+
+            optimise = {
+              automatic = true;
+              interval = {
+                Weekday = 0;
+                Hour = 1;
+                Minute = 0;
+              };
+            };
+          };
+      };
+
+    nixos.always =
+      shared
+      // {
+        nix =
+          shared.nix
+          // {
+            gc = {
+              automatic = true;
+              options = "--delete-older-than 3d";
+            };
+
+            optimise.automatic = true;
+          };
+      };
   }

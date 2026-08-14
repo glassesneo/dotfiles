@@ -1,12 +1,20 @@
 {
   delib,
+  host,
   pkgs,
   ...
 }:
 delib.module {
-  name = "nix-darwin.system.host";
+  name = "system.host";
 
   options = delib.singleEnableOption pkgs.stdenv.isDarwin;
+
+  darwin.always.networking = {
+    hostName = host.name;
+    computerName = host.name;
+  };
+
+  nixos.always.networking.hostName = host.name;
 
   darwin.ifEnabled = {myconfig, ...}: {
     system = {

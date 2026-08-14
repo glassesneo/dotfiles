@@ -4,7 +4,7 @@
   ...
 }:
 delib.module {
-  name = "nix-darwin.preferences.language";
+  name = "system.language";
 
   options = delib.singleEnableOption pkgs.stdenv.isDarwin;
 

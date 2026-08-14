@@ -11,5 +11,5 @@ delib.host {
     seiran-vm0.os = "linux";
     seiran-vm1.os = "darwin";
   };
-  myconfig.user.uid = 501;
+  myconfig.system.user.uid = 501;
 }

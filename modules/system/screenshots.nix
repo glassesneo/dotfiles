@@ -4,7 +4,7 @@
   ...
 }:
 delib.module {
-  name = "nix-darwin.preferences.screenshots";
+  name = "system.screenshots";
 
   options = delib.singleEnableOption pkgs.stdenv.isDarwin;
 

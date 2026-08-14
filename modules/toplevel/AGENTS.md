@@ -6,7 +6,7 @@
 - Host-specific declarations, if introduced, belong to the host owner rather than this shared module.
 - Operational key and encrypted-source details belong in `docs/secrets-key-rotation.md`.
 
-## Aggregation Ownership
+## Adapter and Integration Ownership
 
-- Toplevel modules own broad system/user aggregation and shared upstream integrations, not feature-local behavior.
-- Feature modules own their Darwin-specific policy and contribute through typed aggregation interfaces instead of writing centralized system lists directly.
+- Keep only module-system adapters and genuinely cross-cutting final integration in this subtree.
+- Put concern policy and subsystem-local aggregation with the owner defined by `docs/denix-architecture.md`.

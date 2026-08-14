@@ -5,7 +5,7 @@
   ...
 }:
 delib.module {
-  name = "fonts";
+  name = "user.fonts";
 
   options = delib.singleEnableOption host.guiShellFeatured;
 

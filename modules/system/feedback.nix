@@ -4,7 +4,7 @@
   ...
 }:
 delib.module {
-  name = "nix-darwin.preferences.feedback";
+  name = "system.feedback";
 
   options = delib.singleEnableOption pkgs.stdenv.isDarwin;
 
