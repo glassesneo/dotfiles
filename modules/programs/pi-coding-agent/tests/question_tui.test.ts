@@ -11,10 +11,6 @@ const theme = {
     bg(_color: string, text: string) { return text; },
     bold(text: string) { return text; },
 } as Theme;
-const manager = { getKeys(action: string) { return ({
-    "tui.select.confirm": ["enter"], "tui.select.up": ["up"], "tui.select.down": ["down"],
-    "tui.input.submit": ["enter"], "tui.input.newLine": ["shift+enter", "ctrl+j"],
-} as Record<string, string[]>)[action] ?? []; } } as never;
 const keys = { down: "\u001b[B", up: "\u001b[A", tab: "\t", shiftTab: "\u001b[Z", enter: "\r", escape: "\u001b", space: " ", ctrlJ: "\n", ctrlC: "\u0003" };
 const testKeymapConfig = {
     "question.common": { "next-question": ["tab"], "previous-question": ["shift+tab"], back: ["escape"], cancel: ["ctrl+c"] },
@@ -30,7 +26,7 @@ const single: QuestionItem = { id: "single", prompt: "Choose one", kind: "single
 function harness(questions: readonly QuestionItem[], signal?: AbortSignal, policy?: DecisionFlowPolicy, renderedTheme: Theme = theme) {
     const results: QuestionResultDetails[] = [];
     const tui = { terminal: { rows: 24, columns: 80 }, requestRender() {} } as TUI;
-    const component = new DecisionComponent({ tui, theme: renderedTheme, keybindings: manager, keymapConfig: testKeymapConfig, questions, policy, signal, done: result => { results.push(result); } });
+    const component = new DecisionComponent({ tui, theme: renderedTheme, keymapConfig: testKeymapConfig, questions, policy, signal, done: result => { results.push(result); } });
     component.focused = true;
     return { component, results };
 }
@@ -284,10 +280,10 @@ void test("completion, abort, and disposal remove listeners and finish once", ()
     const other = new AbortController(); const disposed = harness([single], other.signal); disposed.component.dispose(); assert.equal(getEventListeners(other.signal, "abort").length, 0);
 });
 
-void test("TUI adapter injects the app keybinding manager", async () => {
+void test("TUI adapter completes the custom decision flow", async () => {
     const result = await runTuiDecisionFlow({ ui: { async custom(factory) {
         let resolved: QuestionResultDetails | undefined;
-        const component = await factory({ terminal: { rows: 24, columns: 80 }, requestRender() {} } as TUI, theme, manager, value => { resolved = value as QuestionResultDetails; });
+        const component = await factory({ terminal: { rows: 24, columns: 80 }, requestRender() {} } as TUI, theme, {} as never, value => { resolved = value as QuestionResultDetails; });
         component.handleInput?.(keys.enter); component.handleInput?.(keys.enter); return resolved as never;
     } } }, [single]);
     assert.equal(result.status, "submitted");

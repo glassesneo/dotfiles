@@ -1,4 +1,3 @@
-import type { KeybindingsManager } from "@earendil-works/pi-coding-agent";
 import { matchesKey, type KeyId } from "@earendil-works/pi-tui";
 import { canonicalKeyId, isValidKeyId } from "./private_key_id.ts";
 import { keyLabel, loadFeatureKeybindings } from "./extension_keybindings.ts";
@@ -57,7 +56,7 @@ export function loadQuestionKeymapConfig(agentDir?: string): { config: QuestionK
     } };
 }
 
-export function resolveQuestionKeymap(_manager: Pick<KeybindingsManager, "getKeys">, config: QuestionKeymapConfig = DEFAULT_CONFIG, path = "extension-keybindings.json"): ResolvedQuestionKeymap {
+export function resolveQuestionKeymap(config: QuestionKeymapConfig = DEFAULT_CONFIG, path = "extension-keybindings.json"): ResolvedQuestionKeymap {
     validateQuestionKeymapConfig(config, path);
     const result = Object.fromEntries(questionContexts.map(context => [context, { ...DEFAULT_CONFIG[context], ...config[context] }])) as ResolvedQuestionKeymap;
     for (const context of questionContexts.filter(value => value !== "question.common")) {

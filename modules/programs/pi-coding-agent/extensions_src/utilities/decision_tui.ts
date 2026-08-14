@@ -1,4 +1,4 @@
-import type { ExtensionUIContext, KeybindingsManager, Theme } from "@earendil-works/pi-coding-agent";
+import type { ExtensionUIContext, Theme } from "@earendil-works/pi-coding-agent";
 import { Editor, truncateToWidth, visibleWidth, wrapTextWithAnsi, type Component, type EditorTheme, type Focusable, type TUI } from "@earendil-works/pi-tui";
 import {
     decisionNoteRequirement,
@@ -28,7 +28,6 @@ interface ChoiceDraft {
 interface TextDraft { value: string; }
 type QuestionDraft = ChoiceDraft | TextDraft;
 type Mode = "question" | "note" | "write-in" | "review";
-type NoteContext = "response";
 interface TuiQuestionContext { ui: Pick<ExtensionUIContext, "custom">; }
 
 function editorTheme(theme: Theme): EditorTheme {
@@ -99,7 +98,6 @@ export class DecisionComponent implements Component, Focusable {
     #writeInDraftSnapshot?: ChoiceDraft;
     #noteSnapshot?: string;
     #noteTarget?: string;
-    #noteContext: NoteContext = "response";
     #submitAfterNote = false;
     #validation?: string;
     #cachedLines?: string[];
@@ -107,11 +105,11 @@ export class DecisionComponent implements Component, Focusable {
     #finished = false;
     #focused = false;
 
-    constructor(options: { tui: TUI; theme: Theme; keybindings: Pick<KeybindingsManager, "getKeys">; keymapConfig?: Parameters<typeof resolveQuestionKeymap>[1]; keymapPath?: string; questions: readonly QuestionItem[]; progress?: QuestionProgress; policy?: DecisionFlowPolicy; signal?: AbortSignal; done: (result: QuestionResultDetails) => void; }) {
+    constructor(options: { tui: TUI; theme: Theme; keymapConfig?: Parameters<typeof resolveQuestionKeymap>[0]; keymapPath?: string; questions: readonly QuestionItem[]; progress?: QuestionProgress; policy?: DecisionFlowPolicy; signal?: AbortSignal; done: (result: QuestionResultDetails) => void; }) {
         this.#tui = options.tui; this.#theme = options.theme; this.#questions = options.questions;
         this.#progress = options.progress ?? new QuestionProgress(options.questions); this.#done = options.done;
         this.#policy = options.policy;
-        this.#keymap = resolveQuestionKeymap(options.keybindings, options.keymapConfig, options.keymapPath);
+        this.#keymap = resolveQuestionKeymap(options.keymapConfig, options.keymapPath);
         this.#editor = new Editor(options.tui, editorTheme(options.theme)); this.#editor.disableSubmit = true;
         for (const question of options.questions) this.#drafts.set(question.id, draftFrom(question, this.#progress.responseFor(question)));
         this.#openQuestion(false);
@@ -186,7 +184,7 @@ export class DecisionComponent implements Component, Focusable {
         if (choice === undefined) throw new Error("Focused choice is the write-in row");
         return choice;
     }
-    #noteRequirement(context: NoteContext = this.#noteContext, option?: QuestionOption): DecisionNoteRequirement {
+    #noteRequirement(option?: QuestionOption): DecisionNoteRequirement {
         const question = this.#question();
         const focused = this.#focusedChoice();
         const target = option ?? (this.#noteTarget === undefined
@@ -194,10 +192,9 @@ export class DecisionComponent implements Component, Focusable {
             : question.options?.find(candidate => candidate.value === this.#noteTarget));
         return decisionNoteRequirement(this.#policy, question, target);
     }
-    #openNote(options: { submitAfterSave?: boolean; context?: NoteContext } = {}): void {
+    #openNote(options: { submitAfterSave?: boolean } = {}): void {
         const draft = this.#choiceDraft();
         const focused = this.#focusedChoice();
-        this.#noteContext = options.context ?? "response";
         this.#noteTarget = focused.value;
         this.#noteDraftSnapshot = cloneDraft(draft) as ChoiceDraft;
         this.#noteSnapshot = draft.optionNotes.get(this.#noteTarget);
@@ -227,7 +224,7 @@ export class DecisionComponent implements Component, Focusable {
         }
         const submit = save && this.#submitAfterNote;
         this.#noteDraftSnapshot = undefined; this.#noteSnapshot = undefined; this.#noteTarget = undefined;
-        this.#submitAfterNote = false; this.#noteContext = "response"; this.#mode = "question";
+        this.#submitAfterNote = false; this.#mode = "question";
         this.#validation = undefined; this.#syncEditorFocus();
         if (submit) this.#commit(); else this.#refresh();
     }
@@ -312,7 +309,7 @@ export class DecisionComponent implements Component, Focusable {
             const focusedOption = focused === undefined ? undefined : question.options?.find(candidate => candidate.value === focused.value);
             if (focused !== undefined && decisionNoteRequirement(this.#policy, question, focusedOption) === "required"
                 && (!draft.selected.has(focused.value) || draft.optionNotes.get(focused.value) === undefined)) {
-                this.#openNote({ context: "response" });
+                this.#openNote();
                 return undefined;
             }
             if (draft.selected.size === 0 && draft.writeIn === undefined) {
@@ -323,7 +320,7 @@ export class DecisionComponent implements Component, Focusable {
                 if (!draft.selected.has(option.value)) continue;
                 if (decisionNoteRequirement(this.#policy, question, option) === "required" && draft.optionNotes.get(option.value) === undefined) {
                     draft.focusIndex = index;
-                    this.#openNote({ submitAfterSave: true, context: "response" });
+                    this.#openNote({ submitAfterSave: true });
                     return undefined;
                 }
             }
@@ -339,7 +336,7 @@ export class DecisionComponent implements Component, Focusable {
         const option = question.options?.find(candidate => candidate.value === value);
         if (decisionNoteRequirement(this.#policy, question, option) === "required" && draft.optionNotes.get(value) === undefined) {
             draft.focusIndex = Math.max(0, (question.options ?? []).findIndex(candidate => candidate.value === value));
-            this.#openNote({ submitAfterSave: true, context: "response" });
+            this.#openNote({ submitAfterSave: true });
             return undefined;
         }
         const note = draft.optionNotes.get(value);
@@ -399,8 +396,8 @@ export class DecisionComponent implements Component, Focusable {
         if (action === "back") return this.#back(); if (action === "move-up") return this.#moveChoice(-1); if (action === "move-down") return this.#moveChoice(1);
         if (action === "select-and-note" && this.#question().kind !== "text") {
             const choice = this.#focusedChoice();
-            if (this.#noteRequirement("response", this.#question().options?.find(option => option.value === choice.value)) !== "none") {
-                return this.#openNote({ submitAfterSave: this.#question().kind === "single", context: "response" });
+            if (this.#noteRequirement(this.#question().options?.find(option => option.value === choice.value)) !== "none") {
+                return this.#openNote({ submitAfterSave: this.#question().kind === "single" });
             }
         }
         if (action === "write-in" && this.#question().kind !== "text" && this.#allowWriteIn()) return this.#openWriteIn();
@@ -504,7 +501,7 @@ export class DecisionComponent implements Component, Focusable {
     }
     #renderEditor(lines: string[], width: number, label: string): void { appendWrapped(lines, width, this.#theme.fg("accent", this.#theme.bold(label)), " "); for (const line of this.#editor.render(Math.max(1, width - 1))) lines.push(width > 1 ? ` ${line}` : line); }
     #renderNoteEditor(lines: string[], width: number): void {
-        const presentation = notePresentation(this.#policy, this.#question(), this.#noteContext);
+        const presentation = notePresentation(this.#policy, this.#question(), "response");
         const fallback = this.#noteRequirement() === "required" ? "Required note for this option" : "Optional note for this option";
         this.#renderEditor(lines, width, presentation.prompt ?? fallback);
         if (presentation.placeholder) appendWrapped(lines, width, this.#theme.fg("dim", presentation.placeholder), " ");
@@ -552,7 +549,7 @@ export class DecisionComponent implements Component, Focusable {
 export async function runTuiDecisionFlow(context: TuiQuestionContext, questions: readonly QuestionItem[], signal?: AbortSignal, policy?: DecisionFlowPolicy): Promise<QuestionResultDetails> {
     const progress = new QuestionProgress(questions); if (signal?.aborted) return progress.cancelled();
     const loaded = loadQuestionKeymapConfig();
-    return context.ui.custom<QuestionResultDetails>((tui, theme, keybindings, done) => new DecisionComponent({ tui, theme, keybindings, keymapConfig: loaded.config, keymapPath: loaded.path, questions, progress, policy, signal, done }));
+    return context.ui.custom<QuestionResultDetails>((tui, theme, _keybindings, done) => new DecisionComponent({ tui, theme, keymapConfig: loaded.config, keymapPath: loaded.path, questions, progress, policy, signal, done }));
 }
 
 export const runTuiQuestionFlow = runTuiDecisionFlow;
