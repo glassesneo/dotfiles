@@ -27,6 +27,11 @@ delib.rice {
         enable = true;
         transparent = true;
       };
+      spicetify.theme = {
+        enable = true;
+        colorScheme = "mocha";
+        accentColor = "red";
+      };
     };
 
     services.jankyborders = {
