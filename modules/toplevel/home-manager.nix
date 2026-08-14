@@ -24,6 +24,14 @@ in
     home.always = {myconfig, ...}: let
       inherit (myconfig.constants) username;
     in {
+      targets.darwin = {
+        linkApps.enable = false;
+
+        copyApps = {
+          enable = true;
+          directory = "Applications/Home Manager Apps";
+        };
+      };
       home = {
         inherit username;
         homeDirectory =
