@@ -18,23 +18,39 @@
     () (multi rmet @rift-rcmd-arm-open) break
   )
 
-  rift-focus-left  (cmd "@riftCli@" "execute" "window" "focus" "left")
-  rift-focus-down  (cmd "@riftCli@" "execute" "window" "focus" "down")
-  rift-focus-up    (cmd "@riftCli@" "execute" "window" "focus" "up")
-  rift-focus-right (cmd "@riftCli@" "execute" "window" "focus" "right")
+  ;; Swallow plain Command-H while preserving Command chords that add another
+  ;; modifier and the separate double-Command Rift navigation flow.
+  cmd-h-guard (switch
+    ((and
+       (or (input real lmet) (input real rmet))
+       (not (or (input real lctl) (input real rctl) (input real lalt) (input real ralt) (input real lsft) (input real rsft)))
+     ))
+      XX
+      break
+    ()
+      h
+      break
+  )
 
-  rift-move-left  (cmd "@riftCli@" "execute" "layout" "move-node" "left")
-  rift-move-down  (cmd "@riftCli@" "execute" "layout" "move-node" "down")
-  rift-move-up    (cmd "@riftCli@" "execute" "layout" "move-node" "up")
-  rift-move-right (cmd "@riftCli@" "execute" "layout" "move-node" "right")
+  ;; Private Kanata -> Rift protocol. F14-F17 encode left/down/up/right;
+  ;; modifiers distinguish focus, move, and join. F18-F20 encode commands.
+  rift-focus-left  C-M-f14
+  rift-focus-down  C-M-f15
+  rift-focus-up    C-M-f16
+  rift-focus-right C-M-f17
 
-  rift-join-left  (cmd "@riftCli@" "execute" "layout" "join-window" "left")
-  rift-join-down  (cmd "@riftCli@" "execute" "layout" "join-window" "down")
-  rift-join-up    (cmd "@riftCli@" "execute" "layout" "join-window" "up")
-  rift-join-right (cmd "@riftCli@" "execute" "layout" "join-window" "right")
-  rift-toggle-fullscreen-within-gaps (cmd "@riftCli@" "execute" "window" "toggle-fullscreen-within-gaps")
-  rift-center-selection (cmd "@riftCli@" "execute" "layout" "center-selection")
-  rift-toggle-stack (cmd "@riftCli@" "execute" "layout" "toggle-stack")
+  rift-move-left  C-S-M-f14
+  rift-move-down  C-S-M-f15
+  rift-move-up    C-S-M-f16
+  rift-move-right C-S-M-f17
+
+  rift-join-left  C-A-M-f14
+  rift-join-down  C-A-M-f15
+  rift-join-up    C-A-M-f16
+  rift-join-right C-A-M-f17
+  rift-toggle-fullscreen-within-gaps C-A-S-M-f18
+  rift-center-selection C-A-S-M-f19
+  rift-toggle-stack C-A-S-M-f20
 
   rift-join-hold (layer-while-held rift-join)
 
@@ -56,8 +72,8 @@
   )
 )
 
-;; Startup-selected sparse overlay for rift. All unspecified keys transparently
-;; fall back to the canonical first-defined layer in profiles/macbook-us.kbd.
+;; Startup-selected sparse overlay for Rift. All unspecified keys transparently
+;; fall back to the canonical first-defined layer in the selected Kanata profile.
 (deflayermap (rift-base)
   c c
   h @cmd-h-guard

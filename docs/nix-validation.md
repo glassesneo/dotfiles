@@ -43,6 +43,7 @@ Current focused check owners are:
 
 - `pi-customizations`: Pi TypeScript typechecking, linting, and admitted Node behavioral tests;
 - `configuration-contracts` on `aarch64-darwin`: cross-owner Nix configuration projection and semantic consumer validation;
+- `kanata-configs` on `aarch64-darwin`: pinned Kanata consumer validation of the final Rift-enabled and Rift-disabled generated root configurations;
 - `sketchybar-workspace-adapter-tests` on `aarch64-darwin`: workspace-provider normalization behavior;
 - `sketchybar-media-hover-tests` on `aarch64-darwin`: media hover state transitions and concurrency;
 - `repository-consistency`: repository-owned path, documentation-link, and Skill-package integrity;

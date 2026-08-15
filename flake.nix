@@ -67,6 +67,9 @@
           inherit inputs moduleSystem homeManagerUser;
         };
       };
+
+    darwinConfigurations =
+      filterConfigurationsByHostNames ["seiran" "seiran-vm1"] (mkConfigurations "darwin");
   in
     flake-parts.lib.mkFlake {inherit inputs;} {
       imports = [inputs.treefmt-nix.flakeModule];
@@ -83,8 +86,7 @@
         nixosConfigurations = {};
         homeConfigurations =
           filterConfigurationsByHostNames ["seiran" "seiran-vm1"] (mkConfigurations "home");
-        darwinConfigurations =
-          filterConfigurationsByHostNames ["seiran" "seiran-vm1"] (mkConfigurations "darwin");
+        inherit darwinConfigurations;
       };
 
       # ----------------------------------------------------------------
@@ -254,6 +256,24 @@
                 runHook postInstall
               '';
             };
+
+            kanata-configs = let
+              configurations = {
+                rift-enabled = darwinConfigurations.seiran.config.services.kanata;
+                rift-disabled = darwinConfigurations.seiran-clean.config.services.kanata;
+              };
+              checkCommands = lib.concatMapStringsSep "\n" (name: let
+                configuration = configurations.${name};
+              in ''
+                echo "Checking ${name} Kanata configuration"
+                ${lib.getExe configuration.package} --check --cfg ${configuration.configSource}
+              '') (builtins.attrNames configurations);
+            in
+              pkgs.runCommand "kanata-configs" {} ''
+                set -eu
+                ${checkCommands}
+                touch "$out"
+              '';
 
             sketchybar-workspace-adapter-tests =
               pkgs.runCommand "sketchybar-workspace-adapter-tests" {

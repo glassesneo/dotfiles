@@ -77,6 +77,27 @@ app_rules = [
 move = "Alt + Shift"
 
 [keys]
+# Private Kanata -> Rift protocol. F14-F17 encode left/down/up/right;
+# modifiers distinguish focus, move, and join. F18-F20 encode commands.
+"Ctrl + Meta + F14" = { move_focus = "left" }
+"Ctrl + Meta + F15" = { move_focus = "down" }
+"Ctrl + Meta + F16" = { move_focus = "up" }
+"Ctrl + Meta + F17" = { move_focus = "right" }
+
+"Ctrl + Shift + Meta + F14" = { move_node = "left" }
+"Ctrl + Shift + Meta + F15" = { move_node = "down" }
+"Ctrl + Shift + Meta + F16" = { move_node = "up" }
+"Ctrl + Shift + Meta + F17" = { move_node = "right" }
+
+"Ctrl + Alt + Meta + F14" = { join_window = "left" }
+"Ctrl + Alt + Meta + F15" = { join_window = "down" }
+"Ctrl + Alt + Meta + F16" = { join_window = "up" }
+"Ctrl + Alt + Meta + F17" = { join_window = "right" }
+
+"Ctrl + Alt + Shift + Meta + F18" = "toggle_fullscreen_within_gaps"
+"Ctrl + Alt + Shift + Meta + F19" = "center_selection"
+"Ctrl + Alt + Shift + Meta + F20" = "toggle_stack"
+
 "Alt + 1" = { switch_to_workspace = 0 }
 "Alt + 2" = { switch_to_workspace = 1 }
 "Alt + 3" = { switch_to_workspace = 2 }

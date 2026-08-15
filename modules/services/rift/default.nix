@@ -53,6 +53,12 @@ in
       myconfig,
       ...
     }: {
+      myconfig.services.kanata.integrations.rift = {
+        enable = true;
+        fragment = ./kanata.kbd;
+        startupBaseLayer = "rift-base";
+      };
+
       # Rift requires macOS "Displays have separate Spaces" enabled (i.e.
       # com.apple.spaces.spans-displays = 0). That preference is owned by
       # system.spaces, which writes the key when enabled. This assertion guards

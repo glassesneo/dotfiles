@@ -4,9 +4,26 @@
   inputs,
   lib,
   pkgs,
-  windowManager,
   ...
 }: let
+  integrationType = lib.types.submodule {
+    options = {
+      enable = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = "Whether to include this external-software integration.";
+      };
+      fragment = lib.mkOption {
+        type = lib.types.path;
+        description = "Kanata fragment owned by the integrated software.";
+      };
+      startupBaseLayer = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Optional sparse base layer selected when this integration is enabled.";
+      };
+    };
+  };
   profiles = {
     macbook-us = {
       config = ./profiles/macbook-us.kbd;
@@ -23,6 +40,7 @@ in
           && myconfig.services.kanata.profile != null
         );
         profile = allowNull (enumOption (builtins.attrNames profiles) null);
+        integrations = attrsOfOption integrationType {};
       });
 
     darwin.always = {
@@ -31,32 +49,21 @@ in
       ];
     };
 
-    darwin.ifEnabled = {
-      cfg,
-      myconfig,
-      ...
-    }: let
+    darwin.ifEnabled = {cfg, ...}: let
       selectedProfile = cfg.profile;
       include = path: "(include \"${path}\")";
       selectedProfileConfig = profiles.${selectedProfile}.config;
-      # Keep injections declarative so future tool integrations can add one
-      # entry here and reuse the same root-config assembly flow. Injections may
-      # add layers and request a startup-selected base layer, but the profile
-      # owns the canonical defsrc/base structure.
-      injections = [
-        {
-          name = "rift";
-          enabled = windowManager.isRift;
-          startupBaseLayer = "rift-base";
-          rootFragment = pkgs.replaceVars ./injections/rift.kbd {
-            riftCli = windowManager.rift.cli;
-          };
-        }
-      ];
-      enabledInjections = lib.filter (injection: injection.enabled) injections;
+      enabledIntegrationNames = lib.filter (
+        name: cfg.integrations.${name}.enable
+      ) (builtins.attrNames cfg.integrations);
+      enabledIntegrations =
+        map (
+          name: cfg.integrations.${name}
+        )
+        enabledIntegrationNames;
       enabledStartupBaseLayers = lib.unique (
         lib.filter (layer: layer != null) (
-          map (injection: injection.startupBaseLayer or null) enabledInjections
+          map (integration: integration.startupBaseLayer) enabledIntegrations
         )
       );
       selectedStartupBaseLayer =
@@ -77,9 +84,7 @@ in
           ./common.kbd
           selectedProfileConfig
         ]
-        ++ map (injection: injection.rootFragment) (
-          lib.filter (injection: injection.rootFragment != null) enabledInjections
-        )
+        ++ map (integration: integration.fragment) enabledIntegrations
         ++ lib.optional (startupLayerFragment != null) startupLayerFragment;
       effectiveConfigSource =
         pkgs.writeText "${selectedProfile}-generated.kbd"
@@ -88,11 +93,10 @@ in
             "(defcfg"
             "  process-unmapped-keys yes"
             # Keep the canonical profile base as the first defined layer so
-            # sparse injection overlays can transparently inherit it.
+            # sparse integration overlays can transparently inherit it.
             "  delegate-to-first-layer yes"
             "  concurrent-tap-hold yes"
             "  chords-v2-min-idle 5"
-            "  danger-enable-cmd yes"
           ]
           ++ lib.optional (selectedStartupBaseLayer != null) "  alias-to-trigger-on-load kanata-init-layer"
           ++ [
@@ -104,7 +108,7 @@ in
       assertions = [
         {
           assertion = builtins.length enabledStartupBaseLayers <= 1;
-          message = "services.kanata profile ${selectedProfile} has multiple injection startup base layers enabled at once: ${lib.concatStringsSep ", " enabledStartupBaseLayers}";
+          message = "services.kanata profile ${selectedProfile} has multiple integration startup base layers enabled at once: ${lib.concatStringsSep ", " enabledStartupBaseLayers}";
         }
       ];
       services.kanata =
@@ -112,7 +116,6 @@ in
           enable = true;
           package = pkgs.kanata-with-cmd;
           # With sudoers enabled, kanata starts without a login-time auth prompt.
-          # Keep .kbd free of cmd actions unless you intentionally want root-triggered commands.
           sudoers = true;
           daemon.enable = false;
           kanata-bar = {
