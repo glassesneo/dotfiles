@@ -46,11 +46,12 @@ master_count = 1
 new_window_placement = "stack"
 
 [settings.layout.gaps.outer]
-top = 4
-left = 4
-bottom = 4
-right = 4
+top = @reservedTop@
+left = @normalOuterGap@
+bottom = @normalOuterGap@
+right = @normalOuterGap@
 
+@perDisplayOuter@
 [settings.layout.gaps.inner]
 horizontal = 5
 vertical = 5

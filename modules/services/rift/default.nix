@@ -1,6 +1,7 @@
 {
   delib,
   homeConfig,
+  host,
   inputs,
   lib,
   pkgs,
@@ -8,6 +9,17 @@
   ...
 }: let
   serviceLabel = "git.acsandmann.rift";
+  normalOuterGap = 4;
+  gapAssertions = cfg: [
+    {
+      assertion = cfg.reservedTop >= normalOuterGap;
+      message = "services.rift.reservedTop must be at least the normal outer gap of ${toString normalOuterGap} logical points.";
+    }
+    {
+      assertion = !host.hasNotch || cfg.reservedTop <= normalOuterGap || host.builtInDisplayUuid != null;
+      message = "services.rift requires host.builtInDisplayUuid on notched hosts when reservedTop exceeds the normal outer gap.";
+    }
+  ];
   # Rift is a Rust-built tiling window manager for macOS. Packaging stays local
   # to this module because there is no other consumer yet; if more modules need
   # the package, lift it into modules/config/ with a shared option.
@@ -46,6 +58,7 @@ in
         # Activation is derived from the shared Window Manager selector.
         enable = readOnly (boolOption windowManager.isRift);
         package = readOnly (packageOption rift);
+        reservedTop = description (intOption 38) "Total top outer gap for displays where SketchyBar occupies the top edge, in logical points.";
       };
 
     darwin.ifEnabled = {
@@ -65,20 +78,36 @@ in
       # only the policy module's enable flag — it does not verify the final
       # key/value. If the module changes which key it writes, this check must be
       # tightened.
-      assertions = [
-        {
-          assertion = myconfig.system.spaces.enable;
-          message = "services.rift requires system.spaces.enable = true so that 'Displays have separate Spaces' (com.apple.spaces.spans-displays = 0) stays applied.";
-        }
-      ];
+      assertions =
+        [
+          {
+            assertion = myconfig.system.spaces.enable;
+            message = "services.rift requires system.spaces.enable = true so that 'Displays have separate Spaces' (com.apple.spaces.spans-displays = 0) stays applied.";
+          }
+        ]
+        ++ gapAssertions cfg;
 
       environment.systemPackages = [cfg.package];
     };
 
-    home.ifEnabled = {cfg, ...}: {
+    home.ifEnabled = {cfg, ...}: let
+      perDisplayOuter = lib.optionalString (host.hasNotch && host.builtInDisplayUuid != null) ''
+        [settings.layout.gaps.per_display."${lib.toUpper host.builtInDisplayUuid}".outer]
+        top = ${toString normalOuterGap}
+        left = ${toString normalOuterGap}
+        bottom = ${toString normalOuterGap}
+        right = ${toString normalOuterGap}
+      '';
+      riftConfig = assert lib.all (check: lib.assertMsg check.assertion check.message) (gapAssertions cfg);
+        pkgs.replaceVars ./config.toml {
+          reservedTop = toString cfg.reservedTop;
+          normalOuterGap = toString normalOuterGap;
+          inherit perDisplayOuter;
+        };
+    in {
       home.packages = [cfg.package];
 
-      xdg.configFile."rift/config.toml".source = ./config.toml;
+      xdg.configFile."rift/config.toml".source = riftConfig;
 
       launchd.agents.rift = {
         enable = true;

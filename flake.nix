@@ -55,6 +55,7 @@
                   options = with denix.lib; {
                     tier = description (enumOption ["minimal" "basic" "standard" "full"] "standard") "Performance tier of this host. Ordered: minimal < basic < standard < full.";
                     hasNotch = description (boolOption false) "Whether this host has a display notch (e.g. MacBook Pro). Drives bar position and notch-aware layout defaults.";
+                    builtInDisplayUuid = description (allowNull ((strOption null) // {type = lib.types.strMatching "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}";})) "CoreGraphics display UUID for this host's built-in panel.";
                   };
                 })
               ];
