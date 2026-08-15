@@ -2,7 +2,7 @@
 
 ## Source and Deployment Ownership
 
-- This subtree is the canonical source for reusable skill packages. Edit it rather than deployed copies under user runtime directories.
+- This subtree is the canonical source for reusable skill packages. Reusable Skills are optional, harness-independent methods; mandatory role contracts do not belong here. Edit this source rather than deployed copies under user runtime directories.
 - `default.nix` owns the deployment registry and intentional target-runtime matrix.
 - Each `skills/<name>/` package owns its `SKILL.md` entrypoint and any local references, assets, or scripts.
 
@@ -10,5 +10,5 @@
 
 - Keep the directory name, frontmatter `name`, and exact `SKILL.md` entry filename aligned.
 - Keep frontmatter descriptions concise and routing-oriented. Keep `SKILL.md` focused on reusable receiver behavior; move optional long examples, templates, and checklists to package references.
-- Preserve ownership boundaries between skills rather than copying one skill's workflow or artifact schema into another. In particular, `agent-artifact` owns durable artifact formats; `codebase-exploration`, `source-implementation`, `implementation-validation`, and `adaptive-review` own bounded exploration, source change, automated validation, and read-only review behavior.
+- Preserve ownership boundaries between skills rather than copying one skill's workflow or artifact schema into another. In particular, `agent-artifact` owns durable artifact formats, while mandatory role purpose, procedure, authority boundaries, stopping conditions, and output contracts belong in the role prompt.
 - When adding or removing a local skill, update the registry unless the task is explicitly source-only. Do not copy existing `targetDirs` blindly; deployment membership is an explicit decision.

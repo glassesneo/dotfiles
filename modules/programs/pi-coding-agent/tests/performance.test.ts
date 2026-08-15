@@ -43,7 +43,7 @@ const taskOther = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
 async function addMeshTask(stateRoot: string, input: { meshId: string; agentId: string; agent: string; taskId: string; start: string; finish?: string }): Promise<void> {
     const mesh = join(stateRoot, "meshes", input.meshId); const task = join(mesh, "tasks", input.taskId); const agent = join(mesh, "agents", input.agentId);
     await mkdir(task, { recursive: true }); await mkdir(agent, { recursive: true });
-    await writeFile(join(agent, "agent.json"), JSON.stringify({ schemaVersion: 2, meshId: input.meshId, agentId: input.agentId, role: input.agent }));
+    await writeFile(join(agent, "agent.json"), JSON.stringify({ schemaVersion: 3, meshId: input.meshId, agentId: input.agentId, role: input.agent }));
     await writeFile(join(agent, "events.jsonl"), "");
     await writeFile(join(task, "request.json"), JSON.stringify({ schemaVersion: 2, meshId: input.meshId, agentId: input.agentId, taskId: input.taskId, prompt: "measure this task", requesterEndpointId: `root:${input.meshId}`, createdAt: input.start }));
     await writeFile(join(task, "status.json"), JSON.stringify({ schemaVersion: 1, meshId: input.meshId, agentId: input.agentId, taskId: input.taskId, state: input.finish ? "succeeded" : "running", createdAt: input.start, startedAt: input.start, ...(input.finish ? { finishedAt: input.finish } : {}) }));

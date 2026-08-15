@@ -125,6 +125,7 @@ def main [] {
     const roleCatalog = validateRoleCatalog(catalog);
     const executionProfiles = validateExecutionProfileConfig(profiles);
     const orchestrationConfig = validateOrchestrationConfig(orchestration);
+    assert.match(orchestrationConfig.stateRoot, /\/pi\/orchestration-v4$/u);
     const enabledModeConfig = validateModeConfig(enabledModes);
     validateOrchestrationReferences(orchestrationConfig, roleCatalog, executionProfiles, Object.keys(enabledModeConfig.modes));
     validateModeConfig(disabledModes);

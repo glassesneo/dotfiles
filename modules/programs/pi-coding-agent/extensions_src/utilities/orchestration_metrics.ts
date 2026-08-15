@@ -80,7 +80,7 @@ async function readTaskCandidate(
 async function readAgentTypes(meshRoot: string, meshId: string, agentIds: readonly string[]): Promise<Map<string, string>> {
     const entries = await mapConcurrent([...new Set(agentIds)], METRICS_READ_CONCURRENCY, async agentId => {
         const rawAgent = object(await json(join(meshRoot, "agents", agentId, "agent.json")).catch(() => undefined));
-        const agentType = rawAgent?.schemaVersion === 2 && rawAgent.meshId === meshId && rawAgent.agentId === agentId && typeof rawAgent.role === "string"
+        const agentType = rawAgent?.schemaVersion === 3 && rawAgent.meshId === meshId && rawAgent.agentId === agentId && typeof rawAgent.role === "string"
             ? rawAgent.role
             : undefined;
         return [agentId, agentType] as const;

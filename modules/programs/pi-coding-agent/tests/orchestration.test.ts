@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { access, mkdir, readFile, readdir, stat, utimes, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import test from "node:test";
-import { buildLaunchEnvelope, buildPolicySnapshot, policyDigest, validateLaunchEnvelope, validateOrchestrationConfig, validateOrchestrationReferences } from "../extensions_src/utilities/agent_types.ts";
+import { buildLaunchEnvelope, buildPolicySnapshot, policyDigest, validateLaunchEnvelope, validateOrchestrationConfig, validateOrchestrationReferences, validateRoleCatalog } from "../extensions_src/utilities/agent_types.ts";
 import { availableContext, publishAgentActivity } from "../extensions_src/utilities/orchestration_activity.ts";
 import { bindAgentRuntime } from "../extensions_src/utilities/orchestration_runtime.ts";
 import {
@@ -35,9 +35,9 @@ import { withMeshLock } from "../extensions_src/utilities/orchestration_lock.ts"
 import { emptyUsage } from "../extensions_src/utilities/orchestration_types.ts";
 import { settleWithinEventLoopTurns, withTemporaryRoot as withRoot, yieldToIO } from "./test_helpers.ts";
 
-const syntheticRole = (name = "worker") => ({ description: `Synthetic ${name}`, tools: [], skillOptIns: [], instructions: "Return the bounded result.", defaultProfile: "pi-medium", contextPolicy: "project" as const, childExtensionContributions: [] });
+const syntheticRole = (name = "worker") => ({ description: `Synthetic ${name}`, tools: [], instructions: "Return the bounded result.", defaultProfile: "pi-medium", contextPolicy: "project" as const, childExtensionContributions: [] });
 const syntheticProfile = { model: "provider/model", thinkingLevel: "medium" as const, harness: "pi" as const };
-const syntheticCatalog = (roles: Record<string, ReturnType<typeof syntheticRole>>) => ({ schemaVersion: 2 as const, roles });
+const syntheticCatalog = (roles: Record<string, ReturnType<typeof syntheticRole>>) => ({ schemaVersion: 3 as const, roles });
 const syntheticEpochInput = (mode: string, roles: Record<string, ReturnType<typeof syntheticRole>>) => ({
     mode,
     catalog: syntheticCatalog(roles),
@@ -173,7 +173,7 @@ void test("an ephemeral root remains nonrecoverable while supporting the persist
 
 void test("holistic orchestration references reject unreachable ghost and incompatible caller edges", () => {
     const role = (name: string, defaultProfile = "pi-medium", contextPolicy: "project" | "prompt-only" = "project") => ({ ...syntheticRole(name), defaultProfile, contextPolicy });
-    const catalog = { schemaVersion: 2 as const, roles: { worker: role("worker"), external: role("external", "external"), isolated: role("isolated", "pi-medium", "prompt-only") } };
+    const catalog = { schemaVersion: 3 as const, roles: { worker: role("worker"), external: role("external", "external"), isolated: role("isolated", "pi-medium", "prompt-only") } };
     const profiles = { schemaVersion: 1 as const, profiles: { "pi-medium": syntheticProfile, external: { model: "cursor/model", harness: "cursor-agent" as const, harnessOptions: { mode: "agent" } } } };
     const raw = {
         schemaVersion: 3, stateRoot: "/state", tmux: "/tmux", returnParentCommand: "/return", parentNavigationHint: "parent", historyViewerExtension: "/history", popupExtension: "/popup", orchestrationExtension: "/orchestration", childBridgeExtension: "/bridge",
@@ -197,27 +197,34 @@ void test("holistic orchestration references reject unreachable ghost and incomp
     assert.throws(() => validateOrchestrationReferences(config, externalPromptOnly, profiles, ["ops"]), /prompt-only role isolated/u);
 });
 
-void test("policy epochs capture transitive role/profile/policy closure, digest it, and reject legacy records", async () => withRoot("mesh-epoch-v2-", async root => {
+// Admission: persisted and external consumers parse these exact protocol generations; accepting a stale role shape could silently restore retired prompt ownership.
+// Given a v3 role catalog, when it crosses catalog, epoch, and launch-envelope boundaries, consumers observe v3 records without role Skill opt-ins and reject the v2 generation and old role shape.
+void test("role protocol v3 captures policy closure and rejects the v2 role generation", async () => withRoot("mesh-role-v3-", async root => {
     const mesh = await initializeMesh(root, { rootSessionId: "session", recoverable: true, budgets });
-    const role = (description: string, defaultProfile: string) => ({ description, tools: [], skillOptIns: [], instructions: "Return evidence.", defaultProfile, contextPolicy: "project" as const, childExtensionContributions: [] });
-    const catalog = { schemaVersion: 2 as const, roles: { reviewer: role("Review", "review"), lens: role("Lens", "lens"), leaf: role("Leaf", "leaf"), sibling: role("Sibling", "leaf") } };
+    const role = (description: string, defaultProfile: string) => ({ description, tools: [], instructions: "Return evidence.", defaultProfile, contextPolicy: "project" as const, childExtensionContributions: [] });
+    const catalog = { schemaVersion: 3 as const, roles: { reviewer: role("Review", "review"), lens: role("Lens", "lens"), leaf: role("Leaf", "leaf"), sibling: role("Sibling", "leaf") } };
+    assert.deepEqual(validateRoleCatalog(catalog), catalog);
+    assert.throws(() => validateRoleCatalog({ ...catalog, schemaVersion: 2 }), /Unsupported/u);
+    assert.throws(() => validateRoleCatalog({ ...catalog, roles: { ...catalog.roles, reviewer: { ...catalog.roles.reviewer, skillOptIns: ["retired-role-method"] } } }), /unknown keys/u);
     const profiles = { schemaVersion: 1 as const, profiles: { review: { model: "provider/review", thinkingLevel: "high" as const, harness: "pi" as const }, lens: { model: "provider/lens", thinkingLevel: "medium" as const, harness: "pi" as const }, leaf: { model: "provider/leaf", thinkingLevel: "low" as const, harness: "pi" as const } } };
     const callPolicy = { modes: { ops: { roles: ["reviewer", "sibling"] } }, roles: { reviewer: { roles: ["lens"], profiles: [] }, lens: { roles: ["leaf"], profiles: [] } } };
     const epoch = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", catalog, profiles, callPolicy });
+    assert.equal(epoch.schemaVersion, 3);
     assert.deepEqual(epoch.directRoles, ["reviewer", "sibling"]);
     assert.deepEqual(Object.keys(epoch.roles).sort(), ["leaf", "lens", "reviewer", "sibling"]);
     assert.deepEqual(Object.keys(epoch.profiles).sort(), ["leaf", "lens", "review"]);
     assert.equal(epoch.policyDigest, policyDigest({ mode: epoch.mode, directRoles: epoch.directRoles, roles: epoch.roles, profiles: epoch.profiles, policies: epoch.policies }));
     const envelope = buildLaunchEnvelope({ meshId: mesh.meshId, agentId: randomUUID(), epochId: epoch.epochId, role: "reviewer", snapshot: epoch, childExtensions: Object.fromEntries(Object.keys(epoch.roles).map(name => [name, [`/${name}`]])) });
+    assert.deepEqual({ schemaVersion: envelope.schemaVersion, marker: envelope.marker }, { schemaVersion: 3, marker: "pi-mesh-role-launch-v3" });
     assert.deepEqual(Object.keys(envelope.roles).sort(), ["leaf", "lens", "reviewer"]);
     assert.equal(envelope.roles.sibling, undefined);
     assert.deepEqual(envelope.policies.reviewer?.roles, ["lens"]);
     const empty = buildPolicySnapshot({ mode: "missing", catalog, profiles, callPolicy });
     assert.deepEqual(empty, { mode: "missing", directRoles: [], roles: {}, profiles: {}, policies: {} });
     assert.throws(() => buildLaunchEnvelope({ meshId: mesh.meshId, agentId: randomUUID(), epochId: epoch.epochId, role: "reviewer", selectedProfile: "lens", snapshot: epoch, childExtensions: Object.fromEntries(Object.keys(epoch.roles).map(name => [name, [`/${name}`]])) }), /not authorized/u);
-    assert.throws(() => validateLaunchEnvelope({ ...envelope, schemaVersion: 1, marker: "pi-mesh-agent-launch-v1" }), /Unsupported/u);
+    assert.throws(() => validateLaunchEnvelope({ ...envelope, schemaVersion: 2, marker: "pi-mesh-role-launch-v2" }), /Unsupported/u);
     const persisted = JSON.parse(await readFile(epochPath(root, mesh.meshId, epoch.epochId), "utf8")) as Record<string, unknown>;
-    await writeFile(epochPath(root, mesh.meshId, epoch.epochId), JSON.stringify({ ...persisted, schemaVersion: 1 }));
+    await writeFile(epochPath(root, mesh.meshId, epoch.epochId), JSON.stringify({ ...persisted, schemaVersion: 2 }));
     await assert.rejects(readPolicyEpoch(root, mesh.meshId, epoch.epochId), /Unsupported/u);
 }));
 
@@ -311,8 +318,10 @@ void test("root reconciliation removes uncommitted task directories and settles 
     const prepared = await reconcileMeshState(root, mesh.meshId); assert.equal(prepared.removedTaskDirectories, 1); assert.equal((await readAgentSnapshot(root, mesh.meshId, agent.agentId, taskId)).status.activeTaskId, taskId); await reconcileMeshReservations(root, mesh.meshId, async () => "absent"); const repairedReservation = JSON.parse(await readFile(reservationPath(root, mesh.meshId, agent.reservation.reservationId), "utf8")) as { taskId?: string }; assert.equal(repairedReservation.taskId, taskId);
     const task = await readAgentSnapshot(root, mesh.meshId, agent.agentId, taskId); const usage = emptyUsage(); usage.input = 7; usage.totalTokens = 7; usage.cost.input = 0.07; usage.cost.total = 0.07;
     await writeFile(paths.result, JSON.stringify({ schemaVersion: 1, meshId: mesh.meshId, agentId: agent.agentId, taskId, outcome: "succeeded", output: "done", usage, turns: 1, interventions: [], startedAt: task.task!.status.createdAt, finishedAt: new Date().toISOString() }));
-    await reconcileMeshState(root, mesh.meshId); const settled = await readAgentSnapshot(root, mesh.meshId, agent.agentId, taskId); assert.equal(settled.task?.status.state, "succeeded"); assert.equal(settled.status.state, "idle"); assert.equal(settled.status.agentUsage.input, 7); assert.deepEqual(settled.status.accountedTaskIds, [taskId]);
+    await reconcileMeshState(root, mesh.meshId); const settled = await readAgentSnapshot(root, mesh.meshId, agent.agentId, taskId); assert.equal(settled.agent.schemaVersion, 3); assert.equal(settled.task?.status.state, "succeeded"); assert.equal(settled.status.state, "idle"); assert.equal(settled.status.agentUsage.input, 7); assert.deepEqual(settled.status.accountedTaskIds, [taskId]);
     await reconcileMeshState(root, mesh.meshId); assert.equal((await readAgentSnapshot(root, mesh.meshId, agent.agentId, taskId)).status.agentUsage.input, 7);
+    const agentPath = join(meshPaths(root, mesh.meshId).agents, agent.agentId, "agent.json"); const agentRecord = JSON.parse(await readFile(agentPath, "utf8")) as Record<string, unknown>; await writeFile(agentPath, JSON.stringify({ ...agentRecord, schemaVersion: 2 }));
+    await assert.rejects(readAgentSnapshot(root, mesh.meshId, agent.agentId), /Unsupported agent record/u);
 }));
 
 void test("reservation recovery retains creating agents on unknown tmux evidence and removes records only on definitive absence", async () => withRoot("mesh-reservation-evidence-", async root => {

@@ -59,26 +59,6 @@ delib.module {
           ".agents/skills"
         ];
       };
-      codebase-exploration = {
-        source = ./skills/codebase-exploration;
-        targetDirs = piAuthoringTargets;
-      };
-      web-research = {
-        source = ./skills/web-research;
-        targetDirs = piAuthoringTargets;
-      };
-      source-implementation = {
-        source = ./skills/source-implementation;
-        targetDirs = piAuthoringTargets;
-      };
-      implementation-validation = {
-        source = ./skills/implementation-validation;
-        targetDirs = piAuthoringTargets;
-      };
-      adaptive-review = {
-        source = ./skills/adaptive-review;
-        targetDirs = piAuthoringTargets;
-      };
       intent-elicitation = {
         source = ./skills/intent-elicitation;
         targetDirs = piAuthoringTargets;

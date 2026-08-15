@@ -6,7 +6,6 @@ export type ContextPolicy = "project" | "prompt-only";
 export interface RoleDefinition {
     description: string;
     tools: string[];
-    skillOptIns: string[];
     instructions: string;
     defaultProfile: string;
     contextPolicy: ContextPolicy;
@@ -14,8 +13,8 @@ export interface RoleDefinition {
 }
 /** Temporary type alias so separately integrated runtime changes can migrate mechanically. */
 export type AgentDefinition = RoleDefinition;
-export interface RoleCatalog { schemaVersion: 2; roles: Record<string, RoleDefinition> }
-/** Temporary type alias; the generated file and validator are role-catalog v2 only. */
+export interface RoleCatalog { schemaVersion: 3; roles: Record<string, RoleDefinition> }
+/** Temporary type alias; the generated file and validator are role-catalog v3 only. */
 export type AgentCatalog = RoleCatalog;
 export interface CallerPolicy { roles: string[]; profiles: string[] }
 export interface CallPolicy { modes: Record<string, { roles: string[] }>; roles: Record<string, CallerPolicy> }
@@ -32,8 +31,8 @@ export interface PolicySnapshot {
     policies: Record<string, CallerPolicy>;
 }
 export interface AgentLaunchEnvelope {
-    schemaVersion: 2;
-    marker: "pi-mesh-role-launch-v2";
+    schemaVersion: 3;
+    marker: "pi-mesh-role-launch-v3";
     meshId: string;
     agentId: string;
     epochId: string;
@@ -46,7 +45,7 @@ export interface AgentLaunchEnvelope {
     policies: Record<string, CallerPolicy>;
     policyDigest: string;
     childExtensions: Record<string, string[]>;
-    /** Transitional in-memory aliases; never serialized or accepted by the v2 decoder. */
+    /** Transitional in-memory aliases; never serialized or accepted by the v3 decoder. */
     readonly identity: string;
     readonly self: RoleDefinition;
     readonly catalog: Record<string, RoleDefinition>;
@@ -86,15 +85,15 @@ export function validateExecutionProfileConfig(value: unknown): ExecutionProfile
 export const validateExecutionProfiles = validateExecutionProfileConfig;
 
 export function validateRoleDefinition(name: string, value: unknown, label = `roles.${name}`): RoleDefinition {
-    const raw = object(value, label); exact(raw, ["description", "tools", "skillOptIns", "instructions", "defaultProfile", "contextPolicy", "childExtensionContributions"], [], label);
+    const raw = object(value, label); exact(raw, ["description", "tools", "instructions", "defaultProfile", "contextPolicy", "childExtensionContributions"], [], label);
     if (raw.contextPolicy !== "project" && raw.contextPolicy !== "prompt-only") throw new Error(`${label}.contextPolicy is invalid`);
-    return { description: text(raw.description, `${label}.description`), tools: strings(raw.tools, `${label}.tools`), skillOptIns: strings(raw.skillOptIns, `${label}.skillOptIns`), instructions: text(raw.instructions, `${label}.instructions`), defaultProfile: text(raw.defaultProfile, `${label}.defaultProfile`), contextPolicy: raw.contextPolicy, childExtensionContributions: strings(raw.childExtensionContributions, `${label}.childExtensionContributions`) };
+    return { description: text(raw.description, `${label}.description`), tools: strings(raw.tools, `${label}.tools`), instructions: text(raw.instructions, `${label}.instructions`), defaultProfile: text(raw.defaultProfile, `${label}.defaultProfile`), contextPolicy: raw.contextPolicy, childExtensionContributions: strings(raw.childExtensionContributions, `${label}.childExtensionContributions`) };
 }
 export const validateAgentDefinition = validateRoleDefinition;
 export const validateAgentDefinitionSnapshot = validateRoleDefinition;
 export function validateRoleCatalog(value: unknown): RoleCatalog {
-    const root = object(value, "role catalog"); exact(root, ["schemaVersion", "roles"], [], "role catalog"); if (root.schemaVersion !== 2) throw new Error("Unsupported role catalog schemaVersion");
-    return { schemaVersion: 2, roles: Object.fromEntries(Object.entries(object(root.roles, "roles")).map(([name, role]) => [text(name, "role name"), validateRoleDefinition(name, role)])) };
+    const root = object(value, "role catalog"); exact(root, ["schemaVersion", "roles"], [], "role catalog"); if (root.schemaVersion !== 3) throw new Error("Unsupported role catalog schemaVersion");
+    return { schemaVersion: 3, roles: Object.fromEntries(Object.entries(object(root.roles, "roles")).map(([name, role]) => [text(name, "role name"), validateRoleDefinition(name, role)])) };
 }
 export const validateAgentCatalog = validateRoleCatalog;
 
@@ -166,13 +165,13 @@ export function policyDigest(input: PolicySnapshot): string {
     return createHash("sha256").update(canonicalJson(snapshot)).digest("hex");
 }
 export function projectPolicyClosure(role: string, snapshot: PolicySnapshot): PolicySnapshot {
-    const catalog: RoleCatalog = { schemaVersion: 2, roles: snapshot.roles }; const callPolicy: CallPolicy = { modes: { child: { roles: [role] } }, roles: snapshot.policies }; const names = closureFrom([role], catalog, callPolicy);
+    const catalog: RoleCatalog = { schemaVersion: 3, roles: snapshot.roles }; const callPolicy: CallPolicy = { modes: { child: { roles: [role] } }, roles: snapshot.policies }; const names = closureFrom([role], catalog, callPolicy);
     const roles = Object.fromEntries(names.map(name => [name, structuredClone(snapshot.roles[name]!) ])); const policies = Object.fromEntries(names.map(name => [name, structuredClone(snapshot.policies[name] ?? { roles: [], profiles: [] })]));
     const profileNames = new Set<string>(); for (const name of names) { profileNames.add(roles[name]!.defaultProfile); for (const profile of policies[name]!.profiles) profileNames.add(profile); }
     return { mode: snapshot.mode, directRoles: [role], roles, profiles: Object.fromEntries([...profileNames].map(name => [name, structuredClone(snapshot.profiles[name]!)])), policies };
 }
 export function validateLaunchEnvelope(value: unknown): AgentLaunchEnvelope {
-    const root = object(value, "agent launch envelope"); exact(root, ["schemaVersion", "marker", "meshId", "agentId", "epochId", "role", "selectedProfile", "selfRole", "executionProfile", "roles", "profiles", "policies", "policyDigest", "childExtensions"], [], "agent launch envelope"); if (root.schemaVersion !== 2 || root.marker !== "pi-mesh-role-launch-v2") throw new Error("Unsupported agent launch envelope schema or marker");
+    const root = object(value, "agent launch envelope"); exact(root, ["schemaVersion", "marker", "meshId", "agentId", "epochId", "role", "selectedProfile", "selfRole", "executionProfile", "roles", "profiles", "policies", "policyDigest", "childExtensions"], [], "agent launch envelope"); if (root.schemaVersion !== 3 || root.marker !== "pi-mesh-role-launch-v3") throw new Error("Unsupported agent launch envelope schema or marker");
     const role = text(root.role, "role"); const roles = Object.fromEntries(Object.entries(object(root.roles, "roles")).map(([name, definition]) => [name, validateRoleDefinition(name, definition)])); if (!roles[role]) throw new Error("launch closure must contain role");
     const profiles = Object.fromEntries(Object.entries(object(root.profiles, "profiles")).map(([name, profile]) => [name, validateExecutionProfile(name, profile)])); const selectedProfile = text(root.selectedProfile, "selectedProfile"); const executionProfile = validateExecutionProfile(selectedProfile, root.executionProfile, "executionProfile"); if (canonicalJson(profiles[selectedProfile]) !== canonicalJson(executionProfile)) throw new Error("executionProfile does not match selectedProfile");
     const selfRole = validateRoleDefinition(role, root.selfRole, "selfRole"); if (canonicalJson(roles[role]) !== canonicalJson(selfRole)) throw new Error("selfRole does not match closure role");
@@ -192,7 +191,7 @@ export function validateLaunchEnvelope(value: unknown): AgentLaunchEnvelope {
     if (!allowedSelectedProfiles.has(selectedProfile)) throw new Error(`selectedProfile ${selectedProfile} is not authorized for role ${role}`);
     const childExtensions = Object.fromEntries(Object.entries(object(root.childExtensions, "childExtensions")).map(([name, paths]) => [name, strings(paths, `childExtensions.${name}`)])); if (canonicalJson(Object.keys(childExtensions).sort()) !== canonicalJson(Object.keys(roles).sort())) throw new Error("childExtensions must exactly cover closure roles");
     const digest = text(root.policyDigest, "policyDigest"); if (!/^[0-9a-f]{64}$/u.test(digest)) throw new Error("policyDigest must be SHA-256");
-    const envelope = { schemaVersion: 2, marker: "pi-mesh-role-launch-v2", meshId: uuid(root.meshId, "meshId"), agentId: uuid(root.agentId, "agentId"), epochId: uuid(root.epochId, "epochId"), role, selectedProfile, selfRole, executionProfile, roles, profiles, policies, policyDigest: digest, childExtensions } as AgentLaunchEnvelope;
+    const envelope = { schemaVersion: 3, marker: "pi-mesh-role-launch-v3", meshId: uuid(root.meshId, "meshId"), agentId: uuid(root.agentId, "agentId"), epochId: uuid(root.epochId, "epochId"), role, selectedProfile, selfRole, executionProfile, roles, profiles, policies, policyDigest: digest, childExtensions } as AgentLaunchEnvelope;
     Object.defineProperties(envelope, {
         identity: { enumerable: false, value: `agent:${role}` },
         self: { enumerable: false, value: selfRole },
@@ -214,7 +213,7 @@ export function assertLaunchEnvelopeProjection(envelopeValue: unknown, epoch: Po
 export function buildLaunchEnvelope(input: { meshId: string; agentId: string; epochId: string; role: string; selectedProfile?: string; snapshot: PolicySnapshot; childExtensions: Record<string, string[]> }): AgentLaunchEnvelope {
     const closure = projectPolicyClosure(input.role, input.snapshot); const selectedProfile = input.selectedProfile ?? closure.roles[input.role]?.defaultProfile; if (!selectedProfile || !closure.profiles[selectedProfile]) throw new Error(`Selected profile ${String(selectedProfile)} is outside role closure`);
     const extensions = Object.fromEntries(Object.keys(closure.roles).map(name => { const paths = input.childExtensions[name]; if (!paths) throw new Error(`Missing child extension manifest for ${name}`); return [name, paths]; }));
-    return validateLaunchEnvelope({ schemaVersion: 2, marker: "pi-mesh-role-launch-v2", meshId: input.meshId, agentId: input.agentId, epochId: input.epochId, role: input.role, selectedProfile, selfRole: closure.roles[input.role], executionProfile: closure.profiles[selectedProfile], roles: closure.roles, profiles: closure.profiles, policies: closure.policies, policyDigest: policyDigest(input.snapshot), childExtensions: extensions });
+    return validateLaunchEnvelope({ schemaVersion: 3, marker: "pi-mesh-role-launch-v3", meshId: input.meshId, agentId: input.agentId, epochId: input.epochId, role: input.role, selectedProfile, selfRole: closure.roles[input.role], executionProfile: closure.profiles[selectedProfile], roles: closure.roles, profiles: closure.profiles, policies: closure.policies, policyDigest: policyDigest(input.snapshot), childExtensions: extensions });
 }
 export function projectLaunchEnvelope(role: string, agentId: string, parent: AgentLaunchEnvelope, selectedProfile?: string): AgentLaunchEnvelope {
     const source = validateLaunchEnvelope(parent); const snapshot: PolicySnapshot = { mode: "child", directRoles: [source.role], roles: source.roles, profiles: source.profiles, policies: source.policies }; const allowed = source.policies[source.role]?.roles ?? []; if (!allowed.includes(role)) throw new Error(`Role ${role} is outside caller direct policy`);

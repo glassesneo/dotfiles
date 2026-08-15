@@ -19,12 +19,12 @@ const epochId = "33333333-3333-4333-8333-333333333333";
 const runtime = { stateRoot: "/state", harnesses: { pi: { adapter: "pi-native", command: "/pi" }, "cursor-agent": { adapter: "cursor-acp", command: "/cursor", workerCommand: "/node", workerEntrypoint: "/worker.ts" }, codex: { adapter: "codex-acp", command: "/codex-acp", workerCommand: "/node", workerEntrypoint: "/worker.ts" } } } as never;
 
 function role(overrides: Partial<RoleDefinition> = {}): RoleDefinition {
-    return { description: "purpose", tools: [], skillOptIns: [], instructions: "Own this purpose.", defaultProfile: "sol-medium", contextPolicy: "project", childExtensionContributions: [], ...overrides };
+    return { description: "purpose", tools: [], instructions: "Own this purpose.", defaultProfile: "sol-medium", contextPolicy: "project", childExtensionContributions: [], ...overrides };
 }
 function envelope(input: { role: string; selfRole: RoleDefinition; selectedProfile: string; executionProfile: ExecutionProfile; policy?: CallerPolicy; extensions?: string[] }): AgentLaunchEnvelope {
     return {
-        schemaVersion: 2,
-        marker: "pi-mesh-role-launch-v2",
+        schemaVersion: 3,
+        marker: "pi-mesh-role-launch-v3",
         meshId,
         agentId,
         epochId,
@@ -60,10 +60,10 @@ const cursorProfile: ExecutionProfile = { model: "cursor/cursor-grok-4.5-high-fa
 const externalConfig: ExternalWorkerConfig = { adapter: "cursor-acp", command: "/cursor", cwd: "/work", permissionPolicy: "allow-always" };
 
 async function externalFixture(root: string) {
-    const workerRole = role({ instructions: "Complete the bounded worker objective.", defaultProfile: "sol-medium", tools: ["read", "write"], skillOptIns: ["source-implementation"] });
+    const workerRole = role({ instructions: "Complete the bounded worker objective.", defaultProfile: "sol-medium", tools: ["read", "write"] });
     const profileConfig: ExecutionProfileConfig = { schemaVersion: 1, profiles: { "sol-medium": { model: "openai-codex/gpt-5.6-sol", thinkingLevel: "medium", harness: "pi" }, "cursor-fast": cursorProfile } };
     const mesh = await initializeMesh(root, { rootSessionId: "root", recoverable: false, budgets: externalBudgets });
-    const epoch = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", catalog: { schemaVersion: 2, roles: { worker: workerRole } }, profiles: profileConfig, callPolicy: { modes: { ops: { roles: ["worker"] } }, roles: { worker: { roles: [], profiles: ["cursor-fast"] } } } });
+    const epoch = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", catalog: { schemaVersion: 3, roles: { worker: workerRole } }, profiles: profileConfig, callPolicy: { modes: { ops: { roles: ["worker"] } }, roles: { worker: { roles: [], profiles: ["cursor-fast"] } } } });
     const reservation = await reserveMeshCapacity(root, mesh.meshId, "new-agent-task");
     const prepared = await prepareAgent(root, mesh.meshId, { reservationId: reservation.reservationId, role: "worker", selectedProfile: "cursor-fast", harness: "cursor-agent", cwd: "/work", roleSnapshot: workerRole, profileSnapshot: cursorProfile, launchEnvelope: "pending", epochId: epoch.epochId, provenance: { creatorSessionId: "parent" }, capabilities: externalCapabilities });
     const launchEnvelope = buildLaunchEnvelope({ meshId: mesh.meshId, agentId: prepared.agentId, epochId: epoch.epochId, role: "worker", selectedProfile: "cursor-fast", snapshot: epoch, childExtensions: { worker: [] } });
@@ -79,7 +79,7 @@ async function externalFixture(root: string) {
 // Given project and prompt-only role envelopes, when they cross the native launch-descriptor boundary, the Pi process observes only the selected profile and resources authorized for that context/direct policy.
 void test("Pi launch descriptors isolate prompt-only roles and configure peer tools only for direct callers", () => {
     const piProfile: ExecutionProfile = { model: "openai-codex/gpt-5.6-terra", thinkingLevel: "high", harness: "pi" };
-    const promptOnly = envelope({ role: "gyaru", selfRole: role({ contextPolicy: "prompt-only", defaultProfile: "terra-high", tools: [], skillOptIns: [] }), selectedProfile: "terra-high", executionProfile: piProfile });
+    const promptOnly = envelope({ role: "gyaru", selfRole: role({ contextPolicy: "prompt-only", defaultProfile: "terra-high", tools: [] }), selectedProfile: "terra-high", executionProfile: piProfile });
     const isolated = piLaunchDescriptor(runtime, launchInput("gyaru", promptOnly));
     assert.equal(option(isolated.args, "--model"), piProfile.model);
     assert.equal(option(isolated.args, "--thinking"), piProfile.thinkingLevel);
@@ -98,7 +98,7 @@ void test("Pi launch descriptors isolate prompt-only roles and configure peer to
 // Admission: selected-profile misrouting changes the actual model/harness while preserving an apparently correct purpose identity; final worker config and prompt composition are not guaranteed by envelope validation alone.
 // Given worker/cursor-fast and searcher/codex-search envelopes, when they cross harness and external-driver routing, the worker observes the selected execution profile while retaining the role-owned instructions and caller task.
 void test("external routing consumes selected profiles without turning profiles into purpose identities", () => {
-    const workerRole = role({ instructions: "Complete the bounded worker objective.", defaultProfile: "sol-medium", tools: ["read", "write"], skillOptIns: ["source-implementation"] });
+    const workerRole = role({ instructions: "Complete the bounded worker objective.", defaultProfile: "sol-medium", tools: ["read", "write"] });
     const workerEnvelope = envelope({ role: "worker", selfRole: workerRole, selectedProfile: "cursor-fast", executionProfile: cursorProfile, policy: { roles: [], profiles: ["cursor-fast"] } });
     const cursor = resolveHarnessAdapter(runtime, cursorProfile.harness, cursorProfile);
     const cursorLaunch = cursor.adapter.launch(runtime, cursor.harness, launchInput("worker", workerEnvelope));
