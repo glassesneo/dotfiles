@@ -84,7 +84,7 @@
     reviewer = {
       description = "Use when a defined target needs independent review judgment consolidated into evidence the caller can act on.";
       tools = ["read" "grep" "find" "ls" "bash" "save_agent_artifact"];
-      skillOptIns = ["adaptive-review" "task-orchestration" "prompt-interface-design" "agent-artifact"];
+      skillOptIns = ["adaptive-review" "prompt-interface-design" "agent-artifact"];
       instructions = "Review read-only; obtain bounded independent lenses or validation evidence only when they can materially improve the verdict; consolidate supported severity-ordered findings, verdict, gaps, and residual risk. Decide what belongs in the review, not whether the parent changes source.";
       defaultProfile = "sol-high";
       contextPolicy = "project";
@@ -102,7 +102,7 @@
     researcher = {
       description = "Use when a question needs codebase and/or multiple external evidence paths integrated into one supported conclusion.";
       tools = ["read" "grep" "find" "ls" "bash" "web_search" "web_fetch"];
-      skillOptIns = ["web-research" "task-orchestration" "prompt-interface-design"];
+      skillOptIns = ["web-research" "prompt-interface-design"];
       instructions = "Determine the evidence needed, integrate codebase and external sources, examine material counterevidence, and return the best-supported conclusion with claim-linked sources and uncertainty. Searcher results are evidence to evaluate, not output to relay unchanged.";
       defaultProfile = "terra-high";
       contextPolicy = "project";

@@ -28,6 +28,12 @@ export interface CompletionChannelProjection {
     total: number;
 }
 
+export interface OpenChannelSummary {
+    channel: ChannelKey;
+    terminal: number;
+    total: number;
+}
+
 export interface CompletionReceiptCreationResult {
     receipt?: CompletionReceipt;
     created: boolean;
@@ -235,7 +241,18 @@ function unreceivedTasks(tasks: readonly CompletionTask[], ledger: CompletionLed
 
 export interface CompletionSettlement {
     ledgersPersisted: boolean;
-    eventBatches: Array<{ ledger: CompletionLedger; batch: CompletionBatch; tasks: CompletionTask[] }>;
+    eventBatches: Array<{ ledger: CompletionLedger; batch: CompletionBatch; tasks: CompletionTask[]; openChannels: OpenChannelSummary[] }>;
+}
+
+function openChannelSummaries(tasks: readonly CompletionTask[], ledger: CompletionLedger): OpenChannelSummary[] {
+    return CHANNEL_KEYS.flatMap(channel => {
+        const route = { endpointId: ledger.endpointId, endpointSessionFile: ledger.endpointSessionFile, mode: "channel" as const, channel };
+        const cohort = unassignedTasks(tasks, ledger, route);
+        if (!cohort.length) return [];
+        const terminal = cohort.filter(task => isTerminalTask(task.state)).length;
+        if (terminal >= cohort.length) throw new Error(`Completion channel ${channel} remained settleable after settlement`);
+        return [{ channel, terminal, total: cohort.length }];
+    });
 }
 
 /** Caller must hold the mesh lock. Persists event IDs before any event file is materialized. */
@@ -266,9 +283,10 @@ export async function settleCompletionDeliveriesUnlocked(stateRoot: string, mesh
             await writeAtomicJson(completionLedgerPath(stateRoot, meshId, identity.endpointId, identity.endpointSessionFile), ledger);
             ledgersPersisted = true;
         }
+        const openChannels = openChannelSummaries(tasks, ledger);
         for (const batch of ledger.batches.filter(batch => batch.disposition === "event")) {
             const batchTasks = tasks.filter(task => batch.taskIds.includes(task.taskId));
-            if (batchTasks.length === batch.taskIds.length) eventBatches.push({ ledger, batch, tasks: batchTasks });
+            if (batchTasks.length === batch.taskIds.length) eventBatches.push({ ledger, batch, tasks: batchTasks, openChannels });
         }
     }
     return { ledgersPersisted, eventBatches };

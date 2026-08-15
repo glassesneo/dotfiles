@@ -9,7 +9,7 @@ import {
     formatTaskStateBadge,
 } from "./orchestration_display_tree.ts";
 import type { SubmitDetails } from "./orchestration_projection.ts";
-import { promptSummary, type AgentSnapshot, type AgentState, type ChannelKey, type TaskState } from "./orchestration_types.ts";
+import { CHANNEL_KEYS, promptSummary, type AgentSnapshot, type AgentState, type ChannelKey, type TaskState } from "./orchestration_types.ts";
 
 /** Subset of Pi ToolRenderContext used by mesh cards (not re-exported by the package). */
 export type CardRenderContext = {
@@ -270,7 +270,23 @@ export function renderSignalResult(result: AgentToolResult<unknown>, options: To
     return textFromComponent(context.lastComponent, lines.join("\n"));
 }
 type CompletionMessage = { customType: string; content: unknown; details?: unknown };
-function completionPayload(message: CompletionMessage): { route: "direct" | "channel"; channel?: string; tasks: Array<{ taskId: string; state: TaskState; createdAt?: string; startedAt?: string; finishedAt?: string }> } | undefined {
+type OpenChannelCardSummary = { channel: ChannelKey; terminal: number; total: number };
+function openChannelPayload(value: unknown): OpenChannelCardSummary[] | undefined {
+    if (value === undefined) return [];
+    if (!Array.isArray(value)) return undefined;
+    const channels = new Set<ChannelKey>();
+    const summaries: OpenChannelCardSummary[] = [];
+    for (const summary of value) {
+        if (!summary || typeof summary !== "object" || Array.isArray(summary)) return undefined;
+        const record = summary as Record<string, unknown>;
+        if (Object.keys(record).length !== 3 || typeof record.channel !== "string" || !CHANNEL_KEYS.includes(record.channel as ChannelKey) || channels.has(record.channel as ChannelKey) || typeof record.terminal !== "number" || !Number.isInteger(record.terminal) || typeof record.total !== "number" || !Number.isInteger(record.total) || record.total <= 0 || record.terminal < 0 || record.terminal >= record.total) return undefined;
+        const channel = record.channel as ChannelKey;
+        channels.add(channel);
+        summaries.push({ channel, terminal: record.terminal, total: record.total });
+    }
+    return summaries;
+}
+function completionPayload(message: CompletionMessage): { route: "direct" | "channel"; channel?: string; tasks: Array<{ taskId: string; state: TaskState; createdAt?: string; startedAt?: string; finishedAt?: string }>; openChannels: OpenChannelCardSummary[] } | undefined {
     const details = message.details as Record<string, unknown> | undefined;
     const payload = details?.payload as Record<string, unknown> | undefined;
     if (details?.kind !== "completion" || !payload || payload.route !== "direct" && payload.route !== "channel" || !Array.isArray(payload.tasks)) return undefined;
@@ -279,8 +295,9 @@ function completionPayload(message: CompletionMessage): { route: "direct" | "cha
         const record = task as Record<string, unknown>;
         return typeof record.taskId === "string" && typeof record.state === "string";
     });
-    if (tasks.length !== payload.tasks.length) return undefined;
-    return { route: payload.route, ...(typeof payload.channel === "string" ? { channel: payload.channel } : {}), tasks };
+    const openChannels = openChannelPayload(payload.openChannels);
+    if (tasks.length !== payload.tasks.length || !openChannels) return undefined;
+    return { route: payload.route, ...(typeof payload.channel === "string" ? { channel: payload.channel } : {}), tasks, openChannels };
 }
 function taskStateSummary(tasks: Array<{ state: TaskState }>): string {
     const order: TaskState[] = ["succeeded", "failed", "stopped", "running", "created"];
@@ -293,6 +310,7 @@ export function renderMeshEventMessage(message: CompletionMessage, options: { ex
     if (!payload) return new WidthSafeText(theme.fg("muted", typeof message.content === "string" ? message.content : "mesh event"), options.outputPad ?? 0);
     const route = payload.route === "channel" ? `channel ${payload.channel ?? "?"} completion` : "direct completion";
     const lines = [theme.fg("accent", `${route} · ${taskStateSummary(payload.tasks)}`)];
+    if (payload.openChannels.length) lines.push(theme.fg("muted", `open channels · ${payload.openChannels.map(summary => `${summary.channel} ${summary.terminal}/${summary.total} terminal`).join(" · ")}`));
     if (options.expanded) for (const task of payload.tasks) lines.push(joinParts([`taskId: ${task.taskId}`, `state: ${task.state}`, task.finishedAt ? `finishedAt: ${task.finishedAt}` : undefined]));
     return new WidthSafeText(lines.join("\n"), options.outputPad ?? 0);
 }

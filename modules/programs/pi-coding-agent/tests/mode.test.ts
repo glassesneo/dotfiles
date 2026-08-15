@@ -7,7 +7,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { registerModeController } from "../extensions_src/mode.ts";
 import { validateExecutionProfileConfig, validateModeConfig, validateModeProfileReferences } from "../extensions_src/utilities/mode_types.ts";
 
-const mode = { description: "Synthetic", defaultProfile: "recon-default", tools: ["read"], skillOptIns: ["task-orchestration"], instructions: "Stay coherent." };
+const mode = { description: "Synthetic", defaultProfile: "recon-default", tools: ["read"], skillOptIns: ["prompt-interface-design"], instructions: "Stay coherent." };
 const profiles = {
     schemaVersion: 1,
     profiles: {

@@ -130,3 +130,24 @@ void test("completion messages name their route and summarize task states", () =
         assert.match(semantic, details.payload.route === "direct" ? /1 succeeded/u : /1 failed.*1 stopped/su);
     }
 });
+
+// Admission: the completion card is the stable user-visible projection boundary; type checks cannot reveal omitted progress or width overflow in rendered terminal output.
+// Given a completion notification with open cohorts, when the card renders, the user observes channel progress without task or agent detail and legacy, empty, and signal cards gain no status line.
+void test("completion cards expose open channel progress only when non-empty", () => {
+    const payload = { route: "direct", tasks: [{ taskId, state: "succeeded" }] };
+    const valid = { kind: "completion", payload: { ...payload, openChannels: [{ channel: "A", terminal: 0, total: 1 }, { channel: "B", terminal: 1, total: 3 }] } };
+    for (const expanded of [false, true]) {
+        const text = render(renderMeshEventMessage({ customType: "mesh-event", content: "model payload", details: valid }, { expanded, outputPad: 1 }, theme as never), 24);
+        const semantic = text.replace(/\s+/gu, " ");
+        assert.match(semantic, /open channels/u);
+        assert.match(semantic, /A 0\/1 terminal/u);
+        assert.match(semantic, /B 1\/3 terminal/u);
+        if (!expanded) assert.doesNotMatch(semantic, new RegExp(`${taskId}|${agentId}`, "u"));
+    }
+
+    for (const message of [
+        { customType: "mesh-event", content: "legacy", details: { kind: "completion", payload } },
+        { customType: "mesh-event", content: "empty", details: { kind: "completion", payload: { ...payload, openChannels: [] } } },
+        { customType: "mesh-event", content: "signal", details: { kind: "signal", payload: { openChannels: [{ channel: "A", terminal: 0, total: 1 }] } } },
+    ]) assert.doesNotMatch(render(renderMeshEventMessage(message, { expanded: false, outputPad: 1 }, theme as never), 24), /open channels/u);
+});

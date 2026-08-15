@@ -51,11 +51,12 @@ void test("schema-v3 orchestration policy accepts coherent role hysteresis and r
     assert.throws(() => validateOrchestrationConfig({ ...config, schemaVersion: 2 }), /schemaVersion/u);
 });
 
-// Admission: completion context projection is the model-visible exactly-once boundary; schemas cannot detect duplicate or partially consumed custom messages.
-// Given receipt accounting beside completion, question, and signal messages, when context is projected, the model sees each residual completion once while unrelated messages remain unchanged.
-void test("completion context projection removes only received tasks and deduplicates identical events", () => {
+// Admission: completion context projection is the model-visible exactly-once boundary; schemas cannot detect duplicate, partially consumed, or malformed persisted custom messages.
+// Given valid, malformed, legacy, duplicate, and partially receipted completion messages, when context is projected, the model preserves one frozen valid summary and rejects invalid protocol shapes.
+void test("completion context projection preserves valid open channels with legacy compatibility", () => {
     const eventId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"; const firstTask = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"; const secondTask = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"; const receiptId = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
-    const payload = { eventId, route: "channel", channel: "A", batchId: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee", settledAt: "2026-01-01T00:00:00.000Z", tasks: [{ taskId: firstTask, state: "succeeded" }, { taskId: secondTask, state: "failed" }] };
+    const openChannels = [{ channel: "A", terminal: 0, total: 1 }, { channel: "B", terminal: 1, total: 3 }];
+    const payload = { eventId, route: "channel", channel: "A", batchId: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee", settledAt: "2026-01-01T00:00:00.000Z", tasks: [{ taskId: firstTask, state: "succeeded" }, { taskId: secondTask, state: "failed" }], openChannels };
     const completion = { role: "custom", customType: "mesh-event", content: "stale", details: { eventId, kind: "completion", payload } };
     const receipt = { role: "toolResult", toolName: "mesh_get", details: { accounting: { receiptIds: [receiptId], receivedTaskIds: [firstTask], claimedTaskIds: [] } } };
     const question = { role: "toolResult", toolName: "question", details: { answers: [{ id: "choice" }] } };
@@ -63,8 +64,23 @@ void test("completion context projection removes only received tasks and dedupli
     assert.deepEqual(receiptIdsFromToolResults([receipt]), [receiptId]);
     const projected = projectMeshCompletionContext([completion, question, receipt, structuredClone(completion), signal], new Set([firstTask]));
     assert.deepEqual(projected.eventIds, [eventId]); assert.equal(projected.messages.length, 4); assert.equal(projected.messages[1], question); assert.equal(projected.messages[2], receipt); assert.equal(projected.messages[3], signal);
-    const residual = projected.messages[0] as typeof completion; assert.deepEqual(residual.details.payload.tasks, [{ taskId: secondTask, state: "failed" }]); assert.match(residual.content, new RegExp(secondTask, "u")); assert.doesNotMatch(residual.content, new RegExp(firstTask, "u"));
-    const conflicting = structuredClone(completion); conflicting.details.payload.channel = "B"; assert.throws(() => projectMeshCompletionContext([completion, conflicting], new Set()), /Conflicting duplicate/u);
+    const residual = projected.messages[0] as typeof completion; assert.deepEqual(residual.details.payload.tasks, [{ taskId: secondTask, state: "failed" }]); assert.deepEqual(residual.details.payload.openChannels, openChannels); assert.match(residual.content, new RegExp(secondTask, "u")); assert.doesNotMatch(residual.content, new RegExp(firstTask, "u"));
+
+    const legacyPayload = { ...payload } as Record<string, unknown>; delete legacyPayload.openChannels;
+    const legacy = { ...completion, details: { ...completion.details, payload: legacyPayload } };
+    const legacyProjected = projectMeshCompletionContext([legacy], new Set());
+    assert.equal(Object.hasOwn((legacyProjected.messages[0] as typeof legacy).details.payload, "openChannels"), false);
+
+    for (const malformed of [
+        { ...payload, openChannels: "A" },
+        { ...payload, openChannels: [{ channel: "A", terminal: 0, total: 1 }, { channel: "A", terminal: 0, total: 2 }] },
+        { ...payload, openChannels: [{ channel: "B", terminal: 1, total: 1 }] },
+        { ...payload, openChannels: [{ channel: "B", terminal: 0, total: 1, taskId: firstTask }] },
+    ]) {
+        const invalid = { ...completion, details: { ...completion.details, payload: malformed } };
+        assert.throws(() => projectMeshCompletionContext([invalid], new Set()), /Malformed mesh completion/u);
+    }
+    const conflicting = structuredClone(completion); conflicting.details.payload.openChannels[0]!.total = 2; assert.throws(() => projectMeshCompletionContext([completion, conflicting], new Set()), /Conflicting duplicate/u);
 });
 
 async function writeRuntimeFiles(root: string) {

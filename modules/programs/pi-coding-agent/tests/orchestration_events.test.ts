@@ -56,6 +56,7 @@ void test("routed direct completion persists one minimal steer event and repairs
     assert.equal(event!.delivery, "steer");
     assert.equal(event!.payload.route, "direct");
     assert.deepEqual((event!.payload.tasks as Array<Record<string, unknown>>).map(item => ({ taskId: item.taskId, state: item.state })), [{ taskId: task.request.taskId, state: "succeeded" }]);
+    assert.deepEqual(event!.payload.openChannels, []);
     assert.doesNotMatch(JSON.stringify(event!.payload), /prompt|output|error|usage/u);
     const [again] = await pollMeshEvents(root, fixture.mesh.meshId, fixture.endpoint);
     assert.equal(again!.eventId, event!.eventId);
@@ -103,6 +104,37 @@ void test("channel registration after terminal settlement rotates to the next co
     const events = await pollMeshEvents(root, fixture.mesh.meshId, fixture.endpoint);
     assert.equal(events.length, 2);
     assert.equal(events.some(event => (event.payload.tasks as Array<{ taskId: string }>).some(item => item.taskId === second.request.taskId)), true);
+}));
+
+// Admission: event materialization is the stable receiver boundary for frozen endpoint-scoped cohort state; types cannot detect inclusion of settled or direct work.
+// Given completion batches plus unsettled channel cohorts, when events materialize, the receiver observes one shared open-channel snapshot that remains frozen after later completions.
+void test("completion materialization freezes only unsettled channel cohort counts", async () => withRoot("mesh-open-channels-", async root => {
+    const fixture = await eventFixture(root);
+    const secondAgent = await publishEventAgent(root, fixture.mesh.meshId, fixture.epoch, fixture.definition);
+    const thirdAgent = await publishEventAgent(root, fixture.mesh.meshId, fixture.epoch, fixture.definition);
+    const route = (channel: "A" | "B") => ({ endpointId: fixture.endpoint.endpointId, endpointSessionFile: fixture.endpoint.sessionFile, mode: "channel" as const, channel });
+
+    const settledA = await createTask(root, fixture.mesh.meshId, fixture.agentId, "settled A cohort", { requesterEndpointId: fixture.endpoint.endpointId, completion: route("A") });
+    await finishTask(root, fixture.mesh.meshId, settledA.request.taskId, { outcome: "succeeded", output: "must remain retrieval-only" });
+    const nextA = await createTask(root, fixture.mesh.meshId, fixture.agentId, "next A cohort", { requesterEndpointId: fixture.endpoint.endpointId, completion: route("A") });
+    const firstB = await createTask(root, fixture.mesh.meshId, secondAgent, "terminal B member", { requesterEndpointId: fixture.endpoint.endpointId, completion: route("B") });
+    const secondB = await createTask(root, fixture.mesh.meshId, thirdAgent, "running B member", { requesterEndpointId: fixture.endpoint.endpointId, completion: route("B") });
+    await finishTask(root, fixture.mesh.meshId, firstB.request.taskId, { outcome: "failed", error: "retrieval-only failure" });
+    const direct = await createTask(root, fixture.mesh.meshId, secondAgent, "direct completion", { requesterEndpointId: fixture.endpoint.endpointId, completion: { endpointId: fixture.endpoint.endpointId, endpointSessionFile: fixture.endpoint.sessionFile, mode: "direct" } });
+    await finishTask(root, fixture.mesh.meshId, direct.request.taskId, { outcome: "stopped" });
+
+    const initial = await pollMeshEvents(root, fixture.mesh.meshId, fixture.endpoint);
+    assert.equal(initial.length, 2);
+    const expected = [{ channel: "A", terminal: 0, total: 1 }, { channel: "B", terminal: 1, total: 2 }];
+    assert.deepEqual(initial.map(event => event.payload.openChannels), [expected, expected]);
+    assert.equal(initial.some(event => (event.payload.tasks as Array<{ taskId: string }>).some(task => task.taskId === settledA.request.taskId)), true);
+    assert.equal(expected.some(summary => "taskId" in summary || "agentId" in summary), false);
+    const frozen = new Map(initial.map(event => [event.eventId, structuredClone(event.payload.openChannels)]));
+
+    await finishTask(root, fixture.mesh.meshId, nextA.request.taskId, { outcome: "succeeded" });
+    await finishTask(root, fixture.mesh.meshId, secondB.request.taskId, { outcome: "succeeded" });
+    const later = await pollMeshEvents(root, fixture.mesh.meshId, fixture.endpoint);
+    for (const [eventId, snapshot] of frozen) assert.deepEqual(later.find(event => event.eventId === eventId)!.payload.openChannels, snapshot);
 }));
 
 void test("signal retries return one frozen event for equal arguments and reject a changed retry", async () => withRoot("mesh-signal-", async root => {

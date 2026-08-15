@@ -1,11 +1,13 @@
 import type { Usage } from "@earendil-works/pi-ai";
 import { canonicalJson } from "./agent_types.ts";
 import {
+    CHANNEL_KEYS,
     isTerminalTask,
     promptSummary,
     type AgentSnapshot,
     type AgentState,
     type AgentStatus,
+    type ChannelKey,
     type TaskState,
 } from "./orchestration_types.ts";
 
@@ -489,6 +491,20 @@ export function receiptIdsFromToolResults(messages: readonly unknown[]): string[
     return [...receiptIds];
 }
 
+function validateOpenChannels(value: unknown, eventId: string): void {
+    if (value === undefined) return;
+    if (!Array.isArray(value)) throw new Error(`Malformed mesh completion event ${eventId}`);
+    const channels = new Set<ChannelKey>();
+    for (const summary of value) {
+        if (!summary || typeof summary !== "object" || Array.isArray(summary)) throw new Error(`Malformed mesh completion event ${eventId}`);
+        const record = summary as Record<string, unknown>;
+        if (Object.keys(record).length !== 3 || !Object.hasOwn(record, "channel") || !Object.hasOwn(record, "terminal") || !Object.hasOwn(record, "total")) throw new Error(`Malformed mesh completion event ${eventId}`);
+        if (typeof record.channel !== "string" || !CHANNEL_KEYS.includes(record.channel as ChannelKey) || channels.has(record.channel as ChannelKey)) throw new Error(`Malformed mesh completion event ${eventId}`);
+        if (typeof record.terminal !== "number" || !Number.isInteger(record.terminal) || typeof record.total !== "number" || !Number.isInteger(record.total) || record.total <= 0 || record.terminal < 0 || record.terminal >= record.total) throw new Error(`Malformed mesh completion event ${eventId}`);
+        channels.add(record.channel as ChannelKey);
+    }
+}
+
 export function projectMeshCompletionContext<T>(messages: readonly T[], receivedTaskIds: ReadonlySet<string>): { messages: T[]; eventIds: string[] } {
     const projected: T[] = [];
     const eventIds: string[] = [];
@@ -503,6 +519,7 @@ export function projectMeshCompletionContext<T>(messages: readonly T[], received
         if (typeof eventId !== "string" || !EVENT_ID.test(eventId) || !payload || typeof payload !== "object" || Array.isArray(payload)) throw new Error("Malformed mesh completion event in model context");
         const completion = payload as Record<string, unknown>;
         if (completion.eventId !== eventId || completion.route !== "direct" && completion.route !== "channel" || completion.route === "channel" && (typeof completion.channel !== "string" || !/^[A-Z]$/u.test(completion.channel)) || completion.route === "direct" && completion.channel !== undefined || typeof completion.batchId !== "string" || !EVENT_ID.test(completion.batchId) || typeof completion.settledAt !== "string" || !Number.isFinite(Date.parse(completion.settledAt)) || !Array.isArray(completion.tasks) || completion.tasks.length < 1) throw new Error(`Malformed mesh completion event ${eventId}`);
+        validateOpenChannels(completion.openChannels, eventId);
         const tasks = completion.tasks.map(task => {
             if (!task || typeof task !== "object" || Array.isArray(task)) throw new Error(`Malformed mesh completion event ${eventId}`);
             const record = task as Record<string, unknown>;

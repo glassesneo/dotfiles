@@ -75,6 +75,7 @@ async function evaluateCompletionRoutes(stateRoot: string, meshId: string, optio
                 batchId: item.batch.batchId,
                 settledAt: item.batch.settledAt,
                 tasks: item.tasks.map(task => ({ taskId: task.taskId, state: task.state, createdAt: task.createdAt, ...(task.startedAt ? { startedAt: task.startedAt } : {}), ...(task.finishedAt ? { finishedAt: task.finishedAt } : {}) })),
+                openChannels: item.openChannels,
             },
         }, eventId);
     }

@@ -79,10 +79,6 @@ delib.module {
         source = ./skills/adaptive-review;
         targetDirs = piAuthoringTargets;
       };
-      task-orchestration = {
-        source = ./skills/task-orchestration;
-        targetDirs = piAuthoringTargets;
-      };
       intent-elicitation = {
         source = ./skills/intent-elicitation;
         targetDirs = piAuthoringTargets;
