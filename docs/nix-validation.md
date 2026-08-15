@@ -60,7 +60,9 @@ From the repository root, run:
 nix run .#check-full
 ```
 
-The app builds all checks applicable to the current system once. On Darwin it then builds `seiran`, `seiran-vm1`, and the standalone `neo@seiran-clean` Home Manager configuration. On aarch64 Linux, the applicable flake check builds `nixos-seiran-vm0`; other systems evaluate that incompatible derivation without claiming its build passed.
+The app builds all checks applicable to the current system once and reports the elapsed time for each validation stage. On Darwin it then builds `seiran`, `seiran-vm1`, and the standalone `neo@seiran-clean` Home Manager configuration. On aarch64 Linux, the applicable flake check builds `nixos-seiran-vm0`; other systems evaluate that incompatible derivation without claiming its build passed.
+
+The latest successful representative and dependency-heavy check outputs are retained through stable links below `.direnv/check-full/`. These links keep their closures reusable across automatic garbage collection; each successful retention stage replaces the corresponding prior links.
 
 ## Flake source visibility
 

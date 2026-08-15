@@ -118,7 +118,7 @@
           piVersion = piPackage.version;
           syncPiExtensionVersions = pkgs.writeShellApplication {
             name = "sync-pi-extension-versions";
-            runtimeInputs = [pkgs.nodejs];
+            runtimeInputs = [pkgs.pnpm];
             text = ''
               package_dir="modules/programs/pi-coding-agent"
 
@@ -128,7 +128,7 @@
               fi
 
               cd "$package_dir"
-              npm install --package-lock-only --save-dev --save-exact \
+              pnpm --config.frozen-lockfile=false add --save-dev --save-exact --lockfile-only \
                 "@earendil-works/pi-ai@${piVersion}" \
                 "@earendil-works/pi-coding-agent@${piVersion}" \
                 "@earendil-works/pi-tui@${piVersion}"
@@ -136,7 +136,7 @@
           };
           fullValidation = pkgs.writeShellApplication {
             name = "check-full";
-            runtimeInputs = [pkgs.nix];
+            runtimeInputs = [pkgs.nix pkgs.coreutils];
             text = builtins.replaceStrings ["@system@"] [system] (builtins.readFile ./checks/full-validation.sh);
           };
         in {
@@ -154,7 +154,17 @@
 
         checks = let
           fileset = pkgs.lib.fileset;
-          piNpmDepsHash = "sha256-BL8ZwJc4JSi3SS3nsSpfAnla+tWyNYDOK4UVYJg+f/I=";
+          piSource = ./modules/programs/pi-coding-agent;
+          piPnpm = pkgs.pnpm;
+          piPnpmNativeBuildInputs = [pkgs.nodejs piPnpm pkgs.pnpmConfigHook];
+          piPnpmDeps = pkgs.fetchPnpmDeps {
+            pname = "pi-customizations-deps";
+            version = "0";
+            src = piSource;
+            pnpm = piPnpm;
+            fetcherVersion = 4;
+            hash = "sha256-u12YG+k5gpl8KsT9wmnovxMphME/e6aY8dFdwwWsiu4=";
+          };
           configurationSource = fileset.toSource {
             root = ./.;
             fileset = fileset.unions [
@@ -192,19 +202,18 @@
             ];
           };
           piCustomizations = {
-            pi-customizations = pkgs.buildNpmPackage {
+            pi-customizations = pkgs.stdenvNoCC.mkDerivation {
               pname = "pi-customizations-check";
               version = "0";
-              src = ./modules/programs/pi-coding-agent;
+              src = piSource;
+              pnpmDeps = piPnpmDeps;
 
-              npmDepsHash = piNpmDepsHash;
-              npmDepsFetcherVersion = 2;
-
-              dontNpmBuild = true;
+              nativeBuildInputs = piPnpmNativeBuildInputs;
+              dontBuild = true;
               doCheck = true;
               checkPhase = ''
                 runHook preCheck
-                npm run check
+                pnpm run check
                 runHook postCheck
               '';
               installPhase = ''
@@ -231,17 +240,16 @@
           piCustomizations
           // repositoryConsistency
           // lib.optionalAttrs (system == "aarch64-darwin") {
-            configuration-contracts = pkgs.buildNpmPackage {
+            configuration-contracts = pkgs.stdenvNoCC.mkDerivation {
               pname = "configuration-contracts";
               version = "0";
-              src = ./modules/programs/pi-coding-agent;
+              src = piSource;
+              pnpmDeps = piPnpmDeps;
               CONFIGURATION_SOURCE = configurationSource;
               CONFIGURATION_FIXTURE = ./checks/fixtures/configuration-contracts.nix;
 
-              npmDepsHash = piNpmDepsHash;
-              npmDepsFetcherVersion = 2;
-
-              dontNpmBuild = true;
+              nativeBuildInputs = piPnpmNativeBuildInputs;
+              dontBuild = true;
               doCheck = true;
               checkPhase = ''
                 runHook preCheck
@@ -314,6 +322,7 @@
             packages = with pkgs; [
               deno
               nodejs
+              pnpm
               typescript-language-server
               emmylua-ls
               emmylua-check
