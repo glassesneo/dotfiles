@@ -6,7 +6,7 @@ import { buildLaunchEnvelope } from "../extensions_src/utilities/agent_types.ts"
 import { availableContext, publishAgentActivity } from "../extensions_src/utilities/orchestration_activity.ts";
 import { bindAgentRuntime } from "../extensions_src/utilities/orchestration_runtime.ts";
 import { createCompletionReceipt, readCompletionLedger } from "../extensions_src/utilities/orchestration_channel.ts";
-import { acknowledgeMeshEvents, bindMeshEndpoint, markMeshEventInjected, pollMeshEvents, registerMeshSignal, setMeshEndpointOffline } from "../extensions_src/utilities/orchestration_events.ts";
+import { acknowledgeMeshEvents, bindMeshEndpoint, markMeshEventInjected, materializeMeshCompletionEvents, pollMeshEvents, readPendingMeshEvents, registerMeshSignal, setMeshEndpointOffline } from "../extensions_src/utilities/orchestration_events.ts";
 import { createTask, ensurePolicyEpoch, finishTask, initializeMesh, meshPaths, patchAgentStatus, prepareAgent, publishAgent, readPolicyEpoch, reserveMeshCapacity } from "../extensions_src/utilities/orchestration_store.ts";
 import { withTemporaryRoot as withRoot } from "./test_helpers.ts";
 
@@ -60,6 +60,20 @@ void test("routed direct completion persists one minimal steer event and repairs
     assert.doesNotMatch(JSON.stringify(event!.payload), /prompt|output|error|usage/u);
     const [again] = await pollMeshEvents(root, fixture.mesh.meshId, fixture.endpoint);
     assert.equal(again!.eventId, event!.eventId);
+}));
+
+// Admission: endpoint delivery is repository-owned persistence behavior; types cannot detect accidental settlement writes from a read path.
+// Given a terminal routed task, when an endpoint performs read-only delivery before and after root materialization, it observes no event or ledger mutation until the root-owned boundary runs.
+void test("endpoint delivery reads only root-materialized completion events", async () => withRoot("mesh-read-only-events-", async root => {
+    const fixture = await eventFixture(root);
+    const completion = { endpointId: fixture.endpoint.endpointId, endpointSessionFile: fixture.endpoint.sessionFile, mode: "direct" as const };
+    const task = await createTask(root, fixture.mesh.meshId, fixture.agentId, "root materializes once", { requesterEndpointId: fixture.endpoint.endpointId, completion });
+    await finishTask(root, fixture.mesh.meshId, task.request.taskId, { outcome: "succeeded" });
+    assert.deepEqual(await readPendingMeshEvents(root, fixture.mesh.meshId, fixture.endpoint), []);
+    assert.equal(await readCompletionLedger(root, fixture.mesh.meshId, fixture.endpoint.endpointId, fixture.endpoint.sessionFile), undefined);
+    await materializeMeshCompletionEvents(root, fixture.mesh.meshId);
+    const [event] = await readPendingMeshEvents(root, fixture.mesh.meshId, fixture.endpoint);
+    assert.equal((event!.payload.tasks as Array<{ taskId: string }>)[0]!.taskId, task.request.taskId);
 }));
 
 // Given retrieval on either side of assignment persistence, completion settlement suppresses receipt-first work while retaining frozen batch payloads for ledger-first repair.

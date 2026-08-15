@@ -2,15 +2,15 @@ use ../../colors.nu
 
 def main () {
   const name = "@name@"
-  let percentage = pmset -g batt
-    | lines
+  let battery_state = pmset -g batt | lines
+  let percentage = $battery_state
     | find '%;'
     | split words
     | get 0
     | get 5
     | into int
 
-  if (pmset -g batt | lines | find "AC Power" | length) != 0 {
+  if ($battery_state | find "AC Power" | length) != 0 {
     let options = [
       $"icon=($percentage)%"
       "label="

@@ -390,7 +390,20 @@ def handle_workspace_change [] {
       })
       save_workspace_snapshot ($snapshot | upsert workspaces $workspaces)
     }
-  } else { resync_workspaces --update-focus }
+  } else {
+    let update = (rift event_focus_update (load_previous_snapshot) {
+      workspace_name: ($env.RIFT_WORKSPACE_NAME? | default "")
+      display_uuid: ($env.RIFT_DISPLAY_UUID? | default "")
+      space_id: ($env.RIFT_SPACE_ID? | default "")
+    })
+    if $update == null {
+      resync_workspaces --update-focus
+      return
+    }
+
+    update_focus $update.focused $update.previous
+    save_workspace_snapshot $update.snapshot
+  }
 }
 
 def click_workspace [id: string] {

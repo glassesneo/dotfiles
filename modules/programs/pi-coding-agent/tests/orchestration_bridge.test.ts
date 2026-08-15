@@ -7,8 +7,9 @@ import test from "node:test";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { registerMeshChildBridge, type MeshChildBridgeDependencies } from "../extensions_src/orchestration_child_bridge.ts";
 import { buildLaunchEnvelope } from "../extensions_src/utilities/agent_types.ts";
+import { FakeMonotonicTimers, yieldToIO } from "./test_helpers.ts";
 import { readAgentActivity } from "../extensions_src/utilities/orchestration_activity.ts";
-import { createTask, ensurePolicyEpoch, initializeMesh, markAgentStopping, prepareAgent, publishAgent, readAgentSnapshot, requestTaskCancellation, reserveMeshCapacity } from "../extensions_src/utilities/orchestration_store.ts";
+import { claimPendingTask, createTask, ensurePolicyEpoch, initializeMesh, markAgentStopping, prepareAgent, publishAgent, readAgentSnapshot, requestTaskCancellation, reserveMeshCapacity } from "../extensions_src/utilities/orchestration_store.ts";
 
 const capabilities = { nativeScreen: true, taskDelivery: true, taskCompletion: true, taskCancellation: true, usage: true, interactiveInterventions: true, terminalHistory: true };
 const tmux = { socket: "/tmp/tmux", serverPid: "1", sessionId: "$1", sessionName: "main", windowId: "@1", paneId: "%1", windowName: "worker" };
@@ -58,7 +59,7 @@ async function bridgeFixture(options: { publish?: boolean; contextPolicy?: "proj
         sendUserMessage(prompt: string) { delivered.push(prompt); },
     } as unknown as ExtensionAPI;
     registerMeshChildBridge(pi, { PI_MESH_ID: mesh.meshId, PI_MESH_AGENT_ID: agentId, PI_MESH_AGENT_DIR: prepared.paths.directory, PI_MESH_EPOCH_ID: epoch.epochId, PI_AGENT_RESOLVED_AGENT: envelopePath }, {
-        setInterval(callback) { intervalCallback = callback; return 1; }, clearInterval() {}, resolveCompactionReserveTokens: () => 68, contextHeadroomTokens: 32, standaloneRuntimeBinding: true, ...options.dependencies,
+        cadenceSetTimeout(callback) { intervalCallback = callback; return 1; }, cadenceClearTimeout() {}, resolveCompactionReserveTokens: () => 68, contextHeadroomTokens: 32, standaloneRuntimeBinding: true, idleClaimIntervalMs: 0, ...options.dependencies,
     });
     const activate = (value: unknown = envelope) => { for (const handler of eventHandlers) handler({ schemaVersion: 1, identity: envelope.identity, envelope: value }); };
     const start = () => handlers.get("session_start")?.({}, { cwd: "/work", sessionManager: { getSessionId: () => "child", getSessionFile: () => join(root, "child.jsonl") }, getContextUsage: () => ({ tokens: 99, contextWindow: 200, percent: 49.5 }), isIdle: () => idle, hasPendingMessages: () => pendingMessages, abort() { aborts += 1; }, shutdown() { shutdowns += 1; } });
@@ -111,6 +112,37 @@ void test("manual idle compaction settles on a later quiescent observation", asy
     fixture.setIdle(false); await fixture.tick(); assert.equal((await readAgentActivity(fixture.root, fixture.meshId, fixture.agentId))?.phase, "compacting");
     fixture.setIdle(true); fixture.setPendingMessages(true); await fixture.tick(); assert.equal((await readAgentActivity(fixture.root, fixture.meshId, fixture.agentId))?.phase, "compacting");
     fixture.setPendingMessages(false); await fixture.tick(); assert.equal((await readAgentActivity(fixture.root, fixture.meshId, fixture.agentId))?.phase, "idle");
+});
+
+// Admission: claimed-task ownership across recursive child polling and shutdown is a durable lifecycle contract that types and persistence validation cannot observe.
+// Given a real task claimed while shutdown awaits the in-flight pass plus a captured stale callback, reload fails the owned task without prompt delivery, timeout resurrection, or post-unbind polling.
+void test("Pi child shutdown fences in-flight and stale cadence callbacks", async () => {
+    const clock = new FakeMonotonicTimers(); clock.now = Date.now();
+    let claims = 0; let release!: () => void; let entered!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; }); const inFlight = new Promise<void>(resolve => { entered = resolve; });
+    const fixture = await bridgeFixture({ dependencies: {
+        now: () => clock.now,
+        idleClaimIntervalMs: 3000,
+        cadenceSetTimeout: clock.setTimeout,
+        cadenceClearTimeout: clock.clearTimeout,
+        claimPendingTask: async (...args) => { claims += 1; if (claims === 2) { entered(); await gate; } return claimPendingTask(...args); },
+    } });
+    fixture.activate(); await fixture.start();
+    assert.equal(claims, 1);
+    const task = await createTask(fixture.root, fixture.meshId, fixture.agentId, "claim during shutdown", `root:${fixture.meshId}`);
+    const stale = clock.captureNextCallback()!;
+    const advancing = clock.advance(3000); await inFlight;
+    const shutdown = fixture.emit("session_shutdown", { reason: "reload" }); await yieldToIO();
+    release(); await Promise.all([advancing, shutdown]);
+    const settled = await readAgentSnapshot(fixture.root, fixture.meshId, fixture.agentId, task.request.taskId);
+    assert.deepEqual(fixture.delivered, []);
+    assert.equal(settled.task?.status.state, "failed");
+    assert.equal(settled.task?.result?.outcome, "failed");
+    assert.match(settled.task?.result?.error ?? "", /replaced \(reload\) during the task/u);
+    assert.equal(clock.pendingCount, 0);
+    await stale(); await clock.advance(10_000);
+    assert.equal(claims, 2);
+    assert.equal(clock.pendingCount, 0);
 });
 
 // Given a durable root stop, when child shutdown crosses the bridge boundary, lifecycle remains stopping for root tmux confirmation.
@@ -176,6 +208,20 @@ void test("stalled completion persistence shuts down the settled child after a b
     now += 2; expire(); await settling;
     assert.equal(fixture.shutdowns, 1);
     await fixture.emit("session_shutdown", { reason: "quit" });
+});
+
+// Admission: child claim cadence is repository-owned state behavior; types cannot distinguish an idle full-store claim from an active cancellation probe.
+// Given an idle child and then an active task, cadence crossings defer full pickup for three seconds while retaining a 100 ms active cancellation deadline.
+void test("Pi child separates idle task claims from active cancellation cadence", async () => {
+    const clock = new FakeMonotonicTimers(); clock.now = Date.now();
+    const fixture = await bridgeFixture({ dependencies: { now: () => clock.now, idleClaimIntervalMs: 3000, cadenceSetTimeout: clock.setTimeout, cadenceClearTimeout: clock.clearTimeout } });
+    fixture.activate(); await fixture.start();
+    const task = await createTask(fixture.root, fixture.meshId, fixture.agentId, "cadenced task", `root:${fixture.meshId}`);
+    await clock.advance(2999); assert.deepEqual(fixture.delivered, []);
+    await clock.advance(1); assert.deepEqual(fixture.delivered, ["cadenced task"]); assert.equal(clock.nextDelay(), 100);
+    await requestTaskCancellation(fixture.root, fixture.meshId, task.request.taskId, "cadence cancellation");
+    await clock.advance(99); assert.equal((await readAgentSnapshot(fixture.root, fixture.meshId, fixture.agentId, task.request.taskId)).task?.status.state, "running");
+    await clock.advance(1); assert.equal((await readAgentSnapshot(fixture.root, fixture.meshId, fixture.agentId, task.request.taskId)).task?.status.state, "stopped");
 });
 
 void test("Pi child tasks preserve completion, cancellation, and failure outcomes", async () => {

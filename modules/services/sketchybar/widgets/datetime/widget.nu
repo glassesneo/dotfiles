@@ -8,7 +8,7 @@ def main [direction: string] {
   log info $"Rendering ($name)"
   let widget_options = [
     script="@script-path@"
-    update_freq=30
+    update_freq=60
     $"label.font.style=($label_font_style)"
     $"label.color=($colors.accent_datetime)"
     # icon.drawing=off

@@ -11,6 +11,24 @@ delib.module {
   home.ifEnabled.programs.nvf.settings.vim = {
     extraPackages = [llm-agents.copilot-language-server];
     luaConfigRC.copilot-privacy-policy = builtins.readFile ./copilot-lsp.lua;
+    lazy.plugins.copilot-lua = {
+      event = lib.mkForce [];
+      keys = lib.mkForce [];
+    };
+    autocmds = [
+      {
+        event = ["FileType"];
+        pattern = ["gitcommit"];
+        desc = "Enable Copilot for Git commit messages";
+        callback = lib.generators.mkLuaInline ''
+          function()
+            vim.schedule(function()
+              vim.cmd("Copilot enable")
+            end)
+          end
+        '';
+      }
+    ];
     assistant.copilot = {
       enable = true;
       cmp.enable = false;

@@ -33,6 +33,37 @@ export function extensionContext(options: {
     } as ExtensionContext;
 }
 
+export class FakeMonotonicTimers {
+    now = 0;
+    private nextId = 1;
+    private readonly timers = new Map<number, { due: number; callback: () => void | Promise<void> }>();
+
+    readonly setTimeout = (callback: () => void | Promise<void>, delayMs: number): number => {
+        const id = this.nextId++;
+        this.timers.set(id, { due: this.now + Math.max(0, delayMs), callback });
+        return id;
+    };
+    readonly clearTimeout = (timer: unknown): void => { this.timers.delete(Number(timer)); };
+    get pendingCount(): number { return this.timers.size; }
+    nextDelay(): number | undefined { const due = Math.min(...[...this.timers.values()].map(timer => timer.due)); return Number.isFinite(due) ? Math.max(0, due - this.now) : undefined; }
+    captureNextCallback(): (() => void | Promise<void>) | undefined { return [...this.timers.values()].sort((left, right) => left.due - right.due)[0]?.callback; }
+
+    async advance(milliseconds: number): Promise<void> {
+        const target = this.now + milliseconds;
+        while (true) {
+            const next = [...this.timers.entries()].filter(([, timer]) => timer.due <= target).sort((left, right) => left[1].due - right[1].due || left[0] - right[0])[0];
+            if (!next) break;
+            const [id, timer] = next;
+            this.timers.delete(id);
+            this.now = timer.due;
+            await timer.callback();
+            await yieldToIO();
+        }
+        this.now = target;
+        await yieldToIO();
+    }
+}
+
 export async function yieldToIO(): Promise<void> {
     await new Promise<void>(resolve => setImmediate(resolve));
 }

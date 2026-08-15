@@ -55,64 +55,88 @@ def cache_artwork [artwork_data: string] {
   $published
 }
 
+def visible_state [payload: record] {
+  {
+    playing: ($payload | get playing? | default false)
+    artist: ($payload | get artist? | default null)
+    title: ($payload | get title? | default null)
+    album: ($payload | get album? | default null)
+    artworkData: ($payload | get artworkData? | default null)
+  }
+}
+
+def active_artwork [payload: record] {
+  if ($payload | get playing? | default false) {
+    $payload | get artworkData? | default null
+  } else {
+    null
+  }
+}
+
 def trigger_play [payload: record] {
-  let metadata = $payload | select artist title album | to json
+  let metadata = {
+    artist: ($payload | get artist? | default null)
+    title: ($payload | get title? | default null)
+    album: ($payload | get album? | default null)
+  } | to json --raw
   sketchybar --trigger media_stream_play $"PAYLOAD=($metadata)" | ignore
 }
 
-def handle_payload [payload: record, previous_artwork: any] {
+def handle_visible_state [payload: record, previous: any] {
   if not ($payload | get playing? | default false) {
     invalidate_artwork
     sketchybar --trigger media_stream_pause | ignore
-    return null
+    return
   }
 
-  let artwork_data = $payload | get artworkData? | default null
-  let artwork_missing = $artwork_data == null or ($artwork_data | is-empty)
-  let cache_current = (
-    not $artwork_missing
-    and $previous_artwork != null
-    and $artwork_data == $previous_artwork
-    and ($cache_path | path exists)
-  )
-
-  let artwork_valid = if $cache_current {
-    true
-  } else if $artwork_missing {
-    invalidate_artwork
-    false
-  } else {
-    cache_artwork $artwork_data
+  let artwork_data = active_artwork $payload
+  let previous_artwork = if $previous == null { null } else { active_artwork $previous }
+  if $previous == null or $artwork_data != $previous_artwork {
+    let artwork_missing = $artwork_data == null or ($artwork_data | is-empty)
+    if $artwork_missing {
+      invalidate_artwork
+    } else {
+      cache_artwork $artwork_data | ignore
+    }
   }
 
   trigger_play $payload
-  if $artwork_valid { $artwork_data } else { null }
 }
 
 def main [] {
   invalidate_artwork
-  mut previous_artwork: any = null
+  mut current = {}
+  mut previous_visible: any = null
 
   let initial = try {
     ^$media_control get | from json
   } catch {
     null
   }
-  if $initial != null {
-    $previous_artwork = (handle_payload $initial $previous_artwork)
+  if $initial != null and ($initial | describe) =~ '^record' {
+    $current = $initial
+    handle_visible_state $current null
+    $previous_visible = visible_state $current
   }
 
-  for line in (^$media_control stream --no-diff | lines) {
+  for line in (^$media_control stream --debounce=100 | lines) {
     let data = try {
       $line | from json
     } catch {
       continue
     }
-    if ($data | get payload? | compact | is-empty) {
+    let payload = $data | get payload?
+    if $payload == null or ($payload | describe) !~ '^record' {
       continue
     }
 
-    let payload = $data | get payload
-    $previous_artwork = (handle_payload $payload $previous_artwork)
+    let previous = $current
+    let is_diff = $data | get diff? | default false
+    $current = if $is_diff { $current | merge $payload } else { $payload }
+    let next_visible = visible_state $current
+    if $previous_visible == null or $next_visible != $previous_visible {
+      handle_visible_state $current $previous
+      $previous_visible = $next_visible
+    }
   }
 }

@@ -10,7 +10,7 @@ import { readAgentActivity } from "../extensions_src/utilities/orchestration_act
 import { resolveExternalDriver, validateExternalWorkerConfig, type ExternalDriver, type ExternalWorkerConfig } from "../extensions_src/utilities/orchestration_external_driver.ts";
 import { resolveHarnessAdapter } from "../extensions_src/utilities/orchestration_harness.ts";
 import { MESH_PEER_TOOL_NAMES, piLaunchDescriptor } from "../extensions_src/utilities/orchestration_pi.ts";
-import { createTask, ensurePolicyEpoch, initializeMesh, markAgentStopping, prepareAgent, publishAgent, readAgentSnapshot, requestTaskCancellation, reserveMeshCapacity, taskPaths } from "../extensions_src/utilities/orchestration_store.ts";
+import { claimPendingTask, createTask, ensurePolicyEpoch, initializeMesh, markAgentStopping, prepareAgent, publishAgent, readAgentSnapshot, readAgentStatus, requestTaskCancellation, reserveMeshCapacity, taskPaths } from "../extensions_src/utilities/orchestration_store.ts";
 import { withTemporaryRoot, yieldToIO } from "./test_helpers.ts";
 
 const meshId = "11111111-1111-4111-8111-111111111111";
@@ -127,7 +127,26 @@ void test("external worker rejects mismatched immutable envelope identity before
     assert.equal(starts, 0);
 }));
 
-// Given a published worker role under cursor-fast, when the external worker crosses readiness and successive task boundaries, durable state records completion, recoverable failure, cancellation, and later reuse under the same role/profile identity.
+// Admission: external idle claiming is repository-owned process behavior; schemas cannot detect repeated full task scans hidden behind stop probes.
+// Given an idle external worker, when stop probes cross the worker loop, full task claims occur only at the three-second deadline.
+void test("external worker separates idle stop probes from full task claims", async () => withTemporaryRoot("orchestration-external-cadence-", async root => {
+    const fixture = await externalFixture(root);
+    let now = 0;
+    const claimTimes: number[] = []; const probeTimes: number[] = [];
+    const driver: ExternalDriver = { async start() {}, async runTask() { return { output: "", stopReason: "end_turn" }; }, async cancel() {}, async shutdown() {}, waitForClose: () => new Promise(() => {}), fatalError: () => undefined };
+    await runExternalWorker(fixture.env, {
+        createDriver: () => driver,
+        now: () => now,
+        sleep: async milliseconds => { now += milliseconds; },
+        readAgentStatus: async (...args) => { probeTimes.push(now); return readAgentStatus(...args); },
+        claimPendingTask: async (...args) => { claimTimes.push(now); const task = await claimPendingTask(...args); if (claimTimes.length === 2) await markAgentStopping(root, fixture.meshId, fixture.agentId); return task; },
+    });
+    assert.deepEqual(claimTimes, [0, 3000]);
+    assert.deepEqual(probeTimes.slice(0, 31), Array.from({ length: 31 }, (_value, index) => index * 100));
+}));
+
+// Admission: external active cancellation cadence is process-owned behavior not established by schemas or the idle-claim test.
+// Given a published worker role under cursor-fast, when the external worker crosses readiness and successive task boundaries, durable state records completion, recoverable failure, 50 ms cancellation monitoring, and later reuse under the same role/profile identity.
 void test("external worker persists readiness and reusable completion, failure, and cancellation lifecycle", async () => withTemporaryRoot("orchestration-external-lifecycle-", async root => {
     const fixture = await externalFixture(root);
     const prompts: string[] = [];
@@ -148,8 +167,8 @@ void test("external worker persists readiness and reusable completion, failure, 
         waitForClose: () => new Promise(() => {}),
         fatalError: () => undefined,
     };
-    const workerSleep = (milliseconds: number) => milliseconds === 50 ? new Promise<void>(resolve => setTimeout(resolve, 1)) : yieldToIO();
-    const worker = runExternalWorker(fixture.env, { createDriver: () => driver, sleep: workerSleep, activityHeartbeatMs: 1 });
+    const sleepRequests: number[] = []; const workerSleep = (milliseconds: number) => { sleepRequests.push(milliseconds); return milliseconds === 50 ? new Promise<void>(resolve => setTimeout(resolve, 1)) : yieldToIO(); };
+    const worker = runExternalWorker(fixture.env, { createDriver: () => driver, sleep: workerSleep, activityHeartbeatMs: 1, idleClaimIntervalMs: 1 });
     let workerStopped = false;
     try {
     await waitUntil(async () => { const snapshot = await readAgentSnapshot(root, fixture.meshId, fixture.agentId); return snapshot.status.bridgeReady && snapshot.activity.phase === "idle"; });
@@ -181,7 +200,7 @@ void test("external worker persists readiness and reusable completion, failure, 
     const cancelled = await readAgentSnapshot(root, fixture.meshId, fixture.agentId, cancellation.request.taskId);
     assert.equal(cancelled.task?.result?.output, "partial cancellation output");
     assert.match(cancelled.task?.result?.error ?? "", /cancelled/u);
-    assert.ok((await readAgentActivity(root, fixture.meshId, fixture.agentId))!.sequence > 0);
+    assert.ok((await readAgentActivity(root, fixture.meshId, fixture.agentId))!.sequence > 0); assert.equal(sleepRequests.includes(50), true);
 
     await markAgentStopping(root, fixture.meshId, fixture.agentId);
     await worker;

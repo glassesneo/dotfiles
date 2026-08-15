@@ -59,6 +59,9 @@ in
         enable = readOnly (boolOption windowManager.isRift);
         package = readOnly (packageOption rift);
         reservedTop = description (intOption 38) "Total top outer gap for displays where SketchyBar occupies the top edge, in logical points.";
+        # Rift owns the final upstream run_on_start value; integrations append
+        # commands through this typed aggregation interface.
+        startupCommands = listOfOption str [];
       };
 
     darwin.ifEnabled = {
@@ -102,6 +105,7 @@ in
         pkgs.replaceVars ./config.toml {
           reservedTop = toString cfg.reservedTop;
           normalOuterGap = toString normalOuterGap;
+          runOnStart = builtins.toJSON cfg.startupCommands;
           inherit perDisplayOuter;
         };
     in {

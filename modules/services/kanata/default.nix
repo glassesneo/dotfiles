@@ -92,6 +92,7 @@ in
           [
             "(defcfg"
             "  process-unmapped-keys yes"
+            "  log-layer-changes no"
             # Keep the canonical profile base as the first defined layer so
             # sparse integration overlays can transparently inherit it.
             "  delegate-to-first-layer yes"

@@ -191,6 +191,7 @@
               ./modules/services/sketchybar/widgets/workspace/tests
               ./modules/services/sketchybar/widgets/workspace/providers/aerospace.nu
               ./modules/services/sketchybar/widgets/workspace/providers/rift.nu
+              ./modules/services/sketchybar/widgets/workspace/rift-subscribe-on-start.sh
             ];
           };
           mediaTestSource = fileset.toSource {
@@ -198,6 +199,7 @@
             fileset = fileset.unions [
               ./modules/services/sketchybar/colors.nu
               ./modules/services/sketchybar/widgets/media/handler.nu
+              ./modules/services/sketchybar/widgets/media/service.nu
               ./modules/services/sketchybar/widgets/media/tests
             ];
           };
@@ -293,6 +295,7 @@
                 chmod -R u+w workspace
                 cd workspace/tests
                 nu default.nu
+                bash rift-subscribe-on-start.sh
                 touch $out
               '';
 
@@ -305,6 +308,7 @@
                 chmod -R u+w sketchybar
                 cd sketchybar/widgets/media/tests
                 bash default.sh
+                bash service.sh
                 touch $out
               '';
           }

@@ -4,11 +4,11 @@ import { basename, dirname, resolve } from "node:path";
 import { launchEnvelopeDigest, validateLaunchEnvelope } from "./utilities/agent_types.ts";
 import { externalContext, publishAgentActivity, type AgentActivityPhase } from "./utilities/orchestration_activity.ts";
 import { bindAgentRuntime } from "./utilities/orchestration_runtime.ts";
-import { agentPaths, claimPendingTask, failAgent, finishTask, markBridgeReady, readAgentSnapshot, readTaskCancellation } from "./utilities/orchestration_store.ts";
+import { agentPaths, claimPendingTask, failAgent, finishTask, markBridgeReady, readAgentSnapshot, readAgentStatus, readTaskCancellation } from "./utilities/orchestration_store.ts";
 import { emptyUsage, isTerminalAgent } from "./utilities/orchestration_types.ts";
 import { resolveExternalDriver, validateExternalWorkerConfig, type ExternalDriver, type ExternalWorkerConfig, type ExternalWorkerEvent } from "./utilities/orchestration_external_driver.ts";
 
-interface WorkerDependencies { createDriver?: (config: ExternalWorkerConfig, event: (event: ExternalWorkerEvent) => void) => ExternalDriver; publishAgentActivity?: typeof publishAgentActivity; activityHeartbeatMs?: number; now?: () => number; sleep?: (ms: number) => Promise<void> }
+interface WorkerDependencies { claimPendingTask?: typeof claimPendingTask; readAgentStatus?: typeof readAgentStatus; readAgentSnapshot?: typeof readAgentSnapshot; readTaskCancellation?: typeof readTaskCancellation; createDriver?: (config: ExternalWorkerConfig, event: (event: ExternalWorkerEvent) => void) => ExternalDriver; publishAgentActivity?: typeof publishAgentActivity; activityHeartbeatMs?: number; idleClaimIntervalMs?: number; idleStopProbeMs?: number; activeCancellationIntervalMs?: number; now?: () => number; sleep?: (ms: number) => Promise<void> }
 
 function requireEnv(env: NodeJS.ProcessEnv, name: string): string { const value = env[name]; if (!value?.trim()) throw new Error(`${name} is required`); return value; }
 function sleep(ms: number): Promise<void> { return new Promise(resolve => setTimeout(resolve, ms)); }
@@ -98,14 +98,17 @@ export async function runExternalWorker(env: NodeJS.ProcessEnv = process.env, de
         await markBridgeReady(stateRoot, meshId, agentId, launchEnvelopeDigest(envelope), runtimeId);
         view.event({ type: "state", text: "ready" });
         await publishActivity("idle");
+        let nextClaimAt = Number.NEGATIVE_INFINITY;
         while (!stopping) {
             await publishActivity(activityPhase, true).catch(() => {});
-            const snapshot = await readAgentSnapshot(stateRoot, meshId, agentId);
-            if (isTerminalAgent(snapshot.status.state)) { await stop(snapshot.status.exitReason ?? "Stopped by parent", snapshot.status.state === "failed" ? "failed" : "stopped"); break; }
-            if (snapshot.status.state === "stopping") { await stop(snapshot.status.exitReason ?? "Stopped by parent", undefined, true); break; }
-            const task = await claimPendingTask(stateRoot, meshId, agentId, runtimeId);
+            const status = await (dependencies.readAgentStatus ?? readAgentStatus)(agentPaths(stateRoot, meshId, agentId), meshId);
+            if (isTerminalAgent(status.state)) { await stop(status.exitReason ?? "Stopped by parent", status.state === "failed" ? "failed" : "stopped"); break; }
+            if (status.state === "stopping") { await stop(status.exitReason ?? "Stopped by parent", undefined, true); break; }
+            const now = (dependencies.now ?? Date.now)();
+            const task = now >= nextClaimAt ? await (dependencies.claimPendingTask ?? claimPendingTask)(stateRoot, meshId, agentId, runtimeId) : undefined;
+            if (now >= nextClaimAt) nextClaimAt = now + (dependencies.idleClaimIntervalMs ?? 3000);
             if (!task) {
-                const closed = await Promise.race([wait(100).then(() => undefined), driverClosed]);
+                const closed = await Promise.race([wait(Math.min(dependencies.idleStopProbeMs ?? 100, Math.max(0, nextClaimAt - now))).then(() => undefined), driverClosed]);
                 if (closed) throw closed.driverError;
                 const fatal = driver.fatalError();
                 if (fatal) throw fatal;
@@ -121,11 +124,11 @@ export async function runExternalWorker(env: NodeJS.ProcessEnv = process.env, de
             let driverFailed = false;
             const monitorStop = async (): Promise<void> => {
                 while (!turnSettled) {
-                    await wait(50);
+                    await wait(dependencies.activeCancellationIntervalMs ?? 50);
                     if (turnSettled) return;
                     await publishActivity(activityPhase, true).catch(() => {});
                     if (turnSettled) return;
-                    const status = (await readAgentSnapshot(stateRoot, meshId, agentId)).status;
+                    const status = (await (dependencies.readAgentSnapshot ?? readAgentSnapshot)(stateRoot, meshId, agentId)).status;
                     if (turnSettled) return;
                     if (isTerminalAgent(status.state)) {
                         await stop(status.exitReason ?? "Stopped by parent", status.state === "failed" ? "failed" : "stopped");
@@ -135,7 +138,7 @@ export async function runExternalWorker(env: NodeJS.ProcessEnv = process.env, de
                         await stop(status.exitReason ?? "Stopped by parent", undefined, true);
                         throw new Error(status.exitReason ?? "Stopped by parent");
                     }
-                    const cancellation = await readTaskCancellation(stateRoot, meshId, taskId);
+                    const cancellation = await (dependencies.readTaskCancellation ?? readTaskCancellation)(stateRoot, meshId, taskId);
                     if (turnSettled) return;
                     if (cancellation) {
                         taskCancelled = true;

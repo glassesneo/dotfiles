@@ -7,7 +7,7 @@ focus_follows_mouse = true
 mouse_follows_focus = false
 mouse_hides_on_focus = false
 auto_focus_blacklist = []
-run_on_start = []
+run_on_start = @runOnStart@
 hot_reload = true
 
 [settings.ui.mission_control]

@@ -31,6 +31,9 @@ delib.module {
       runtimeFiles = readOnly (attrsOfOption path {
         "providers/aerospace.nu" = ./providers/aerospace.nu;
         "providers/rift.nu" = ./providers/rift.nu;
+        "rift-event-bridge.sh" = pkgs.replaceVars ./rift-event-bridge.sh {
+          sketchybar-exe = lib.getExe pkgs.sketchybar;
+        };
       });
     });
 
@@ -44,31 +47,15 @@ delib.module {
     ];
   };
 
-  home.ifEnabled = lib.mkIf windowManager.isRift {
-    launchd.agents.sketchybar-workspace-rift-subscriber = {
-      enable = true;
-      config = {
-        Label = "com.neo.sketchybar.workspace.rift-subscriber";
-        ProgramArguments = [
-          pkgs.runtimeShell
-          "${pkgs.replaceVars ./rift-subscriber.sh {
-            runtime-shell = pkgs.runtimeShell;
-            rift-cli = windowManager.rift.cli;
-            rift-exe = windowManager.rift.executable;
-            sketchybar-exe = lib.getExe pkgs.sketchybar;
-          }}"
-        ];
-        RunAtLoad = true;
-        KeepAlive = {
-          Crashed = true;
-          SuccessfulExit = false;
-        };
-        ThrottleInterval = 5;
-        LimitLoadToSessionType = "Aqua";
-        ProcessType = "Interactive";
-        StandardOutPath = "${homeConfig.xdg.stateHome}/sketchybar/workspace-rift-subscriber.log";
-        StandardErrorPath = "${homeConfig.xdg.stateHome}/sketchybar/workspace-rift-subscriber.err";
-      };
+  # The workspace widget contributes one native subscription command; the
+  # Rift owner remains the sole writer of settings.run_on_start.
+  myconfig.ifEnabled.services.rift.startupCommands = lib.optionals windowManager.isRift (let
+    riftSubscribeOnStart = pkgs.writeShellApplication {
+      name = "sketchybar-workspace-rift-subscribe-on-start";
+      text = builtins.readFile ./rift-subscribe-on-start.sh;
     };
-  };
+    stableEventBridge = "${homeConfig.home.homeDirectory}/.config/sketchybar/widgets/workspace/rift-event-bridge.sh";
+  in [
+    "${lib.getExe riftSubscribeOnStart} ${windowManager.rift.cli} ${stableEventBridge}"
+  ]);
 }

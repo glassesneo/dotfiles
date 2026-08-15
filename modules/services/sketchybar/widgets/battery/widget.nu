@@ -6,7 +6,7 @@ def main [direction: string] {
   log info $"Rendering ($name)"
   let widget_options = [
     script="@script-path@"
-    update_freq=120
+    update_freq=300
     icon.font.style=Regular
     icon.font.size=14
     label.font.style=Bold
