@@ -23,24 +23,21 @@ in
 
     home.always = {myconfig, ...}: let
       inherit (myconfig.constants) username;
-    in
-      {
-        home = {
-          inherit username;
-          homeDirectory =
-            if pkgs.stdenv.isDarwin
-            then "/Users/${username}"
-            else "/home/${username}";
-        };
-      }
-      // pkgs.lib.optionalAttrs pkgs.stdenv.isDarwin {
-        targets.darwin = {
-          linkApps.enable = false;
+    in {
+      home = {
+        inherit username;
+        homeDirectory =
+          if pkgs.stdenv.isDarwin
+          then "/Users/${username}"
+          else "/home/${username}";
+      };
+      targets.darwin = pkgs.lib.mkIf pkgs.stdenv.isDarwin {
+        linkApps.enable = false;
 
-          copyApps = {
-            enable = true;
-            directory = "Applications/Home Manager Apps";
-          };
+        copyApps = {
+          enable = true;
+          directory = "Applications/Home Manager Apps";
         };
       };
+    };
   }
