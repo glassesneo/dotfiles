@@ -193,8 +193,8 @@ in
               pressureFloor = 1;
             };
             worker = {
-              collectAt = 6;
-              retain = 3;
+              collectAt = 8;
+              retain = 4;
               pressureFloor = 1;
             };
             validator = {
@@ -203,8 +203,8 @@ in
               pressureFloor = 1;
             };
             reviewer = {
-              collectAt = 3;
-              retain = 1;
+              collectAt = 4;
+              retain = 3;
               pressureFloor = 1;
             };
             review-lens = {
@@ -214,7 +214,7 @@ in
             };
             researcher = {
               collectAt = 3;
-              retain = 1;
+              retain = 2;
               pressureFloor = 1;
             };
             searcher = {
