@@ -250,14 +250,14 @@ void test("persisted agents reject a forged sibling policy edge even when the ep
     await assert.rejects(publishAgent(root, mesh.meshId, prepared.paths, { agentId: prepared.agentId, epochId: epoch.epochId, role: "reviewer", selectedProfile: "pi-medium", harness: "pi", cwd: root, roleSnapshot: reviewer, profileSnapshot: syntheticProfile, launchEnvelope: envelopePath, tmux, capabilities, creatorSessionId: "root" }), /exact child projection/u);
 }));
 
-void test("task requests persist requester provenance and reject requester-less legacy records", async () => withRoot("mesh-requester-v2-", async root => {
+void test("task requests persist requester provenance and reject requester-less legacy records", async () => withRoot("mesh-requester-v3-", async root => {
     const taskId = randomUUID(); const meshId = randomUUID(); const agentId = randomUUID(); const paths = taskPaths(root, meshId, taskId); await mkdir(paths.directory, { recursive: true });
-    const createdAt = new Date().toISOString(); await writeFile(paths.request, JSON.stringify({ schemaVersion: 2, meshId, agentId, taskId, prompt: "bounded", requesterEndpointId: `agent:${agentId}`, requesterAgentId: agentId, createdAt }));
+    const createdAt = new Date().toISOString(); await writeFile(paths.request, JSON.stringify({ schemaVersion: 3, meshId, agentId, taskId, prompt: "bounded", requesterEndpointId: `agent:${agentId}`, requesterAgentId: agentId, createdAt }));
     await writeFile(paths.status, JSON.stringify({ schemaVersion: 1, meshId, agentId, taskId, state: "created", createdAt }));
     await mkdir(join(root, "meshes", meshId, "agents", agentId), { recursive: true }); await writeFile(join(root, "meshes", meshId, "agents", agentId, "events.jsonl"), "");
     const task = await import("../extensions_src/utilities/orchestration_store.ts").then(store => store.readTask(root, meshId, taskId));
     assert.deepEqual({ endpoint: task.request.requesterEndpointId, agent: task.request.requesterAgentId }, { endpoint: `agent:${agentId}`, agent: agentId });
-    await writeFile(paths.request, JSON.stringify({ schemaVersion: 2, meshId, agentId, taskId, prompt: "forged", requesterEndpointId: `root:${meshId}`, requesterAgentId: agentId, createdAt }));
+    await writeFile(paths.request, JSON.stringify({ schemaVersion: 3, meshId, agentId, taskId, prompt: "forged", requesterEndpointId: `root:${meshId}`, requesterAgentId: agentId, createdAt }));
     await assert.rejects(import("../extensions_src/utilities/orchestration_store.ts").then(store => store.readTask(root, meshId, taskId)), /requester identity/u);
     await writeFile(paths.request, JSON.stringify({ schemaVersion: 1, meshId, agentId, taskId, prompt: "legacy", createdAt }));
     await assert.rejects(import("../extensions_src/utilities/orchestration_store.ts").then(store => store.readTask(root, meshId, taskId)), /Unsupported task request/u);
@@ -311,7 +311,7 @@ void test("closing admission checkpoints reject preparation, publication, and ta
 
 void test("root reconciliation removes uncommitted task directories and settles durable task, agent, and usage state exactly once", async () => withRoot("mesh-state-reconcile-", async root => {
     const mesh = await initializeMesh(root, { rootSessionId: "root", recoverable: true, budgets }); const epoch = await ensurePolicyEpoch(root, mesh.meshId, syntheticEpochInput("ops", { worker: syntheticRole("worker") })); const agent = await createPublishedAgent(root, mesh.meshId, epoch.epochId);
-    const taskId = randomUUID(); const paths = taskPaths(root, mesh.meshId, taskId); const createdAt = new Date().toISOString(); await mkdir(paths.directory, { recursive: true }); await writeFile(paths.request, JSON.stringify({ schemaVersion: 2, meshId: mesh.meshId, agentId: agent.agentId, taskId, prompt: "durable request", requesterEndpointId: `root:${mesh.meshId}`, createdAt }));
+    const taskId = randomUUID(); const paths = taskPaths(root, mesh.meshId, taskId); const createdAt = new Date().toISOString(); await mkdir(paths.directory, { recursive: true }); await writeFile(paths.request, JSON.stringify({ schemaVersion: 3, meshId: mesh.meshId, agentId: agent.agentId, taskId, prompt: "durable request", requesterEndpointId: `root:${mesh.meshId}`, createdAt }));
     const abandonedId = randomUUID(); await mkdir(taskPaths(root, mesh.meshId, abandonedId).directory, { recursive: true });
     await patchAgentStatus(root, mesh.meshId, agent.agentId, { state: "idle", activeTaskId: undefined });
     assert.equal((await readMeshBudgetUsage(root, mesh.meshId)).lifetimeTasks, 1);

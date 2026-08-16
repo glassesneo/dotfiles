@@ -3,11 +3,9 @@ import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { visibleWidth } from "@earendil-works/pi-tui";
 import { unknownAgentActivityProjection } from "../extensions_src/utilities/orchestration_activity.ts";
 import { buildMeshDisplayTree } from "../extensions_src/utilities/orchestration_display_tree.ts";
 import { openMeshHistory } from "../extensions_src/utilities/orchestration_history.ts";
-import { defaultPaletteKeymap } from "../extensions_src/utilities/command_palette_keymap.ts";
 import { MeshAgentsPaletteComponent } from "../extensions_src/utilities/orchestration_palette.ts";
 import { openLivePreview } from "../extensions_src/utilities/orchestration_preview.ts";
 import { MAX_MODEL_VISIBLE_BYTES, MAX_MODEL_VISIBLE_LINES, projectDebugSnapshot, projectMinimalAgentTask, serializeModelVisibleJson } from "../extensions_src/utilities/orchestration_projection.ts";
@@ -29,7 +27,7 @@ function snapshot(id: string, state: AgentState, options: { parentAgentId?: stri
         status: { schemaVersion: 1, meshId, agentId: id, state, bridgeReady: true, meshToolsEnabled: true, agentUsage: emptyUsage(), accountedTaskIds: [], updatedAt: options.createdAt ?? id, ...(options.sessionFile ? { childSessionFile: options.sessionFile } : {}), ...(options.sessionId ? { childSessionId: options.sessionId } : {}) },
         activity: unknownAgentActivityProjection(),
         stop: null,
-        task: { request: { schemaVersion: 2, meshId, agentId: id, taskId, prompt, requesterEndpointId: "root:test", createdAt: options.createdAt ?? id }, status: { schemaVersion: 1, meshId, agentId: id, taskId, state: taskState, createdAt: options.createdAt ?? id, ...(terminal ? { finishedAt: options.createdAt ?? id } : {}) }, result: terminal ? { schemaVersion: 1, meshId, agentId: id, taskId, outcome: taskState, output: "done", usage: emptyUsage(), turns: 1, interventions: [], startedAt: options.createdAt ?? id, finishedAt: options.createdAt ?? id } : null, interventions: [], claimed: false, directory: "/task" },
+        task: { request: { schemaVersion: 3, meshId, agentId: id, taskId, prompt, requesterEndpointId: "root:test", createdAt: options.createdAt ?? id }, status: { schemaVersion: 1, meshId, agentId: id, taskId, state: taskState, createdAt: options.createdAt ?? id, ...(terminal ? { finishedAt: options.createdAt ?? id } : {}) }, result: terminal ? { schemaVersion: 1, meshId, agentId: id, taskId, outcome: taskState, output: "done", usage: emptyUsage(), turns: 1, interventions: [], startedAt: options.createdAt ?? id, finishedAt: options.createdAt ?? id } : null, interventions: [], claimed: false, directory: "/task" },
     };
 }
 
@@ -100,54 +98,6 @@ void test("history and preview reject unsafe identity before allocating tmux sta
     let allocated = false;
     await assert.rejects(openLivePreview(async () => ({ stdout: "", stderr: "", code: 0 }), "/tmux", { socket: "/tmp/tmux", serverPid: "10", sessionId: "$parent", sessionName: "main", windowId: "@parent", paneId: "%parent" }, tmux, "preview", { makeTempDirectory: async () => { allocated = true; return directory; } }), /client/u);
     assert.equal(allocated, false);
-});
-
-// Given a caller-scoped channel larger than the viewport, existing navigation selects its node and every member while agent-only actions remain inert on channel rows.
-void test("palette exposes every selectable channel member width-safely without stealing agent actions", async () => {
-    const live = snapshot("dddddddd-dddd-4ddd-8ddd-dddddddddddd", "busy", { taskState: "running" });
-    const members = Array.from({ length: 6 }, (_, index) => ({
-        taskId: `task-${index}-22222222-2222-4222-8222-222222222222`,
-        agentId: `agent-${index}-11111111-1111-4111-8111-111111111111`,
-        agent: `role-${index}`,
-        agentState: index % 2 === 0 ? "busy" as const : "idle" as const,
-        state: index < 2 ? "succeeded" as const : "running" as const,
-    }));
-    let execCalls = 0; let stopCalls = 0;
-    const component = new MeshAgentsPaletteComponent({
-        tui: { terminal: { rows: 14 }, requestRender() {} } as never,
-        theme: { fg: (_role: string, text: string) => text, bg: (_role: string, text: string) => text, bold: (text: string) => text } as never,
-        ui: { input: async () => undefined, confirm: async () => false }, keymap: defaultPaletteKeymap,
-        deps: { meshId, exec: async () => { execCalls += 1; return { stdout: "", stderr: "", code: 0 }; }, tmux: "/tmux", historyViewerExtension: "/viewer", piCommand: "/pi", natureHandleWords: ["May"], discover: async () => ({ agents: [live], malformedCount: 0 }), stopAgent: async () => { stopCalls += 1; return live; } },
-        done() {},
-    });
-    component.replaceAgents([live]);
-    component.replaceChannels([{ channel: "A", terminal: 2, total: 6, tasks: members }]);
-
-    // Initial agent selection remains stable; move to the preceding channel header through the unchanged Up binding.
-    for (let index = 0; index < members.length + 1; index += 1) component.handleInput("\x10");
-    assert.equal(component.selectedRowId, "channel:A");
-    assert.equal(component.selectedAgentId, undefined);
-    const headerLines = component.render(140);
-    assert.ok(headerLines.every(line => visibleWidth(line) <= 140));
-    const headerText = headerLines.join("\n");
-    assert.match(headerText, /Channel A.*2\/6 terminal/su);
-    assert.match(headerText, /role-0.*task state: succeeded.*agent state: busy/su);
-
-    await component.action("open"); await component.action("stop"); await component.action("preview"); await component.action("unlink");
-    assert.equal(execCalls, 0); assert.equal(stopCalls, 0);
-
-    // Right selects the first member; Down traverses all six despite the five-row viewport.
-    component.handleInput("\x1b[C");
-    for (const [index, member] of members.entries()) {
-        assert.equal(component.selectedRowId, `channel:A:task:${member.taskId}`);
-        const lines = component.render(76);
-        assert.ok(lines.every(line => visibleWidth(line) <= 76));
-        assert.match(lines.join("\n"), new RegExp(`${member.agent}.*task ${member.state}.*agent ${member.agentState}`, "su"));
-        if (index < members.length - 1) component.handleInput("\x0e");
-    }
-    component.handleInput("\x0e");
-    assert.equal(component.selectedAgentId, live.agent.agentId);
-    component.dispose();
 });
 
 void test("palette delegates stop authority with mesh identity and preserves the stopped result over a stale refresh", async () => {

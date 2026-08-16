@@ -1,13 +1,11 @@
 import type { Usage } from "@earendil-works/pi-ai";
 import { canonicalJson } from "./agent_types.ts";
 import {
-    CHANNEL_KEYS,
     isTerminalTask,
     promptSummary,
     type AgentSnapshot,
     type AgentState,
     type AgentStatus,
-    type ChannelKey,
     type TaskState,
 } from "./orchestration_types.ts";
 
@@ -46,7 +44,6 @@ export type MinimalSubmitResult = {
     taskId: string;
     agent: string;
     profile: string;
-    route: "direct" | `channel ${string}`;
     agentState: AgentState;
     taskState: TaskState;
 };
@@ -114,14 +111,12 @@ export function projectMinimalSubmitResult(
 ): MinimalSubmitResult {
     const projected = projectMinimalAgentTask(rawSnapshot);
     if (!projected.taskId || !projected.taskState) throw new Error(`Mesh agent ${projected.agentId} has no submitted task`);
-    const completion = rawSnapshot.task?.request.completion;
-    if (!completion) throw new Error(`Mesh task ${projected.taskId} has no durable completion route`);
+    if (!rawSnapshot.task?.request.completion) throw new Error(`Mesh task ${projected.taskId} has no durable completion target`);
     return {
         agentId: projected.agentId,
         taskId: projected.taskId,
         agent: projected.agent,
         profile: rawSnapshot.agent.selectedProfile,
-        route: completion.mode === "direct" ? "direct" : `channel ${completion.channel}`,
         agentState: projected.agentState,
         taskState: projected.taskState,
     };
@@ -355,7 +350,8 @@ function buildBudgetClone(
             });
             return [];
         }
-        const selected = key !== "tasks" && value.length > MAX_STRUCTURAL_ITEMS
+        const losslessTaskIdentityList = key === "tasks" || key === "pendingTasks";
+        const selected = !losslessTaskIdentityList && value.length > MAX_STRUCTURAL_ITEMS
             ? value.slice(0, MAX_STRUCTURAL_ITEMS)
             : value;
         if (selected.length !== value.length && markerTarget) markerFor(markerTarget, markers).truncated = true;
@@ -491,56 +487,87 @@ export function receiptIdsFromToolResults(messages: readonly unknown[]): string[
     return [...receiptIds];
 }
 
-function validateOpenChannels(value: unknown, eventId: string): void {
-    if (value === undefined) return;
-    if (!Array.isArray(value)) throw new Error(`Malformed mesh completion event ${eventId}`);
-    const channels = new Set<ChannelKey>();
-    for (const summary of value) {
-        if (!summary || typeof summary !== "object" || Array.isArray(summary)) throw new Error(`Malformed mesh completion event ${eventId}`);
-        const record = summary as Record<string, unknown>;
-        if (Object.keys(record).length !== 3 || !Object.hasOwn(record, "channel") || !Object.hasOwn(record, "terminal") || !Object.hasOwn(record, "total")) throw new Error(`Malformed mesh completion event ${eventId}`);
-        if (typeof record.channel !== "string" || !CHANNEL_KEYS.includes(record.channel as ChannelKey) || channels.has(record.channel as ChannelKey)) throw new Error(`Malformed mesh completion event ${eventId}`);
-        if (typeof record.terminal !== "number" || !Number.isInteger(record.terminal) || typeof record.total !== "number" || !Number.isInteger(record.total) || record.total <= 0 || record.terminal < 0 || record.terminal >= record.total) throw new Error(`Malformed mesh completion event ${eventId}`);
-        channels.add(record.channel as ChannelKey);
-    }
+type CompletionTaskIdentity = { taskId: string; agentId: string; state: "succeeded" | "failed" | "stopped" };
+type PendingTaskIdentity = { taskId: string; agentId: string; state: "created" | "running" };
+type CompletionSource = { eventId: string; batchId: string; settledAt: string; tasks: CompletionTaskIdentity[] };
+type CompletionFrontier = { observedAt: string; pendingTasks: PendingTaskIdentity[] };
+
+function exactRecord(value: unknown, keys: readonly string[], label: string): Record<string, unknown> {
+    if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(label);
+    const raw = value as Record<string, unknown>;
+    if (Object.keys(raw).length !== keys.length || keys.some(key => !(key in raw))) throw new Error(label);
+    return raw;
+}
+function validateTaskIdentity(value: unknown, eventId: string, pending: false): CompletionTaskIdentity;
+function validateTaskIdentity(value: unknown, eventId: string, pending: true): PendingTaskIdentity;
+function validateTaskIdentity(value: unknown, eventId: string, pending: boolean): CompletionTaskIdentity | PendingTaskIdentity {
+    const raw = exactRecord(value, ["taskId", "agentId", "state"], `Malformed mesh completion event ${eventId}`);
+    if (typeof raw.taskId !== "string" || !EVENT_ID.test(raw.taskId) || typeof raw.agentId !== "string" || !EVENT_ID.test(raw.agentId)) throw new Error(`Malformed mesh completion event ${eventId}`);
+    if (pending ? raw.state !== "created" && raw.state !== "running" : raw.state !== "succeeded" && raw.state !== "failed" && raw.state !== "stopped") throw new Error(`Malformed mesh completion event ${eventId}`);
+    return raw as CompletionTaskIdentity | PendingTaskIdentity;
+}
+function validateSource(value: unknown): CompletionSource {
+    const raw = exactRecord(value, ["eventId", "batchId", "settledAt", "tasks"], "Malformed mesh completion source");
+    if (typeof raw.eventId !== "string" || !EVENT_ID.test(raw.eventId) || typeof raw.batchId !== "string" || !EVENT_ID.test(raw.batchId) || typeof raw.settledAt !== "string" || !Number.isFinite(Date.parse(raw.settledAt)) || !Array.isArray(raw.tasks) || !raw.tasks.length) throw new Error("Malformed mesh completion source");
+    const tasks = raw.tasks.map(task => validateTaskIdentity(task, raw.eventId as string, false));
+    if (new Set(tasks.map(task => task.taskId)).size !== tasks.length) throw new Error(`Malformed mesh completion event ${String(raw.eventId)}`);
+    return { eventId: raw.eventId, batchId: raw.batchId, settledAt: raw.settledAt, tasks } as CompletionSource;
+}
+function validateFrontier(value: unknown): CompletionFrontier {
+    const raw = exactRecord(value, ["observedAt", "pendingTasks"], "Malformed mesh completion frontier");
+    if (typeof raw.observedAt !== "string" || !Number.isFinite(Date.parse(raw.observedAt)) || !Array.isArray(raw.pendingTasks)) throw new Error("Malformed mesh completion frontier");
+    const pendingTasks = raw.pendingTasks.map(task => validateTaskIdentity(task, "frontier", true));
+    if (new Set(pendingTasks.map(task => task.taskId)).size !== pendingTasks.length) throw new Error("Malformed mesh completion frontier");
+    return { observedAt: raw.observedAt, pendingTasks };
 }
 
 export function projectMeshCompletionContext<T>(messages: readonly T[], receivedTaskIds: ReadonlySet<string>): { messages: T[]; eventIds: string[] } {
-    const projected: T[] = [];
-    const eventIds: string[] = [];
-    const identities = new Map<string, string>();
-    for (const value of messages) {
-        if (!value || typeof value !== "object" || Array.isArray(value)) { projected.push(value); continue; }
+    const sourceIdentities = new Map<string, string>();
+    const sources: CompletionSource[] = [];
+    const completed = new Map<string, CompletionTaskIdentity>();
+    const completionIndexes = new Set<number>();
+    let latestFrontier: CompletionFrontier | undefined;
+
+    for (const [index, value] of messages.entries()) {
+        if (!value || typeof value !== "object" || Array.isArray(value)) continue;
         const message = value as Record<string, unknown>;
         const details = message.details && typeof message.details === "object" && !Array.isArray(message.details) ? message.details as Record<string, unknown> : undefined;
-        if (message.customType !== "mesh-event" || details?.kind !== "completion") { projected.push(value); continue; }
-        const eventId = details.eventId;
-        const payload = details.payload;
-        if (typeof eventId !== "string" || !EVENT_ID.test(eventId) || !payload || typeof payload !== "object" || Array.isArray(payload)) throw new Error("Malformed mesh completion event in model context");
-        const completion = payload as Record<string, unknown>;
-        if (completion.eventId !== eventId || completion.route !== "direct" && completion.route !== "channel" || completion.route === "channel" && (typeof completion.channel !== "string" || !/^[A-Z]$/u.test(completion.channel)) || completion.route === "direct" && completion.channel !== undefined || typeof completion.batchId !== "string" || !EVENT_ID.test(completion.batchId) || typeof completion.settledAt !== "string" || !Number.isFinite(Date.parse(completion.settledAt)) || !Array.isArray(completion.tasks) || completion.tasks.length < 1) throw new Error(`Malformed mesh completion event ${eventId}`);
-        validateOpenChannels(completion.openChannels, eventId);
-        const tasks = completion.tasks.map(task => {
-            if (!task || typeof task !== "object" || Array.isArray(task)) throw new Error(`Malformed mesh completion event ${eventId}`);
-            const record = task as Record<string, unknown>;
-            if (typeof record.taskId !== "string" || !EVENT_ID.test(record.taskId) || record.state !== "succeeded" && record.state !== "failed" && record.state !== "stopped") throw new Error(`Malformed mesh completion event ${eventId}`);
-            for (const key of ["createdAt", "startedAt", "finishedAt"] as const) if (record[key] !== undefined && (typeof record[key] !== "string" || !Number.isFinite(Date.parse(record[key] as string)))) throw new Error(`Malformed mesh completion event ${eventId}`);
-            return record;
-        });
-        if (new Set(tasks.map(task => task.taskId)).size !== tasks.length) throw new Error(`Malformed mesh completion event ${eventId}`);
-        const identity = canonicalJson(payload);
-        const existing = identities.get(eventId);
-        if (existing !== undefined) {
-            if (existing !== identity) throw new Error(`Conflicting duplicate mesh completion event ${eventId}`);
-            continue;
+        if (message.customType !== "mesh-event" || details?.kind !== "completion") continue;
+        completionIndexes.add(index);
+        const raw = exactRecord(details, ["kind", "sources", "frontier"], "Malformed mesh completion bundle in model context");
+        if (raw.kind !== "completion" || !Array.isArray(raw.sources) || !raw.sources.length) throw new Error("Malformed mesh completion bundle in model context");
+        for (const valueSource of raw.sources) {
+            const source = validateSource(valueSource);
+            const identity = canonicalJson(source);
+            const existing = sourceIdentities.get(source.eventId);
+            if (existing !== undefined) {
+                if (existing !== identity) throw new Error(`Conflicting duplicate mesh completion event ${source.eventId}`);
+                continue;
+            }
+            sourceIdentities.set(source.eventId, identity);
+            sources.push(source);
+            for (const task of source.tasks) {
+                const prior = completed.get(task.taskId);
+                if (prior && canonicalJson(prior) !== canonicalJson(task)) throw new Error(`Conflicting duplicate mesh completion task ${task.taskId}`);
+                completed.set(task.taskId, task);
+            }
         }
-        identities.set(eventId, identity);
-        eventIds.push(eventId);
-        const residual = tasks.filter(task => !receivedTaskIds.has(task.taskId as string));
-        if (!residual.length) continue;
-        const nextPayload = { ...completion, tasks: residual };
-        const nextDetails = { ...details, payload: nextPayload };
-        projected.push({ ...message, content: `[mesh-event ${eventId}] completion\n${serializeModelVisibleJson(nextPayload)}`, details: nextDetails } as T);
+        latestFrontier = validateFrontier(raw.frontier);
+    }
+
+    const eventIds = sources.map(source => source.eventId);
+    if (!completionIndexes.size) return { messages: [...messages], eventIds };
+    const residualTasks = [...completed.values()].filter(task => !receivedTaskIds.has(task.taskId));
+    const completedIds = new Set(completed.keys());
+    const pendingTasks = (latestFrontier?.pendingTasks ?? []).filter(task => !completedIds.has(task.taskId) && !receivedTaskIds.has(task.taskId));
+    const lastCompletionIndex = Math.max(...completionIndexes);
+    const projected: T[] = [];
+    for (const [index, value] of messages.entries()) {
+        if (!completionIndexes.has(index)) { projected.push(value); continue; }
+        if (index !== lastCompletionIndex || residualTasks.length === 0 && pendingTasks.length === 0) continue;
+        const original = value as unknown as Record<string, unknown>;
+        const frontier = { observedAt: latestFrontier!.observedAt, pendingTasks };
+        projected.push({ ...original, content: JSON.stringify({ tasks: residualTasks, pendingTasks }), details: { kind: "completion", sources, frontier } } as T);
     }
     return { messages: projected, eventIds };
 }

@@ -9,7 +9,7 @@ import {
     formatTaskStateBadge,
 } from "./orchestration_display_tree.ts";
 import type { SubmitDetails } from "./orchestration_projection.ts";
-import { CHANNEL_KEYS, promptSummary, type AgentSnapshot, type AgentState, type ChannelKey, type TaskState } from "./orchestration_types.ts";
+import { promptSummary, type AgentSnapshot, type AgentState, type TaskState } from "./orchestration_types.ts";
 
 /** Subset of Pi ToolRenderContext used by mesh cards (not re-exported by the package). */
 export type CardRenderContext = {
@@ -19,12 +19,9 @@ export type CardRenderContext = {
     isError?: boolean;
 };
 
-export type SubmitCardArgs = { agent?: string; agentId?: string; profile?: string; prompt: string; channel?: ChannelKey };
-export type ChannelCardArgs = { action: "inspect" | "flush"; channel?: ChannelKey };
+export type SubmitCardArgs = { agent?: string; agentId?: string; profile?: string; prompt: string };
 export type WaitCardArgs = { taskIds: string[] };
 export type SignalCardArgs = { receiver: string; delivery: "steer" | "followUp"; taskIds?: string[]; topic: string; text: string };
-export type ChannelCardTask = { taskId: string; agentId: string; agent: string; agentState: AgentState; state: TaskState };
-export type ChannelCardProjection = { channel: ChannelKey; terminal: number; total: number; tasks: ChannelCardTask[] };
 
 const COLLAPSED_ERROR_CHARS = 240;
 const EXPANDED_TEXT_LINES = 40;
@@ -169,10 +166,8 @@ function submitSelector(args: SubmitCardArgs, theme: Theme): string {
     const id = args.agentId ?? "missing";
     return `agentId ${Array.from(id).slice(0, 8).join("")}${Array.from(id).length > 8 ? "…" : ""}`;
 }
-function routeText(channel: ChannelKey | undefined): string { return channel ? `channel ${channel}` : "direct"; }
-
 export function renderSubmitCall(args: SubmitCardArgs, theme: Theme, context: CardRenderContext): Component {
-    const lines = [joinParts(["mesh_submit", submitSelector(args, theme), routeText(args.channel)])];
+    const lines = [joinParts(["mesh_submit", submitSelector(args, theme)])];
     if (context.expanded) {
         if (args.agentId) lines.push(labeled(theme, "agentId", args.agentId));
         lines.push(labeled(theme, "prompt", previewText(args.prompt, EXPANDED_TEXT_LINES, EXPANDED_TEXT_CHARS)));
@@ -194,11 +189,6 @@ export function renderStopCall(args: { agentId?: string; taskId?: string; reason
     if (context.expanded) { lines.push(labeled(theme, args.taskId ? "taskId" : "agentId", args.taskId ?? args.agentId ?? "missing")); if (args.reason) lines.push(labeled(theme, "reason", previewText(args.reason, 4, 512))); }
     return textFromComponent(context.lastComponent, lines.join("\n"));
 }
-export function renderChannelCall(args: ChannelCardArgs, theme: Theme, context: CardRenderContext): Component {
-    const lines = [joinParts(["mesh_channel", args.action, args.channel ? `channel ${args.channel}` : "active channels"])];
-    if (context.expanded && args.channel) lines.push(labeled(theme, "channel", args.channel));
-    return textFromComponent(context.lastComponent, lines.join("\n"));
-}
 function compactReceiver(receiver: string): string { return receiver === "parent" || receiver === "root" ? receiver : Array.from(receiver).length > 12 ? `${Array.from(receiver).slice(0, 8).join("")}…` : receiver; }
 export function renderSignalCall(args: SignalCardArgs, theme: Theme, context: CardRenderContext): Component {
     const lines = [joinParts(["mesh_signal", compactReceiver(args.receiver), args.delivery, args.topic])];
@@ -212,9 +202,7 @@ export function renderSignalCall(args: SignalCardArgs, theme: Theme, context: Ca
 export function renderAgentToolResult(result: AgentToolResult<unknown>, options: ToolRenderResultOptions, theme: Theme, context: CardRenderContext, _argsPrompt?: string, debug?: boolean, words?: readonly string[]): Component { return renderAgentResult(result, options, theme, context, words, undefined, debug); }
 export function renderSubmitResult(result: AgentToolResult<unknown>, options: ToolRenderResultOptions, theme: Theme, context: CardRenderContext, words?: readonly string[]): Component {
     if (!isSubmitDetails(result.details) || !result.details.task) return textFromComponent(context.lastComponent, resultProblem(result, options, theme, context));
-    const completion = result.details.task.request.completion;
-    const route = completion?.mode === "channel" ? `channel ${completion.channel}` : "direct";
-    const heading = joinParts(["mesh_submit", route, `agent ${result.details.status.state}`, `task ${result.details.task.status.state}`]);
+    const heading = joinParts(["mesh_submit", `agent ${result.details.status.state}`, `task ${result.details.task.status.state}`]);
     return renderAgentResult(result, options, theme, context, words, heading);
 }
 export function renderWaitResult(result: AgentToolResult<unknown>, options: ToolRenderResultOptions, theme: Theme, context: CardRenderContext, words?: readonly string[]): Component {
@@ -235,32 +223,6 @@ export function renderStopResult(result: AgentToolResult<unknown>, options: Tool
     return renderAgentResult(result, options, theme, context, words, `${target} · ${state}`);
 }
 
-function isChannelTask(value: unknown): value is ChannelCardTask {
-    if (!value || typeof value !== "object") return false;
-    const item = value as Record<string, unknown>;
-    return typeof item.taskId === "string" && typeof item.agentId === "string" && typeof item.agent === "string" && typeof item.agentState === "string" && typeof item.state === "string";
-}
-function isChannelProjection(value: unknown): value is ChannelCardProjection {
-    if (!value || typeof value !== "object") return false;
-    const item = value as Record<string, unknown>;
-    return typeof item.channel === "string" && typeof item.terminal === "number" && typeof item.total === "number" && Array.isArray(item.tasks) && item.tasks.every(isChannelTask);
-}
-function channelTaskLine(theme: Theme, task: ChannelCardTask, expanded: boolean): string {
-    const compact = joinParts([agentTypeText(theme, task.agent), `task ${taskStateText(theme, task.state)}`, `agent ${agentStateText(theme, task.agentState)}`]);
-    return expanded ? `${compact}\n  ${labeled(theme, "taskId", task.taskId)}\n  ${labeled(theme, "agentId", task.agentId)}` : compact;
-}
-export function renderChannelResult(result: AgentToolResult<unknown>, options: ToolRenderResultOptions, theme: Theme, context: CardRenderContext): Component {
-    const details = result.details as Record<string, unknown> | undefined;
-    let channels: ChannelCardProjection[] | undefined;
-    if (details && Array.isArray(details.channels) && details.channels.every(isChannelProjection)) channels = details.channels;
-    else if (details && isChannelProjection(details.channelResult)) channels = [details.channelResult];
-    if (!channels) return textFromComponent(context.lastComponent, resultProblem(result, options, theme, context));
-    const lines = channels.length ? channels.flatMap(channel => [
-        `channel ${channel.channel} · ${channel.terminal}/${channel.total} terminal`,
-        ...channel.tasks.map(task => channelTaskLine(theme, task, options.expanded)),
-    ]) : ["no active channels"];
-    return textFromComponent(context.lastComponent, lines.join("\n"));
-}
 export function renderSignalResult(result: AgentToolResult<unknown>, options: ToolRenderResultOptions, theme: Theme, context: CardRenderContext): Component {
     const details = result.details as { eventId?: unknown } | undefined;
     if (typeof details?.eventId !== "string") return textFromComponent(context.lastComponent, resultProblem(result, options, theme, context));
@@ -270,47 +232,55 @@ export function renderSignalResult(result: AgentToolResult<unknown>, options: To
     return textFromComponent(context.lastComponent, lines.join("\n"));
 }
 type CompletionMessage = { customType: string; content: unknown; details?: unknown };
-type OpenChannelCardSummary = { channel: ChannelKey; terminal: number; total: number };
-function openChannelPayload(value: unknown): OpenChannelCardSummary[] | undefined {
-    if (value === undefined) return [];
+type CompletionCardTask = { taskId: string; agentId: string; state: TaskState };
+type CompletionCardPayload = { tasks: CompletionCardTask[]; pendingTasks: CompletionCardTask[] };
+
+function completionTasks(value: unknown): CompletionCardTask[] | undefined {
     if (!Array.isArray(value)) return undefined;
-    const channels = new Set<ChannelKey>();
-    const summaries: OpenChannelCardSummary[] = [];
-    for (const summary of value) {
-        if (!summary || typeof summary !== "object" || Array.isArray(summary)) return undefined;
-        const record = summary as Record<string, unknown>;
-        if (Object.keys(record).length !== 3 || typeof record.channel !== "string" || !CHANNEL_KEYS.includes(record.channel as ChannelKey) || channels.has(record.channel as ChannelKey) || typeof record.terminal !== "number" || !Number.isInteger(record.terminal) || typeof record.total !== "number" || !Number.isInteger(record.total) || record.total <= 0 || record.terminal < 0 || record.terminal >= record.total) return undefined;
-        const channel = record.channel as ChannelKey;
-        channels.add(channel);
-        summaries.push({ channel, terminal: record.terminal, total: record.total });
-    }
-    return summaries;
-}
-function completionPayload(message: CompletionMessage): { route: "direct" | "channel"; channel?: string; tasks: Array<{ taskId: string; state: TaskState; createdAt?: string; startedAt?: string; finishedAt?: string }>; openChannels: OpenChannelCardSummary[] } | undefined {
-    const details = message.details as Record<string, unknown> | undefined;
-    const payload = details?.payload as Record<string, unknown> | undefined;
-    if (details?.kind !== "completion" || !payload || payload.route !== "direct" && payload.route !== "channel" || !Array.isArray(payload.tasks)) return undefined;
-    const tasks = payload.tasks.filter((task): task is { taskId: string; state: TaskState; createdAt?: string; startedAt?: string; finishedAt?: string } => {
-        if (!task || typeof task !== "object") return false;
+    const tasks: CompletionCardTask[] = [];
+    for (const task of value) {
+        if (!task || typeof task !== "object" || Array.isArray(task)) return undefined;
         const record = task as Record<string, unknown>;
-        return typeof record.taskId === "string" && typeof record.state === "string";
-    });
-    const openChannels = openChannelPayload(payload.openChannels);
-    if (tasks.length !== payload.tasks.length || !openChannels) return undefined;
-    return { route: payload.route, ...(typeof payload.channel === "string" ? { channel: payload.channel } : {}), tasks, openChannels };
+        if (typeof record.taskId !== "string" || typeof record.agentId !== "string" || typeof record.state !== "string") return undefined;
+        tasks.push({ taskId: record.taskId, agentId: record.agentId, state: record.state as TaskState });
+    }
+    return tasks;
 }
+
+function completionPayload(message: CompletionMessage): CompletionCardPayload | undefined {
+    const details = message.details as Record<string, unknown> | undefined;
+    const sources = details?.sources;
+    const frontier = details?.frontier as Record<string, unknown> | undefined;
+    if (details?.kind !== "completion" || !Array.isArray(sources) || !frontier) return undefined;
+    const tasks: CompletionCardTask[] = [];
+    for (const source of sources) {
+        if (!source || typeof source !== "object" || Array.isArray(source)) return undefined;
+        const sourceTasks = completionTasks((source as Record<string, unknown>).tasks);
+        if (!sourceTasks) return undefined;
+        tasks.push(...sourceTasks);
+    }
+    const pendingTasks = completionTasks(frontier.pendingTasks);
+    return pendingTasks ? { tasks, pendingTasks } : undefined;
+}
+
 function taskStateSummary(tasks: Array<{ state: TaskState }>): string {
-    const order: TaskState[] = ["succeeded", "failed", "stopped", "running", "created"];
+    const order: TaskState[] = ["succeeded", "failed", "stopped"];
     const counts = new Map<TaskState, number>();
     for (const task of tasks) counts.set(task.state, (counts.get(task.state) ?? 0) + 1);
-    return order.filter(state => counts.has(state)).map(state => `${counts.get(state)} ${state}`).join(" · ") || "0 tasks";
+    return order.filter(state => counts.has(state)).map(state => `${counts.get(state)} ${state}`).join(" · ") || "0 completed";
 }
+
+function completionTaskLine(task: CompletionCardTask, kind: "completed" | "pending"): string {
+    return joinParts([kind, `taskId: ${task.taskId}`, `agentId: ${task.agentId}`, `state: ${task.state}`]);
+}
+
 export function renderMeshEventMessage(message: CompletionMessage, options: { expanded: boolean; outputPad?: number }, theme: Theme): Component {
     const payload = completionPayload(message);
     if (!payload) return new WidthSafeText(theme.fg("muted", typeof message.content === "string" ? message.content : "mesh event"), options.outputPad ?? 0);
-    const route = payload.route === "channel" ? `channel ${payload.channel ?? "?"} completion` : "direct completion";
-    const lines = [theme.fg("accent", `${route} · ${taskStateSummary(payload.tasks)}`)];
-    if (payload.openChannels.length) lines.push(theme.fg("muted", `open channels · ${payload.openChannels.map(summary => `${summary.channel} ${summary.terminal}/${summary.total} terminal`).join(" · ")}`));
-    if (options.expanded) for (const task of payload.tasks) lines.push(joinParts([`taskId: ${task.taskId}`, `state: ${task.state}`, task.finishedAt ? `finishedAt: ${task.finishedAt}` : undefined]));
+    const lines = [theme.fg("accent", `completion · ${taskStateSummary(payload.tasks)} · ${payload.pendingTasks.length} pending`)];
+    if (options.expanded) {
+        lines.push(...payload.tasks.map(task => completionTaskLine(task, "completed")));
+        lines.push(...payload.pendingTasks.map(task => completionTaskLine(task, "pending")));
+    }
     return new WidthSafeText(lines.join("\n"), options.outputPad ?? 0);
 }

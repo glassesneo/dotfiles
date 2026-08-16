@@ -7,7 +7,6 @@ export type { HarnessRuntimeConfig, MeshBudgets, OrchestrationConfig } from "./a
 export const MESH_STATES = ["open", "closing", "closed"] as const;
 export const AGENT_STATES = ["creating", "idle", "busy", "stopping", "stopped", "failed"] as const;
 export const TASK_STATES = ["created", "running", "succeeded", "failed", "stopped"] as const;
-export const CHANNEL_KEYS = Array.from({ length: 26 }, (_, index) => String.fromCharCode(65 + index)) as ChannelKey[];
 export const RESERVATION_STATES = ["pending", "committed", "released"] as const;
 export const AGENT_STOP_STATES = ["requested", "terminating", "confirmed", "failed"] as const;
 export const AGENT_STOP_SOURCES = ["user", "peer", "gc-role", "gc-context", "gc-pressure", "shutdown", "recovery"] as const;
@@ -15,12 +14,11 @@ export type MeshState = (typeof MESH_STATES)[number];
 export type AgentState = (typeof AGENT_STATES)[number];
 export type TaskState = (typeof TASK_STATES)[number];
 export type TerminalTaskState = Extract<TaskState, "succeeded" | "failed" | "stopped">;
-export type ChannelKey = "A" | "B" | "C" | "D" | "E" | "F" | "G" | "H" | "I" | "J" | "K" | "L" | "M" | "N" | "O" | "P" | "Q" | "R" | "S" | "T" | "U" | "V" | "W" | "X" | "Y" | "Z";
-export type CompletionRoute = { endpointId: string; endpointSessionFile: string } & ({ mode: "direct" } | { mode: "channel"; channel: ChannelKey });
-export interface CompletionBatch { batchId: string; disposition: "event" | "flush"; route: "direct" | "channel"; channel?: ChannelKey; taskIds: string[]; settledAt: string; eventId?: string }
-export type CompletionReceiptToolName = "mesh_get" | "mesh_wait" | "mesh_channel";
+export interface CompletionTarget { endpointId: string; endpointSessionFile: string }
+export interface CompletionBatch { batchId: string; taskIds: string[]; settledAt: string; eventId: string }
+export type CompletionReceiptToolName = "mesh_get" | "mesh_wait";
 export interface CompletionReceipt { receiptId: string; claimantSessionFile: string; toolCallId: string; toolName: CompletionReceiptToolName; argumentsDigest: string; taskIds: string[]; receivedAt: string }
-export interface CompletionLedger { schemaVersion: 2; meshId: string; endpointId: string; endpointSessionFile: string; batches: CompletionBatch[]; receipts: CompletionReceipt[]; updatedAt: string }
+export interface CompletionLedger { schemaVersion: 3; meshId: string; endpointId: string; endpointSessionFile: string; batches: CompletionBatch[]; receipts: CompletionReceipt[]; updatedAt: string }
 export type ReservationState = (typeof RESERVATION_STATES)[number];
 export type AgentStopState = (typeof AGENT_STOP_STATES)[number];
 export type AgentStopSource = (typeof AGENT_STOP_SOURCES)[number];
@@ -43,12 +41,12 @@ export interface AgentProvenance { parentAgentId?: string; creatorSessionId: str
 export interface AgentRecord extends AgentProvenance { schemaVersion: 3; meshId: string; agentId: string; epochId: string; role: string; selectedProfile: string; harness: AgentHarness; cwd: string; createdAt: string; roleSnapshot: RoleDefinition; profileSnapshot: ExecutionProfile; launchEnvelope: string; launchEnvelopeDigest: string; tmux: TmuxAgentReference; tmuxOwnership?: TmuxOwnership; capabilities: NativeCapabilities; /** Transitional runtime aliases. */ readonly agent: string; readonly agentSnapshot: RoleDefinition }
 export interface AgentStatus { schemaVersion: 1; meshId: string; agentId: string; state: AgentState; activeTaskId?: string; latestTaskId?: string; bridgeReady: boolean; meshToolsEnabled: boolean; childSessionId?: string; childSessionFile?: string; agentUsage: Usage; accountedTaskIds: string[]; updatedAt: string; exitReason?: string }
 export interface AgentStopRequest { schemaVersion: 1; meshId: string; agentId: string; stopRequestId: string; state: AgentStopState; source: AgentStopSource; requesterEndpointId?: string; reason: string; terminalState?: AgentStopTerminalState; activitySequence?: number; gcPassId?: string; previousAgentState: AgentState; requestedAt: string; updatedAt: string; terminatingAt?: string; confirmedAt?: string; failedAt?: string; failureCategory?: string; noticeCreatedAt?: string }
-export interface TaskRequest { schemaVersion: 2; meshId: string; agentId: string; taskId: string; prompt: string; requesterEndpointId: string; requesterAgentId?: string; completion?: CompletionRoute; createdAt: string }
+export interface TaskRequest { schemaVersion: 3; meshId: string; agentId: string; taskId: string; prompt: string; requesterEndpointId: string; requesterAgentId?: string; completion?: CompletionTarget; createdAt: string }
 export interface TaskCancelRequest { schemaVersion: 1; meshId: string; agentId: string; taskId: string; requestedAt: string; reason: string }
 export interface Intervention { sequence: number; timestamp: string; taskId?: string; text: string; deliveryMode: "steer" | "followUp" | "idle"; images: string[] }
 export interface TaskStatus { schemaVersion: 1; meshId: string; agentId: string; taskId: string; state: TaskState; createdAt: string; startedAt?: string; finishedAt?: string; error?: string }
 export interface TaskResult { schemaVersion: 1; meshId: string; agentId: string; taskId: string; outcome: TerminalTaskState; output: string; usage: Usage; turns: number; interventions: Intervention[]; startedAt: string; finishedAt: string; error?: string }
-export interface UsageClaim { schemaVersion: 1; meshId: string; claimantSessionFile: string; toolCallId: string; toolName: "mesh_run" | "mesh_submit" | "mesh_get" | "mesh_wait" | "mesh_channel" | "mesh_stop"; agentId: string; taskId: string; claimedAt: string }
+export interface UsageClaim { schemaVersion: 1; meshId: string; claimantSessionFile: string; toolCallId: string; toolName: "mesh_run" | "mesh_submit" | "mesh_get" | "mesh_wait" | "mesh_stop"; agentId: string; taskId: string; claimedAt: string }
 export interface AgentSnapshot { agent: AgentRecord; status: AgentStatus; activity: AgentActivityProjection; stop: AgentStopRequest | null; task?: TaskSnapshot }
 export interface TaskSnapshot { request: TaskRequest; status: TaskStatus; result: TaskResult | null; interventions: Intervention[]; claimed: boolean; directory: string }
 

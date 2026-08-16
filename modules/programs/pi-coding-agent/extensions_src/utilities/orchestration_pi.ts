@@ -2,7 +2,7 @@ import type { AgentLaunchEnvelope, CallerPolicy } from "./agent_types.ts";
 import type { NativeLaunchDescriptor } from "./orchestration_harness.ts";
 import type { SubagentRuntimeConfig } from "./orchestration_types.ts";
 
-export const MESH_PEER_TOOL_NAMES = Object.freeze(["mesh_submit", "mesh_get", "mesh_wait", "mesh_channel", "mesh_stop", "mesh_signal"] as const);
+export const MESH_PEER_TOOL_NAMES = Object.freeze(["mesh_submit", "mesh_get", "mesh_wait", "mesh_stop", "mesh_signal"] as const);
 
 export function meshPiLaunchTools(roleTools: readonly string[], policy: CallerPolicy): string[] {
     const canDispatch = policy.roles.length > 0 || policy.profiles.length > 0;

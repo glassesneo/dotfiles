@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { visibleWidth } from "@earendil-works/pi-tui";
-import { createMeshChannelTool, createMeshGetTool, createMeshSignalTool, createMeshSubmitTool, createMeshWaitTool, type OrchestrationDependencies } from "../extensions_src/orchestration.ts";
-import { renderMeshEventMessage } from "../extensions_src/utilities/orchestration_cards.ts";
+import { renderAgentToolResult, renderMeshEventMessage, renderSignalCall, renderSignalResult, renderSubmitCall, renderSubmitResult, renderWaitCall, renderWaitResult } from "../extensions_src/utilities/orchestration_cards.ts";
 import type { RoleDefinition } from "../extensions_src/utilities/agent_types.ts";
 import { unknownAgentActivityProjection } from "../extensions_src/utilities/orchestration_activity.ts";
 import { emptyUsage, type AgentSnapshot } from "../extensions_src/utilities/orchestration_types.ts";
@@ -10,7 +9,6 @@ import { emptyUsage, type AgentSnapshot } from "../extensions_src/utilities/orch
 const agentId = "11111111-1111-4111-8111-111111111111";
 const taskId = "22222222-2222-4222-8222-222222222222";
 const theme = { fg: (_role: string, text: string) => text, bold: (text: string) => text };
-const deps: OrchestrationDependencies = { configPath: "/unused/config.json", env: {}, exec: async () => ({ stdout: "", stderr: "", code: 0 }), natureHandleWords: () => ["Fern"] };
 
 function snapshot(): AgentSnapshot {
     const definition: RoleDefinition = { description: "Synthetic worker", tools: ["read", "write"], instructions: "Complete the bounded task.", defaultProfile: "pi-medium", contextPolicy: "project", childExtensionContributions: [] };
@@ -21,7 +19,7 @@ function snapshot(): AgentSnapshot {
         status: { schemaVersion: 1, meshId, agentId, state: "idle", bridgeReady: true, meshToolsEnabled: true, agentUsage: usage, accountedTaskIds: [], updatedAt: "2026-01-01T00:02:00Z", childSessionFile: "/private/session.jsonl" },
         activity: unknownAgentActivityProjection(),
         stop: null,
-        task: { request: { schemaVersion: 2, meshId, agentId, taskId, prompt: "public summary\nprivate prompt continuation", requesterEndpointId: "root:test", createdAt: "2026-01-01T00:00:00Z" }, status: { schemaVersion: 1, meshId, agentId, taskId, state: "succeeded", createdAt: "2026-01-01T00:00:00Z", startedAt: "2026-01-01T00:00:10Z", finishedAt: "2026-01-01T00:01:00Z" }, result: { schemaVersion: 1, meshId, agentId, taskId, outcome: "succeeded", output: "private completed output", usage, turns: 2, interventions: [], startedAt: "2026-01-01T00:00:10Z", finishedAt: "2026-01-01T00:01:00Z" }, interventions: [], claimed: false, directory: "/private/task" },
+        task: { request: { schemaVersion: 3, meshId, agentId, taskId, prompt: "public summary\nprivate prompt continuation", requesterEndpointId: "root:test", createdAt: "2026-01-01T00:00:00Z" }, status: { schemaVersion: 1, meshId, agentId, taskId, state: "succeeded", createdAt: "2026-01-01T00:00:00Z", startedAt: "2026-01-01T00:00:10Z", finishedAt: "2026-01-01T00:01:00Z" }, result: { schemaVersion: 1, meshId, agentId, taskId, outcome: "succeeded", output: "private completed output", usage, turns: 2, interventions: [], startedAt: "2026-01-01T00:00:10Z", finishedAt: "2026-01-01T00:01:00Z" }, interventions: [], claimed: false, directory: "/private/task" },
     };
 }
 
@@ -34,13 +32,12 @@ function render(component: { render(width: number): string[] } | undefined, widt
 
 // Given private result details at the Pi renderer boundary, collapsed output hides them while explicit expansion reveals diagnostics.
 void test("mesh result details are private until expanded", () => {
-    const tool = createMeshGetTool(deps);
     const details = JSON.parse(JSON.stringify(snapshot())) as AgentSnapshot;
     const args = { agentId };
-    const collapsed = render(tool.renderResult?.({ content: [], details } as never, { expanded: false } as never, theme as never, { args } as never));
+    const collapsed = render(renderAgentToolResult({ content: [], details } as never, { expanded: false } as never, theme as never, { args, lastComponent: undefined } as never));
     assert.doesNotMatch(collapsed, new RegExp(`${agentId}|${taskId}|/private/|private completed output|private prompt continuation`, "u"));
 
-    const expanded = render(tool.renderResult?.({ content: [], details } as never, { expanded: true } as never, theme as never, { args } as never));
+    const expanded = render(renderAgentToolResult({ content: [], details } as never, { expanded: true } as never, theme as never, { args, lastComponent: undefined } as never));
     assert.match(expanded, new RegExp(agentId, "u"));
     assert.match(expanded, new RegExp(taskId, "u"));
     assert.match(expanded, /private prompt continuation/u);
@@ -49,12 +46,11 @@ void test("mesh result details are private until expanded", () => {
 
 // Given malformed result details, collapsed output hides raw data while expansion reuses the component for bounded diagnostics; adapter errors remain errors.
 void test("malformed mesh results remain private and preserve renderer mechanics", () => {
-    const tool = createMeshGetTool(deps);
     const secret = { token: "raw-secret", path: "/private/raw", body: "x".repeat(10_000) };
     const args = { agentId };
-    const collapsedComponent = tool.renderResult?.({ content: [], details: secret } as never, { expanded: false } as never, theme as never, { args, lastComponent: undefined } as never);
+    const collapsedComponent = renderAgentToolResult({ content: [], details: secret } as never, { expanded: false } as never, theme as never, { args, lastComponent: undefined } as never);
     assert.doesNotMatch(render(collapsedComponent), /raw-secret|\/private\/raw/u);
-    const expandedComponent = tool.renderResult?.({ content: [], details: secret } as never, { expanded: true } as never, theme as never, { args, lastComponent: collapsedComponent } as never);
+    const expandedComponent = renderAgentToolResult({ content: [], details: secret } as never, { expanded: true } as never, theme as never, { args, lastComponent: collapsedComponent } as never);
     assert.equal(expandedComponent, collapsedComponent);
     const expanded = render(expandedComponent);
     assert.match(expanded, /raw-secret|\/private\/raw/u);
@@ -62,25 +58,23 @@ void test("malformed mesh results remain private and preserve renderer mechanics
 
 });
 
-// Given each supported submit selector and completion route, the tool card exposes selector, route, and lifecycle state without exceeding terminal width.
-void test("mesh_submit cards project selector route and states width-safely", () => {
-    const tool = createMeshSubmitTool(deps, { worker: snapshot().agent.roleSnapshot }, ["pi-fast"]);
+// Given each supported submit selector, the card exposes selector and lifecycle state without exceeding terminal width.
+void test("mesh_submit cards project selector and states width-safely", () => {
     for (const args of [
-        { agent: "worker", prompt: "bounded", channel: "A" as const },
+        { agent: "worker", prompt: "bounded" },
         { agentId, prompt: "bounded" },
         { profile: "pi-fast", prompt: "bounded" },
     ]) {
-        const call = render(tool.renderCall?.(args as never, theme as never, { expanded: true, lastComponent: undefined } as never), 34);
+        const call = render(renderSubmitCall(args, theme as never, { expanded: true, lastComponent: undefined }), 34);
         assert.match(call, args.agent ? /agent worker/u : args.profile ? /profile pi-fast/u : /agentId/u);
-        assert.match(call, args.channel ? /channel A/u : /direct/u);
+        assert.doesNotMatch(call, /direct|route/u);
     }
-    const reused = render(tool.renderCall?.({ agentId, prompt: "bounded" } as never, theme as never, { expanded: false, lastComponent: undefined } as never), 34);
+    const reused = render(renderSubmitCall({ agentId, prompt: "bounded" }, theme as never, { expanded: false, lastComponent: undefined }), 34);
     assert.match(reused, new RegExp(`agentId ${agentId.slice(0, 8)}`, "u"));
     assert.doesNotMatch(reused, new RegExp(agentId, "u"));
     const details = snapshot();
-    details.task!.request.completion = { endpointId: "root:test", endpointSessionFile: "/session.jsonl", mode: "channel", channel: "A" };
-    const result = render(tool.renderResult?.({ content: [], details: { ...details, accounting: { claimedTaskIds: [], receiptIds: [], receivedTaskIds: [] } } } as never, { expanded: false } as never, theme as never, { args: { agent: "worker", prompt: "bounded", channel: "A" }, lastComponent: undefined } as never), 34);
-    assert.match(result, /channel A/u);
+    const result = render(renderSubmitResult({ content: [], details: { ...details, accounting: { claimedTaskIds: [], receiptIds: [], receivedTaskIds: [] } } } as never, { expanded: false } as never, theme as never, { args: { agent: "worker", prompt: "bounded" }, lastComponent: undefined } as never), 34);
+    assert.doesNotMatch(result, /direct|route/u);
     const semantic = result.replace(/\s+/gu, " ");
     assert.match(semantic, /agent idle/u);
     assert.match(semantic, /task succeeded/u);
@@ -88,66 +82,36 @@ void test("mesh_submit cards project selector route and states width-safely", ()
 
 // Given an all-task wait result, its card exposes terminal progress and expanded identifiers without freezing decoration.
 void test("mesh_wait cards expose all-terminal state and full task identifiers width-safely", () => {
-    const wait = createMeshWaitTool(deps); const args = { taskIds: [taskId, agentId] };
-    assert.match(render(wait.renderCall?.(args as never, theme as never, { expanded: false, lastComponent: undefined } as never), 24), /all 2 tasks/u);
+    const args = { taskIds: [taskId, agentId] };
+    assert.match(render(renderWaitCall(args, theme as never, { expanded: false, lastComponent: undefined }), 24), /all 2 tasks/u);
     const first = snapshot(); const second = structuredClone(first); second.agent.agentId = agentId; second.task!.request.taskId = agentId; second.task!.status.state = "failed"; second.task!.result!.outcome = "failed";
-    const collapsed = render(wait.renderResult?.({ content: [], details: { tasks: [first, second], accounting: { claimedTaskIds: [], receiptIds: [], receivedTaskIds: [] } } } as never, { expanded: false } as never, theme as never, { args, lastComponent: undefined } as never), 32); assert.match(collapsed, /all 2 tasks terminal/u); assert.match(collapsed, /SUCCEEDED/u); assert.match(collapsed, /FAILED/u);
-    const expanded = render(wait.renderResult?.({ content: [], details: { tasks: [first, second] } } as never, { expanded: true } as never, theme as never, { args, lastComponent: undefined } as never), 32); assert.match(expanded.replace(/\s+/gu, ""), new RegExp(taskId, "u")); assert.match(expanded.replace(/\s+/gu, ""), new RegExp(agentId, "u"));
+    const collapsed = render(renderWaitResult({ content: [], details: { tasks: [first, second], accounting: { claimedTaskIds: [], receiptIds: [], receivedTaskIds: [] } } } as never, { expanded: false } as never, theme as never, { args, lastComponent: undefined } as never), 32); assert.match(collapsed, /all 2 tasks terminal/u); assert.match(collapsed, /SUCCEEDED/u); assert.match(collapsed, /FAILED/u);
+    const expanded = render(renderWaitResult({ content: [], details: { tasks: [first, second] } } as never, { expanded: true } as never, theme as never, { args, lastComponent: undefined } as never), 32); assert.match(expanded.replace(/\s+/gu, ""), new RegExp(taskId, "u")); assert.match(expanded.replace(/\s+/gu, ""), new RegExp(agentId, "u"));
 });
 
-// Given inspect/flush and signal projections, their cards retain channel counts, role/lifecycle semantics, and expanded identifiers within width.
-void test("mesh_channel and mesh_signal cards expose semantic state and identifiers", () => {
-    const channel = createMeshChannelTool(deps);
-    assert.match(render(channel.renderCall?.({ action: "inspect" } as never, theme as never, { expanded: false, lastComponent: undefined } as never), 24), /inspect.*active channels/su);
-    assert.match(render(channel.renderCall?.({ action: "flush", channel: "B" } as never, theme as never, { expanded: false, lastComponent: undefined } as never), 24), /flush.*channel B/su);
-    const projection = { channel: "B", terminal: 1, total: 2, tasks: [{ taskId, agentId, agent: "worker", agentState: "busy", state: "succeeded" }] };
-    const collapsed = render(channel.renderResult?.({ content: [], details: { channels: [projection] } } as never, { expanded: false } as never, theme as never, { args: { action: "inspect", channel: "B" }, lastComponent: undefined } as never), 32);
-    assert.match(collapsed, /channel B/u);
-    assert.match(collapsed, /1\/2 terminal/u);
-    assert.match(collapsed, /worker/u);
-    assert.match(collapsed, /task.*SUCCEEDED/isu);
-    assert.match(collapsed, /agent.*BUSY/isu);
-    assert.doesNotMatch(collapsed, new RegExp(`${taskId}|${agentId}`, "u"));
-    const expanded = render(channel.renderResult?.({ content: [], details: { channelResult: projection } } as never, { expanded: true } as never, theme as never, { args: { action: "flush", channel: "B" }, lastComponent: undefined } as never), 32);
-    const expandedSemantic = expanded.replace(/\s+/gu, "");
-    assert.match(expandedSemantic, new RegExp(taskId, "u"));
-    assert.match(expandedSemantic, new RegExp(agentId, "u"));
-
-    const signal = createMeshSignalTool(deps);
-    assert.match(render(signal.renderCall?.({ receiver: "parent", delivery: "followUp", topic: "handoff", text: "done" } as never, theme as never, { expanded: false, lastComponent: undefined } as never), 24), /mesh_signal.*parent.*followUp/su);
-    assert.match(render(signal.renderResult?.({ content: [], details: { eventId: taskId } } as never, { expanded: false } as never, theme as never, { args: { receiver: "parent" }, lastComponent: undefined } as never), 24), /signal queued/u);
+void test("mesh_signal cards expose delivery and queued state", () => {
+    assert.match(render(renderSignalCall({ receiver: "parent", delivery: "followUp", topic: "handoff", text: "done" }, theme as never, { expanded: false, lastComponent: undefined }), 24), /mesh_signal.*parent.*followUp/su);
+    assert.match(render(renderSignalResult({ content: [], details: { eventId: taskId } } as never, { expanded: false } as never, theme as never, { args: { receiver: "parent" }, lastComponent: undefined } as never), 24), /signal queued/u);
 });
 
-// Given direct or grouped completion payloads, the custom-message renderer names the route and summarizes terminal task states width-safely.
-void test("completion messages name their route and summarize task states", () => {
-    for (const details of [
-        { kind: "completion", payload: { route: "direct", tasks: [{ taskId, state: "succeeded" }] } },
-        { kind: "completion", payload: { route: "channel", channel: "C", tasks: [{ taskId, state: "failed" }, { taskId: agentId, state: "stopped" }] } },
-    ]) {
-        const text = render(renderMeshEventMessage({ customType: "mesh-event", content: "model payload", details }, { expanded: false, outputPad: 1 }, theme as never), 28);
-        const semantic = text.replace(/\s+/gu, " ");
-        assert.match(semantic, details.payload.route === "direct" ? /direct completion/u : /channel C completion/u);
-        assert.match(semantic, details.payload.route === "direct" ? /1 succeeded/u : /1 failed.*1 stopped/su);
-    }
-});
+// Admission: the completion card is the stable user-visible projection boundary; type checks cannot reveal omitted progress, hidden identifiers, or width overflow in terminal output.
+// Given a bundled completion and delivery-time frontier, the collapsed card exposes completed-state counts and pending count, while expansion exposes every task identity and state.
+void test("completion cards expose compact progress and expanded task identities width-safely", () => {
+    const pendingTaskId = "33333333-3333-4333-8333-333333333333";
+    const pendingAgentId = "44444444-4444-4444-8444-444444444444";
+    const details = {
+        kind: "completion",
+        sources: [
+            { eventId: "event-1", batchId: "batch-1", settledAt: "2026-01-01T00:00:00Z", tasks: [{ taskId, agentId, state: "succeeded" }] },
+            { eventId: "event-2", batchId: "batch-2", settledAt: "2026-01-01T00:00:01Z", tasks: [{ taskId: agentId, agentId: pendingAgentId, state: "failed" }] },
+        ],
+        frontier: { observedAt: "2026-01-01T00:00:02Z", pendingTasks: [{ taskId: pendingTaskId, agentId: pendingAgentId, state: "running" }] },
+    };
+    const collapsed = render(renderMeshEventMessage({ customType: "mesh-event", content: "model payload", details }, { expanded: false, outputPad: 1 }, theme as never), 26);
+    const collapsedSemantic = collapsed.replace(/\s+/gu, " ");
+    assert.match(collapsedSemantic, /1 succeeded.*1 failed.*1 pending/su);
+    assert.doesNotMatch(collapsedSemantic, new RegExp(`${taskId}|${agentId}|${pendingTaskId}|${pendingAgentId}`, "u"));
 
-// Admission: the completion card is the stable user-visible projection boundary; type checks cannot reveal omitted progress or width overflow in rendered terminal output.
-// Given a completion notification with open cohorts, when the card renders, the user observes channel progress without task or agent detail and legacy, empty, and signal cards gain no status line.
-void test("completion cards expose open channel progress only when non-empty", () => {
-    const payload = { route: "direct", tasks: [{ taskId, state: "succeeded" }] };
-    const valid = { kind: "completion", payload: { ...payload, openChannels: [{ channel: "A", terminal: 0, total: 1 }, { channel: "B", terminal: 1, total: 3 }] } };
-    for (const expanded of [false, true]) {
-        const text = render(renderMeshEventMessage({ customType: "mesh-event", content: "model payload", details: valid }, { expanded, outputPad: 1 }, theme as never), 24);
-        const semantic = text.replace(/\s+/gu, " ");
-        assert.match(semantic, /open channels/u);
-        assert.match(semantic, /A 0\/1 terminal/u);
-        assert.match(semantic, /B 1\/3 terminal/u);
-        if (!expanded) assert.doesNotMatch(semantic, new RegExp(`${taskId}|${agentId}`, "u"));
-    }
-
-    for (const message of [
-        { customType: "mesh-event", content: "legacy", details: { kind: "completion", payload } },
-        { customType: "mesh-event", content: "empty", details: { kind: "completion", payload: { ...payload, openChannels: [] } } },
-        { customType: "mesh-event", content: "signal", details: { kind: "signal", payload: { openChannels: [{ channel: "A", terminal: 0, total: 1 }] } } },
-    ]) assert.doesNotMatch(render(renderMeshEventMessage(message, { expanded: false, outputPad: 1 }, theme as never), 24), /open channels/u);
+    const expanded = render(renderMeshEventMessage({ customType: "mesh-event", content: "model payload", details }, { expanded: true, outputPad: 1 }, theme as never), 26).replace(/\s+/gu, "");
+    for (const value of [taskId, agentId, pendingTaskId, pendingAgentId, "succeeded", "failed", "running"]) assert.match(expanded, new RegExp(value, "u"));
 });
