@@ -587,38 +587,6 @@
         "url": "https://channels.nixos.org/nixos-unstable/nixexprs.tar.xz"
       }
     },
-    "nixpkgs_5": {
-      "locked": {
-        "lastModified": 1779102034,
-        "narHash": "sha256-vZJZjLo513IeI8hjzHFc6TDezUd4uCE2Eq4SNO3DNNg=",
-        "owner": "NixOS",
-        "repo": "nixpkgs",
-        "rev": "687f05a9184cad4eaf905c48b63649e3a86f5433",
-        "type": "github"
-      },
-      "original": {
-        "owner": "NixOS",
-        "ref": "nixos-25.11",
-        "repo": "nixpkgs",
-        "type": "github"
-      }
-    },
-    "nixpkgs_6": {
-      "locked": {
-        "lastModified": 1744536153,
-        "narHash": "sha256-awS2zRgF4uTwrOKwwiJcByDzDOdo3Q1rPZbiHQg/N38=",
-        "owner": "NixOS",
-        "repo": "nixpkgs",
-        "rev": "18dd725c29603f582cf1900e0d25f9f1063dbf11",
-        "type": "github"
-      },
-      "original": {
-        "owner": "NixOS",
-        "ref": "nixpkgs-unstable",
-        "repo": "nixpkgs",
-        "type": "github"
-      }
-    },
     "nur": {
       "inputs": {
         "flake-parts": "flake-parts_4",
@@ -725,26 +693,7 @@
         "treefmt-nix": "treefmt-nix_2",
         "various-wallpapers": "various-wallpapers",
         "wallpapers": "wallpapers",
-        "zed-extensions": "zed-extensions",
         "zeno-zsh": "zeno-zsh"
-      }
-    },
-    "rust-overlay": {
-      "inputs": {
-        "nixpkgs": "nixpkgs_6"
-      },
-      "locked": {
-        "lastModified": 1779333539,
-        "narHash": "sha256-lpmN2lrBDZDPjov2cbD3bOOJsI0fkKolKXasYPCqSys=",
-        "owner": "oxalica",
-        "repo": "rust-overlay",
-        "rev": "672fa5fc5608d5cd82286a6f69aaf84a40b4fe41",
-        "type": "github"
-      },
-      "original": {
-        "owner": "oxalica",
-        "repo": "rust-overlay",
-        "type": "github"
       }
     },
     "skills-deployer": {
@@ -938,25 +887,6 @@
       "original": {
         "owner": "rose-pine",
         "repo": "wallpapers",
-        "type": "github"
-      }
-    },
-    "zed-extensions": {
-      "inputs": {
-        "nixpkgs": "nixpkgs_5",
-        "rust-overlay": "rust-overlay"
-      },
-      "locked": {
-        "lastModified": 1780202116,
-        "narHash": "sha256-aQaKP+jfWd3J/m5lyXZlZ/MHye+3u8SsFufwLcUSno0=",
-        "owner": "DuskSystems",
-        "repo": "nix-zed-extensions",
-        "rev": "63ef4e61aae628baf13c904fd462ca335b6b4d49",
-        "type": "github"
-      },
-      "original": {
-        "owner": "DuskSystems",
-        "repo": "nix-zed-extensions",
         "type": "github"
       }
     },
