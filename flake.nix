@@ -405,6 +405,10 @@
       url = "github:glassesneo/skills-deployer";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    vicinae = {
+      url = "github:vicinaehq/vicinae";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     japanese-tech-writing-skill = {
       url = "git+https://gist.github.com/k16shikano/fd287c3133457c4fd8f5601d34aa817d";
       flake = false;

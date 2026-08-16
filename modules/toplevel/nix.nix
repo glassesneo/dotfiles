@@ -14,6 +14,7 @@
         "https://cache.nixos.org"
         "https://nix-community.cachix.org"
         "https://cache.numtide.com"
+        "https://vicinae.cachix.org"
         "https://ryoppippi.cachix.org"
         "https://moocs-collect-nix.cachix.org"
       ];
@@ -21,6 +22,7 @@
         "cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY="
         "nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs="
         "niks3.numtide.com-1:DTx8wZduET09hRmMtKdQDxNNthLQETkc/yaX7M4qK0g="
+        "vicinae.cachix.org-1:1kDrfienkGHPYbkpNj1mWTr7Fm1+zcenzgTizIcI3oc="
         "ryoppippi.cachix.org-1:b2LbtWNvJeL/qb1B6TYOMK+apaCps4SCbzlPRfSQIms="
         "moocs-collect-nix.cachix.org-1:MpREl4nnQpusRFLilrWt2S67SW1mLuqM6HvcirF/CjE="
       ];

@@ -1,4 +1,5 @@
 {
+  applicationLauncher,
   delib,
   homeConfig,
   host,
@@ -9,7 +10,11 @@
 delib.module {
   name = "programs.raycast";
 
-  options = delib.singleEnableOption (pkgs.stdenv.isDarwin && host.guiShellFeatured);
+  options = with delib;
+    moduleOptions {
+      # Activation is derived from the shared application-launcher selector.
+      enable = readOnly (boolOption applicationLauncher.isRaycast);
+    };
 
   home.ifEnabled = {
     home.packages = [
@@ -42,23 +47,6 @@ delib.module {
 
   darwin.ifEnabled = {
     system.defaults.CustomUserPreferences = {
-      # Disable Spotlight hotkey so Raycast can claim ⌘Space
-      "com.apple.symbolichotkeys" = {
-        AppleSymbolicHotKeys = {
-          "64" = {
-            enabled = false;
-            value = {
-              type = "standard";
-              parameters = [
-                32
-                49
-                1048576
-              ];
-            };
-          };
-        };
-      };
-
       "com.raycast.macos" = {
         raycastGlobalHotkey = "Command-49"; # ⌘Space
         raycastShouldFollowSystemAppearance = true;

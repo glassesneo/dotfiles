@@ -10,9 +10,12 @@ delib.rice {
     };
     darwin.window-manager.backend = "aerospace";
     wallpaper.title = "shape";
-    programs.nvf.theme = {
-      enable = true;
-      transparent = false;
+    programs = {
+      application-launcher.backend = "raycast";
+      nvf.theme = {
+        enable = true;
+        transparent = false;
+      };
     };
     services.jankyborders.enable = false;
   };
