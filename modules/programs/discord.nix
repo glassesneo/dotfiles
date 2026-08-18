@@ -1,4 +1,5 @@
 {
+  brewCasks,
   delib,
   host,
   tiers,
@@ -12,6 +13,7 @@ delib.module {
   home.ifEnabled = {
     programs.discord = {
       enable = true;
+      package = brewCasks.discord;
     };
   };
 }
