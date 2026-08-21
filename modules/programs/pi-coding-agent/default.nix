@@ -16,7 +16,12 @@
   # Repository-owned soft ceiling for Pi's native compaction scheduler; this does
   # not represent Sol's provider-side context capability.
   modelOverrides = {
-    providers."openai-codex".modelOverrides."gpt-5.6-sol".contextWindow = 192000;
+    providers."openai-codex".modelOverrides."gpt-5.6-sol".contextWindow = 272000;
+  };
+  codexCompactionPackage = "npm:@ogulcancelik/pi-codex-compaction@0.1.3";
+  codexCompactionConfig = {
+    autoCompact = true;
+    thresholdRatio = 0.9;
   };
   nativeLifecycleSettings = {
     compaction = {
@@ -199,6 +204,7 @@ in
           modelDefaults
           // nativeLifecycleSettings
           // {
+            packages = [codexCompactionPackage];
             extensions = lib.mkBefore extensionPaths;
             prompts = [
               "${./prompts}"
@@ -214,6 +220,7 @@ in
       home.file =
         {
           "${cfg.configDir}/models.json".text = builtins.toJSON modelOverrides;
+          "${cfg.configDir}/pi-codex-compaction.json".text = builtins.toJSON codexCompactionConfig;
           "${cfg.configDir}/execution-profiles.json".text = builtins.toJSON {
             schemaVersion = 1;
             profiles = lib.mapAttrs (_: profile: lib.filterAttrs (_name: value: value != null && value != {}) profile) cfg.profiles;
