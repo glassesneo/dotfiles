@@ -20,6 +20,20 @@ delib.module {
           };
         };
       };
+      keymaps = [
+        {
+          key = "<S-h>";
+          mode = ["n"];
+          action = "<Cmd>BufferLineCyclePrev<CR>";
+          silent = true;
+        }
+        {
+          key = "<S-l>";
+          mode = ["n"];
+          action = "<Cmd>BufferLineCycleNext<CR>";
+          silent = true;
+        }
+      ];
     };
   };
 }

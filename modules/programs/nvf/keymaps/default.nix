@@ -31,18 +31,6 @@ delib.module {
           silent = true;
         }
         {
-          key = "<S-h>";
-          mode = ["n"];
-          action = "<Cmd>bprev<CR>";
-          silent = true;
-        }
-        {
-          key = "<S-l>";
-          mode = ["n"];
-          action = "<Cmd>bnext<CR>";
-          silent = true;
-        }
-        {
           key = "<S-r>";
           mode = ["n"];
           action = "function() vim.lsp.buf.rename() end";
