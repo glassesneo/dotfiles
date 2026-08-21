@@ -11,11 +11,11 @@ const taskId = "22222222-2222-4222-8222-222222222222";
 const theme = { fg: (_role: string, text: string) => text, bold: (text: string) => text };
 
 function snapshot(): AgentSnapshot {
-    const definition: RoleDefinition = { description: "Synthetic worker", tools: ["read", "write"], instructions: "Complete the bounded task.", defaultProfile: "pi-medium", contextPolicy: "project", childExtensionContributions: [] };
+    const definition: RoleDefinition = { description: "Synthetic worker", tools: ["read", "write"], instructions: "Complete the bounded task.", contextPolicy: "project", childExtensionContributions: [] };
     const usage = emptyUsage();
     const meshId = "55555555-5555-4555-8555-555555555555";
     return {
-        agent: { schemaVersion: 3, meshId, agentId, epochId: "66666666-6666-4666-8666-666666666666", role: "worker", selectedProfile: "pi-medium", harness: "pi", cwd: "/private/worktree", createdAt: "2026-01-01T00:00:00Z", roleSnapshot: definition, profileSnapshot: { model: "synthetic/pi", thinkingLevel: "medium", harness: "pi" }, launchEnvelope: "/private/envelope.json", launchEnvelopeDigest: "digest", tmux: { socket: "/tmp/tmux", serverPid: "1", sessionId: "$1", sessionName: "mesh", windowId: "@1", paneId: "%1", windowName: "worker" }, capabilities: { nativeScreen: true, taskDelivery: true, taskCompletion: true, taskCancellation: true, usage: true, interactiveInterventions: true, terminalHistory: true }, creatorSessionId: "creator", agent: "worker", agentSnapshot: definition },
+        agent: { schemaVersion: 4, meshId, agentId, epochId: "66666666-6666-4666-8666-666666666666", role: "worker", selectedProfile: "pi-medium", harness: "pi", cwd: "/private/worktree", createdAt: "2026-01-01T00:00:00Z", roleSnapshot: definition, profileSnapshot: { model: "synthetic/pi", thinkingLevel: "medium", harness: "pi" }, launchEnvelope: "/private/envelope.json", launchEnvelopeDigest: "digest", tmux: { socket: "/tmp/tmux", serverPid: "1", sessionId: "$1", sessionName: "mesh", windowId: "@1", paneId: "%1", windowName: "worker" }, capabilities: { nativeScreen: true, taskDelivery: true, taskCompletion: true, taskCancellation: true, usage: true, interactiveInterventions: true, terminalHistory: true }, creatorSessionId: "creator", agent: "worker", agentSnapshot: definition },
         status: { schemaVersion: 1, meshId, agentId, state: "idle", bridgeReady: true, meshToolsEnabled: true, agentUsage: usage, accountedTaskIds: [], updatedAt: "2026-01-01T00:02:00Z", childSessionFile: "/private/session.jsonl" },
         activity: unknownAgentActivityProjection(),
         stop: null,
@@ -42,6 +42,11 @@ void test("mesh result details are private until expanded", () => {
     assert.match(expanded, new RegExp(taskId, "u"));
     assert.match(expanded, /private prompt continuation/u);
     assert.match(expanded, /private completed output/u);
+
+    const external = snapshot(); external.agent.capabilities.usage = false;
+    const unavailable = render(renderAgentToolResult({ content: [], details: external } as never, { expanded: true } as never, theme as never, { args, lastComponent: undefined } as never));
+    assert.match(unavailable, /turns: unavailable/u); assert.match(unavailable, /usage: unavailable/u); assert.match(unavailable, /agentUsage: unavailable/u);
+    assert.doesNotMatch(unavailable, /0 tokens|\$0\.0000/u);
 });
 
 // Given malformed result details, collapsed output hides raw data while expansion reuses the component for bounded diagnostics; adapter errors remain errors.

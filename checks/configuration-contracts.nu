@@ -45,7 +45,7 @@ def main [] {
   assert-contract (($pi.enabledQuestion.modes.modes | values | any {|mode| $mode.tools | any {|tool| $tool == "question" } })) "question-tool-enabled"
   assert-contract (not ($pi.disabledQuestion.modes.modes | values | any {|mode| $mode.tools | any {|tool| $tool == "question" } })) "question-tool-disabled"
   assert-contract (($pi.extensionKeybindings.features | get historyViewer | get exit | first) == "f12") "native-key-alias"
-  assert-contract (($pi.models.providers | get openai-codex | get modelOverrides | get 'gpt-5.6-sol' | get contextWindow) == 192000) "sol-soft-context-ceiling"
+  assert-contract (($pi.models.providers | get openai-codex | get modelOverrides | get 'gpt-5.6-sol' | get contextWindow) == 272000) "sol-soft-context-ceiling"
   assert-contract ($pi.settings.compaction.enabled and $pi.settings.compaction.reserveTokens == 16384 and $pi.settings.compaction.keepRecentTokens == 20000) "native-compaction-settings"
   assert-contract ($pi.settings.retry.enabled and $pi.settings.retry.maxRetries == 3 and $pi.settings.retry.baseDelayMs == 2000) "agent-retry-settings"
   assert-contract ($pi.settings.retry.provider.maxRetries == 0 and $pi.settings.retry.provider.maxRetryDelayMs == 60000) "provider-retry-disabled"
@@ -132,7 +132,33 @@ def main [] {
     const roleCatalog = validateRoleCatalog(catalog);
     const executionProfiles = validateExecutionProfileConfig(profiles);
     const orchestrationConfig = validateOrchestrationConfig(orchestration);
-    assert.match(orchestrationConfig.stateRoot, /\/pi\/orchestration-v4$/u);
+    assert.match(orchestrationConfig.stateRoot, /\/pi\/orchestration-v5$/u);
+    assert.deepEqual(executionProfiles, {
+      schemaVersion: 1,
+      profiles: {
+        "codex-search": { model: "codex/gpt-5.6-luna", thinkingLevel: "high", harness: "codex", harnessOptions: { mode: "read-only", permissionPolicy: "reject", webSearch: "cached" } },
+        "cursor-read": { model: "cursor/cursor-grok-4.5-high-fast", harness: "cursor-agent", harnessOptions: { mode: "ask", permissionPolicy: "reject", sandbox: "disabled", trustWorkspace: true, worktree: false } },
+        "cursor-write": { model: "cursor/cursor-grok-4.5-high-fast", harness: "cursor-agent", harnessOptions: { mode: "agent", permissionPolicy: "allow-always", sandbox: "disabled", trustWorkspace: true, worktree: false } },
+        "luna-high": { model: "openai-codex/gpt-5.6-luna", thinkingLevel: "high", harness: "pi" },
+        "luna-xhigh": { model: "openai-codex/gpt-5.6-luna", thinkingLevel: "xhigh", harness: "pi" },
+        "sol-high": { model: "openai-codex/gpt-5.6-sol", thinkingLevel: "high", harness: "pi" },
+        "sol-medium": { model: "openai-codex/gpt-5.6-sol", thinkingLevel: "medium", harness: "pi" },
+        "terra-high": { model: "openai-codex/gpt-5.6-terra", thinkingLevel: "high", harness: "pi" },
+      },
+    });
+    assert.deepEqual(Object.keys(roleCatalog.roles).sort(), ["delegate", "explorer", "gyaru", "researcher", "review-lens", "reviewer", "searcher", "validator", "worker"]);
+    for (const definition of Object.values(roleCatalog.roles)) assert.deepEqual(Object.keys(definition).sort(), ["childExtensionContributions", "contextPolicy", "description", "instructions", "tools"]);
+    assert.deepEqual({ tools: roleCatalog.roles.delegate.tools, contextPolicy: roleCatalog.roles.delegate.contextPolicy, childExtensionContributions: roleCatalog.roles.delegate.childExtensionContributions }, { tools: [], contextPolicy: "project", childExtensionContributions: [] });
+    assert.deepEqual(orchestrationConfig.callPolicy, {
+      modes: {
+        ops: { targets: { delegate: { profiles: ["cursor-read", "cursor-write"] }, explorer: { profiles: ["luna-high"] }, gyaru: { profiles: ["luna-high"] }, researcher: { profiles: ["terra-high"] }, "review-lens": { profiles: ["luna-high"] }, reviewer: { profiles: ["luna-xhigh", "terra-high", "sol-medium"] }, searcher: { profiles: ["codex-search"] }, validator: { profiles: ["luna-high"] }, worker: { profiles: ["luna-xhigh", "terra-high", "sol-medium"] } } },
+        recon: { targets: { delegate: { profiles: ["cursor-read"] }, explorer: { profiles: ["luna-high"] }, gyaru: { profiles: ["luna-high"] }, researcher: { profiles: ["terra-high"] }, reviewer: { profiles: ["luna-xhigh", "terra-high", "sol-medium"] }, searcher: { profiles: ["codex-search"] } } },
+      },
+      roles: {
+        researcher: { targets: { searcher: { profiles: ["codex-search"] } } },
+        reviewer: { targets: { "review-lens": { profiles: ["luna-high"] }, validator: { profiles: ["luna-high"] } } },
+      },
+    });
     const enabledModeConfig = validateModeConfig(enabledModes);
     validateOrchestrationReferences(orchestrationConfig, roleCatalog, executionProfiles, Object.keys(enabledModeConfig.modes));
     validateModeConfig(disabledModes);

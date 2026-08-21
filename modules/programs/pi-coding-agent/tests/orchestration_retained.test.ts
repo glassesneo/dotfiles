@@ -12,7 +12,7 @@ import { MAX_MODEL_VISIBLE_BYTES, MAX_MODEL_VISIBLE_LINES, projectDebugSnapshot,
 import { inspectMeshAgentWindow, launchAgentSession, meshHubName, stopAgentSession, type CommandResult } from "../extensions_src/utilities/orchestration_tmux.ts";
 import { emptyUsage, type AgentSnapshot, type AgentState, type TaskState } from "../extensions_src/utilities/orchestration_types.ts";
 
-const syntheticRole = (name = "worker") => ({ description: `Synthetic ${name}`, tools: [], instructions: "Return the bounded result.", defaultProfile: "pi-medium", contextPolicy: "project" as const, childExtensionContributions: [] });
+const syntheticRole = (name = "worker") => ({ description: `Synthetic ${name}`, tools: [], instructions: "Return the bounded result.", contextPolicy: "project" as const, childExtensionContributions: [] });
 const syntheticProfile = { model: "provider/model", thinkingLevel: "medium" as const, harness: "pi" as const };
 const definition = syntheticRole("worker");
 const meshId = "11111111-1111-4111-8111-111111111111";
@@ -23,7 +23,7 @@ const tmux = { socket: "/tmp/tmux", serverPid: "10", sessionId: "$hub", sessionN
 function snapshot(id: string, state: AgentState, options: { parentAgentId?: string; taskState?: TaskState; createdAt?: string; sessionFile?: string; sessionId?: string } = {}): AgentSnapshot {
     const taskId = id.replace(/^./u, "b"); const prompt = "Implement retained behavior\nfull detail"; const taskState = options.taskState ?? (state === "failed" ? "failed" : "succeeded"); const terminal = taskState === "succeeded" || taskState === "failed" || taskState === "stopped";
     return {
-        agent: { schemaVersion: 3, meshId, agentId: id, epochId, role: "worker", selectedProfile: "pi-medium", harness: "pi", cwd: "/work", createdAt: options.createdAt ?? id, roleSnapshot: definition, profileSnapshot: syntheticProfile, agent: "worker", agentSnapshot: definition, launchEnvelope: "/envelope", launchEnvelopeDigest: "digest", tmux, capabilities, creatorSessionId: "creator", ...(options.parentAgentId ? { parentAgentId: options.parentAgentId } : {}) },
+        agent: { schemaVersion: 4, meshId, agentId: id, epochId, role: "worker", selectedProfile: "pi-medium", harness: "pi", cwd: "/work", createdAt: options.createdAt ?? id, roleSnapshot: definition, profileSnapshot: syntheticProfile, agent: "worker", agentSnapshot: definition, launchEnvelope: "/envelope", launchEnvelopeDigest: "digest", tmux, capabilities, creatorSessionId: "creator", ...(options.parentAgentId ? { parentAgentId: options.parentAgentId } : {}) },
         status: { schemaVersion: 1, meshId, agentId: id, state, bridgeReady: true, meshToolsEnabled: true, agentUsage: emptyUsage(), accountedTaskIds: [], updatedAt: options.createdAt ?? id, ...(options.sessionFile ? { childSessionFile: options.sessionFile } : {}), ...(options.sessionId ? { childSessionId: options.sessionId } : {}) },
         activity: unknownAgentActivityProjection(),
         stop: null,
@@ -76,6 +76,15 @@ void test("model-visible projection truncates content while preserving machine f
     const text = serializeModelVisibleJson({ outcome: "completed", tasks }); const projected = JSON.parse(text) as { outcome: string; tasks: Array<{ agentId: string; taskId: string; agentState: string; taskState: string; outputTruncated?: boolean }> };
     assert.ok(Buffer.byteLength(text, "utf8") <= MAX_MODEL_VISIBLE_BYTES); assert.ok(text.split(/\r\n|\r|\n/u).length <= MAX_MODEL_VISIBLE_LINES);
     assert.equal(projected.outcome, "completed"); assert.equal(projected.tasks.length, tasks.length); assert.deepEqual(projected.tasks.map(task => task.agentId), tasks.map(task => task.agentId)); assert.ok(projected.tasks.every(task => task.agentState === "idle" && task.taskState === "succeeded")); assert.ok(projected.tasks.some(task => task.outputTruncated));
+});
+
+void test("debug projection marks unsupported external telemetry unavailable", () => {
+    const value = snapshot("acacacac-acac-4cac-8cac-acacacacacac", "idle");
+    value.agent.capabilities = { ...value.agent.capabilities, usage: false };
+    const debug = projectDebugSnapshot(value);
+    assert.equal(debug.status.agentUsage, "unavailable");
+    assert.equal(debug.task?.result?.usage, "unavailable");
+    assert.equal(debug.task?.result?.turns, "unavailable");
 });
 
 void test("model-visible stop projection keeps one fixed nullable shape without internal fields", () => {

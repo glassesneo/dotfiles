@@ -13,14 +13,14 @@ import { claimPendingTask, createTask, ensurePolicyEpoch, initializeMesh, markAg
 
 const capabilities = { nativeScreen: true, taskDelivery: true, taskCompletion: true, taskCancellation: true, usage: true, interactiveInterventions: true, terminalHistory: true };
 const tmux = { socket: "/tmp/tmux", serverPid: "1", sessionId: "$1", sessionName: "main", windowId: "@1", paneId: "%1", windowName: "worker" };
-const syntheticRole = (name = "worker", contextPolicy: "project" | "prompt-only" = "project") => ({ description: `Synthetic ${name}`, tools: [], instructions: "Return the bounded result.", defaultProfile: "pi-medium", contextPolicy, childExtensionContributions: [] });
+const syntheticRole = (name = "worker", contextPolicy: "project" | "prompt-only" = "project") => ({ description: `Synthetic ${name}`, tools: [], instructions: "Return the bounded result.", contextPolicy, childExtensionContributions: [] });
 const syntheticProfile = { model: "provider/model", thinkingLevel: "medium" as const, harness: "pi" as const };
-const syntheticCatalog = (roles: Record<string, ReturnType<typeof syntheticRole>>) => ({ schemaVersion: 3 as const, roles });
+const syntheticCatalog = (roles: Record<string, ReturnType<typeof syntheticRole>>) => ({ schemaVersion: 4 as const, roles });
 const syntheticEpochInput = (mode: string, roles: Record<string, ReturnType<typeof syntheticRole>>) => ({
     mode,
     catalog: syntheticCatalog(roles),
     profiles: { schemaVersion: 1 as const, profiles: { "pi-medium": syntheticProfile } },
-    callPolicy: { modes: { [mode]: { roles: Object.keys(roles) } }, roles: {} },
+    callPolicy: { modes: { [mode]: { targets: Object.fromEntries(Object.keys(roles).map(name => [name, { profiles: ["pi-medium"] }])) } }, roles: {} },
 });
 const budgets = { maxLiveAgents: 4, maxConcurrentTasks: 4, maxTasksPerMesh: 20 };
 

@@ -1,4 +1,4 @@
-import type { ExecutionProfile } from "./mode_types.ts";
+import { CURSOR_READ_HARNESS_OPTIONS, CURSOR_WRITE_HARNESS_OPTIONS, type ExecutionProfile } from "./mode_types.ts";
 import { CodexAcpDriver } from "./orchestration_codex_acp.ts";
 import { CursorAcpDriver } from "./orchestration_cursor_acp.ts";
 
@@ -11,7 +11,7 @@ export type ExternalWorkerEvent =
 export interface ExternalTaskResult { output: string; stopReason: string }
 export interface ExternalDriver { start(): Promise<void>; runTask(prompt: string): Promise<ExternalTaskResult>; cancel(): Promise<void>; partialOutput?(): string; shutdown(): Promise<void>; waitForClose(): Promise<Error>; fatalError(): Error | undefined }
 
-export interface CursorExternalWorkerConfig { adapter: "cursor-acp"; command: string; cwd: string; permissionPolicy: "allow-always" }
+export interface CursorExternalWorkerConfig { adapter: "cursor-acp"; command: string; cwd: string; mode: "ask" | "agent"; permissionPolicy: "reject" | "allow-always" }
 export interface CodexExternalWorkerConfig { adapter: "codex-acp"; command: string; cwd: string; mode: "read-only"; permissionPolicy: "reject"; webSearch: "cached" }
 export type ExternalWorkerConfig = CursorExternalWorkerConfig | CodexExternalWorkerConfig;
 export interface ExternalDriverRoute { display: string; create(event: (event: ExternalWorkerEvent) => void): ExternalDriver }
@@ -32,9 +32,11 @@ function text(value: unknown, name: string): string {
 export function validateExternalWorkerConfig(value: unknown): ExternalWorkerConfig {
     const raw = object(value);
     if (raw.adapter === "cursor-acp") {
-        exact(raw, ["adapter", "command", "cwd", "permissionPolicy"]);
-        if (raw.permissionPolicy !== "allow-always") throw new Error("Cursor external worker permissionPolicy must be allow-always");
-        return { adapter: "cursor-acp", command: text(raw.command, "command"), cwd: text(raw.cwd, "cwd"), permissionPolicy: "allow-always" };
+        exact(raw, ["adapter", "command", "cwd", "mode", "permissionPolicy"]);
+        const read = raw.mode === "ask" && raw.permissionPolicy === "reject";
+        const write = raw.mode === "agent" && raw.permissionPolicy === "allow-always";
+        if (!read && !write) throw new Error("Cursor external worker mode and permissionPolicy combination is invalid");
+        return { adapter: "cursor-acp", command: text(raw.command, "command"), cwd: text(raw.cwd, "cwd"), mode: raw.mode as "ask" | "agent", permissionPolicy: raw.permissionPolicy as "reject" | "allow-always" };
     }
     if (raw.adapter === "codex-acp") {
         exact(raw, ["adapter", "command", "cwd", "mode", "permissionPolicy", "webSearch"]);
@@ -54,10 +56,11 @@ function exactHarnessOptions(actual: Record<string, unknown> | undefined, expect
 export function resolveExternalDriver(config: ExternalWorkerConfig, profile: ExecutionProfile): ExternalDriverRoute {
     if (config.adapter === "cursor-acp") {
         if (profile.harness !== "cursor-agent" || !profile.model.startsWith("cursor/") || profile.thinkingLevel !== undefined) throw new Error("cursor-acp requires a Cursor selected execution profile");
-        if (!exactHarnessOptions(profile.harnessOptions, { mode: "agent", permissionPolicy: "allow-always", sandbox: "disabled", trustWorkspace: true, worktree: false })) throw new Error("cursor-acp selected execution profile has invalid harnessOptions");
+        const expected = config.mode === "ask" ? CURSOR_READ_HARNESS_OPTIONS : CURSOR_WRITE_HARNESS_OPTIONS;
+        if (!exactHarnessOptions(profile.harnessOptions, expected)) throw new Error("cursor-acp selected execution profile has invalid harnessOptions");
         return {
             display: "cursor-agent",
-            create: event => new CursorAcpDriver({ command: config.command, cwd: config.cwd, model: profile.model.slice(7), permissionPolicy: config.permissionPolicy, event }),
+            create: event => new CursorAcpDriver({ command: config.command, cwd: config.cwd, model: profile.model.slice(7), mode: config.mode, permissionPolicy: config.permissionPolicy, event }),
         };
     }
     if (profile.harness !== "codex" || !profile.model.startsWith("codex/") || !profile.thinkingLevel || !exactHarnessOptions(profile.harnessOptions, { mode: "read-only", permissionPolicy: "reject", webSearch: "cached" })) throw new Error("codex-acp requires a Codex selected execution profile");

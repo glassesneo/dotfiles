@@ -1,5 +1,5 @@
 import type { AgentLaunchEnvelope } from "./agent_types.ts";
-import type { ExecutionProfile } from "./mode_types.ts";
+import { isApprovedCursorHarnessOptions, type ExecutionProfile } from "./mode_types.ts";
 import { piLaunchDescriptor } from "./orchestration_pi.ts";
 import type { HarnessRuntimeConfig, NativeCapabilities, SubagentRuntimeConfig } from "./orchestration_types.ts";
 
@@ -7,7 +7,6 @@ export interface NativeLaunchDescriptor { command: string; args: string[]; env: 
 export interface HarnessLaunchInput { meshId: string; agentId: string; agentDirectory: string; role: string; taskPath: string; launchEnvelope: string; epochSnapshot: AgentLaunchEnvelope; cwd: string }
 export interface HarnessAdapter { kind: HarnessRuntimeConfig["adapter"]; capabilities: NativeCapabilities; validate(profile: ExecutionProfile, harnessId: string): void; launch(config: SubagentRuntimeConfig, harness: HarnessRuntimeConfig, input: HarnessLaunchInput): NativeLaunchDescriptor }
 
-const expectedCursor = { mode: "agent", permissionPolicy: "allow-always", sandbox: "disabled", trustWorkspace: true, worktree: false } as const;
 const expectedCodex = { mode: "read-only", permissionPolicy: "reject", webSearch: "cached" } as const;
 const externalCapabilities = { nativeScreen: true, taskDelivery: true, taskCompletion: true, taskCancellation: true, usage: false, interactiveInterventions: false, terminalHistory: false } as const;
 function exactOptions(value: Record<string, unknown> | undefined, expected: Record<string, unknown>, label: string): void {
@@ -19,7 +18,7 @@ function piOptions(profile: ExecutionProfile, harnessId: string): void {
 }
 function cursorOptions(profile: ExecutionProfile, harnessId: string): void {
     if (harnessId !== "cursor-agent" || profile.harness !== "cursor-agent" || !profile.model.startsWith("cursor/") || profile.thinkingLevel !== undefined) throw new Error("Cursor execution profiles require cursor-agent, cursor/<model>, and no thinkingLevel");
-    exactOptions(profile.harnessOptions, expectedCursor, "Cursor execution profile");
+    if (!isApprovedCursorHarnessOptions(profile.harnessOptions)) throw new Error("Cursor execution profile requires exact approved harnessOptions");
 }
 function codexOptions(profile: ExecutionProfile, harnessId: string): void {
     if (harnessId !== "codex" || profile.harness !== "codex" || !profile.model.startsWith("codex/") || !profile.thinkingLevel) throw new Error("Codex execution profiles require codex, codex/<model>, and thinkingLevel");
@@ -40,7 +39,7 @@ function externalLaunch(harness: HarnessRuntimeConfig, input: HarnessLaunchInput
 }
 
 const pi: HarnessAdapter = { kind: "pi-native", capabilities: { nativeScreen: true, taskDelivery: true, taskCompletion: true, taskCancellation: true, usage: true, interactiveInterventions: true, terminalHistory: true }, validate: piOptions, launch: (config, _harness, input) => piLaunchDescriptor(config, input) };
-const cursor: HarnessAdapter = { kind: "cursor-acp", capabilities: externalCapabilities, validate: cursorOptions, launch(_config, harness, input) { const envelope = selected(input); cursorOptions(envelope.executionProfile, envelope.executionProfile.harness); return externalLaunch(harness, input, { adapter: "cursor-acp", command: harness.command, cwd: input.cwd, permissionPolicy: expectedCursor.permissionPolicy }); } };
+const cursor: HarnessAdapter = { kind: "cursor-acp", capabilities: externalCapabilities, validate: cursorOptions, launch(_config, harness, input) { const envelope = selected(input); cursorOptions(envelope.executionProfile, envelope.executionProfile.harness); const options = envelope.executionProfile.harnessOptions!; return externalLaunch(harness, input, { adapter: "cursor-acp", command: harness.command, cwd: input.cwd, mode: String(options.mode), permissionPolicy: String(options.permissionPolicy) }); } };
 const codex: HarnessAdapter = { kind: "codex-acp", capabilities: externalCapabilities, validate: codexOptions, launch(_config, harness, input) { const envelope = selected(input); codexOptions(envelope.executionProfile, envelope.executionProfile.harness); return externalLaunch(harness, input, { adapter: "codex-acp", command: harness.command, cwd: input.cwd, mode: expectedCodex.mode, permissionPolicy: expectedCodex.permissionPolicy, webSearch: expectedCodex.webSearch }); } };
 export const harnessAdapters = Object.freeze({ "pi-native": pi, "cursor-acp": cursor, "codex-acp": codex });
 export function resolveHarnessAdapter(config: SubagentRuntimeConfig, id: string, profile?: ExecutionProfile): { adapter: HarnessAdapter; harness: HarnessRuntimeConfig } {

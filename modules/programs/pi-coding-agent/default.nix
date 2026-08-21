@@ -78,19 +78,31 @@ in
         model = "openai-codex/gpt-5.6-sol";
         thinkingLevel = "medium";
       };
-      luna-medium = {
+      luna-high = {
         model = "openai-codex/gpt-5.6-luna";
-        thinkingLevel = "medium";
+        thinkingLevel = "high";
       };
-      terra-medium = {
-        model = "openai-codex/gpt-5.6-terra";
-        thinkingLevel = "medium";
+      luna-xhigh = {
+        model = "openai-codex/gpt-5.6-luna";
+        thinkingLevel = "xhigh";
       };
       terra-high = {
         model = "openai-codex/gpt-5.6-terra";
         thinkingLevel = "high";
       };
-      cursor-fast = {
+      cursor-read = {
+        model = "cursor/cursor-grok-4.5-high-fast";
+        thinkingLevel = null;
+        harness = "cursor-agent";
+        harnessOptions = {
+          mode = "ask";
+          permissionPolicy = "reject";
+          sandbox = "disabled";
+          trustWorkspace = true;
+          worktree = false;
+        };
+      };
+      cursor-write = {
         model = "cursor/cursor-grok-4.5-high-fast";
         thinkingLevel = null;
         harness = "cursor-agent";

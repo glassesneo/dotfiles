@@ -97,7 +97,7 @@ async function readAgentCapabilities(meshRoot: string, meshId: string, agentIds:
     const entries = await mapConcurrent([...new Set(agentIds)], METRICS_READ_CONCURRENCY, async agentId => {
         const rawAgent = object(await json(join(meshRoot, "agents", agentId, "agent.json")).catch(() => undefined));
         const capabilities = object(rawAgent?.capabilities);
-        const value = rawAgent?.schemaVersion === 3 && rawAgent.meshId === meshId && rawAgent.agentId === agentId && typeof rawAgent.role === "string" && typeof capabilities?.usage === "boolean"
+        const value = rawAgent?.schemaVersion === 4 && rawAgent.meshId === meshId && rawAgent.agentId === agentId && typeof rawAgent.role === "string" && typeof capabilities?.usage === "boolean"
             ? { agentType: rawAgent.role, usage: capabilities.usage }
             : undefined;
         return [agentId, value] as const;
@@ -167,6 +167,7 @@ export async function readOrchestrationMetrics(
             tasks.push({
                 ...metric,
                 agentType: capability.agentType,
+                turns: capability.usage ? metric.turns : "unavailable",
                 usage: capability.usage && resultUsage
                     ? { availability: "available", value: resultUsage }
                     : { availability: "unavailable" },

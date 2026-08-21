@@ -14,7 +14,7 @@ const profiles = {
         "recon-default": { model: "provider/recon", thinkingLevel: "low", harness: "pi" },
         alternate: { model: "provider/alternate", thinkingLevel: "high", harness: "pi" },
         "ops-default": { model: "provider/ops", thinkingLevel: "high", harness: "pi" },
-        external: { model: "cursor/fast", harness: "cursor-agent", harnessOptions: { mode: "agent" } },
+        external: { model: "cursor/fast", harness: "cursor-agent", harnessOptions: { worktree: false, trustWorkspace: true, sandbox: "disabled", permissionPolicy: "reject", mode: "ask" } },
     },
 } as const;
 

@@ -63,6 +63,8 @@ export type AgentToolDetails = AgentSnapshot & {
 };
 
 export type SubmitDetails = AgentToolDetails;
+type ModelVisibleTaskResult = Omit<NonNullable<NonNullable<AgentSnapshot["task"]>["result"]>, "usage" | "turns"> & { usage: Usage | "unavailable"; turns: number | "unavailable" };
+type ModelVisibleTask = Omit<NonNullable<AgentSnapshot["task"]>, "result"> & { result: ModelVisibleTaskResult | null };
 /** Hide provisional task results until the task status is terminal. */
 export function sanitizeSnapshot(snapshot: AgentSnapshot): AgentSnapshot {
     const task = snapshot.task && !isTerminalTask(snapshot.task.status.state) && snapshot.task.result
@@ -125,11 +127,17 @@ export function projectMinimalSubmitResult(
     };
 }
 
-type DebugAgentStatus = Omit<AgentStatus, "accountedTaskIds">;
+type DebugAgentStatus = Omit<AgentStatus, "accountedTaskIds" | "agentUsage"> & { agentUsage: Usage | "unavailable" };
 
-function statusWithoutAccountingIds(status: AgentStatus): DebugAgentStatus {
-    const { accountedTaskIds: _ignored, ...rest } = status;
-    return rest;
+function modelVisibleTask(snapshot: AgentSnapshot): ModelVisibleTask | undefined {
+    const task = snapshot.task;
+    if (!task || snapshot.agent.capabilities.usage || !task.result) return task;
+    return { ...task, result: { ...task.result, usage: "unavailable", turns: "unavailable" } };
+}
+
+function statusWithoutAccountingIds(status: AgentStatus, usageAvailable: boolean): DebugAgentStatus {
+    const { accountedTaskIds: _ignored, agentUsage, ...rest } = status;
+    return { ...rest, agentUsage: usageAvailable ? agentUsage : "unavailable" };
 }
 
 /**
@@ -141,15 +149,15 @@ export function projectDebugSnapshot(rawSnapshot: AgentSnapshot): {
     status: DebugAgentStatus;
     activity: AgentSnapshot["activity"];
     stop: ModelVisibleStop | null;
-    task: AgentSnapshot["task"];
+    task: ModelVisibleTask | undefined;
 } {
     const snapshot = sanitizeSnapshot(rawSnapshot);
     return {
         agent: snapshot.agent,
-        status: statusWithoutAccountingIds(snapshot.status),
+        status: statusWithoutAccountingIds(snapshot.status, snapshot.agent.capabilities.usage),
         activity: snapshot.activity,
         stop: projectModelVisibleStop(snapshot.stop),
-        task: snapshot.task,
+        task: modelVisibleTask(snapshot),
     };
 }
 

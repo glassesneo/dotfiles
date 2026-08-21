@@ -19,12 +19,12 @@ const epochId = "33333333-3333-4333-8333-333333333333";
 const runtime = { stateRoot: "/state", harnesses: { pi: { adapter: "pi-native", command: "/pi" }, "cursor-agent": { adapter: "cursor-acp", command: "/cursor", workerCommand: "/node", workerEntrypoint: "/worker.ts" }, codex: { adapter: "codex-acp", command: "/codex-acp", workerCommand: "/node", workerEntrypoint: "/worker.ts" } } } as never;
 
 function role(overrides: Partial<RoleDefinition> = {}): RoleDefinition {
-    return { description: "purpose", tools: [], instructions: "Own this purpose.", defaultProfile: "sol-medium", contextPolicy: "project", childExtensionContributions: [], ...overrides };
+    return { description: "purpose", tools: [], instructions: "Own this purpose.", contextPolicy: "project", childExtensionContributions: [], ...overrides };
 }
 function envelope(input: { role: string; selfRole: RoleDefinition; selectedProfile: string; executionProfile: ExecutionProfile; policy?: CallerPolicy; extensions?: string[] }): AgentLaunchEnvelope {
     return {
-        schemaVersion: 3,
-        marker: "pi-mesh-role-launch-v3",
+        schemaVersion: 4,
+        marker: "pi-mesh-role-launch-v4",
         meshId,
         agentId,
         epochId,
@@ -32,9 +32,10 @@ function envelope(input: { role: string; selfRole: RoleDefinition; selectedProfi
         selectedProfile: input.selectedProfile,
         selfRole: input.selfRole,
         executionProfile: input.executionProfile,
+        directTargets: { [input.role]: { profiles: [input.selectedProfile] } },
         roles: { [input.role]: input.selfRole },
         profiles: { [input.selectedProfile]: input.executionProfile },
-        policies: { [input.role]: input.policy ?? { roles: [], profiles: [] } },
+        policies: { [input.role]: input.policy ?? { targets: {} } },
         policyDigest: "0".repeat(64),
         childExtensions: { [input.role]: input.extensions ?? ["/popup.ts", "/orchestration.ts", "/role-contribution.ts", "/orchestration_child_bridge.ts"] },
     } as unknown as AgentLaunchEnvelope;
@@ -57,29 +58,29 @@ const externalCapabilities = { nativeScreen: true, taskDelivery: true, taskCompl
 const externalTmux = { socket: "/tmp/tmux", serverPid: "1", sessionId: "$1", sessionName: "main", windowId: "@1", paneId: "%1", windowName: "worker" };
 const externalBudgets = { maxLiveAgents: 4, maxConcurrentTasks: 4, maxTasksPerMesh: 20 };
 const cursorProfile: ExecutionProfile = { model: "cursor/cursor-grok-4.5-high-fast", harness: "cursor-agent", harnessOptions: { mode: "agent", permissionPolicy: "allow-always", sandbox: "disabled", trustWorkspace: true, worktree: false } };
-const externalConfig: ExternalWorkerConfig = { adapter: "cursor-acp", command: "/cursor", cwd: "/work", permissionPolicy: "allow-always" };
+const externalConfig: ExternalWorkerConfig = { adapter: "cursor-acp", command: "/cursor", cwd: "/work", mode: "agent", permissionPolicy: "allow-always" };
 
 async function externalFixture(root: string) {
-    const workerRole = role({ instructions: "Complete the bounded worker objective.", defaultProfile: "sol-medium", tools: ["read", "write"] });
-    const profileConfig: ExecutionProfileConfig = { schemaVersion: 1, profiles: { "sol-medium": { model: "openai-codex/gpt-5.6-sol", thinkingLevel: "medium", harness: "pi" }, "cursor-fast": cursorProfile } };
+    const delegateRole = role({ instructions: "Make bounded generalist progress.", tools: [] });
+    const profileConfig: ExecutionProfileConfig = { schemaVersion: 1, profiles: { "cursor-write": cursorProfile } };
     const mesh = await initializeMesh(root, { rootSessionId: "root", recoverable: false, budgets: externalBudgets });
-    const epoch = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", catalog: { schemaVersion: 3, roles: { worker: workerRole } }, profiles: profileConfig, callPolicy: { modes: { ops: { roles: ["worker"] } }, roles: { worker: { roles: [], profiles: ["cursor-fast"] } } } });
+    const epoch = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", catalog: { schemaVersion: 4, roles: { delegate: delegateRole } }, profiles: profileConfig, callPolicy: { modes: { ops: { targets: { delegate: { profiles: ["cursor-write"] } } } }, roles: {} } });
     const reservation = await reserveMeshCapacity(root, mesh.meshId, "new-agent-task");
-    const prepared = await prepareAgent(root, mesh.meshId, { reservationId: reservation.reservationId, role: "worker", selectedProfile: "cursor-fast", harness: "cursor-agent", cwd: "/work", roleSnapshot: workerRole, profileSnapshot: cursorProfile, launchEnvelope: "pending", epochId: epoch.epochId, provenance: { creatorSessionId: "parent" }, capabilities: externalCapabilities });
-    const launchEnvelope = buildLaunchEnvelope({ meshId: mesh.meshId, agentId: prepared.agentId, epochId: epoch.epochId, role: "worker", selectedProfile: "cursor-fast", snapshot: epoch, childExtensions: { worker: [] } });
+    const prepared = await prepareAgent(root, mesh.meshId, { reservationId: reservation.reservationId, role: "delegate", selectedProfile: "cursor-write", harness: "cursor-agent", cwd: "/work", roleSnapshot: delegateRole, profileSnapshot: cursorProfile, launchEnvelope: "pending", epochId: epoch.epochId, provenance: { creatorSessionId: "parent" }, capabilities: externalCapabilities });
+    const launchEnvelope = buildLaunchEnvelope({ meshId: mesh.meshId, agentId: prepared.agentId, epochId: epoch.epochId, role: "delegate", selectedProfile: "cursor-write", snapshot: epoch, childExtensions: { delegate: [] } });
     const envelopePath = join(prepared.paths.directory, "launch-envelope.json");
     await writeFile(envelopePath, JSON.stringify(launchEnvelope));
-    await publishAgent(root, mesh.meshId, prepared.paths, { agentId: prepared.agentId, epochId: epoch.epochId, role: "worker", selectedProfile: "cursor-fast", harness: "cursor-agent", cwd: "/work", roleSnapshot: workerRole, profileSnapshot: cursorProfile, launchEnvelope: envelopePath, creatorSessionId: "parent", tmux: externalTmux, capabilities: externalCapabilities });
+    await publishAgent(root, mesh.meshId, prepared.paths, { agentId: prepared.agentId, epochId: epoch.epochId, role: "delegate", selectedProfile: "cursor-write", harness: "cursor-agent", cwd: "/work", roleSnapshot: delegateRole, profileSnapshot: cursorProfile, launchEnvelope: envelopePath, creatorSessionId: "parent", tmux: externalTmux, capabilities: externalCapabilities });
     const taskId = randomUUID();
     const env = { PI_MESH_ID: mesh.meshId, PI_MESH_AGENT_ID: prepared.agentId, PI_MESH_AGENT_DIR: prepared.paths.directory, PI_MESH_EPOCH_ID: epoch.epochId, PI_MESH_TASK_PATH: taskPaths(root, mesh.meshId, taskId).directory, PI_AGENT_RESOLVED_AGENT: envelopePath, PI_MESH_EXTERNAL_CONFIG: JSON.stringify(externalConfig) };
-    return { root, meshId: mesh.meshId, agentId: prepared.agentId, epochId: epoch.epochId, workerRole, launchEnvelope, envelopePath, env };
+    return { root, meshId: mesh.meshId, agentId: prepared.agentId, epochId: epoch.epochId, delegateRole, launchEnvelope, envelopePath, env };
 }
 
 // Admission: launch isolation is repository-owned, a leaked context/tool/resource flag materially violates the gyaru boundary, and neither types nor schema validation observes the final Pi argv.
 // Given project and prompt-only role envelopes, when they cross the native launch-descriptor boundary, the Pi process observes only the selected profile and resources authorized for that context/direct policy.
 void test("Pi launch descriptors isolate prompt-only roles and configure peer tools only for direct callers", () => {
     const piProfile: ExecutionProfile = { model: "openai-codex/gpt-5.6-terra", thinkingLevel: "high", harness: "pi" };
-    const promptOnly = envelope({ role: "gyaru", selfRole: role({ contextPolicy: "prompt-only", defaultProfile: "terra-high", tools: [] }), selectedProfile: "terra-high", executionProfile: piProfile });
+    const promptOnly = envelope({ role: "gyaru", selfRole: role({ contextPolicy: "prompt-only", tools: [] }), selectedProfile: "terra-high", executionProfile: piProfile });
     const isolated = piLaunchDescriptor(runtime, launchInput("gyaru", promptOnly));
     assert.equal(option(isolated.args, "--model"), piProfile.model);
     assert.equal(option(isolated.args, "--thinking"), piProfile.thinkingLevel);
@@ -87,27 +88,27 @@ void test("Pi launch descriptors isolate prompt-only roles and configure peer to
     for (const flag of ["--no-context-files", "--no-skills", "--no-prompt-templates", "--no-tools"]) assert.equal(isolated.args.includes(flag), true, flag);
     assert.equal(isolated.args.includes("--tools"), false);
 
-    const caller = envelope({ role: "reviewer", selfRole: role({ tools: ["read", "save_agent_artifact"], defaultProfile: "sol-high" }), selectedProfile: "sol-high", executionProfile: { model: "openai-codex/gpt-5.6-sol", thinkingLevel: "high", harness: "pi" }, policy: { roles: ["review-lens"], profiles: [] } });
+    const caller = envelope({ role: "reviewer", selfRole: role({ tools: ["read", "save_agent_artifact"] }), selectedProfile: "sol-high", executionProfile: { model: "openai-codex/gpt-5.6-sol", thinkingLevel: "high", harness: "pi" }, policy: { targets: { "review-lens": { profiles: ["terra-high"] } } } });
     const callerTools = option(piLaunchDescriptor(runtime, launchInput("reviewer", caller)).args, "--tools")!.split(",");
     assert.deepEqual(callerTools, ["read", "save_agent_artifact", ...MESH_PEER_TOOL_NAMES]);
 
-    const leaf = envelope({ role: "validator", selfRole: role({ tools: ["read", "bash"], defaultProfile: "luna-medium" }), selectedProfile: "luna-medium", executionProfile: { model: "openai-codex/gpt-5.6-luna", thinkingLevel: "medium", harness: "pi" } });
+    const leaf = envelope({ role: "validator", selfRole: role({ tools: ["read", "bash"] }), selectedProfile: "luna-high", executionProfile: { model: "openai-codex/gpt-5.6-luna", thinkingLevel: "high", harness: "pi" } });
     assert.deepEqual(option(piLaunchDescriptor(runtime, launchInput("validator", leaf)).args, "--tools")!.split(","), ["read", "bash"]);
 });
 
 // Admission: selected-profile misrouting changes the actual model/harness while preserving an apparently correct purpose identity; final worker config and prompt composition are not guaranteed by envelope validation alone.
-// Given worker/cursor-fast and searcher/codex-search envelopes, when they cross harness and external-driver routing, the worker observes the selected execution profile while retaining the role-owned instructions and caller task.
+// Given delegate/cursor-write and searcher/codex-search envelopes, when they cross harness and external-driver routing, each worker observes the selected execution profile while retaining the role-owned instructions and caller task.
 void test("external routing consumes selected profiles without turning profiles into purpose identities", () => {
-    const workerRole = role({ instructions: "Complete the bounded worker objective.", defaultProfile: "sol-medium", tools: ["read", "write"] });
-    const workerEnvelope = envelope({ role: "worker", selfRole: workerRole, selectedProfile: "cursor-fast", executionProfile: cursorProfile, policy: { roles: [], profiles: ["cursor-fast"] } });
+    const delegateRole = role({ instructions: "Make bounded generalist progress.", tools: [] });
+    const delegateEnvelope = envelope({ role: "delegate", selfRole: delegateRole, selectedProfile: "cursor-write", executionProfile: cursorProfile });
     const cursor = resolveHarnessAdapter(runtime, cursorProfile.harness, cursorProfile);
-    const cursorLaunch = cursor.adapter.launch(runtime, cursor.harness, launchInput("worker", workerEnvelope));
-    assert.deepEqual(validateExternalWorkerConfig(JSON.parse(cursorLaunch.env.PI_MESH_EXTERNAL_CONFIG!)), { adapter: "cursor-acp", command: "/cursor", cwd: "/work", permissionPolicy: "allow-always" });
+    const cursorLaunch = cursor.adapter.launch(runtime, cursor.harness, launchInput("delegate", delegateEnvelope));
+    assert.deepEqual(validateExternalWorkerConfig(JSON.parse(cursorLaunch.env.PI_MESH_EXTERNAL_CONFIG!)), { adapter: "cursor-acp", command: "/cursor", cwd: "/work", mode: "agent", permissionPolicy: "allow-always" });
     assert.equal(resolveExternalDriver(validateExternalWorkerConfig(JSON.parse(cursorLaunch.env.PI_MESH_EXTERNAL_CONFIG!)), cursorProfile).display, "cursor-agent");
-    assert.equal(workerEnvelope.role, "worker");
-    assert.equal(externalTaskPrompt(workerEnvelope.selfRole.instructions, "Repair file A."), "Complete the bounded worker objective.\n\nDelegated task:\nRepair file A.");
+    assert.equal(delegateEnvelope.role, "delegate");
+    assert.equal(externalTaskPrompt(delegateEnvelope.selfRole.instructions, "Repair file A."), "Make bounded generalist progress.\n\nDelegated task:\nRepair file A.");
 
-    const searcherRole = role({ instructions: "Answer one bounded external question.", defaultProfile: "codex-search" });
+    const searcherRole = role({ instructions: "Answer one bounded external question." });
     const codexProfile: ExecutionProfile = { model: "codex/gpt-5.6-luna", thinkingLevel: "high", harness: "codex", harnessOptions: { mode: "read-only", permissionPolicy: "reject", webSearch: "cached" } };
     const searcherEnvelope = envelope({ role: "searcher", selfRole: searcherRole, selectedProfile: "codex-search", executionProfile: codexProfile });
     const codex = resolveHarnessAdapter(runtime, codexProfile.harness, codexProfile);
@@ -146,7 +147,7 @@ void test("external worker separates idle stop probes from full task claims", as
 }));
 
 // Admission: external active cancellation cadence is process-owned behavior not established by schemas or the idle-claim test.
-// Given a published worker role under cursor-fast, when the external worker crosses readiness and successive task boundaries, durable state records completion, recoverable failure, 50 ms cancellation monitoring, and later reuse under the same role/profile identity.
+// Given a published delegate role under cursor-write, when the external worker crosses readiness and successive task boundaries, durable state records completion, recoverable failure, 50 ms cancellation monitoring, and later reuse under the same role/profile identity.
 void test("external worker persists readiness and reusable completion, failure, and cancellation lifecycle", async () => withTemporaryRoot("orchestration-external-lifecycle-", async root => {
     const fixture = await externalFixture(root);
     const prompts: string[] = [];
@@ -173,7 +174,7 @@ void test("external worker persists readiness and reusable completion, failure, 
     try {
     await waitUntil(async () => { const snapshot = await readAgentSnapshot(root, fixture.meshId, fixture.agentId); return snapshot.status.bridgeReady && snapshot.activity.phase === "idle"; });
     const ready = await readAgentSnapshot(root, fixture.meshId, fixture.agentId);
-    assert.deepEqual({ role: ready.agent.role, selectedProfile: ready.agent.selectedProfile, harness: ready.agent.harness, context: ready.activity.context.state, accepting: ready.activity.acceptingTask }, { role: "worker", selectedProfile: "cursor-fast", harness: "cursor-agent", context: "unsupported", accepting: true });
+    assert.deepEqual({ role: ready.agent.role, selectedProfile: ready.agent.selectedProfile, harness: ready.agent.harness, usage: ready.agent.capabilities.usage, context: ready.activity.context.state, accepting: ready.activity.acceptingTask }, { role: "delegate", selectedProfile: "cursor-write", harness: "cursor-agent", usage: false, context: "unsupported", accepting: true });
 
     const submit = (prompt: string) => createTask(root, fixture.meshId, fixture.agentId, prompt, { requesterEndpointId: `root:${fixture.meshId}` });
     const complete = await submit("complete");
@@ -206,7 +207,7 @@ void test("external worker persists readiness and reusable completion, failure, 
     await worker;
     workerStopped = true;
     assert.equal((await readAgentSnapshot(root, fixture.meshId, fixture.agentId)).status.state, "stopping");
-    assert.deepEqual(prompts, ["complete", "fail", "reuse", "cancel"].map(prompt => externalTaskPrompt(fixture.workerRole.instructions, prompt)));
+    assert.deepEqual(prompts, ["complete", "fail", "reuse", "cancel"].map(prompt => externalTaskPrompt(fixture.delegateRole.instructions, prompt)));
     } finally {
         if (!workerStopped) {
             await markAgentStopping(root, fixture.meshId, fixture.agentId).catch(() => {});

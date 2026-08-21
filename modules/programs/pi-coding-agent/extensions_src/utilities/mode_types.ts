@@ -19,6 +19,12 @@ export interface AgentMode {
 }
 export interface AgentModeConfig { schemaVersion: 2; defaultMode: string; modes: Record<string, AgentMode> }
 
+const cursorCommonHarnessOptions = { sandbox: "disabled", trustWorkspace: true, worktree: false } as const;
+export const CURSOR_READ_HARNESS_OPTIONS = Object.freeze({ mode: "ask", permissionPolicy: "reject", ...cursorCommonHarnessOptions });
+export const CURSOR_WRITE_HARNESS_OPTIONS = Object.freeze({ mode: "agent", permissionPolicy: "allow-always", ...cursorCommonHarnessOptions });
+function matchesExactOptions(actual: Record<string, unknown> | undefined, expected: Record<string, unknown>): boolean { return Boolean(actual && Object.keys(actual).length === Object.keys(expected).length && Object.entries(expected).every(([key, value]) => actual[key] === value)); }
+export function isApprovedCursorHarnessOptions(value: Record<string, unknown> | undefined): boolean { return matchesExactOptions(value, CURSOR_READ_HARNESS_OPTIONS) || matchesExactOptions(value, CURSOR_WRITE_HARNESS_OPTIONS); }
+
 const levels = new Set<unknown>(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);
 function object(value: unknown, label: string): Record<string, unknown> {
     if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`${label} must be an object`);
@@ -64,7 +70,10 @@ export function validateExecutionProfileConfig(value: unknown): ExecutionProfile
         const resolvedThinking = profile.thinkingLevel === undefined ? undefined : thinkingLevel(profile.thinkingLevel, `profiles.${name}.thinkingLevel`);
         const harnessOptions = profile.harnessOptions === undefined ? undefined : object(profile.harnessOptions, `profiles.${name}.harnessOptions`);
         if (harness === "pi" && (resolvedThinking === undefined || harnessOptions !== undefined)) throw new Error(`profiles.${name} pi profile requires thinkingLevel and no harnessOptions`);
-        if (harness === "cursor-agent" && (!resolvedModel.startsWith("cursor/") || resolvedThinking !== undefined || harnessOptions === undefined)) throw new Error(`profiles.${name} cursor-agent profile requires cursor model, no thinkingLevel, and harnessOptions`);
+        if (harness === "cursor-agent") {
+            if (!resolvedModel.startsWith("cursor/") || resolvedThinking !== undefined || harnessOptions === undefined) throw new Error(`profiles.${name} cursor-agent profile requires cursor model, no thinkingLevel, and harnessOptions`);
+            if (!isApprovedCursorHarnessOptions(harnessOptions)) throw new Error(`profiles.${name} cursor-agent profile requires an approved read or write harnessOptions combination`);
+        }
         if (harness === "codex" && (!resolvedModel.startsWith("codex/") || resolvedThinking === undefined || harnessOptions === undefined)) throw new Error(`profiles.${name} codex profile requires codex model, thinkingLevel, and harnessOptions`);
         profiles[name] = { model: resolvedModel, ...(resolvedThinking === undefined ? {} : { thinkingLevel: resolvedThinking }), harness, ...(harnessOptions === undefined ? {} : { harnessOptions }) };
     }

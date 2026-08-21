@@ -120,7 +120,7 @@ function expandedAgentCard(theme: Theme, snapshot: AgentSnapshot, argsPrompt?: s
         if (task.result) {
             if (task.result.error) lines.push(labeled(theme, "error", previewText(task.result.error, EXPANDED_TEXT_LINES, EXPANDED_TEXT_CHARS)));
             if (task.result.output) lines.push(labeled(theme, "output", previewText(task.result.output, EXPANDED_TEXT_LINES, EXPANDED_TEXT_CHARS)));
-            lines.push(labeled(theme, "turns", String(task.result.turns)), labeled(theme, "usage", `${task.result.usage.totalTokens} tokens · $${task.result.usage.cost.total.toFixed(4)}`), labeled(theme, "resultStartedAt", task.result.startedAt), labeled(theme, "resultFinishedAt", task.result.finishedAt));
+            lines.push(labeled(theme, "turns", snapshot.agent.capabilities.usage ? String(task.result.turns) : "unavailable"), labeled(theme, "usage", snapshot.agent.capabilities.usage ? `${task.result.usage.totalTokens} tokens · $${task.result.usage.cost.total.toFixed(4)}` : "unavailable"), labeled(theme, "resultStartedAt", task.result.startedAt), labeled(theme, "resultFinishedAt", task.result.finishedAt));
         }
         lines.push(labeled(theme, "path", task.directory));
     } else {
@@ -128,7 +128,7 @@ function expandedAgentCard(theme: Theme, snapshot: AgentSnapshot, argsPrompt?: s
         if (argsPrompt) lines.push(labeled(theme, "prompt", previewText(argsPrompt, EXPANDED_TEXT_LINES, EXPANDED_TEXT_CHARS)));
     }
     if (snapshot.status.childSessionFile) lines.push(labeled(theme, "sessionFile", snapshot.status.childSessionFile));
-    lines.push(labeled(theme, "agentUsage", `${snapshot.status.agentUsage.totalTokens} tokens · $${snapshot.status.agentUsage.cost.total.toFixed(4)}`));
+    lines.push(labeled(theme, "agentUsage", snapshot.agent.capabilities.usage ? `${snapshot.status.agentUsage.totalTokens} tokens · $${snapshot.status.agentUsage.cost.total.toFixed(4)}` : "unavailable"));
     return lines.join("\n");
 }
 

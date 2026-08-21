@@ -5,7 +5,7 @@ import type { SubagentRuntimeConfig } from "./orchestration_types.ts";
 export const MESH_PEER_TOOL_NAMES = Object.freeze(["mesh_submit", "mesh_get", "mesh_wait", "mesh_stop", "mesh_signal"] as const);
 
 export function meshPiLaunchTools(roleTools: readonly string[], policy: CallerPolicy): string[] {
-    const canDispatch = policy.roles.length > 0 || policy.profiles.length > 0;
+    const canDispatch = Object.keys(policy.targets).length > 0;
     return [...new Set([...roleTools, ...(canDispatch ? MESH_PEER_TOOL_NAMES : [])])];
 }
 
@@ -31,7 +31,7 @@ export function piLaunchDescriptor(config: SubagentRuntimeConfig, input: { meshI
     if (envelope.selfRole.contextPolicy === "prompt-only") {
         args.push("--no-context-files", "--no-skills", "--no-prompt-templates", "--no-tools");
     } else {
-        const tools = meshPiLaunchTools(envelope.selfRole.tools, envelope.policies[envelope.role] ?? { roles: [], profiles: [] });
+        const tools = meshPiLaunchTools(envelope.selfRole.tools, envelope.policies[envelope.role] ?? { targets: {} });
         if (tools.length) args.push("--tools", tools.join(","));
         else args.push("--no-tools");
     }

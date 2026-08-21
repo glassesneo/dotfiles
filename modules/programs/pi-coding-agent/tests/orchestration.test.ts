@@ -35,14 +35,14 @@ import { withMeshLock } from "../extensions_src/utilities/orchestration_lock.ts"
 import { emptyUsage } from "../extensions_src/utilities/orchestration_types.ts";
 import { settleWithinEventLoopTurns, withTemporaryRoot as withRoot, yieldToIO } from "./test_helpers.ts";
 
-const syntheticRole = (name = "worker") => ({ description: `Synthetic ${name}`, tools: [], instructions: "Return the bounded result.", defaultProfile: "pi-medium", contextPolicy: "project" as const, childExtensionContributions: [] });
+const syntheticRole = (name = "worker") => ({ description: `Synthetic ${name}`, tools: [], instructions: "Return the bounded result.", contextPolicy: "project" as const, childExtensionContributions: [] });
 const syntheticProfile = { model: "provider/model", thinkingLevel: "medium" as const, harness: "pi" as const };
-const syntheticCatalog = (roles: Record<string, ReturnType<typeof syntheticRole>>) => ({ schemaVersion: 3 as const, roles });
+const syntheticCatalog = (roles: Record<string, ReturnType<typeof syntheticRole>>) => ({ schemaVersion: 4 as const, roles });
 const syntheticEpochInput = (mode: string, roles: Record<string, ReturnType<typeof syntheticRole>>) => ({
     mode,
     catalog: syntheticCatalog(roles),
     profiles: { schemaVersion: 1 as const, profiles: { "pi-medium": syntheticProfile } },
-    callPolicy: { modes: { [mode]: { roles: Object.keys(roles) } }, roles: {} },
+    callPolicy: { modes: { [mode]: { targets: Object.fromEntries(Object.keys(roles).map(name => [name, { profiles: ["pi-medium"] }])) } }, roles: {} },
 });
 
 const budgets = { maxLiveAgents: 2, maxConcurrentTasks: 2, maxTasksPerMesh: 8 };
@@ -54,7 +54,7 @@ async function createPublishedAgent(stateRoot: string, meshId: string, epochId: 
     const reservation = await reserveMeshCapacity(stateRoot, meshId, "new-agent-task");
     const prepared = await prepareAgent(stateRoot, meshId, { reservationId: reservation.reservationId, role, selectedProfile: "pi-medium", harness: syntheticProfile.harness, cwd: stateRoot, roleSnapshot: definition, profileSnapshot: syntheticProfile, launchEnvelope: "pending", epochId, provenance: { creatorSessionId: "creator" }, capabilities });
     const epoch = await readPolicyEpoch(stateRoot, meshId, epochId);
-    const childExtensions = Object.fromEntries(epoch.roleSet.map(name => [name, ["/popup.ts", "/orchestration.ts", ...epoch.roles[name]!.childExtensionContributions, "/bridge.ts"]]));
+    const childExtensions = Object.fromEntries(Object.keys(epoch.roles).map(name => [name, ["/popup.ts", "/orchestration.ts", ...epoch.roles[name]!.childExtensionContributions, "/bridge.ts"]]));
     const envelope = buildLaunchEnvelope({ meshId, agentId: prepared.agentId, epochId, role, snapshot: epoch, childExtensions });
     const envelopePath = join(prepared.paths.directory, "launch-envelope.json");
     await writeFile(envelopePath, `${JSON.stringify(envelope)}\n`, { mode: 0o600 });
@@ -171,71 +171,77 @@ void test("an ephemeral root remains nonrecoverable while supporting the persist
     assert.equal((await readAgentSnapshot(root, mesh.meshId, agent.agentId, task.request.taskId)).task?.result?.output, "done");
 }));
 
-void test("holistic orchestration references reject unreachable ghost and incompatible caller edges", () => {
-    const role = (name: string, defaultProfile = "pi-medium", contextPolicy: "project" | "prompt-only" = "project") => ({ ...syntheticRole(name), defaultProfile, contextPolicy });
-    const catalog = { schemaVersion: 3 as const, roles: { worker: role("worker"), external: role("external", "external"), isolated: role("isolated", "pi-medium", "prompt-only") } };
-    const profiles = { schemaVersion: 1 as const, profiles: { "pi-medium": syntheticProfile, external: { model: "cursor/model", harness: "cursor-agent" as const, harnessOptions: { mode: "agent" } } } };
+void test("holistic orchestration references reject unknown and incompatible target-profile edges", () => {
+    const role = (name: string, contextPolicy: "project" | "prompt-only" = "project") => ({ ...syntheticRole(name), contextPolicy });
+    const catalog = { schemaVersion: 4 as const, roles: { worker: role("worker"), external: role("external"), isolated: role("isolated", "prompt-only") } };
+    const profiles = { schemaVersion: 1 as const, profiles: { "pi-medium": syntheticProfile, external: { model: "cursor/model", harness: "cursor-agent" as const, harnessOptions: { mode: "agent", permissionPolicy: "allow-always", sandbox: "disabled", trustWorkspace: true, worktree: false } } } };
     const raw = {
-        schemaVersion: 3, stateRoot: "/state", tmux: "/tmux", returnParentCommand: "/return", parentNavigationHint: "parent", historyViewerExtension: "/history", popupExtension: "/popup", orchestrationExtension: "/orchestration", childBridgeExtension: "/bridge",
+        schemaVersion: 4, stateRoot: "/state", tmux: "/tmux", returnParentCommand: "/return", parentNavigationHint: "parent", historyViewerExtension: "/history", popupExtension: "/popup", orchestrationExtension: "/orchestration", childBridgeExtension: "/bridge",
         harnesses: { pi: { adapter: "pi-native", command: "/pi" } }, natureHandleWords: ["May"],
-        callPolicy: { modes: { ops: { roles: ["worker"] } }, roles: {} },
+        callPolicy: { modes: { ops: { targets: { worker: { profiles: ["pi-medium"] } } } }, roles: {} },
         budgets: { maxLiveAgents: 2, maxConcurrentTasks: 2, maxTasksPerMesh: 4 },
         gc: { contextHeadroomTokens: 1, periodicIntervalMs: 1, activityHeartbeatMs: 1, activityStaleMs: 2, roles: {} },
     };
     const config = validateOrchestrationConfig(raw);
     validateOrchestrationReferences(config, catalog, profiles, ["ops"]);
-    const reject = (callPolicy: { modes: Record<string, { roles: string[] }>; roles: Record<string, { roles: string[]; profiles: string[] }> }, pattern: RegExp, modes: readonly string[] = ["ops"]) => assert.throws(() => validateOrchestrationReferences(validateOrchestrationConfig({ ...raw, callPolicy }), catalog, profiles, modes), pattern);
-    reject({ modes: { ghostMode: { roles: ["worker"] } }, roles: {} }, /unknown mode caller/u);
-    reject({ modes: { ops: { roles: ["ghost"] } }, roles: {} }, /unknown roles/u);
-    reject({ modes: { ops: { roles: ["worker"] } }, roles: { ghost: { roles: [], profiles: [] } } }, /unknown role caller/u);
-    reject({ modes: { ops: { roles: ["worker"] } }, roles: { worker: { roles: ["ghost"], profiles: [] } } }, /unknown roles/u);
-    reject({ modes: { ops: { roles: ["worker"] } }, roles: { worker: { roles: [], profiles: ["ghost"] } } }, /unknown profiles/u);
-    reject({ modes: { ops: { roles: [] } }, roles: { external: { roles: ["worker"], profiles: [] } } }, /external-profile caller/u);
-    reject({ modes: { ops: { roles: [] } }, roles: { isolated: { roles: ["worker"], profiles: [] } } }, /prompt-only caller/u);
-    reject({ modes: { ops: { roles: [] } }, roles: { worker: { roles: [], profiles: ["pi-medium"] } } }, /repeats its default/u);
-    const externalPromptOnly = { ...catalog, roles: { ...catalog.roles, isolated: role("isolated", "external", "prompt-only") } };
-    assert.throws(() => validateOrchestrationReferences(config, externalPromptOnly, profiles, ["ops"]), /prompt-only role isolated/u);
+    const reject = (callPolicy: unknown, pattern: RegExp, modes: readonly string[] = ["ops"]) => assert.throws(() => validateOrchestrationReferences(validateOrchestrationConfig({ ...raw, callPolicy }), catalog, profiles, modes), pattern);
+    reject({ modes: { ghostMode: { targets: { worker: { profiles: ["pi-medium"] } } } }, roles: {} }, /unknown mode caller/u);
+    reject({ modes: { ops: { targets: { ghost: { profiles: ["pi-medium"] } } } }, roles: {} }, /unknown role target/u);
+    reject({ modes: { ops: { targets: { worker: { profiles: ["pi-medium"] } } } }, roles: { ghost: { targets: {} } } }, /unknown role caller/u);
+    reject({ modes: { ops: { targets: { worker: { profiles: ["pi-medium"] } } } }, roles: { worker: { targets: { ghost: { profiles: ["pi-medium"] } } } } }, /unknown role target/u);
+    reject({ modes: { ops: { targets: { worker: { profiles: ["ghost"] } } } }, roles: {} }, /unknown profiles/u);
+    reject({ modes: { ops: { targets: { external: { profiles: ["external"] } } } }, roles: { external: { targets: { worker: { profiles: ["pi-medium"] } } } } }, /external-profile caller/u);
+    reject({ modes: { ops: { targets: { isolated: { profiles: ["pi-medium"] } } } }, roles: { isolated: { targets: { worker: { profiles: ["pi-medium"] } } } } }, /prompt-only caller/u);
+    reject({ modes: { ops: { targets: { isolated: { profiles: ["external"] } } } }, roles: {} }, /prompt-only role isolated/u);
+    assert.throws(() => validateOrchestrationConfig({ ...raw, callPolicy: { modes: { ops: { targets: { worker: { profiles: [] } } } }, roles: {} } }), /must not be empty/u);
 });
 
-// Admission: persisted and external consumers parse these exact protocol generations; accepting a stale role shape could silently restore retired prompt ownership.
-// Given a v3 role catalog, when it crosses catalog, epoch, and launch-envelope boundaries, consumers observe v3 records without role Skill opt-ins and reject the v2 generation and old role shape.
-void test("role protocol v3 captures policy closure and rejects the v2 role generation", async () => withRoot("mesh-role-v3-", async root => {
+// Admission: persisted consumers parse the authority protocol; accepting the retired default-profile shape could restore stale execution authority.
+// Given a v4 role catalog and target-profile policy, protocol consumers retain exact closure and reject v3/defaultProfile records.
+void test("role protocol v4 captures profile-aware closure and rejects the v3 role generation", async () => withRoot("mesh-role-v4-", async root => {
     const mesh = await initializeMesh(root, { rootSessionId: "session", recoverable: true, budgets });
-    const role = (description: string, defaultProfile: string) => ({ description, tools: [], instructions: "Return evidence.", defaultProfile, contextPolicy: "project" as const, childExtensionContributions: [] });
-    const catalog = { schemaVersion: 3 as const, roles: { reviewer: role("Review", "review"), lens: role("Lens", "lens"), leaf: role("Leaf", "leaf"), sibling: role("Sibling", "leaf") } };
+    const role = (description: string) => ({ description, tools: [], instructions: "Return evidence.", contextPolicy: "project" as const, childExtensionContributions: [] });
+    const catalog = { schemaVersion: 4 as const, roles: { reviewer: role("Review"), lens: role("Lens"), leaf: role("Leaf"), sibling: role("Sibling") } };
     assert.deepEqual(validateRoleCatalog(catalog), catalog);
-    assert.throws(() => validateRoleCatalog({ ...catalog, schemaVersion: 2 }), /Unsupported/u);
-    assert.throws(() => validateRoleCatalog({ ...catalog, roles: { ...catalog.roles, reviewer: { ...catalog.roles.reviewer, skillOptIns: ["retired-role-method"] } } }), /unknown keys/u);
+    assert.throws(() => validateRoleCatalog({ ...catalog, schemaVersion: 3 }), /Unsupported/u);
+    assert.throws(() => validateRoleCatalog({ ...catalog, roles: { ...catalog.roles, reviewer: { ...catalog.roles.reviewer, defaultProfile: "review" } } }), /unknown keys/u);
     const profiles = { schemaVersion: 1 as const, profiles: { review: { model: "provider/review", thinkingLevel: "high" as const, harness: "pi" as const }, lens: { model: "provider/lens", thinkingLevel: "medium" as const, harness: "pi" as const }, leaf: { model: "provider/leaf", thinkingLevel: "low" as const, harness: "pi" as const } } };
-    const callPolicy = { modes: { ops: { roles: ["reviewer", "sibling"] } }, roles: { reviewer: { roles: ["lens"], profiles: [] }, lens: { roles: ["leaf"], profiles: [] } } };
+    const callPolicy = { modes: { ops: { targets: { reviewer: { profiles: ["review"] }, sibling: { profiles: ["leaf"] } } } }, roles: { reviewer: { targets: { lens: { profiles: ["lens"] } } }, lens: { targets: { leaf: { profiles: ["leaf"] } } } } };
     const epoch = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", catalog, profiles, callPolicy });
-    assert.equal(epoch.schemaVersion, 3);
-    assert.deepEqual(epoch.directRoles, ["reviewer", "sibling"]);
+    assert.equal(epoch.schemaVersion, 4);
+    assert.deepEqual(Object.keys(epoch.directTargets), ["reviewer", "sibling"]);
     assert.deepEqual(Object.keys(epoch.roles).sort(), ["leaf", "lens", "reviewer", "sibling"]);
     assert.deepEqual(Object.keys(epoch.profiles).sort(), ["leaf", "lens", "review"]);
-    assert.equal(epoch.policyDigest, policyDigest({ mode: epoch.mode, directRoles: epoch.directRoles, roles: epoch.roles, profiles: epoch.profiles, policies: epoch.policies }));
-    const envelope = buildLaunchEnvelope({ meshId: mesh.meshId, agentId: randomUUID(), epochId: epoch.epochId, role: "reviewer", snapshot: epoch, childExtensions: Object.fromEntries(Object.keys(epoch.roles).map(name => [name, [`/${name}`]])) });
-    assert.deepEqual({ schemaVersion: envelope.schemaVersion, marker: envelope.marker }, { schemaVersion: 3, marker: "pi-mesh-role-launch-v3" });
+    assert.equal(epoch.policyDigest, policyDigest({ mode: epoch.mode, directTargets: epoch.directTargets, roles: epoch.roles, profiles: epoch.profiles, policies: epoch.policies }));
+    const envelope = buildLaunchEnvelope({ meshId: mesh.meshId, agentId: randomUUID(), epochId: epoch.epochId, role: "reviewer", selectedProfile: "review", snapshot: epoch, childExtensions: Object.fromEntries(Object.keys(epoch.roles).map(name => [name, [`/${name}`]])) });
+    assert.deepEqual({ schemaVersion: envelope.schemaVersion, marker: envelope.marker }, { schemaVersion: 4, marker: "pi-mesh-role-launch-v4" });
     assert.deepEqual(Object.keys(envelope.roles).sort(), ["leaf", "lens", "reviewer"]);
     assert.equal(envelope.roles.sibling, undefined);
-    assert.deepEqual(envelope.policies.reviewer?.roles, ["lens"]);
+    assert.deepEqual(envelope.policies.reviewer?.targets, { lens: { profiles: ["lens"] } });
+    const forgedExternalCaller = structuredClone(envelope);
+    forgedExternalCaller.profiles.external = { model: "cursor/model", harness: "cursor-agent", harnessOptions: { mode: "ask", permissionPolicy: "reject", sandbox: "disabled", trustWorkspace: true, worktree: false } };
+    forgedExternalCaller.policies.reviewer!.targets.lens = { profiles: ["external"] };
+    assert.throws(() => validateLaunchEnvelope(forgedExternalCaller), /external profile caller lens/u);
     const empty = buildPolicySnapshot({ mode: "missing", catalog, profiles, callPolicy });
-    assert.deepEqual(empty, { mode: "missing", directRoles: [], roles: {}, profiles: {}, policies: {} });
+    assert.deepEqual(empty, { mode: "missing", directTargets: {}, roles: {}, profiles: {}, policies: {} });
     assert.throws(() => buildLaunchEnvelope({ meshId: mesh.meshId, agentId: randomUUID(), epochId: epoch.epochId, role: "reviewer", selectedProfile: "lens", snapshot: epoch, childExtensions: Object.fromEntries(Object.keys(epoch.roles).map(name => [name, [`/${name}`]])) }), /not authorized/u);
-    assert.throws(() => validateLaunchEnvelope({ ...envelope, schemaVersion: 2, marker: "pi-mesh-role-launch-v2" }), /Unsupported/u);
-    const persisted = JSON.parse(await readFile(epochPath(root, mesh.meshId, epoch.epochId), "utf8")) as Record<string, unknown>;
-    await writeFile(epochPath(root, mesh.meshId, epoch.epochId), JSON.stringify({ ...persisted, schemaVersion: 2 }));
+    assert.throws(() => validateLaunchEnvelope({ ...envelope, schemaVersion: 3, marker: "pi-mesh-role-launch-v3" }), /Unsupported/u);
+    const persisted = JSON.parse(await readFile(epochPath(root, mesh.meshId, epoch.epochId), "utf8")) as Record<string, any>;
+    const malformedEdge = structuredClone(persisted); malformedEdge.directTargets.reviewer.profiles = [];
+    await writeFile(epochPath(root, mesh.meshId, epoch.epochId), JSON.stringify(malformedEdge));
+    await assert.rejects(readPolicyEpoch(root, mesh.meshId, epoch.epochId), /must not be empty/u);
+    await writeFile(epochPath(root, mesh.meshId, epoch.epochId), JSON.stringify({ ...persisted, schemaVersion: 3 }));
     await assert.rejects(readPolicyEpoch(root, mesh.meshId, epoch.epochId), /Unsupported/u);
 }));
 
 void test("persisted agents reject a forged sibling policy edge even when the epoch digest remains valid", async () => withRoot("mesh-forged-envelope-", async root => {
     const mesh = await initializeMesh(root, { rootSessionId: "root", recoverable: true, budgets });
-    const reviewer = { ...syntheticRole("reviewer"), defaultProfile: "pi-medium" };
+    const reviewer = syntheticRole("reviewer");
     const lens = syntheticRole("lens");
     const sibling = syntheticRole("sibling");
     const catalog = syntheticCatalog({ reviewer, lens, sibling });
     const profiles = { schemaVersion: 1 as const, profiles: { "pi-medium": syntheticProfile } };
-    const callPolicy = { modes: { ops: { roles: ["reviewer", "sibling"] } }, roles: { reviewer: { roles: ["lens"], profiles: [] } } };
+    const callPolicy = { modes: { ops: { targets: { reviewer: { profiles: ["pi-medium"] }, sibling: { profiles: ["pi-medium"] } } } }, roles: { reviewer: { targets: { lens: { profiles: ["pi-medium"] } } } } };
     const epoch = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", catalog, profiles, callPolicy });
     const reservation = await reserveMeshCapacity(root, mesh.meshId, "new-agent-task");
     const prepared = await prepareAgent(root, mesh.meshId, { reservationId: reservation.reservationId, role: "reviewer", selectedProfile: "pi-medium", harness: "pi", cwd: root, roleSnapshot: reviewer, profileSnapshot: syntheticProfile, launchEnvelope: "pending", epochId: epoch.epochId, provenance: { creatorSessionId: "root" }, capabilities });
@@ -243,8 +249,8 @@ void test("persisted agents reject a forged sibling policy edge even when the ep
     const envelope = buildLaunchEnvelope({ meshId: mesh.meshId, agentId: prepared.agentId, epochId: epoch.epochId, role: "reviewer", snapshot: epoch, childExtensions: extensions });
     const forged = structuredClone(envelope) as typeof envelope;
     forged.roles.sibling = sibling;
-    forged.policies.sibling = { roles: [], profiles: [] };
-    forged.policies.reviewer!.roles.push("sibling");
+    forged.policies.sibling = { targets: {} };
+    forged.policies.reviewer!.targets.sibling = { profiles: ["pi-medium"] };
     forged.childExtensions.sibling = extensions.sibling!;
     const envelopePath = join(prepared.paths.directory, "launch-envelope.json"); await writeFile(envelopePath, JSON.stringify(forged));
     await assert.rejects(publishAgent(root, mesh.meshId, prepared.paths, { agentId: prepared.agentId, epochId: epoch.epochId, role: "reviewer", selectedProfile: "pi-medium", harness: "pi", cwd: root, roleSnapshot: reviewer, profileSnapshot: syntheticProfile, launchEnvelope: envelopePath, tmux, capabilities, creatorSessionId: "root" }), /exact child projection/u);
@@ -318,9 +324,9 @@ void test("root reconciliation removes uncommitted task directories and settles 
     const prepared = await reconcileMeshState(root, mesh.meshId); assert.equal(prepared.removedTaskDirectories, 1); assert.equal((await readAgentSnapshot(root, mesh.meshId, agent.agentId, taskId)).status.activeTaskId, taskId); await reconcileMeshReservations(root, mesh.meshId, async () => "absent"); const repairedReservation = JSON.parse(await readFile(reservationPath(root, mesh.meshId, agent.reservation.reservationId), "utf8")) as { taskId?: string }; assert.equal(repairedReservation.taskId, taskId);
     const task = await readAgentSnapshot(root, mesh.meshId, agent.agentId, taskId); const usage = emptyUsage(); usage.input = 7; usage.totalTokens = 7; usage.cost.input = 0.07; usage.cost.total = 0.07;
     await writeFile(paths.result, JSON.stringify({ schemaVersion: 1, meshId: mesh.meshId, agentId: agent.agentId, taskId, outcome: "succeeded", output: "done", usage, turns: 1, interventions: [], startedAt: task.task!.status.createdAt, finishedAt: new Date().toISOString() }));
-    await reconcileMeshState(root, mesh.meshId); const settled = await readAgentSnapshot(root, mesh.meshId, agent.agentId, taskId); assert.equal(settled.agent.schemaVersion, 3); assert.equal(settled.task?.status.state, "succeeded"); assert.equal(settled.status.state, "idle"); assert.equal(settled.status.agentUsage.input, 7); assert.deepEqual(settled.status.accountedTaskIds, [taskId]);
+    await reconcileMeshState(root, mesh.meshId); const settled = await readAgentSnapshot(root, mesh.meshId, agent.agentId, taskId); assert.equal(settled.agent.schemaVersion, 4); assert.equal(settled.task?.status.state, "succeeded"); assert.equal(settled.status.state, "idle"); assert.equal(settled.status.agentUsage.input, 7); assert.deepEqual(settled.status.accountedTaskIds, [taskId]);
     await reconcileMeshState(root, mesh.meshId); assert.equal((await readAgentSnapshot(root, mesh.meshId, agent.agentId, taskId)).status.agentUsage.input, 7);
-    const agentPath = join(meshPaths(root, mesh.meshId).agents, agent.agentId, "agent.json"); const agentRecord = JSON.parse(await readFile(agentPath, "utf8")) as Record<string, unknown>; await writeFile(agentPath, JSON.stringify({ ...agentRecord, schemaVersion: 2 }));
+    const agentPath = join(meshPaths(root, mesh.meshId).agents, agent.agentId, "agent.json"); const agentRecord = JSON.parse(await readFile(agentPath, "utf8")) as Record<string, unknown>; await writeFile(agentPath, JSON.stringify({ ...agentRecord, schemaVersion: 3 }));
     await assert.rejects(readAgentSnapshot(root, mesh.meshId, agent.agentId), /Unsupported agent record/u);
 }));
 
