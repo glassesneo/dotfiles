@@ -9,6 +9,7 @@ delib.module {
           "InsertEnter"
           "CmdlineEnter"
         ];
+        after = builtins.readFile ./after.lua;
       };
     };
   };
