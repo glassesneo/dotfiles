@@ -11,6 +11,8 @@ import performanceExtension, {
     parsePerformanceArguments,
     PerformanceCollector,
     PERFORMANCE_ENTRY,
+    PERFORMANCE_SCHEMA_VERSION,
+    parsePerformanceRun,
     readMeshMetrics,
     summarizeRuns,
     type PerformanceResourceSnapshot,
@@ -23,12 +25,36 @@ void test("performance collector retains current and overlapping tool timing", (
     assert.equal(mergeIntervalDuration([{ startMs: 0, endMs: 10 }, { startMs: 5, endMs: 20 }, { startMs: 30, endMs: 35 }]), 25);
 });
 
-void test("performance entries reject incompatible records without exposing private payloads", () => {
-    const valid = { schemaVersion: 1, startedAt: "2026-01-01T00:00:00.000Z", finishedAt: "2026-01-01T00:00:01.000Z", totalMs: 1000, turnCount: 1, turnMs: 900, tools: { bash: { count: 1, durationMs: 100 } }, toolWallMs: 100, nonToolMs: 900 };
-    const summary = summarizeRuns([{ type: "custom", customType: PERFORMANCE_ENTRY, data: valid }, { type: "custom", customType: PERFORMANCE_ENTRY, data: { ...valid, schemaVersion: 0 } }, { type: "custom", customType: PERFORMANCE_ENTRY, data: "broken" }]);
-    assert.equal(summary.runs.length, 1); assert.equal(summary.unread, 2);
-    const serialized = JSON.stringify(summary.runs[0]);
-    for (const privateField of ["prompt", "thinking", "args", "result", "command", "path"]) assert.doesNotMatch(serialized, new RegExp(`"${privateField}"`, "u"));
+void test("performance schema v2 separates quota metadata and reads v1 entries", () => {
+    const legacy = { schemaVersion: 1, startedAt: "2026-01-01T00:00:00.000Z", finishedAt: "2026-01-01T00:00:01.000Z", totalMs: 1000, turnCount: 1, turnMs: 900, tools: { bash: { count: 1, durationMs: 100 } }, toolWallMs: 100, nonToolMs: 900 };
+    let clock = 0; const collector = new PerformanceCollector(() => clock, () => new Date(clock)); collector.startRun();
+    collector.recordMessage({ role: "assistant", content: "private prompt", usage: { input: 10, output: 2, cacheRead: 4, cacheWrite: 1, totalTokens: 17, cost: { input: 1, output: 2, cacheRead: 3, cacheWrite: 4, total: 10 } } });
+    collector.recordMessage({ role: "toolResult", toolCallId: "private-task-id", toolName: "mesh_get", content: "https://private.example/path", usage: { input: 20, output: 3, cacheRead: 5, cacheWrite: 0, totalTokens: 28, cost: { input: 2, output: 3, cacheRead: 4, cacheWrite: 0, total: 9 } } });
+    collector.observeContext({ tokens: 100_000, contextWindow: 192_000 }); collector.recordProviderRequest(); collector.recordProviderResponse(429);
+    collector.recordCompaction({ reason: "threshold", willRetry: false, tokensBefore: 176_000, usage: { input: 30, output: 4, cacheRead: 6, cacheWrite: 0, totalTokens: 40, cost: { input: 3, output: 4, cacheRead: 5, cacheWrite: 0, total: 12 } } });
+    clock = 100; const current = collector.settle(); assert.ok(current); assert.equal(current.schemaVersion, PERFORMANCE_SCHEMA_VERSION);
+    assert.deepEqual(current.assistantUsage, { availability: "available", value: { input: 10, output: 2, cacheRead: 4, cacheWrite: 1, totalTokens: 17, cost: { input: 1, output: 2, cacheRead: 3, cacheWrite: 4, total: 10 } } });
+    assert.equal(current.nestedToolUsage.availability, "available"); assert.equal(current.compactionUsage[0]?.tokensBefore, 176_000); assert.deepEqual(current.context, { peakTokens: 100_000, contextWindow: 192_000, compactionThreshold: 175_616 }); assert.equal(current.providerRequests.statusCategories?.rateLimited, 1);
+    const summary = summarizeRuns([{ type: "custom", customType: PERFORMANCE_ENTRY, data: legacy }, { type: "custom", customType: PERFORMANCE_ENTRY, data: { ...current, prompt: "discard me", sessionId: "discard me" } }, { type: "custom", customType: PERFORMANCE_ENTRY, data: { ...legacy, schemaVersion: 0 } }]);
+    assert.deepEqual(summary.runs.map(run => run.schemaVersion), [1, 2]); assert.equal(summary.unread, 1);
+    const serialized = JSON.stringify(summary.runs[1]);
+    for (const privateValue of ["private prompt", "private-task-id", "https://private.example/path", "discard me"]) assert.doesNotMatch(serialized, new RegExp(privateValue.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&"), "u"));
+    const partial = { ...current, assistantUsage: { availability: "unavailable" } as const, nestedToolUsage: { availability: "unavailable" } as const, compactionUsage: [{ reason: "manual" as const, willRetry: false, tokensBefore: 120_000, usage: { availability: "unavailable" as const } }], providerRequests: { beforeCount: 1, afterCount: 0, statusAvailability: "unavailable" as const } };
+    const formatted = formatCurrentPerformance([...summary.runs, partial], { tasks: [], unread: 0 }, { cpuCount: 1, loadAverage: [0, 0, 0], memoryTotalBytes: 1, memoryFreeBytes: 1, swap: "unavailable", diskFreeBytes: "unavailable" });
+    assert.match(formatted, /Assistant usage:.*cache ratio 28\.6%.*\(1 unavailable\)/u); assert.match(formatted, /Nested tool usage:.*\(1 unavailable\)/u); assert.match(formatted, /Compactions:.*\(1 unavailable\)/u); assert.match(formatted, /statuses .*429 1/u);
+});
+
+void test("v2 parser preserves unavailable provider and usage observations instead of zero", () => {
+    const collector = new PerformanceCollector(() => 0, () => new Date(0)); collector.startRun(); collector.recordProviderRequest(); const run = collector.settle(); assert.ok(run);
+    const parsed = parsePerformanceRun(run); assert.ok(parsed && parsed.schemaVersion === 2); assert.deepEqual(parsed.assistantUsage, { availability: "unavailable" }); assert.deepEqual(parsed.nestedToolUsage, { availability: "unavailable" }); assert.equal(parsed.providerRequests.beforeCount, 1); assert.equal(parsed.providerRequests.afterCount, 0); assert.equal(parsed.providerRequests.statusAvailability, "unavailable");
+});
+
+void test("out-of-run compaction is persisted as its own session aggregate", () => {
+    const handlers = new Map<string, (event: any, ctx?: any) => unknown>(); const appended: Array<{ customType: string; data: unknown }> = [];
+    const pi = { on(name: string, handler: (event: any, ctx?: any) => unknown) { handlers.set(name, handler); }, appendEntry(customType: string, data: unknown) { appended.push({ customType, data }); }, registerCommand() {}, events: { on() { return () => {}; }, emit() {} } } as unknown as ExtensionAPI;
+    performanceExtension(pi, { clock: () => 10, wallClock: () => new Date(10) });
+    handlers.get("session_compact")!({ reason: "manual", willRetry: false, compactionEntry: { tokensBefore: 50_000, usage: { input: 4, output: 1, cacheRead: 0, cacheWrite: 0, totalTokens: 5, cost: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, total: 2 } } } });
+    assert.equal(appended.length, 1); assert.equal(appended[0]?.customType, PERFORMANCE_ENTRY); const run = parsePerformanceRun(appended[0]?.data); assert.ok(run && run.schemaVersion === 2); assert.equal(run.compactionUsage[0]?.reason, "manual"); assert.equal(run.compactionUsage[0]?.usage.availability, "available");
 });
 
 const meshCurrent = "11111111-1111-4111-8111-111111111111";
@@ -40,14 +66,14 @@ const taskCurrent = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const taskPrior = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 const taskOther = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
 
-async function addMeshTask(stateRoot: string, input: { meshId: string; agentId: string; agent: string; taskId: string; start: string; finish?: string }): Promise<void> {
+async function addMeshTask(stateRoot: string, input: { meshId: string; agentId: string; agent: string; taskId: string; start: string; finish?: string; usageCapability?: boolean }): Promise<void> {
     const mesh = join(stateRoot, "meshes", input.meshId); const task = join(mesh, "tasks", input.taskId); const agent = join(mesh, "agents", input.agentId);
     await mkdir(task, { recursive: true }); await mkdir(agent, { recursive: true });
-    await writeFile(join(agent, "agent.json"), JSON.stringify({ schemaVersion: 3, meshId: input.meshId, agentId: input.agentId, role: input.agent }));
+    await writeFile(join(agent, "agent.json"), JSON.stringify({ schemaVersion: 3, meshId: input.meshId, agentId: input.agentId, role: input.agent, capabilities: { usage: input.usageCapability ?? true } }));
     await writeFile(join(agent, "events.jsonl"), "");
     await writeFile(join(task, "request.json"), JSON.stringify({ schemaVersion: 3, meshId: input.meshId, agentId: input.agentId, taskId: input.taskId, prompt: "measure this task", requesterEndpointId: `root:${input.meshId}`, createdAt: input.start }));
     await writeFile(join(task, "status.json"), JSON.stringify({ schemaVersion: 1, meshId: input.meshId, agentId: input.agentId, taskId: input.taskId, state: input.finish ? "succeeded" : "running", createdAt: input.start, startedAt: input.start, ...(input.finish ? { finishedAt: input.finish } : {}) }));
-    if (input.finish) await writeFile(join(task, "result.json"), JSON.stringify({ schemaVersion: 1, meshId: input.meshId, agentId: input.agentId, taskId: input.taskId, outcome: "succeeded", output: "", usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } }, turns: 1, interventions: [], startedAt: input.start, finishedAt: input.finish }));
+    if (input.finish) await writeFile(join(task, "result.json"), JSON.stringify({ schemaVersion: 1, meshId: input.meshId, agentId: input.agentId, taskId: input.taskId, outcome: "succeeded", output: "", usage: { input: 7, output: 2, cacheRead: 3, cacheWrite: 0, totalTokens: 12, cost: { input: 1, output: 1, cacheRead: 1, cacheWrite: 0, total: 3 } }, turns: 2, interventions: [], startedAt: input.start, finishedAt: input.finish }));
 }
 
 void test("mesh metrics scope current tasks by mesh and aggregate recent tasks across meshes", async () => {
@@ -55,7 +81,7 @@ void test("mesh metrics scope current tasks by mesh and aggregate recent tasks a
     await writeFile(configPath, JSON.stringify({ schemaVersion: 7, stateRoot }));
     await addMeshTask(stateRoot, { meshId: meshCurrent, agentId: agentA, agent: "tester", taskId: taskCurrent, start: "2026-08-04T11:40:00.000Z" });
     await addMeshTask(stateRoot, { meshId: meshCurrent, agentId: agentA, agent: "tester", taskId: taskPrior, start: "2026-08-04T11:00:00.000Z", finish: "2026-08-04T11:05:00.000Z" });
-    await addMeshTask(stateRoot, { meshId: meshOther, agentId: agentB, agent: "reviewer", taskId: taskOther, start: "2026-08-03T10:00:00.000Z", finish: "2026-08-03T10:20:00.000Z" });
+    await addMeshTask(stateRoot, { meshId: meshOther, agentId: agentB, agent: "reviewer", taskId: taskOther, start: "2026-08-03T10:00:00.000Z", finish: "2026-08-03T10:20:00.000Z", usageCapability: false });
 
     const current = await readMeshMetrics(configPath, { meshId: meshCurrent, nowMs: now });
     assert.deepEqual(current.tasks.map(task => ({ taskId: task.taskId, outcome: task.outcome, open: task.open, longRunning: task.longRunning, durationMs: task.durationMs })), [
@@ -65,9 +91,11 @@ void test("mesh metrics scope current tasks by mesh and aggregate recent tasks a
 
     const recent = await readMeshMetrics(configPath, { sinceMs: now - 2 * 86_400_000, nowMs: now });
     assert.deepEqual(recent.tasks.map(task => task.taskId), [taskCurrent, taskOther, taskPrior]);
+    assert.equal(recent.tasks.find(task => task.taskId === taskPrior)?.usage.availability, "available");
+    assert.equal(recent.tasks.find(task => task.taskId === taskOther)?.usage.availability, "unavailable");
     const text = formatRecentPerformance(2, recent);
-    assert.match(text, /tester/u);
-    assert.match(text, /reviewer/u);
+    assert.match(text, /tester.*cache ratio 30\.0%/u);
+    assert.match(text, /reviewer.*usage unavailable/u);
 });
 
 void test("mesh metrics report unavailable state and reject future open tasks", async () => {
@@ -103,8 +131,8 @@ void test("performance argument range is strict", () => {
 
 void test("current formatter exposes task timing without private identifiers", () => {
     const resources: PerformanceResourceSnapshot = { cpuCount: 6, loadAverage: [1, 2, 3], memoryTotalBytes: 8 * 1024 ** 3, memoryFreeBytes: 4 * 1024 ** 3, swap: "0 used", diskFreeBytes: 20 * 1024 ** 3 };
-    const text = formatCurrentPerformance([], { unread: 2, tasks: [{ meshId: "mesh-secret", agentId: "agent-secret", taskId: "12345678-private", agentType: "tester", outcome: "running", startedAt: "2026-01-01T00:00:00Z", durationMs: 700000, open: true, longRunning: true }] }, resources);
-    assert.match(text, /tester.*running/u); assert.doesNotMatch(text, /mesh-secret|agent-secret|purpose|prompt|private/iu);
+    const text = formatCurrentPerformance([], { unread: 2, tasks: [{ meshId: "mesh-secret", agentId: "agent-secret", taskId: "12345678-private", agentType: "tester", outcome: "running", startedAt: "2026-01-01T00:00:00Z", durationMs: 700000, open: true, turns: "unavailable", usage: { availability: "unavailable" }, longRunning: true }] }, resources);
+    assert.match(text, /tester.*running/u); assert.match(text, /usage unavailable/u); assert.doesNotMatch(text, /mesh-secret|agent-secret|purpose|prompt|private/iu);
 });
 
 void test("slash command and palette use PI_MESH_ID for the same current handler", async () => {

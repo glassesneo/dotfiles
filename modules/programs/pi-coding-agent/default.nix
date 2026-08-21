@@ -13,10 +13,26 @@
     defaultModel = "gpt-5.6-sol";
     defaultThinkingLevel = "medium";
   };
-  # Sol alone opts into Pi's long-context tier; requests beyond 272K may price the
-  # whole request at that tier. Luna and Terra deliberately retain provider metadata.
+  # Repository-owned soft ceiling for Pi's native compaction scheduler; this does
+  # not represent Sol's provider-side context capability.
   modelOverrides = {
-    providers."openai-codex".modelOverrides."gpt-5.6-sol".contextWindow = 1050000;
+    providers."openai-codex".modelOverrides."gpt-5.6-sol".contextWindow = 192000;
+  };
+  nativeLifecycleSettings = {
+    compaction = {
+      enabled = true;
+      reserveTokens = 16384;
+      keepRecentTokens = 20000;
+    };
+    retry = {
+      enabled = true;
+      maxRetries = 3;
+      baseDelayMs = 2000;
+      provider = {
+        maxRetries = 0;
+        maxRetryDelayMs = 60000;
+      };
+    };
   };
   profileType = delib.submodule {
     options = with delib; {
@@ -44,6 +60,7 @@ in
           "orchestration"
           "command_palette"
           "web_retrieval"
+          "performance"
         ]);
       };
 
@@ -120,6 +137,7 @@ in
       names = values: lib.concatStringsSep ", " values;
       emergencySettings =
         modelDefaults
+        // nativeLifecycleSettings
         // {
           extensions = extensionPaths;
           prompts = [
@@ -179,6 +197,7 @@ in
         inherit (cfg) configDir;
         settings =
           modelDefaults
+          // nativeLifecycleSettings
           // {
             extensions = lib.mkBefore extensionPaths;
             prompts = [

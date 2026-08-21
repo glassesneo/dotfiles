@@ -19,7 +19,7 @@ import { runTuiQuestionFlow } from "./utilities/decision_tui.ts";
 import { loadQuestionKeymapConfig } from "./utilities/decision_keymap.ts";
 
 export const questionDescription =
-    "Ask the user for user-owned decisions or missing information that affects the current task. Supports single-choice, multiple-choice, and multiline text questions. For yes/no questions, use a two-option single question with stable values. Options accept notes; set noteRequired to true when an explanation is required. Users can submit a write-in response when no listed option applies, and write-ins count as answered. Users may submit with questions untouched; absent response IDs are intentionally skipped.";
+    "Ask the user for task-relevant decisions or missing information. Write-ins are answers; absent response IDs are intentionally skipped.";
 
 function inline(value: string): string {
     return value.replace(/\s*\r?\n\s*/g, " ⏎ ").trim();
@@ -39,17 +39,9 @@ function responseDisplay(question: QuestionItem, response: QuestionResponse, exp
 }
 
 const questionPromptGuidelines = [
-    "Use the `question` tool only for user-owned decisions or missing information that affects the current task; do not use it for facts available from the repository or provided materials.",
-    "In a `question` tool call, group related questions when useful, but ask the minimum number needed.",
-    "For yes/no questions in the `question` tool, use kind='single' with Yes and No options and stable string values.",
-    "The `question` tool lets users add a note to each selected option; set `noteRequired: true` when an option requires a non-blank explanation. Multi-choice results keep each note with its option.",
-    "Users may submit a write-in response when no listed option applies. Treat a write-in as answered decision input, not as an unanswered choice.",
-    "When the `question` tool asks the user to choose a direction such as 'revise' and explain conditions, prefer that option with its note over adding a separate text question.",
-    "In the `question` tool, separate meaningful directions into options and use notes for conditions that do not fit the option label.",
-    "Do not mechanically add a generic 'Other' option to the `question` tool; users can use the write-in action when no option applies. A contextually meaningful Other option may be used with `noteRequired: true`.",
-    "A submitted `question` tool result may omit untouched question IDs. Treat absent IDs as intentionally skipped rather than as tool failure, and do not treat the omitted decisions as settled.",
-    "If the `question` tool returns cancelled or unavailable, do not treat its requested user-owned decisions as settled; use an available conversation fallback when appropriate.",
-    "After receiving responses from the `question` tool, return to the original task.",
+    "Use question only for user-owned input unavailable from current evidence, grouping the minimum useful questions.",
+    "In question, use option notes for conditions, especially revision conditions; require a note when an explanation is necessary.",
+    "Treat question write-ins as answers and absent IDs as skipped, not settled. A cancelled or unavailable question leaves the decision unresolved.",
 ];
 
 export function createQuestionToolDefinition(): ToolDefinition<
@@ -60,8 +52,7 @@ export function createQuestionToolDefinition(): ToolDefinition<
         name: "question",
         label: "Question",
         description: questionDescription,
-        promptSnippet:
-            "Use the question tool to ask the user for user-owned decisions or missing information that affects the current task, with optional notes for selected options",
+        promptSnippet: "Ask for user-owned task input",
         promptGuidelines: questionPromptGuidelines,
         parameters: questionParameters,
         executionMode: "sequential",

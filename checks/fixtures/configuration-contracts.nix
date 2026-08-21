@@ -170,6 +170,8 @@ in
         catalog = builtins.fromJSON (builtins.unsafeDiscardStringContext base.config.home.file."${base.config.home.homeDirectory}/.pi/agent/role-catalog.json".text);
         profiles = builtins.fromJSON (builtins.unsafeDiscardStringContext base.config.home.file."${base.config.home.homeDirectory}/.pi/agent/execution-profiles.json".text);
         orchestration = builtins.fromJSON (builtins.unsafeDiscardStringContext base.config.home.file."${base.config.home.homeDirectory}/.pi/agent/orchestration.json".text);
+        settings = base.config.programs.pi-coding-agent.settings;
+        models = builtins.fromJSON (builtins.unsafeDiscardStringContext base.config.home.file."${base.config.home.homeDirectory}/.pi/agent/models.json".text);
         extensionKeybindings = builtins.fromJSON (builtins.unsafeDiscardStringContext aliasOverride.config.home.file."${aliasOverride.config.home.homeDirectory}/.pi/agent/extension-keybindings.json".text);
         navigationTmux = navigation.config.programs.tmux.extraConfig;
         darwinTmux = darwin.config.home-manager.users.neo.programs.tmux.extraConfig;

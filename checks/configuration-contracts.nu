@@ -45,6 +45,13 @@ def main [] {
   assert-contract (($pi.enabledQuestion.modes.modes | values | any {|mode| $mode.tools | any {|tool| $tool == "question" } })) "question-tool-enabled"
   assert-contract (not ($pi.disabledQuestion.modes.modes | values | any {|mode| $mode.tools | any {|tool| $tool == "question" } })) "question-tool-disabled"
   assert-contract (($pi.extensionKeybindings.features | get historyViewer | get exit | first) == "f12") "native-key-alias"
+  assert-contract (($pi.models.providers | get openai-codex | get modelOverrides | get 'gpt-5.6-sol' | get contextWindow) == 192000) "sol-soft-context-ceiling"
+  assert-contract ($pi.settings.compaction.enabled and $pi.settings.compaction.reserveTokens == 16384 and $pi.settings.compaction.keepRecentTokens == 20000) "native-compaction-settings"
+  assert-contract ($pi.settings.retry.enabled and $pi.settings.retry.maxRetries == 3 and $pi.settings.retry.baseDelayMs == 2000) "agent-retry-settings"
+  assert-contract ($pi.settings.retry.provider.maxRetries == 0 and $pi.settings.retry.provider.maxRetryDelayMs == 60000) "provider-retry-disabled"
+  assert-contract ($pi.orchestration.budgets.maxLiveAgents == 12 and $pi.orchestration.budgets.maxConcurrentTasks == 12 and $pi.orchestration.budgets.maxTasksPerMesh == 64) "mesh-budgets"
+  let default_extension_names = ($pi.settings.extensions | each {|path| $path | path basename })
+  assert-contract ($default_extension_names | any {|name| $name == "performance.ts" }) "performance-default-extension"
   let parent_identity_invocation = 'pi-mesh-return-parent\s+--binding\s+#\{q:client_name\}\s+#\{q:session_id\}\s+#\{q:window_id\}'
   assert-contract ($pi.navigationTmux =~ $parent_identity_invocation) "tmux-parent-identity-arguments"
   assert-contract ($pi.darwinTmux =~ $parent_identity_invocation) "darwin-tmux-parent-identity-arguments"

@@ -48,7 +48,7 @@ void test("web_fetch input boundary applies defaults while preserving URL occurr
     assert.deepEqual(parseWebFetchInput({ urls: [duplicate, duplicate] }), {
         urls: [duplicate, duplicate],
         mode: "relevant",
-        maxCharsTotal: 50_000,
+        maxCharsTotal: 24_000,
     });
     assert.deepEqual(parseWebFetchInput({
         urls: ["http://example.com/a"],
@@ -153,7 +153,7 @@ void test("provider mappings use one mode-specific batch and project mixed resul
     assert.deepEqual(buildParallelExtractBody(relevant), {
         urls: [a, b, a],
         objective: "find evidence",
-        max_chars_total: 50_000,
+        max_chars_total: 24_000,
     });
     const parallel = normalizeParallelExtractResponse({
         extract_id: "extract-1",

@@ -28,6 +28,8 @@ import {
 import {
     createWebSearchToolDefinition,
     registerWebSearch,
+    WEB_SEARCH_MAX_VISIBLE_BYTES,
+    WEB_SEARCH_MAX_VISIBLE_LINES,
     webSearchParameters,
 } from "../extensions_src/web_search.ts";
 
@@ -450,7 +452,8 @@ void test("AC5-AC7: adapters map native requests and retain safe URL results wit
     }
 });
 
-void test("AC15: tool registration is extension-owned and truncation preserves full structured details privately", async () => {
+// Given omitted result count and an oversized formatted response, the tool caller observes one 10-result provider request, bounded model text with a private full-output path, and complete structured details.
+void test("search tool preserves one default-sized request and bounds only model-visible output", async () => {
     const tools: string[] = [];
     registerWebSearch({ registerTool(tool: { name: string }) { tools.push(tool.name); } } as unknown as ExtensionAPI, {
         loadConfig: async () => config(),
@@ -469,19 +472,56 @@ void test("AC15: tool registration is extension-owned and truncation preserves f
     const previousTmp = process.env.TMPDIR;
     process.env.TMPDIR = isolatedTmp;
     try {
+        let searchCalls = 0;
+        let providerRequest: NormalizedSearchRequest | undefined;
         const tool = createWebSearchToolDefinition({
             loadConfig: async () => config(),
-            router: { search: async () => response },
+            router: { search: async (_config, normalized) => {
+                searchCalls += 1;
+                providerRequest = normalized;
+                return response;
+            } },
         });
         const result = await tool.execute("call", { query: "evidence" }, undefined, undefined, { cwd: "/work" } as never);
+        assert.equal(searchCalls, 1);
+        assert.equal(providerRequest?.maxResults, 10);
         assert.deepEqual(result.details.response, response);
         assert.equal(result.details.truncation?.truncated, true);
-        assert.match(result.content[0]?.type === "text" ? result.content[0].text : "", /Provider: parallel-search/);
+        const visibleText = result.content[0]?.type === "text" ? result.content[0].text : "";
+        assert.match(visibleText, /Provider: parallel-search/);
+        assert.equal(Buffer.byteLength(visibleText, "utf8") <= WEB_SEARCH_MAX_VISIBLE_BYTES, true);
+        assert.equal(visibleText.split("\n").length <= WEB_SEARCH_MAX_VISIBLE_LINES, true);
         const path = result.details.truncation?.fullOutputPath;
         assert.ok(path?.startsWith(isolatedTmp));
+        assert.equal(visibleText.includes(path!), true);
         assert.equal((await stat(path!)).mode & 0o777, 0o600);
         assert.equal((await stat(join(path!, ".."))).mode & 0o777, 0o700);
         assert.match(await readFile(path!, "utf8"), /https:\/\/example.com/);
+
+        const lineHeavyResponse: WebSearchDetails["response"] = {
+            ...response,
+            results: [{
+                url: "https://lines.example.com",
+                excerpts: ["x\n".repeat(3_000)],
+                source: { provider: "parallel-search", rank: 1 },
+            }],
+        };
+        let lineSearchCalls = 0;
+        const lineTool = createWebSearchToolDefinition({
+            loadConfig: async () => config(),
+            router: { search: async () => {
+                lineSearchCalls += 1;
+                return lineHeavyResponse;
+            } },
+            writeTempOutput: async () => "/tmp/full-search-lines",
+        });
+        const lineResult = await lineTool.execute("call", { query: "lines" }, undefined, undefined, { cwd: "/work" } as never);
+        const lineVisibleText = lineResult.content[0]?.type === "text" ? lineResult.content[0].text : "";
+        assert.equal(lineSearchCalls, 1);
+        assert.equal(lineResult.details.truncation?.truncatedBy, "lines");
+        assert.equal(lineVisibleText.split("\n").length <= WEB_SEARCH_MAX_VISIBLE_LINES, true);
+        assert.equal(lineVisibleText.includes("/tmp/full-search-lines"), true);
+        assert.deepEqual(lineResult.details.response, lineHeavyResponse);
 
         const failing = createWebSearchToolDefinition({
             loadConfig: async () => config(),

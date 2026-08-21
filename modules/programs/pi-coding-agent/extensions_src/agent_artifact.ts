@@ -45,15 +45,11 @@ export interface AgentArtifactResultDetails {
 }
 
 export const agentArtifactDescription =
-    "Persist a canonical project-local agent artifact. Designs require user approval; decision records, research, implementation reports, review reports, bug reports, and failure reports are saved directly.";
+    "Persist a canonical project-local artifact. Designs await user approval; other kinds save directly.";
 
 export const agentArtifactPromptGuidelines = [
-    "Use save_agent_artifact for completed durable agent artifacts; do not print the full artifact in normal assistant text first.",
-    "Pass the completed Markdown content once so pending review and final storage use identical content.",
-    "Select the canonical kind defined by the agent-artifact Skill and provide a non-empty lowercase kebab-case slug.",
-    "Only kind=design enters user approval; all other kinds save directly.",
-    "If a design returns revision_requested, read pendingPath, revise the same content, and call save_agent_artifact with the same pendingId.",
-    "After an artifact is saved, mention finalPath if useful but do not repeat the artifact body.",
+    "Pass completed Markdown to save_agent_artifact once and do not repeat its body in assistant text.",
+    "When save_agent_artifact returns revision_requested, revise pendingPath and resubmit with the same pendingId; unavailable remains pending, not approved.",
 ];
 
 function detailsFrom(
@@ -214,7 +210,7 @@ export function createAgentArtifactToolDefinition(): ToolDefinition<typeof artif
         name: "save_agent_artifact",
         label: "Save agent artifact",
         description: agentArtifactDescription,
-        promptSnippet: "Persist a canonical project-local agent artifact without repeating its body",
+        promptSnippet: "Persist a canonical agent artifact",
         promptGuidelines: agentArtifactPromptGuidelines,
         parameters: artifactParameters,
         executionMode: "sequential",

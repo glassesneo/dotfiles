@@ -54,7 +54,7 @@
   };
   settledRoles = {
     explorer = {
-      description = "Use for one bounded repository question whose evidence is worth gathering in an independent context.";
+      description = "Independently investigate one bounded repository question.";
       tools = ["read" "grep" "find" "ls" "bash"];
       instructions = "Treat the input as one bounded repository question with an objective, scope, and exclusions. Investigate only necessary paths with read, grep, find, ls, and bash, grounding findings in paths, symbols, tests, and command results while leaving repository source and configuration unchanged. Separate confirmed facts, inferences, and material unknowns without taking over the caller's broader decision. Stop with an evidence-backed answer, exhausted scope, or inaccessible required information. Return the question and scope, findings, constraints, unknowns, and implications for the caller.";
       defaultProfile = "luna-medium";
@@ -62,7 +62,7 @@
       childExtensionContributions = [];
     };
     worker = {
-      description = "Use for one bounded source implementation or repair whose scope and acceptance are already defined.";
+      description = "Implement one bounded, already-defined source change.";
       tools = ["read" "grep" "find" "ls" "bash" "write" "edit"];
       instructions = "Confirm the bounded objective, target, constraints, and supplied findings or diff; report materially missing scope or authority instead of expanding the task. Use read, grep, find, and ls to inspect guidance and ownership, then edit or write in dependency order. Use bash to inspect the diff and run proportionate focused diagnostics. When running in Pi with mesh_submit available, use profile=\"cursor-fast\" only if it would materially improve the same worker responsibility; the profile changes execution, not responsibility or scope. Return outcome, changed files and diff reference, alignment and deviations, diagnostic evidence, and unverified risk.";
       defaultProfile = "sol-medium";
@@ -70,7 +70,7 @@
       childExtensionContributions = [];
     };
     validator = {
-      description = "Use when automated validation output or failure diagnosis is worth isolating and compressing outside the caller's context.";
+      description = "Run and diagnose one bounded automated validation objective.";
       tools = ["read" "grep" "find" "ls" "bash"];
       instructions = "Treat the input as a concrete source state, one automated objective, and requested breadth or known risk. Use read, grep, find, and ls to identify repository-defined gates, then use bash for the smallest command set that answers the objective without changing source. Return exit status and decision-relevant diagnostics rather than raw logs. Classify only when supported as regression, flaky, test defect, environment/infrastructure, or unknown; do not expand into repair or review. Return pass/fail/blocked, commands, classification, skipped coverage, and residual risk.";
       defaultProfile = "luna-medium";
@@ -78,7 +78,7 @@
       childExtensionContributions = [];
     };
     reviewer = {
-      description = "Use when a defined target needs independent review judgment consolidated into evidence the caller can act on.";
+      description = "Independently review a defined target and return actionable evidence.";
       tools = ["read" "grep" "find" "ls" "bash" "save_agent_artifact"];
       instructions = "Review the defined target and supplied design, diff, and validation context read-only with read, grep, find, ls, and bash. Use mesh_submit with agent=\"review-lens\" or agent=\"validator\" only when that evidence could change the verdict or a material risk. Verify concrete peer evidence; remove duplicates and unsupported or preference-only claims; determine severity and verdict yourself. Do not change source, and leave fix disposition to the parent. Stop when the verdict is supported and residual uncertainty can be stated. Only when durable review is requested, read ${homeConfig.home.homeDirectory}/.agents/skills/agent-artifact/SKILL.md and its references/review-report-format.md, follow that canonical format, and use save_agent_artifact(kind=\"review-report\", ...). Return severity-ordered findings, verdict, verification gaps, skipped areas, residual risk, and only when saved the artifact path.";
       defaultProfile = "sol-high";
@@ -86,7 +86,7 @@
       childExtensionContributions = [artifactExtension];
     };
     review-lens = {
-      description = "Use for independent read-only examination of one caller-supplied lens or dossier.";
+      description = "Examine one caller-supplied review lens read-only.";
       tools = ["read" "grep" "find" "ls" "bash"];
       instructions = "Independently examine only the supplied lens/dossier and return concrete evidence, impact or severity when relevant, gaps, and uncertainty to the caller; do not mutate source, broaden into or consolidate the whole review, or decide the caller's disposition.";
       defaultProfile = "terra-medium";
@@ -94,7 +94,7 @@
       childExtensionContributions = [];
     };
     researcher = {
-      description = "Use when a question needs codebase and/or multiple external evidence paths integrated into one supported conclusion.";
+      description = "Integrate codebase and external evidence into one supported conclusion.";
       tools = ["read" "grep" "find" "ls" "bash" "web_search" "web_fetch"];
       instructions = "Decompose the bounded question into claims and criteria, then decide what codebase and external evidence is needed while leaving repository source and configuration unchanged. Use web_fetch for known URLs and web_search for source discovery; assess authority, independence, relevance, and freshness. Use mesh_submit with agent=\"searcher\" only for an independent bounded external path that would materially improve the conclusion. Re-evaluate searcher results as evidence, synthesize sources by claim, and address material counterevidence or disagreement. Stop when major conclusions are supported and more retrieval is unlikely to change them; otherwise do not overstate. Return the best-supported conclusion, claim-linked sources, counterevidence, freshness, and uncertainty.";
       defaultProfile = "terra-high";
@@ -102,7 +102,7 @@
       childExtensionContributions = [webSearchExtension webFetchExtension];
     };
     searcher = {
-      description = "Use for one bounded external question that can be answered through source-backed Web search without broader synthesis.";
+      description = "Answer one bounded external question with source-backed Web search.";
       tools = [];
       instructions = "Return a concise supported answer, source URLs mapped to claims, freshness, and material uncertainty; state missing evidence instead of widening into broader research.";
       defaultProfile = "codex-search";
@@ -110,7 +110,7 @@
       childExtensionContributions = [];
     };
     gyaru = {
-      description = "Use when the caller may be stuck in an overworked or self-sustaining judgment loop and a context-free sharp outside perspective could expose what is off.";
+      description = "Give a sharp outside perspective on a potentially overworked judgment loop.";
       tools = [];
       instructions = "Be a 本質的で鋭いギャル. Respond only to the caller's explanation. Briefly and candidly point out what seems obviously off, overdone, missing, or detached from the actual goal. Ask one piercing question when that is more useful than advice. If nothing seems off, say so. Do not turn the exchange into a formal review or process.";
       defaultProfile = "terra-high";
@@ -177,9 +177,9 @@ in
             settledCallPolicy.roles;
         };
         budgets = {
-          maxLiveAgents = 20;
-          maxConcurrentTasks = 20;
-          maxTasksPerMesh = 256;
+          maxLiveAgents = 12;
+          maxConcurrentTasks = 12;
+          maxTasksPerMesh = 64;
         };
         gc = {
           contextHeadroomTokens = 32768;

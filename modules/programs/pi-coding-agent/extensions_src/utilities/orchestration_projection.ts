@@ -11,6 +11,8 @@ import {
 
 export const MAX_MODEL_VISIBLE_BYTES = 50 * 1024;
 export const MAX_MODEL_VISIBLE_LINES = 2000;
+export const MAX_COMPACT_TASK_RESULT_BYTES = 16 * 1024;
+export type MeshOutputMode = "compact" | "full";
 
 export type ModelVisibleStop = {
     stopRequestId: string;
@@ -37,6 +39,7 @@ export type MinimalAgentTask = {
     output?: string;
     error?: string;
     outputTruncated?: true;
+    fullOutputAvailable?: true;
 };
 
 export type MinimalSubmitResult = {
@@ -411,19 +414,49 @@ function fairContentCap(costs: readonly number[], budget: number): number {
     return best;
 }
 
-function finalizeMarkers(markers: Iterable<MarkerState>): void {
+function finalizeMarkers(markers: Iterable<MarkerState>, fullOutputAvailableOnTruncation: boolean): void {
     for (const marker of markers) {
-        if (marker.truncated) marker.target.outputTruncated = true;
-        else if (marker.hadProperty) marker.target.outputTruncated = marker.original;
+        if (marker.truncated) {
+            marker.target.outputTruncated = true;
+            if (fullOutputAvailableOnTruncation) marker.target.fullOutputAvailable = true;
+        } else if (marker.hadProperty) marker.target.outputTruncated = marker.original;
         else delete marker.target.outputTruncated;
     }
+}
+
+/** Deterministically cap one terminal task's encoded output and error fields. */
+export function projectMeshRetrievalTask(rawSnapshot: AgentSnapshot, outputMode: MeshOutputMode): MinimalAgentTask {
+    const projected = projectMinimalAgentTask(rawSnapshot);
+    if (outputMode === "full" || projected.output === undefined && projected.error === undefined) return projected;
+    const resultFields = () => ({
+        ...(projected.output !== undefined ? { output: projected.output } : {}),
+        ...(projected.error !== undefined ? { error: projected.error } : {}),
+    });
+    if (utf8Bytes(JSON.stringify(resultFields())) <= MAX_COMPACT_TASK_RESULT_BYTES) return projected;
+
+    const originals = [projected.output, projected.error].filter((value): value is string => value !== undefined);
+    const baseline = JSON.stringify({
+        ...(projected.output !== undefined ? { output: "" } : {}),
+        ...(projected.error !== undefined ? { error: "" } : {}),
+        outputTruncated: true,
+        fullOutputAvailable: true,
+    });
+    const remaining = Math.max(0, MAX_COMPACT_TASK_RESULT_BYTES - utf8Bytes(baseline));
+    const costs = originals.map(value => jsonStringContentBytes(value));
+    const cap = fairContentCap(costs, remaining);
+    let index = 0;
+    if (projected.output !== undefined) projected.output = truncateToJsonBudget(projected.output, Math.min(costs[index++]!, cap));
+    if (projected.error !== undefined) projected.error = truncateToJsonBudget(projected.error, Math.min(costs[index]!, cap));
+    projected.outputTruncated = true;
+    projected.fullOutputAvailable = true;
+    return projected;
 }
 
 /**
  * Serialize model-visible JSON within Pi's aggregate 50KB / 2000-line budget.
  * Uses one clone and an encoded-byte budget; only the final bounded clone is serialized at full fidelity.
  */
-export function serializeModelVisibleJson(value: unknown): string {
+export function serializeModelVisibleJson(value: unknown, options: { fullOutputAvailableOnTruncation?: boolean } = {}): string {
     const estimatedBytes = estimatedJsonBytes(value, MAX_MODEL_VISIBLE_BYTES);
     if (estimatedBytes !== undefined && estimatedBytes <= MAX_MODEL_VISIBLE_BYTES) {
         const text = JSON.stringify(value);
@@ -434,7 +467,10 @@ export function serializeModelVisibleJson(value: unknown): string {
     const sites: ContentSite[] = [];
     let clone: unknown;
     clone = buildBudgetClone(value, undefined, next => { clone = next; }, undefined, sites, markers, true);
-    for (const marker of markers.values()) marker.target.outputTruncated = true;
+    for (const marker of markers.values()) {
+        marker.target.outputTruncated = true;
+        if (options.fullOutputAvailableOnTruncation) marker.target.fullOutputAvailable = true;
+    }
 
     const baseText = JSON.stringify(clone);
     if (!exceedsModelVisibleLimit(baseText)) {
@@ -443,7 +479,7 @@ export function serializeModelVisibleJson(value: unknown): string {
         for (const site of sites) {
             if (site.apply(Math.min(site.cost, cap))) site.marker.truncated = true;
         }
-        finalizeMarkers(markers.values());
+        finalizeMarkers(markers.values(), options.fullOutputAvailableOnTruncation === true);
         const bounded = JSON.stringify(clone);
         if (!exceedsModelVisibleLimit(bounded)) return bounded;
         return baseText;
@@ -457,6 +493,7 @@ export function serializeModelVisibleJson(value: unknown): string {
     return JSON.stringify({
         truncated: true as const,
         outputTruncated: true as const,
+        ...(options.fullOutputAvailableOnTruncation ? { fullOutputAvailable: true as const } : {}),
         ...(agentId ? { agentId } : {}),
         preview: "Structure exceeds the model-visible JSON budget",
     });
