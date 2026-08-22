@@ -19,9 +19,9 @@ export type CardRenderContext = {
     isError?: boolean;
 };
 
-export type SubmitCardArgs = { agent?: string; agentId?: string; profile?: string; prompt: string };
+export type SendCardArgs = { agent?: string; agentId?: string; profile?: string; message: string };
 export type WaitCardArgs = { taskIds: string[] };
-export type SignalCardArgs = { receiver: string; delivery: "steer" | "followUp"; taskIds?: string[]; topic: string; text: string };
+export type ReportCardArgs = { summary: string };
 
 const COLLAPSED_ERROR_CHARS = 240;
 const EXPANDED_TEXT_LINES = 40;
@@ -153,30 +153,29 @@ function renderAgentResult(result: AgentToolResult<unknown>, options: ToolRender
         const handles = assignNatureHandles([snapshot.agent.agentId], words);
         if (!options.expanded) return textFromComponent(context.lastComponent, [heading, compactAgentLine(theme, snapshot, handles)].filter(Boolean).join("\n"));
         const args = argsRecord(context);
-        const prompt = typeof args.prompt === "string" ? args.prompt : undefined;
-        const body = expandedAgentCard(theme, snapshot, prompt, handles);
+        const message = typeof args.message === "string" ? args.message : undefined;
+        const body = expandedAgentCard(theme, snapshot, message, handles);
         const debugBody = debug ? `${theme.fg("warning", "DEBUG")}\n${body}\n${labeled(theme, "cwd", snapshot.agent.cwd)}\n${labeled(theme, "tmux", `${snapshot.agent.tmux.sessionName} ${snapshot.agent.tmux.windowId} ${snapshot.agent.tmux.paneId}`)}` : body;
         return textFromComponent(context.lastComponent, [heading, debugBody].filter(Boolean).join("\n"));
     } catch { return textFromComponent(context.lastComponent, resultProblem(result, options, theme, context)); }
 }
 
-function submitSelector(args: SubmitCardArgs, theme: Theme): string {
+function sendSelector(args: SendCardArgs, theme: Theme): string {
     if (args.agent !== undefined) return `agent ${agentTypeText(theme, args.agent)}`;
-    if (args.profile !== undefined) return `profile ${args.profile}`;
     const id = args.agentId ?? "missing";
     return `agentId ${Array.from(id).slice(0, 8).join("")}${Array.from(id).length > 8 ? "…" : ""}`;
 }
-export function renderSubmitCall(args: SubmitCardArgs, theme: Theme, context: CardRenderContext): Component {
-    const lines = [joinParts(["mesh_submit", submitSelector(args, theme)])];
+export function renderSendCall(args: SendCardArgs, theme: Theme, context: CardRenderContext): Component {
+    const lines = [joinParts(["mesh_send", sendSelector(args, theme)])];
     if (context.expanded) {
         if (args.agentId) lines.push(labeled(theme, "agentId", args.agentId));
-        lines.push(labeled(theme, "prompt", previewText(args.prompt, EXPANDED_TEXT_LINES, EXPANDED_TEXT_CHARS)));
+        lines.push(labeled(theme, "message", previewText(args.message, EXPANDED_TEXT_LINES, EXPANDED_TEXT_CHARS)));
     }
     return textFromComponent(context.lastComponent, lines.join("\n"));
 }
-export function renderGetCall(args: { agentId?: string; taskId?: string; debug?: boolean }, theme: Theme, context: CardRenderContext): Component {
-    const lines = [`mesh_get · ${args.taskId ? "task" : "agent"}${args.debug ? " · DEBUG" : ""}`];
-    if (context.expanded) { if (args.agentId) lines.push(labeled(theme, "agentId", args.agentId)); if (args.taskId) lines.push(labeled(theme, "taskId", args.taskId)); }
+export function renderGetCall(args: { taskId: string }, theme: Theme, context: CardRenderContext): Component {
+    const lines = ["mesh_get · task"];
+    if (context.expanded) lines.push(labeled(theme, "taskId", args.taskId));
     return textFromComponent(context.lastComponent, lines.join("\n"));
 }
 export function renderWaitCall(args: WaitCardArgs, theme: Theme, context: CardRenderContext): Component {
@@ -189,20 +188,23 @@ export function renderStopCall(args: { agentId?: string; taskId?: string; reason
     if (context.expanded) { lines.push(labeled(theme, args.taskId ? "taskId" : "agentId", args.taskId ?? args.agentId ?? "missing")); if (args.reason) lines.push(labeled(theme, "reason", previewText(args.reason, 4, 512))); }
     return textFromComponent(context.lastComponent, lines.join("\n"));
 }
-function compactReceiver(receiver: string): string { return receiver === "parent" || receiver === "root" ? receiver : Array.from(receiver).length > 12 ? `${Array.from(receiver).slice(0, 8).join("")}…` : receiver; }
-export function renderSignalCall(args: SignalCardArgs, theme: Theme, context: CardRenderContext): Component {
-    const lines = [joinParts(["mesh_signal", compactReceiver(args.receiver), args.delivery, args.topic])];
-    if (context.expanded) {
-        lines.push(labeled(theme, "receiver", args.receiver));
-        if (args.taskIds) lines.push(labeled(theme, "taskIds", args.taskIds.join(", ")));
-        lines.push(labeled(theme, "text", previewText(args.text, EXPANDED_TEXT_LINES, EXPANDED_TEXT_CHARS)));
-    }
+export function renderReportCall(args: ReportCardArgs, theme: Theme, context: CardRenderContext): Component {
+    const lines = ["mesh_report"];
+    if (context.expanded) lines.push(labeled(theme, "summary", previewText(args.summary, EXPANDED_TEXT_LINES, EXPANDED_TEXT_CHARS)));
     return textFromComponent(context.lastComponent, lines.join("\n"));
 }
-export function renderAgentToolResult(result: AgentToolResult<unknown>, options: ToolRenderResultOptions, theme: Theme, context: CardRenderContext, _argsPrompt?: string, debug?: boolean, words?: readonly string[]): Component { return renderAgentResult(result, options, theme, context, words, undefined, debug); }
-export function renderSubmitResult(result: AgentToolResult<unknown>, options: ToolRenderResultOptions, theme: Theme, context: CardRenderContext, words?: readonly string[]): Component {
+export function renderAgentToolResult(result: AgentToolResult<unknown>, options: ToolRenderResultOptions, theme: Theme, context: CardRenderContext, words?: readonly string[]): Component { return renderAgentResult(result, options, theme, context, words); }
+export function renderSendResult(result: AgentToolResult<unknown>, options: ToolRenderResultOptions, theme: Theme, context: CardRenderContext, words?: readonly string[]): Component {
+    const disposition = (result.details as { disposition?: unknown } | undefined)?.disposition;
+    if (disposition === "intervened") {
+        const details = result.details as { agentId?: unknown; taskId?: unknown; sequence?: unknown; messageId?: unknown };
+        if (typeof details.agentId !== "string" || typeof details.taskId !== "string" || typeof details.sequence !== "number" || typeof details.messageId !== "string") return textFromComponent(context.lastComponent, resultProblem(result, options, theme, context));
+        const lines = [joinParts(["mesh_send", "intervened", `sequence ${details.sequence}`])];
+        if (options.expanded) lines.push(labeled(theme, "agentId", details.agentId), labeled(theme, "taskId", details.taskId), labeled(theme, "messageId", details.messageId));
+        return textFromComponent(context.lastComponent, lines.join("\n"));
+    }
     if (!isSubmitDetails(result.details) || !result.details.task) return textFromComponent(context.lastComponent, resultProblem(result, options, theme, context));
-    const heading = joinParts(["mesh_submit", `agent ${result.details.status.state}`, `task ${result.details.task.status.state}`]);
+    const heading = joinParts(["mesh_send", "submitted", `agent ${result.details.status.state}`, `task ${result.details.task.status.state}`]);
     return renderAgentResult(result, options, theme, context, words, heading);
 }
 export function renderWaitResult(result: AgentToolResult<unknown>, options: ToolRenderResultOptions, theme: Theme, context: CardRenderContext, words?: readonly string[]): Component {
@@ -223,12 +225,11 @@ export function renderStopResult(result: AgentToolResult<unknown>, options: Tool
     return renderAgentResult(result, options, theme, context, words, `${target} · ${state}`);
 }
 
-export function renderSignalResult(result: AgentToolResult<unknown>, options: ToolRenderResultOptions, theme: Theme, context: CardRenderContext): Component {
-    const details = result.details as { eventId?: unknown } | undefined;
-    if (typeof details?.eventId !== "string") return textFromComponent(context.lastComponent, resultProblem(result, options, theme, context));
-    const lines = ["signal queued"];
-    const args = context.args as SignalCardArgs | undefined;
-    if (options.expanded) { if (args?.receiver) lines.push(labeled(theme, "receiver", args.receiver)); lines.push(labeled(theme, "eventId", details.eventId)); }
+export function renderReportResult(result: AgentToolResult<unknown>, options: ToolRenderResultOptions, theme: Theme, context: CardRenderContext): Component {
+    const details = result.details as { reportId?: unknown; taskId?: unknown; state?: unknown } | undefined;
+    if (typeof details?.reportId !== "string" || typeof details.taskId !== "string" || details.state !== "queued") return textFromComponent(context.lastComponent, resultProblem(result, options, theme, context));
+    const lines = ["report queued"];
+    if (options.expanded) lines.push(labeled(theme, "taskId", details.taskId), labeled(theme, "reportId", details.reportId));
     return textFromComponent(context.lastComponent, lines.join("\n"));
 }
 type CompletionMessage = { customType: string; content: unknown; details?: unknown };

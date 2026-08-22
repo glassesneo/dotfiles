@@ -19,9 +19,9 @@ async function fixture(root: string) {
     return { mesh, endpointId };
 }
 
-async function persistTask(root: string, meshId: string, input: { endpointId: string; state: TaskState; createdAt?: string; schemaVersion?: number; completion?: Record<string, unknown> }) {
+async function persistTask(root: string, meshId: string, input: { endpointId: string; state: TaskState; agentId?: string; createdAt?: string; schemaVersion?: number; completion?: Record<string, unknown> }) {
     const taskId = randomUUID();
-    const agentId = randomUUID();
+    const agentId = input.agentId ?? randomUUID();
     const paths = taskPaths(root, meshId, taskId);
     const createdAt = input.createdAt ?? new Date().toISOString();
     const completion = input.completion ?? { endpointId: input.endpointId, endpointSessionFile: "/root.jsonl" };
@@ -33,6 +33,17 @@ async function persistTask(root: string, meshId: string, input: { endpointId: st
 
 function receiptInput(endpointId: string, taskIds: string[], overrides: Partial<Parameters<typeof createCompletionReceipt>[2]> = {}): Parameters<typeof createCompletionReceipt>[2] {
     return { endpointId, endpointSessionFile: "/root.jsonl", claimantSessionFile: "/root.jsonl", toolCallId: "get-call", toolName: "mesh_get", canonicalArguments: { taskIds }, taskIds, maxTasksPerMesh: 256, ...overrides };
+}
+
+async function persistCancellation(root: string, meshId: string, taskId: string, agentId: string, requesterEndpointId: string) {
+    await writeFile(taskPaths(root, meshId, taskId).cancel, JSON.stringify({ schemaVersion: 1, meshId, agentId, taskId, requesterEndpointId, requestedAt: new Date().toISOString(), reason: "Stopped by requester" }));
+}
+
+async function persistConfirmedStop(root: string, meshId: string, agentId: string, input: { source: "user" | "peer" | "gc-role"; requesterEndpointId: string; affectedTaskId: string }) {
+    const now = new Date().toISOString();
+    const path = join(meshDirectory(root, meshId), "agents", agentId, "stop.json");
+    await mkdir(dirname(path), { recursive: true });
+    await writeFile(path, JSON.stringify({ schemaVersion: 1, meshId, agentId, stopRequestId: randomUUID(), state: "confirmed", source: input.source, requesterEndpointId: input.requesterEndpointId, affectedTaskId: input.affectedTaskId, reason: "Stopped by requester", previousAgentState: "busy", requestedAt: now, updatedAt: now, confirmedAt: now }));
 }
 
 // Admitted: persistence ordering is not covered by types; the ledger owner must expose one deterministic endpoint batch and replay its frozen identity after a ledger-first interruption.
@@ -83,6 +94,40 @@ void test("rollback and reconciliation remove only uncommitted provisional recei
     const result = await reconcileCompletionReceipts(root, mesh.meshId, { endpointId, endpointSessionFile: "/root.jsonl", claimantSessionFile: "/root.jsonl", persistedReceipts: new Map([[retained.receipt!.receiptId, [{ toolCallId: "retained", toolName: "mesh_get", receivedTaskIds: [], claimedTaskIds: [] }]]]) });
     assert.deepEqual(result.removedReceiptIds, [orphan.receipt!.receiptId]);
     assert.deepEqual((await readCompletionLedger(root, mesh.meshId, endpointId, "/root.jsonl"))!.receipts.map(receipt => receipt.taskIds), [[retainedTask]]);
+}));
+
+// Admission: completion suppression is durable routing behavior; schemas cannot determine whether a stopped task was stopped by its own completion endpoint through an explicit task or agent stop.
+// Given self-requested task and matching explicit agent stops, when stopped tasks settle, the completion endpoint observes no completion batch.
+void test("self task stops and matching explicit agent stops suppress completion delivery", async () => withRoot("mesh-completion-stop-suppression-", async root => {
+    const { mesh, endpointId } = await fixture(root);
+    const taskStopAgent = randomUUID();
+    const taskStop = await persistTask(root, mesh.meshId, { endpointId, agentId: taskStopAgent, state: "stopped", createdAt: "2026-08-14T00:00:00.000Z" });
+    await persistCancellation(root, mesh.meshId, taskStop, taskStopAgent, endpointId);
+    const agentStopAgent = randomUUID();
+    const agentStop = await persistTask(root, mesh.meshId, { endpointId, agentId: agentStopAgent, state: "stopped", createdAt: "2026-08-14T00:00:01.000Z" });
+    await persistConfirmedStop(root, mesh.meshId, agentStopAgent, { source: "peer", requesterEndpointId: endpointId, affectedTaskId: agentStop });
+
+    const settled = await withMeshLock(root, mesh.meshId, () => settleCompletionDeliveriesUnlocked(root, mesh.meshId, budgets.maxTasksPerMesh));
+    assert.deepEqual(settled.eventBatches, []);
+    assert.equal(await readCompletionLedger(root, mesh.meshId, endpointId, "/root.jsonl"), undefined);
+}));
+
+// Admission: only self explicit stops suppress completion; overbroad suppression would lose a consumer-visible completion for externally stopped, non-explicit, successful, or failed tasks.
+// Given terminal tasks outside the matching self-stop boundary, when completions settle, the endpoint receives every terminal task once.
+void test("other-endpoint and non-explicit stops, successes, and failures retain completion delivery", async () => withRoot("mesh-completion-stop-preservation-", async root => {
+    const { mesh, endpointId } = await fixture(root);
+    const otherEndpointStopAgent = randomUUID();
+    const otherEndpointStop = await persistTask(root, mesh.meshId, { endpointId, agentId: otherEndpointStopAgent, state: "stopped", createdAt: "2026-08-14T00:00:00.000Z" });
+    await persistCancellation(root, mesh.meshId, otherEndpointStop, otherEndpointStopAgent, "root:other-endpoint");
+    const nonExplicitStopAgent = randomUUID();
+    const nonExplicitStop = await persistTask(root, mesh.meshId, { endpointId, agentId: nonExplicitStopAgent, state: "stopped", createdAt: "2026-08-14T00:00:01.000Z" });
+    await persistConfirmedStop(root, mesh.meshId, nonExplicitStopAgent, { source: "gc-role", requesterEndpointId: endpointId, affectedTaskId: nonExplicitStop });
+    const succeeded = await persistTask(root, mesh.meshId, { endpointId, state: "succeeded", createdAt: "2026-08-14T00:00:02.000Z" });
+    const failed = await persistTask(root, mesh.meshId, { endpointId, state: "failed", createdAt: "2026-08-14T00:00:03.000Z" });
+
+    const settled = await withMeshLock(root, mesh.meshId, () => settleCompletionDeliveriesUnlocked(root, mesh.meshId, budgets.maxTasksPerMesh));
+    assert.deepEqual(settled.eventBatches[0]!.batch.taskIds, [otherEndpointStop, nonExplicitStop, succeeded, failed]);
+    assert.deepEqual(settled.eventBatches[0]!.tasks.map(task => task.state), ["stopped", "stopped", "succeeded", "failed"]);
 }));
 
 // Mechanical protocol validation: exact keys and generation checks reject channel-bearing targets and pre-v3 persisted records without migration.

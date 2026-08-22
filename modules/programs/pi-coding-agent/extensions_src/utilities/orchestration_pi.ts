@@ -2,11 +2,12 @@ import type { AgentLaunchEnvelope, CallerPolicy } from "./agent_types.ts";
 import type { NativeLaunchDescriptor } from "./orchestration_harness.ts";
 import type { SubagentRuntimeConfig } from "./orchestration_types.ts";
 
-export const MESH_PEER_TOOL_NAMES = Object.freeze(["mesh_submit", "mesh_get", "mesh_wait", "mesh_stop", "mesh_signal"] as const);
+export const MESH_REPORT_TOOL_NAME = "mesh_report" as const;
+export const MESH_PEER_TOOL_NAMES = Object.freeze(["mesh_send", "mesh_get", "mesh_wait", "mesh_stop", MESH_REPORT_TOOL_NAME] as const);
 
 export function meshPiLaunchTools(roleTools: readonly string[], policy: CallerPolicy): string[] {
     const canDispatch = Object.keys(policy.targets).length > 0;
-    return [...new Set([...roleTools, ...(canDispatch ? MESH_PEER_TOOL_NAMES : [])])];
+    return [...new Set([...roleTools, ...(canDispatch ? MESH_PEER_TOOL_NAMES : [MESH_REPORT_TOOL_NAME])])];
 }
 
 function runtimeExtensions(envelope: AgentLaunchEnvelope): string[] {

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { visibleWidth } from "@earendil-works/pi-tui";
-import { renderAgentToolResult, renderMeshEventMessage, renderSignalCall, renderSignalResult, renderSubmitCall, renderSubmitResult, renderWaitCall, renderWaitResult } from "../extensions_src/utilities/orchestration_cards.ts";
+import { renderAgentToolResult, renderMeshEventMessage, renderReportCall, renderReportResult, renderSendCall, renderSendResult, renderWaitCall, renderWaitResult } from "../extensions_src/utilities/orchestration_cards.ts";
 import type { RoleDefinition } from "../extensions_src/utilities/agent_types.ts";
 import { unknownAgentActivityProjection } from "../extensions_src/utilities/orchestration_activity.ts";
 import { emptyUsage, type AgentSnapshot } from "../extensions_src/utilities/orchestration_types.ts";
@@ -63,26 +63,35 @@ void test("malformed mesh results remain private and preserve renderer mechanics
 
 });
 
-// Given each supported submit selector, the card exposes selector and lifecycle state without exceeding terminal width.
-void test("mesh_submit cards project selector and states width-safely", () => {
+// Given a send target and result disposition, the card exposes target/lifecycle state and preserves intervention details without exceeding terminal width.
+void test("mesh_send cards project target, disposition, and states width-safely", () => {
     for (const args of [
-        { agent: "worker", prompt: "bounded" },
-        { agentId, prompt: "bounded" },
-        { profile: "pi-fast", prompt: "bounded" },
+        { agent: "worker", message: "bounded" },
+        { agentId, message: "bounded" },
     ]) {
-        const call = render(renderSubmitCall(args, theme as never, { expanded: true, lastComponent: undefined }), 34);
-        assert.match(call, args.agent ? /agent worker/u : args.profile ? /profile pi-fast/u : /agentId/u);
-        assert.doesNotMatch(call, /direct|route/u);
+        const call = render(renderSendCall(args, theme as never, { expanded: true, lastComponent: undefined }), 34).replace(/\s+/gu, " ");
+        assert.match(call, args.agent ? /agent worker/u : /agentId/u);
+        assert.match(call, /message/u);
+        assert.match(call, /bounded/u);
     }
-    const reused = render(renderSubmitCall({ agentId, prompt: "bounded" }, theme as never, { expanded: false, lastComponent: undefined }), 34);
+    const reused = render(renderSendCall({ agentId, message: "bounded" }, theme as never, { expanded: false, lastComponent: undefined }), 34);
     assert.match(reused, new RegExp(`agentId ${agentId.slice(0, 8)}`, "u"));
     assert.doesNotMatch(reused, new RegExp(agentId, "u"));
+
     const details = snapshot();
-    const result = render(renderSubmitResult({ content: [], details: { ...details, accounting: { claimedTaskIds: [], receiptIds: [], receivedTaskIds: [] } } } as never, { expanded: false } as never, theme as never, { args: { agent: "worker", prompt: "bounded" }, lastComponent: undefined } as never), 34);
-    assert.doesNotMatch(result, /direct|route/u);
+    const result = render(renderSendResult({ content: [], details: { ...details, accounting: { claimedTaskIds: [], receiptIds: [], receivedTaskIds: [] } } } as never, { expanded: false } as never, theme as never, { args: { agent: "worker", message: "bounded" }, lastComponent: undefined } as never), 34);
     const semantic = result.replace(/\s+/gu, " ");
+    assert.match(semantic, /mesh_send/u);
+    assert.match(semantic, /submitted/u);
     assert.match(semantic, /agent idle/u);
     assert.match(semantic, /task succeeded/u);
+
+    const intervention = render(renderSendResult({ content: [], details: { disposition: "intervened", agentId, taskId, messageId: "77777777-7777-4777-8777-777777777777", sequence: 2 } } as never, { expanded: true } as never, theme as never, { args: { agentId, message: "urgent" }, lastComponent: undefined } as never), 34);
+    const interventionSemantic = intervention.replace(/\s+/gu, " ");
+    assert.match(interventionSemantic, /mesh_send/u);
+    assert.match(interventionSemantic, /intervened/u);
+    assert.match(interventionSemantic, /sequence\s+2/u);
+    assert.match(intervention.replace(/\s+/gu, ""), new RegExp(`${agentId}|${taskId}`, "u"));
 });
 
 // Given an all-task wait result, its card exposes terminal progress and expanded identifiers without freezing decoration.
@@ -94,9 +103,21 @@ void test("mesh_wait cards expose all-terminal state and full task identifiers w
     const expanded = render(renderWaitResult({ content: [], details: { tasks: [first, second] } } as never, { expanded: true } as never, theme as never, { args, lastComponent: undefined } as never), 32); assert.match(expanded.replace(/\s+/gu, ""), new RegExp(taskId, "u")); assert.match(expanded.replace(/\s+/gu, ""), new RegExp(agentId, "u"));
 });
 
-void test("mesh_signal cards expose delivery and queued state", () => {
-    assert.match(render(renderSignalCall({ receiver: "parent", delivery: "followUp", topic: "handoff", text: "done" }, theme as never, { expanded: false, lastComponent: undefined }), 24), /mesh_signal.*parent.*followUp/su);
-    assert.match(render(renderSignalResult({ content: [], details: { eventId: taskId } } as never, { expanded: false } as never, theme as never, { args: { receiver: "parent" }, lastComponent: undefined } as never), 24), /signal queued/u);
+void test("mesh_report cards expose summary and queued state", () => {
+    const call = render(renderReportCall({ summary: "handoff complete" }, theme as never, { expanded: false, lastComponent: undefined }), 24);
+    assert.match(call, /mesh_report/u);
+    assert.doesNotMatch(call, /handoff complete/u);
+
+    const expandedCall = render(renderReportCall({ summary: "handoff complete" }, theme as never, { expanded: true, lastComponent: undefined }), 24).replace(/\s+/gu, " ");
+    assert.match(expandedCall, /summary/u);
+    assert.match(expandedCall, /handoff complete/u);
+
+    const reportId = "77777777-7777-4777-8777-777777777777";
+    const queued = render(renderReportResult({ content: [], details: { reportId, taskId, state: "queued" } } as never, { expanded: false } as never, theme as never, { args: { summary: "handoff complete" }, lastComponent: undefined } as never), 24);
+    assert.match(queued, /report queued/u);
+    const expandedResult = render(renderReportResult({ content: [], details: { reportId, taskId, state: "queued" } } as never, { expanded: true } as never, theme as never, { args: { summary: "handoff complete" }, lastComponent: undefined } as never), 24).replace(/\s+/gu, "");
+    assert.match(expandedResult, new RegExp(taskId, "u"));
+    assert.match(expandedResult, new RegExp(reportId, "u"));
 });
 
 // Admission: the completion card is the stable user-visible projection boundary; type checks cannot reveal omitted progress, hidden identifiers, or width overflow in terminal output.

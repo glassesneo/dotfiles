@@ -9,7 +9,7 @@ import type { ExecutionProfile, ExecutionProfileConfig } from "../extensions_src
 import { readAgentActivity } from "../extensions_src/utilities/orchestration_activity.ts";
 import { resolveExternalDriver, validateExternalWorkerConfig, type ExternalDriver, type ExternalWorkerConfig } from "../extensions_src/utilities/orchestration_external_driver.ts";
 import { resolveHarnessAdapter } from "../extensions_src/utilities/orchestration_harness.ts";
-import { MESH_PEER_TOOL_NAMES, piLaunchDescriptor } from "../extensions_src/utilities/orchestration_pi.ts";
+import { piLaunchDescriptor } from "../extensions_src/utilities/orchestration_pi.ts";
 import { claimPendingTask, createTask, ensurePolicyEpoch, initializeMesh, markAgentStopping, prepareAgent, publishAgent, readAgentSnapshot, readAgentStatus, requestTaskCancellation, reserveMeshCapacity, taskPaths } from "../extensions_src/utilities/orchestration_store.ts";
 import { withTemporaryRoot, yieldToIO } from "./test_helpers.ts";
 
@@ -76,9 +76,9 @@ async function externalFixture(root: string) {
     return { root, meshId: mesh.meshId, agentId: prepared.agentId, epochId: epoch.epochId, delegateRole, launchEnvelope, envelopePath, env };
 }
 
-// Admission: launch isolation is repository-owned, a leaked context/tool/resource flag materially violates the gyaru boundary, and neither types nor schema validation observes the final Pi argv.
-// Given project and prompt-only role envelopes, when they cross the native launch-descriptor boundary, the Pi process observes only the selected profile and resources authorized for that context/direct policy.
-void test("Pi launch descriptors isolate prompt-only roles and configure peer tools only for direct callers", () => {
+// Admission: launch isolation is repository-owned, a leaked context/tool/resource flag materially violates the role boundary, and neither types nor schema validation observes the final Pi argv.
+// Given project, outbound, and prompt-only role envelopes, when they cross the native launch-descriptor boundary, the Pi process observes only the selected profile and tools authorized for that context.
+void test("Pi launch descriptors isolate prompt-only roles and expose outbound or report-only mesh tools", () => {
     const piProfile: ExecutionProfile = { model: "openai-codex/gpt-5.6-terra", thinkingLevel: "high", harness: "pi" };
     const promptOnly = envelope({ role: "gyaru", selfRole: role({ contextPolicy: "prompt-only", tools: [] }), selectedProfile: "terra-high", executionProfile: piProfile });
     const isolated = piLaunchDescriptor(runtime, launchInput("gyaru", promptOnly));
@@ -90,10 +90,10 @@ void test("Pi launch descriptors isolate prompt-only roles and configure peer to
 
     const caller = envelope({ role: "reviewer", selfRole: role({ tools: ["read", "save_agent_artifact"] }), selectedProfile: "sol-high", executionProfile: { model: "openai-codex/gpt-5.6-sol", thinkingLevel: "high", harness: "pi" }, policy: { targets: { "review-lens": { profiles: ["terra-high"] } } } });
     const callerTools = option(piLaunchDescriptor(runtime, launchInput("reviewer", caller)).args, "--tools")!.split(",");
-    assert.deepEqual(callerTools, ["read", "save_agent_artifact", ...MESH_PEER_TOOL_NAMES]);
+    assert.deepEqual(callerTools, ["read", "save_agent_artifact", "mesh_send", "mesh_get", "mesh_wait", "mesh_stop", "mesh_report"]);
 
     const leaf = envelope({ role: "validator", selfRole: role({ tools: ["read", "bash"] }), selectedProfile: "luna-high", executionProfile: { model: "openai-codex/gpt-5.6-luna", thinkingLevel: "high", harness: "pi" } });
-    assert.deepEqual(option(piLaunchDescriptor(runtime, launchInput("validator", leaf)).args, "--tools")!.split(","), ["read", "bash"]);
+    assert.deepEqual(option(piLaunchDescriptor(runtime, launchInput("validator", leaf)).args, "--tools")!.split(","), ["read", "bash", "mesh_report"]);
 });
 
 // Admission: selected-profile misrouting changes the actual model/harness while preserving an apparently correct purpose identity; final worker config and prompt composition are not guaranteed by envelope validation alone.

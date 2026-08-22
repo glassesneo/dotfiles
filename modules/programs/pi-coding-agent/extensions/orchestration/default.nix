@@ -42,6 +42,8 @@
       childExtensionContributions = listOfOption str [];
     };
   };
+  meshAsyncChildGuidance = " Retain returned agent/task IDs. Treat each completion bundle as the delivery frontier; call mesh_get once only for terminal task IDs, never poll or sleep. As a nested caller, use mesh_wait when descendant results must remain open while you wait.";
+  meshReportGuidance = " Use mesh_report({summary}) only when the parent requests progress or an intermediate result could change its decisions; do not use it for heartbeats, final results, questions, or blocker waiting.";
   targetPolicyType = delib.submodule {
     options.profiles = delib.listOfOption delib.str [];
   };
@@ -51,43 +53,43 @@
   settledRoles = {
     explorer = {
       description = "Independently investigate one bounded repository question.";
-      tools = ["read" "grep" "find" "ls" "bash"];
-      instructions = "Treat the input as one bounded repository question with an objective, scope, and exclusions. Investigate only necessary paths with read, grep, find, ls, and bash, grounding findings in paths, symbols, tests, and command results while leaving repository source and configuration unchanged. Separate confirmed facts, inferences, and material unknowns without taking over the caller's broader decision. Stop with an evidence-backed answer, exhausted scope, or inaccessible required information. Return the question and scope, findings, constraints, unknowns, and implications for the caller.";
+      tools = ["read" "grep" "find" "ls" "bash" "mesh_report"];
+      instructions = "Treat the input as one bounded repository question with an objective, scope, and exclusions. Investigate only necessary paths with read, grep, find, ls, and bash, grounding findings in paths, symbols, tests, and command results while leaving repository source and configuration unchanged. Separate confirmed facts, inferences, and material unknowns without taking over the caller's broader decision. Stop with an evidence-backed answer, exhausted scope, or inaccessible required information. Return the question and scope, findings, constraints, unknowns, and implications for the caller.${meshReportGuidance}";
       contextPolicy = "project";
       childExtensionContributions = [];
     };
     worker = {
       description = "Implement one bounded, already-defined source change.";
-      tools = ["read" "grep" "find" "ls" "bash" "write" "edit"];
-      instructions = "Confirm the bounded objective, target, constraints, and supplied findings or diff; report materially missing scope or authority instead of expanding the task. Use read, grep, find, and ls to inspect guidance and ownership, then edit or write in dependency order. Use bash to inspect the diff and run proportionate focused diagnostics. Return outcome, changed files and diff reference, alignment and deviations, diagnostic evidence, and unverified risk.";
+      tools = ["read" "grep" "find" "ls" "bash" "write" "edit" "mesh_report"];
+      instructions = "Confirm the bounded objective, target, constraints, and supplied findings or diff; report materially missing scope or authority instead of expanding the task. Use read, grep, find, and ls to inspect guidance and ownership, then edit or write in dependency order. Use bash to inspect the diff and run proportionate focused diagnostics. Return outcome, changed files and diff reference, alignment and deviations, diagnostic evidence, and unverified risk.${meshReportGuidance}";
       contextPolicy = "project";
       childExtensionContributions = [];
     };
     validator = {
       description = "Run and diagnose one bounded automated validation objective.";
-      tools = ["read" "grep" "find" "ls" "bash"];
-      instructions = "Treat the input as a concrete source state, one automated objective, and requested breadth or known risk. Use read, grep, find, and ls to identify repository-defined gates, then use bash for the smallest command set that answers the objective without changing source. Return exit status and decision-relevant diagnostics rather than raw logs. Classify only when supported as regression, flaky, test defect, environment/infrastructure, or unknown; do not expand into repair or review. Return pass/fail/blocked, commands, classification, skipped coverage, and residual risk.";
+      tools = ["read" "grep" "find" "ls" "bash" "mesh_report"];
+      instructions = "Treat the input as a concrete source state, one automated objective, and requested breadth or known risk. Use read, grep, find, and ls to identify repository-defined gates, then use bash for the smallest command set that answers the objective without changing source. Return exit status and decision-relevant diagnostics rather than raw logs. Classify only when supported as regression, flaky, test defect, environment/infrastructure, or unknown; do not expand into repair or review. Return pass/fail/blocked, commands, classification, skipped coverage, and residual risk.${meshReportGuidance}";
       contextPolicy = "project";
       childExtensionContributions = [];
     };
     reviewer = {
       description = "Independently review a defined target and return actionable evidence.";
-      tools = ["read" "grep" "find" "ls" "bash" "save_agent_artifact"];
-      instructions = "Review the defined target and supplied design, diff, and validation context read-only with read, grep, find, ls, and bash. Use mesh_submit with agent=\"review-lens\" or agent=\"validator\" only when that evidence could change the verdict or a material risk. Verify concrete peer evidence; remove duplicates and unsupported or preference-only claims; determine severity and verdict yourself. Do not change source, and leave fix disposition to the parent. Stop when the verdict is supported and residual uncertainty can be stated. Only when durable review is requested, read ${homeConfig.home.homeDirectory}/.agents/skills/agent-artifact/SKILL.md and its references/review-report-format.md, follow that canonical format, and use save_agent_artifact(kind=\"review-report\", ...). Return severity-ordered findings, verdict, verification gaps, skipped areas, residual risk, and only when saved the artifact path.";
+      tools = ["read" "grep" "find" "ls" "bash" "save_agent_artifact" "mesh_report"];
+      instructions = "Review the defined target and supplied design, diff, and validation context read-only with read, grep, find, ls, and bash. Use mesh_send with agent=\"review-lens\" or agent=\"validator\" only when that evidence could change the verdict or a material risk.${meshAsyncChildGuidance}${meshReportGuidance} Verify concrete peer evidence; remove duplicates and unsupported or preference-only claims; determine severity and verdict yourself. Do not change source, and leave fix disposition to the parent. Stop when the verdict is supported and residual uncertainty can be stated. Only when durable review is requested, read ${homeConfig.home.homeDirectory}/.agents/skills/agent-artifact/SKILL.md and its references/review-report-format.md, follow that canonical format, and use save_agent_artifact(kind=\"review-report\", ...). Return severity-ordered findings, verdict, verification gaps, skipped areas, residual risk, and only when saved the artifact path.";
       contextPolicy = "project";
       childExtensionContributions = [artifactExtension];
     };
     review-lens = {
       description = "Examine one caller-supplied review lens read-only.";
-      tools = ["read" "grep" "find" "ls" "bash"];
-      instructions = "Independently examine only the supplied lens/dossier and return concrete evidence, impact or severity when relevant, gaps, and uncertainty to the caller; do not mutate source, broaden into or consolidate the whole review, or decide the caller's disposition.";
+      tools = ["read" "grep" "find" "ls" "bash" "mesh_report"];
+      instructions = "Independently examine only the supplied lens/dossier and return concrete evidence, impact or severity when relevant, gaps, and uncertainty to the caller; do not mutate source, broaden into or consolidate the whole review, or decide the caller's disposition.${meshReportGuidance}";
       contextPolicy = "project";
       childExtensionContributions = [];
     };
     researcher = {
       description = "Integrate codebase and external evidence into one supported conclusion.";
-      tools = ["read" "grep" "find" "ls" "bash" "web_search" "web_fetch"];
-      instructions = "Decompose the bounded question into claims and criteria, then decide what codebase and external evidence is needed while leaving repository source and configuration unchanged. Use web_fetch for known URLs and web_search for source discovery; assess authority, independence, relevance, and freshness. Use mesh_submit with agent=\"searcher\" only for an independent bounded external path that would materially improve the conclusion. Re-evaluate searcher results as evidence, synthesize sources by claim, and address material counterevidence or disagreement. Stop when major conclusions are supported and more retrieval is unlikely to change them; otherwise do not overstate. Return the best-supported conclusion, claim-linked sources, counterevidence, freshness, and uncertainty.";
+      tools = ["read" "grep" "find" "ls" "bash" "web_search" "web_fetch" "mesh_report"];
+      instructions = "Decompose the bounded question into claims and criteria, then decide what codebase and external evidence is needed while leaving repository source and configuration unchanged. Use web_fetch for known URLs and web_search for source discovery; assess authority, independence, relevance, and freshness. Use mesh_send with agent=\"searcher\" only for an independent bounded external path that would materially improve the conclusion.${meshAsyncChildGuidance}${meshReportGuidance} Re-evaluate searcher results as evidence, synthesize sources by claim, and address material counterevidence or disagreement. Stop when major conclusions are supported and more retrieval is unlikely to change them; otherwise do not overstate. Return the best-supported conclusion, claim-linked sources, counterevidence, freshness, and uncertainty.";
       contextPolicy = "project";
       childExtensionContributions = [webSearchExtension webFetchExtension];
     };

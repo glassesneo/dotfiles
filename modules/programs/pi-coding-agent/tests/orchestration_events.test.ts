@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { readFile, stat, writeFile } from "node:fs/promises";
+import { readFile, readdir, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import test from "node:test";
 import { buildLaunchEnvelope } from "../extensions_src/utilities/agent_types.ts";
 import { availableContext, publishAgentActivity } from "../extensions_src/utilities/orchestration_activity.ts";
 import { createCompletionReceipt, readCompletionLedger } from "../extensions_src/utilities/orchestration_completion.ts";
-import { acknowledgeMeshEvents, bindMeshEndpoint, markMeshEventsInjected, materializeMeshCompletionEvents, readEndpointDeliverySnapshot, registerMeshSignal, setMeshEndpointOffline } from "../extensions_src/utilities/orchestration_events.ts";
+import { acknowledgeMeshContextInterventions, acknowledgeMeshEvents, bindMeshEndpoint, markMeshEventsInjected, materializeMeshCompletionEvents, readEndpointDeliverySnapshot, registerMeshReport, registerStateAwareMeshSend, setMeshEndpointOffline } from "../extensions_src/utilities/orchestration_events.ts";
 import { bindAgentRuntime } from "../extensions_src/utilities/orchestration_runtime.ts";
 import { attachRootMesh, createTask, ensurePolicyEpoch, finishTask, initializeMesh, meshPaths, patchAgentStatus, prepareAgent, publishAgent, readPolicyEpoch, reserveMeshCapacity } from "../extensions_src/utilities/orchestration_store.ts";
 import { withTemporaryRoot as withRoot } from "./test_helpers.ts";
@@ -39,7 +39,11 @@ async function eventFixture(root: string) {
     const [agentId, secondAgentId] = await Promise.all([publishEventAgent(root, mesh.meshId, epoch, roles.worker), publishEventAgent(root, mesh.meshId, epoch, roles.worker)]);
     const endpoint = await bindMeshEndpoint(root, mesh.meshId, { endpointId: `root:${mesh.meshId}`, kind: "root", harness: "pi", sessionId: "root", sessionFile: "/root.jsonl" });
     const lease = await attachRootMesh(root, mesh.meshId, { rootSessionId: "root", rootSessionFile: "/root.jsonl", budgets });
-    return { mesh, agentId, secondAgentId, endpoint, lease };
+    return { mesh, epoch, agentId, secondAgentId, endpoint, lease };
+}
+
+async function bindEventAgentEndpoint(root: string, meshId: string, agentId: string) {
+    return bindMeshEndpoint(root, meshId, { endpointId: `agent:${agentId}`, kind: "agent", agentId, harness: "pi", sessionId: `session-${agentId}`, sessionFile: `/agent-${agentId}.jsonl` });
 }
 
 // Admission: assignment and event repair cross two durable files; type checks cannot detect duplicate or lost completion sources.
@@ -101,37 +105,159 @@ void test("receipt ordering suppresses new assignment without corrupting frozen 
     assert.deepEqual((event!.payload.tasks as Array<{ taskId: string }>).map(task => task.taskId), [after.request.taskId]);
 }));
 
-void test("signal retries preserve one event and reject changed arguments", async () => withRoot("mesh-signal-", async root => {
+// Admission: state-aware send owns durable intervention delivery; type checks cannot detect retry duplication, task-local sequence gaps, or acknowledgement before model-context inclusion.
+// Given repeated sends to a busy agent, when its endpoint injects the interventions and reports their context inclusion, sender and receiver observe one ordered delivery-acknowledged intervention per call.
+void test("intervention transport is idempotent, ordered, and context-acknowledged after injection", async () => withRoot("mesh-intervention-", async root => {
     const fixture = await eventFixture(root);
-    const canonicalArguments = { receiver: "root", delivery: "steer", topic: "status", text: "Ready" };
-    const input = { callerEndpointId: "agent:sender", toolCallId: "signal-call", endpoint: fixture.endpoint, delivery: "steer" as const, topic: "status", text: "Ready", canonicalArguments };
-    const first = await registerMeshSignal(root, fixture.mesh.meshId, input);
-    assert.equal((await registerMeshSignal(root, fixture.mesh.meshId, input)).eventId, first.eventId);
-    await assert.rejects(registerMeshSignal(root, fixture.mesh.meshId, { ...input, text: "Changed", canonicalArguments: { ...canonicalArguments, text: "Changed" } }), /different arguments/u);
-    assert.deepEqual((await readEndpointDeliverySnapshot(root, fixture.mesh.meshId, fixture.endpoint)).events[0]!.payload, { eventId: first.eventId, topic: "status", text: "Ready" });
+    const agentEndpoint = await bindEventAgentEndpoint(root, fixture.mesh.meshId, fixture.agentId);
+    const completion = { endpointId: fixture.endpoint.endpointId, endpointSessionFile: fixture.endpoint.sessionFile };
+    const active = await createTask(root, fixture.mesh.meshId, fixture.agentId, "active", { requesterEndpointId: fixture.endpoint.endpointId, completion });
+    const firstInput = { callerEndpointId: fixture.endpoint.endpointId, callerEndpointSessionFile: fixture.endpoint.sessionFile, toolCallId: "intervene-first", canonicalArguments: { agentId: fixture.agentId, message: "First intervention" }, endpoint: agentEndpoint, agentId: fixture.agentId, message: "First intervention", completion };
+    const first = await registerStateAwareMeshSend(root, fixture.mesh.meshId, firstInput);
+    assert.equal(first.disposition, "intervened");
+    if (first.disposition !== "intervened") throw new Error("busy agent send did not create an intervention");
+    assert.deepEqual(await registerStateAwareMeshSend(root, fixture.mesh.meshId, firstInput), first);
+    await assert.rejects(registerStateAwareMeshSend(root, fixture.mesh.meshId, { ...firstInput, message: "Changed intervention", canonicalArguments: { agentId: fixture.agentId, message: "Changed intervention" } }), /different arguments/u);
+    const second = await registerStateAwareMeshSend(root, fixture.mesh.meshId, { ...firstInput, toolCallId: "intervene-second", canonicalArguments: { agentId: fixture.agentId, message: "Second intervention" }, message: "Second intervention" });
+    assert.equal(second.disposition, "intervened");
+    if (second.disposition !== "intervened") throw new Error("busy agent send did not create a second intervention");
+    assert.deepEqual([first.sequence, second.sequence], [1, 2]);
+
+    const pending = await readEndpointDeliverySnapshot(root, fixture.mesh.meshId, agentEndpoint);
+    assert.deepEqual(new Map(pending.events.map(event => [event.eventId, event.state])), new Map([[first.messageId, "pending"], [second.messageId, "pending"]]));
+    await assert.rejects(acknowledgeMeshContextInterventions(root, fixture.mesh.meshId, agentEndpoint, [first.messageId]), /not injected/u);
+    await markMeshEventsInjected(root, fixture.mesh.meshId, agentEndpoint, [first.messageId, second.messageId, first.messageId]);
+    const injected = await readEndpointDeliverySnapshot(root, fixture.mesh.meshId, agentEndpoint);
+    assert.deepEqual(new Map(injected.events.map(event => [event.eventId, event.state])), new Map([[first.messageId, "injected"], [second.messageId, "injected"]]));
+    const acknowledgments = await acknowledgeMeshContextInterventions(root, fixture.mesh.meshId, agentEndpoint, [first.messageId, second.messageId, first.messageId]);
+    assert.equal(acknowledgments.length, 1);
+    assert.equal(acknowledgments[0]!.acknowledgedThrough, 2);
+    assert.deepEqual(new Set(acknowledgments[0]!.messageIds), new Set([first.messageId, second.messageId]));
+    assert.deepEqual(await acknowledgeMeshContextInterventions(root, fixture.mesh.meshId, agentEndpoint, [first.messageId, second.messageId]), acknowledgments);
+    const third = await registerStateAwareMeshSend(root, fixture.mesh.meshId, { ...firstInput, toolCallId: "intervene-third", canonicalArguments: { agentId: fixture.agentId, message: "Third intervention" }, message: "Third intervention" });
+    assert.equal(third.disposition, "intervened");
+    if (third.disposition !== "intervened") throw new Error("busy agent send did not create a third intervention");
+    await markMeshEventsInjected(root, fixture.mesh.meshId, agentEndpoint, [third.messageId]);
+    const incremental = await acknowledgeMeshContextInterventions(root, fixture.mesh.meshId, agentEndpoint, [first.messageId, second.messageId, third.messageId]);
+    assert.equal(incremental.length, 1);
+    assert.notEqual(incremental[0]!.eventId, acknowledgments[0]!.eventId);
+    assert.equal(incremental[0]!.acknowledgedThrough, 3);
+    assert.deepEqual(incremental[0]!.messageIds, [third.messageId]);
+    const fourth = await registerStateAwareMeshSend(root, fixture.mesh.meshId, { ...firstInput, toolCallId: "intervene-fourth", canonicalArguments: { agentId: fixture.agentId, message: "Fourth intervention" }, message: "Fourth intervention" });
+    const fifth = await registerStateAwareMeshSend(root, fixture.mesh.meshId, { ...firstInput, toolCallId: "intervene-fifth", canonicalArguments: { agentId: fixture.agentId, message: "Fifth intervention" }, message: "Fifth intervention" });
+    if (fourth.disposition !== "intervened" || fifth.disposition !== "intervened") throw new Error("busy agent sends did not create later interventions");
+    await markMeshEventsInjected(root, fixture.mesh.meshId, agentEndpoint, [fourth.messageId, fifth.messageId]);
+    const orphanAckId = randomUUID(); const fourthPath = join(meshPaths(root, fixture.mesh.meshId).events, `${fourth.messageId}.json`); const fourthEvent = JSON.parse(await readFile(fourthPath, "utf8"));
+    await writeFile(fourthPath, JSON.stringify({ ...fourthEvent, state: "acknowledged", acknowledgedAt: new Date().toISOString(), ackEventId: orphanAckId }));
+    const repaired = await acknowledgeMeshContextInterventions(root, fixture.mesh.meshId, agentEndpoint, [first.messageId, fourth.messageId, fifth.messageId]);
+    assert.deepEqual(repaired, [{ eventId: orphanAckId, agentId: fixture.agentId, taskId: active.request.taskId, acknowledgedThrough: 5, messageIds: [fourth.messageId, fifth.messageId].sort((a, b) => a.localeCompare(b)) }]);
+
+    const senderEvents = (await readEndpointDeliverySnapshot(root, fixture.mesh.meshId, fixture.endpoint)).events.filter(event => event.kind === "delivery-ack");
+    assert.equal(senderEvents.length, 3);
+    assert.deepEqual(new Map(senderEvents.map(event => [event.eventId, event.payload])), new Map([
+        [acknowledgments[0]!.eventId, { eventId: acknowledgments[0]!.eventId, ackId: acknowledgments[0]!.eventId, agentId: fixture.agentId, taskId: active.request.taskId, acknowledgedThrough: 2, messageIds: acknowledgments[0]!.messageIds }],
+        [incremental[0]!.eventId, { eventId: incremental[0]!.eventId, ackId: incremental[0]!.eventId, agentId: fixture.agentId, taskId: active.request.taskId, acknowledgedThrough: 3, messageIds: incremental[0]!.messageIds }],
+        [orphanAckId, { eventId: orphanAckId, ackId: orphanAckId, agentId: fixture.agentId, taskId: active.request.taskId, acknowledgedThrough: 5, messageIds: repaired[0]!.messageIds }],
+    ]));
+}));
+
+// Admission: acknowledgment repair spans independently routed sender/task scopes; a successful new acknowledgment must not hide another scope's crash orphan.
+// Given an orphaned acknowledgment from an earlier task and a new injected intervention for a later task, one context pass durably delivers both acknowledgment scopes.
+void test("context acknowledgment repairs an orphan while creating another task scope", async () => withRoot("mesh-ack-mixed-repair-", async root => {
+    const fixture = await eventFixture(root); const agentEndpoint = await bindEventAgentEndpoint(root, fixture.mesh.meshId, fixture.agentId); const completion = { endpointId: fixture.endpoint.endpointId, endpointSessionFile: fixture.endpoint.sessionFile };
+    const earlierTask = await createTask(root, fixture.mesh.meshId, fixture.agentId, "earlier", { requesterEndpointId: fixture.endpoint.endpointId, completion });
+    const earlier = await registerStateAwareMeshSend(root, fixture.mesh.meshId, { callerEndpointId: fixture.endpoint.endpointId, callerEndpointSessionFile: fixture.endpoint.sessionFile, toolCallId: "earlier-intervention", canonicalArguments: { agentId: fixture.agentId, message: "Earlier intervention" }, endpoint: agentEndpoint, agentId: fixture.agentId, message: "Earlier intervention", completion });
+    if (earlier.disposition !== "intervened") throw new Error("earlier send did not intervene");
+    await markMeshEventsInjected(root, fixture.mesh.meshId, agentEndpoint, [earlier.messageId]);
+    const orphanAckId = randomUUID(); const earlierPath = join(meshPaths(root, fixture.mesh.meshId).events, `${earlier.messageId}.json`); const earlierEvent = JSON.parse(await readFile(earlierPath, "utf8"));
+    await writeFile(earlierPath, JSON.stringify({ ...earlierEvent, state: "acknowledged", acknowledgedAt: new Date().toISOString(), ackEventId: orphanAckId }));
+    await finishTask(root, fixture.mesh.meshId, earlierTask.request.taskId, { outcome: "succeeded" });
+    const laterTask = await createTask(root, fixture.mesh.meshId, fixture.agentId, "later", { requesterEndpointId: fixture.endpoint.endpointId, completion });
+    const later = await registerStateAwareMeshSend(root, fixture.mesh.meshId, { callerEndpointId: fixture.endpoint.endpointId, callerEndpointSessionFile: fixture.endpoint.sessionFile, toolCallId: "later-intervention", canonicalArguments: { agentId: fixture.agentId, message: "Later intervention" }, endpoint: agentEndpoint, agentId: fixture.agentId, message: "Later intervention", completion });
+    if (later.disposition !== "intervened") throw new Error("later send did not intervene");
+    await markMeshEventsInjected(root, fixture.mesh.meshId, agentEndpoint, [later.messageId]);
+    const acknowledgments = await acknowledgeMeshContextInterventions(root, fixture.mesh.meshId, agentEndpoint, [earlier.messageId, later.messageId]);
+    assert.equal(acknowledgments.length, 2);
+    assert.deepEqual(new Map(acknowledgments.map(item => [item.taskId, item])), new Map([
+        [laterTask.request.taskId, { eventId: acknowledgments.find(item => item.taskId === laterTask.request.taskId)!.eventId, agentId: fixture.agentId, taskId: laterTask.request.taskId, acknowledgedThrough: 1, messageIds: [later.messageId] }],
+        [earlierTask.request.taskId, { eventId: orphanAckId, agentId: fixture.agentId, taskId: earlierTask.request.taskId, acknowledgedThrough: 1, messageIds: [earlier.messageId] }],
+    ]));
+    const delivered = (await readEndpointDeliverySnapshot(root, fixture.mesh.meshId, fixture.endpoint)).events.filter(event => event.kind === "delivery-ack");
+    assert.deepEqual(new Set(delivered.map(event => event.eventId)), new Set(acknowledgments.map(item => item.eventId)));
+}));
+
+// Admission: state-aware send is the durable mutation boundary; runtime prechecks cannot prevent a policy change before the mesh lock is acquired.
+// Given stale dispatch authority for an idle target, when send crosses its locked mutation boundary, no task capacity is reserved.
+void test("idle state-aware send fences dispatch authority before reservation", async () => withRoot("mesh-send-authority-idle-", async root => {
+    const fixture = await eventFixture(root);
+    const completion = { endpointId: fixture.endpoint.endpointId, endpointSessionFile: fixture.endpoint.sessionFile };
+    await assert.rejects(registerStateAwareMeshSend(root, fixture.mesh.meshId, { callerEndpointId: fixture.endpoint.endpointId, callerEndpointSessionFile: fixture.endpoint.sessionFile, toolCallId: "stale-idle-send", canonicalArguments: { agentId: fixture.agentId, message: "must fail" }, agentId: fixture.agentId, message: "must fail", completion, authority: { requesterEndpointId: fixture.endpoint.endpointId, requesterEndpointSessionFile: fixture.endpoint.sessionFile, epochId: fixture.epoch.epochId, policyDigest: "invalid", targetRole: "worker", selectedProfile: "pi-medium" } }), /policy digest changed/u);
+    const reservations = await Promise.all((await readdir(meshPaths(root, fixture.mesh.meshId).reservations)).map(async name => JSON.parse(await readFile(join(meshPaths(root, fixture.mesh.meshId).reservations, name), "utf8")) as Record<string, unknown>));
+    assert.equal(reservations.filter(item => item.kind === "existing-agent-task" && item.agentId === fixture.agentId).length, 0);
+}));
+
+// Given stale dispatch authority for a busy target, when send crosses its locked mutation boundary, the active task receives no intervention.
+void test("busy state-aware send fences dispatch authority before intervention", async () => withRoot("mesh-send-authority-busy-", async root => {
+    const fixture = await eventFixture(root);
+    const agentEndpoint = await bindEventAgentEndpoint(root, fixture.mesh.meshId, fixture.agentId);
+    const completion = { endpointId: fixture.endpoint.endpointId, endpointSessionFile: fixture.endpoint.sessionFile };
+    await createTask(root, fixture.mesh.meshId, fixture.agentId, "active", { requesterEndpointId: fixture.endpoint.endpointId, completion });
+    await assert.rejects(registerStateAwareMeshSend(root, fixture.mesh.meshId, { callerEndpointId: fixture.endpoint.endpointId, callerEndpointSessionFile: fixture.endpoint.sessionFile, toolCallId: "stale-busy-send", canonicalArguments: { agentId: fixture.agentId, message: "must fail" }, endpoint: agentEndpoint, agentId: fixture.agentId, message: "must fail", completion, authority: { requesterEndpointId: fixture.endpoint.endpointId, requesterEndpointSessionFile: fixture.endpoint.sessionFile, epochId: fixture.epoch.epochId, policyDigest: "invalid", targetRole: "worker", selectedProfile: "pi-medium" } }), /policy digest changed/u);
+    assert.deepEqual((await readEndpointDeliverySnapshot(root, fixture.mesh.meshId, agentEndpoint)).events, []);
+}));
+
+// Admission: report routing is durable peer transport outside type coverage.
+// Given an agent report and a retry, when the report is routed to its root endpoint, the root observes one persisted report with the stable report identity.
+void test("reports route durably to the requested endpoint without duplicate retries", async () => withRoot("mesh-report-", async root => {
+    const fixture = await eventFixture(root);
+    const agentEndpoint = await bindEventAgentEndpoint(root, fixture.mesh.meshId, fixture.agentId);
+    const task = await createTask(root, fixture.mesh.meshId, fixture.agentId, "active", { requesterEndpointId: fixture.endpoint.endpointId, completion: { endpointId: fixture.endpoint.endpointId, endpointSessionFile: fixture.endpoint.sessionFile } });
+    const input = { callerEndpointId: agentEndpoint.endpointId, callerEndpointSessionFile: agentEndpoint.sessionFile, toolCallId: "report-call", endpoint: fixture.endpoint, agentId: fixture.agentId, taskId: task.request.taskId, summary: "Bounded report", canonicalArguments: { taskId: task.request.taskId, summary: "Bounded report" } };
+    const first = await registerMeshReport(root, fixture.mesh.meshId, input);
+    assert.deepEqual(await registerMeshReport(root, fixture.mesh.meshId, input), first);
+    const reports = (await readEndpointDeliverySnapshot(root, fixture.mesh.meshId, fixture.endpoint)).events.filter(event => event.kind === "report");
+    assert.equal(reports.length, 1);
+    assert.deepEqual(reports[0]!.payload, { eventId: first.reportId, reportId: first.reportId, agentId: fixture.agentId, taskId: task.request.taskId, summary: "Bounded report" });
+    await bindMeshEndpoint(root, fixture.mesh.meshId, { endpointId: agentEndpoint.endpointId, kind: "agent", agentId: fixture.agentId, harness: "pi", sessionId: "replacement-agent-session", sessionFile: "/replacement-agent.jsonl" });
+    await assert.rejects(registerMeshReport(root, fixture.mesh.meshId, { ...input, toolCallId: "stale-report-call", canonicalArguments: { taskId: task.request.taskId, summary: "Stale report" }, summary: "Stale report" }), /binding is stale or offline/u);
+}));
+
+// Mechanical compatibility validation: persisted legacy completion and signal records remain readable, while only intervention context inclusion may create delivery acknowledgments.
+void test("legacy completion and signal events remain readable without generating delivery acknowledgments", async () => withRoot("mesh-legacy-events-", async root => {
+    const fixture = await eventFixture(root);
+    const agentEndpoint = await bindEventAgentEndpoint(root, fixture.mesh.meshId, fixture.agentId);
+    const completionId = randomUUID();
+    const signalId = randomUUID();
+    const createdAt = new Date().toISOString();
+    await writeFile(join(meshPaths(root, fixture.mesh.meshId).events, `${completionId}.json`), JSON.stringify({ schemaVersion: 1, meshId: fixture.mesh.meshId, eventId: completionId, endpointId: agentEndpoint.endpointId, endpointSessionFile: agentEndpoint.sessionFile, senderEndpointId: fixture.endpoint.endpointId, delivery: "steer", state: "pending", kind: "completion", payload: { eventId: completionId, batchId: randomUUID(), settledAt: createdAt, tasks: [{ taskId: randomUUID(), agentId: fixture.agentId, state: "succeeded" }] }, createdAt }));
+    await writeFile(join(meshPaths(root, fixture.mesh.meshId).events, `${signalId}.json`), JSON.stringify({ schemaVersion: 1, meshId: fixture.mesh.meshId, eventId: signalId, endpointId: agentEndpoint.endpointId, endpointSessionFile: agentEndpoint.sessionFile, senderEndpointId: fixture.endpoint.endpointId, delivery: "followUp", state: "pending", kind: "signal", payload: { topic: "legacy", text: "readable" }, createdAt }));
+    assert.deepEqual((await readEndpointDeliverySnapshot(root, fixture.mesh.meshId, agentEndpoint)).events.map(event => event.kind).sort(), ["completion", "signal"]);
+    assert.deepEqual(await acknowledgeMeshContextInterventions(root, fixture.mesh.meshId, agentEndpoint, [completionId, signalId]), []);
+    assert.deepEqual((await readEndpointDeliverySnapshot(root, fixture.mesh.meshId, fixture.endpoint)).events, []);
 }));
 
 // Admission: endpoint generation fencing protects durable state from delayed runtime callbacks; session identity alone cannot detect same-session reloads.
 // Given a same-session endpoint rebind, stale snapshots, injection, acknowledgement, and offline callbacks fail while the current binding can deliver existing events.
 void test("endpoint bindingId fences delivery lifecycle mutations", async () => withRoot("mesh-endpoint-generation-", async root => {
     const fixture = await eventFixture(root);
-    const signal = await registerMeshSignal(root, fixture.mesh.meshId, { callerEndpointId: "agent:sender", toolCallId: "generation", endpoint: fixture.endpoint, delivery: "followUp", topic: "status", text: "Ready", canonicalArguments: { topic: "status" } });
+    const sender = await bindEventAgentEndpoint(root, fixture.mesh.meshId, fixture.agentId);
+    const report = await registerMeshReport(root, fixture.mesh.meshId, { callerEndpointId: sender.endpointId, callerEndpointSessionFile: sender.sessionFile, toolCallId: "generation", endpoint: fixture.endpoint, agentId: fixture.agentId, taskId: randomUUID(), summary: "Ready", canonicalArguments: { summary: "Ready" } });
     const replacement = await bindMeshEndpoint(root, fixture.mesh.meshId, { endpointId: fixture.endpoint.endpointId, kind: "root", harness: "pi", sessionId: fixture.endpoint.sessionId, sessionFile: fixture.endpoint.sessionFile });
     assert.notEqual(replacement.bindingId, fixture.endpoint.bindingId);
     await assert.rejects(readEndpointDeliverySnapshot(root, fixture.mesh.meshId, fixture.endpoint), /rotated or went offline/u);
-    await assert.rejects(markMeshEventsInjected(root, fixture.mesh.meshId, fixture.endpoint, [signal.eventId]), /rotated or went offline/u);
-    await assert.rejects(acknowledgeMeshEvents(root, fixture.mesh.meshId, fixture.endpoint, [signal.eventId]), /rotated or went offline/u);
+    await assert.rejects(markMeshEventsInjected(root, fixture.mesh.meshId, fixture.endpoint, [report.reportId]), /rotated or went offline/u);
+    await assert.rejects(acknowledgeMeshEvents(root, fixture.mesh.meshId, fixture.endpoint, [report.reportId]), /rotated or went offline/u);
     await setMeshEndpointOffline(root, fixture.mesh.meshId, replacement.endpointId, fixture.endpoint);
     assert.equal((await readEndpointDeliverySnapshot(root, fixture.mesh.meshId, replacement)).events.length, 1);
 
-    await markMeshEventsInjected(root, fixture.mesh.meshId, replacement, [signal.eventId, signal.eventId]);
+    await markMeshEventsInjected(root, fixture.mesh.meshId, replacement, [report.reportId, report.reportId]);
     const injected = (await readEndpointDeliverySnapshot(root, fixture.mesh.meshId, replacement)).events[0]!;
     assert.equal(injected.state, "injected");
-    await markMeshEventsInjected(root, fixture.mesh.meshId, replacement, [signal.eventId]);
+    await markMeshEventsInjected(root, fixture.mesh.meshId, replacement, [report.reportId]);
     assert.equal((await readEndpointDeliverySnapshot(root, fixture.mesh.meshId, replacement)).events[0]!.injectedAt, injected.injectedAt);
-    await acknowledgeMeshEvents(root, fixture.mesh.meshId, replacement, [signal.eventId, signal.eventId]);
+    await acknowledgeMeshEvents(root, fixture.mesh.meshId, replacement, [report.reportId, report.reportId]);
     assert.deepEqual((await readEndpointDeliverySnapshot(root, fixture.mesh.meshId, replacement)).events, []);
-    const path = join(meshPaths(root, fixture.mesh.meshId).events, `${signal.eventId}.json`);
+    const path = join(meshPaths(root, fixture.mesh.meshId).events, `${report.reportId}.json`);
     const persisted = JSON.parse(await readFile(path, "utf8")) as Record<string, unknown>;
     assert.equal(persisted.state, "acknowledged");
     assert.equal((await stat(path)).mode & 0o777, 0o600);

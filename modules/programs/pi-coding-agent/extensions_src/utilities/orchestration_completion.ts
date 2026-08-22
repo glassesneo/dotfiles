@@ -19,6 +19,7 @@ export interface CompletionTask {
     startedAt?: string;
     finishedAt?: string;
     completion: CompletionTarget;
+    suppressCompletion: boolean;
 }
 
 export interface CompletionReceiptCreationResult {
@@ -168,14 +169,17 @@ async function completionTasksUnlocked(stateRoot: string, meshId: string): Promi
         if (request.schemaVersion !== 3) throw new Error("Unsupported task request schemaVersion");
         if (request.completion === undefined) return undefined;
         if (request.taskId !== taskId || typeof request.agentId !== "string" || !UUID.test(request.agentId) || typeof request.requesterEndpointId !== "string") throw new Error("completion task request identity is invalid");
-        const statusValue = await optionalJson(join(taskDirectory, "status.json"));
+        const [statusValue, cancellationValue, stopValue] = await Promise.all([optionalJson(join(taskDirectory, "status.json")), optionalJson(join(meshDirectory(stateRoot, meshId), "tasks", taskId, "cancel.json")), optionalJson(join(meshDirectory(stateRoot, meshId), "agents", request.agentId, "stop.json"))]);
         if (!statusValue || typeof statusValue !== "object" || Array.isArray(statusValue)) return undefined;
         const status = statusValue as Record<string, unknown>;
         if (status.taskId !== taskId || status.agentId !== request.agentId || typeof status.state !== "string" || !TASK_STATES.includes(status.state as TaskState)) throw new Error("completion task status is invalid");
         const createdAt = timestamp(status.createdAt, "completion task createdAt");
         const startedAt = status.startedAt === undefined ? undefined : timestamp(status.startedAt, "completion task startedAt");
         const finishedAt = status.finishedAt === undefined ? undefined : timestamp(status.finishedAt, "completion task finishedAt");
-        return { taskId, agentId: request.agentId, state: status.state as TaskState, createdAt, ...(startedAt ? { startedAt } : {}), ...(finishedAt ? { finishedAt } : {}), completion: validateCompletionTarget(request.completion, request.requesterEndpointId) } satisfies CompletionTask;
+        const completion = validateCompletionTarget(request.completion, request.requesterEndpointId);
+        const cancelledByCompletionEndpoint = Boolean(cancellationValue && typeof cancellationValue === "object" && !Array.isArray(cancellationValue) && (cancellationValue as Record<string, unknown>).schemaVersion === 1 && (cancellationValue as Record<string, unknown>).meshId === meshId && (cancellationValue as Record<string, unknown>).agentId === request.agentId && (cancellationValue as Record<string, unknown>).taskId === taskId && (cancellationValue as Record<string, unknown>).requesterEndpointId === completion.endpointId);
+        const stoppedByCompletionEndpoint = Boolean(stopValue && typeof stopValue === "object" && !Array.isArray(stopValue) && (stopValue as Record<string, unknown>).schemaVersion === 1 && (stopValue as Record<string, unknown>).meshId === meshId && (stopValue as Record<string, unknown>).agentId === request.agentId && (stopValue as Record<string, unknown>).state === "confirmed" && ((stopValue as Record<string, unknown>).source === "user" || (stopValue as Record<string, unknown>).source === "peer") && (stopValue as Record<string, unknown>).affectedTaskId === taskId && (stopValue as Record<string, unknown>).requesterEndpointId === completion.endpointId);
+        return { taskId, agentId: request.agentId, state: status.state as TaskState, createdAt, ...(startedAt ? { startedAt } : {}), ...(finishedAt ? { finishedAt } : {}), completion, suppressCompletion: status.state === "stopped" && (cancelledByCompletionEndpoint || stoppedByCompletionEndpoint) } satisfies CompletionTask;
     }));
     return tasks.filter((task): task is CompletionTask => task !== undefined).sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.taskId.localeCompare(b.taskId));
 }
@@ -208,7 +212,7 @@ export async function settleCompletionDeliveriesUnlocked(stateRoot: string, mesh
         let ledger = await readCompletionLedger(stateRoot, meshId, identity.endpointId, identity.endpointSessionFile) ?? emptyLedger(meshId, identity.endpointId, identity.endpointSessionFile);
         const assigned = new Set(ledger.batches.flatMap(batch => batch.taskIds));
         const received = new Set(ledger.receipts.flatMap(receipt => receipt.taskIds));
-        const terminal = tasks.filter(task => task.completion.endpointId === identity.endpointId && task.completion.endpointSessionFile === identity.endpointSessionFile && isTerminalTask(task.state) && !assigned.has(task.taskId) && !received.has(task.taskId));
+        const terminal = tasks.filter(task => task.completion.endpointId === identity.endpointId && task.completion.endpointSessionFile === identity.endpointSessionFile && isTerminalTask(task.state) && !task.suppressCompletion && !assigned.has(task.taskId) && !received.has(task.taskId));
         if (terminal.length) {
             const settledAt = new Date().toISOString();
             ledger = { ...ledger, batches: [...ledger.batches, { batchId: randomUUID(), taskIds: terminal.map(task => task.taskId), settledAt, eventId: randomUUID() }], updatedAt: settledAt };
