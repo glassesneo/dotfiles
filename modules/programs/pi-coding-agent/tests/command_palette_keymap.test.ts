@@ -6,6 +6,7 @@ void test("synthetic palette overrides are projected into the resolved keymap", 
     const resolved = resolvePaletteKeymap({ moveUp: ["f10"], refresh: ["ctrl+r"] });
     assert.deepEqual(resolved.moveUp, ["f10"]);
     assert.deepEqual(resolved.refresh, ["ctrl+r"]);
+    assert.deepEqual(resolvePaletteKeymap({ toggleTerminal: ["t"] }).toggleTerminal, ["t"]);
 });
 
 void test("palette keymap validates actions, keys, required bindings, and collisions", () => {
@@ -15,4 +16,5 @@ void test("palette keymap validates actions, keys, required bindings, and collis
     assert.throws(() => resolvePaletteKeymap({ moveUp: ["ctrl+n"] }), /conflicts between moveUp, moveDown/);
     assert.throws(() => resolvePaletteKeymap({ moveUp: ["ctrl+shift+n"], moveDown: ["shift+ctrl+n"] }), /conflicts between moveUp, moveDown/);
     assert.throws(() => resolvePaletteKeymap({ collapse: ["enter"] }), /conflicts between/);
+    assert.throws(() => resolvePaletteKeymap({ toggleTerminal: ["x"] }), /conflicts between stop, toggleTerminal/);
 });

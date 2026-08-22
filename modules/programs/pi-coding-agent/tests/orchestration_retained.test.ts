@@ -3,8 +3,10 @@ import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { visibleWidth } from "@earendil-works/pi-tui";
 import { unknownAgentActivityProjection } from "../extensions_src/utilities/orchestration_activity.ts";
 import { buildMeshDisplayTree } from "../extensions_src/utilities/orchestration_display_tree.ts";
+import { resolvePaletteKeymap } from "../extensions_src/utilities/command_palette_keymap.ts";
 import { openMeshHistory } from "../extensions_src/utilities/orchestration_history.ts";
 import { MeshAgentsPaletteComponent } from "../extensions_src/utilities/orchestration_palette.ts";
 import { openLivePreview } from "../extensions_src/utilities/orchestration_preview.ts";
@@ -61,15 +63,52 @@ void test("tmux stop does not mutate a server whose recorded identity no longer 
     assert.equal(await stopAgentSession(exec, "/tmux", tmux), false); assert.equal(calls.some(args => args.includes("kill-window")), false);
 });
 
-void test("mesh display tree promotes a live descendant through a terminal parent without changing record lineage", () => {
+// Admission: the display projection alone owns hiding terminal history without hiding live descendants; type checks cannot observe this user-visible lineage.
+// Given a live descendant behind a terminal parent, when the inventory crosses the display tree, the palette observes a promoted live row with its stored lineage unchanged.
+void test("mesh display tree hides terminal history by default and promotes live descendants", () => {
     const root = snapshot("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", "busy", { taskState: "running", createdAt: "2026-01-01T00:00:00Z" });
     const middle = snapshot("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", "stopped", { parentAgentId: root.agent.agentId, createdAt: "2026-01-01T00:01:00Z" });
     const child = snapshot("cccccccc-cccc-4ccc-8ccc-cccccccccccc", "busy", { parentAgentId: middle.agent.agentId, taskState: "running", createdAt: "2026-01-01T00:02:00Z" });
-    const tree = buildMeshDisplayTree([child, middle, root], ["May"]); const childNode = tree.byId.get(child.agent.agentId)!;
-    assert.deepEqual(tree.roots.map(node => node.agentId), [root.agent.agentId]); assert.deepEqual(tree.roots[0]?.children.map(node => node.agentId), [middle.agent.agentId, child.agent.agentId]);
-    assert.deepEqual({ promoted: childNode.promoted, viaHandle: childNode.viaHandle, ghost: childNode.ghost, recordParent: childNode.snapshot.agent.parentAgentId }, { promoted: true, viaHandle: tree.handles.get(middle.agent.agentId), ghost: false, recordParent: middle.agent.agentId });
+    const liveTree = buildMeshDisplayTree([child, middle, root], ["May"]); const childNode = liveTree.byId.get(child.agent.agentId)!;
+    assert.deepEqual(liveTree.roots.map(node => node.agentId), [root.agent.agentId]); assert.deepEqual(liveTree.roots[0]?.children.map(node => node.agentId), [child.agent.agentId]);
+    assert.deepEqual({ promoted: childNode.promoted, viaHandle: childNode.viaHandle, ghost: childNode.ghost, recordParent: childNode.snapshot.agent.parentAgentId }, { promoted: true, viaHandle: liveTree.handles.get(middle.agent.agentId), ghost: false, recordParent: middle.agent.agentId });
+    const historyTree = buildMeshDisplayTree([child, middle, root], ["May"], { showTerminal: true });
+    assert.ok(historyTree.byId.get(middle.agent.agentId)?.ghost);
+    assert.deepEqual(historyTree.byId.get(middle.agent.agentId)?.children.map(node => node.agentId), [child.agent.agentId]);
 });
 
+// Admission: the palette owns keyboard recovery of terminal history; selection and focus loss are material and are not covered by generated-keybinding validation.
+// Given a selected terminal row, when terminal visibility toggles, the keyboard user observes deterministic live fallback, focus retention, hidden counts, and restored history rows.
+void test("palette toggles terminal history while retaining deterministic selection and focus", () => {
+    const root = snapshot("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", "busy", { taskState: "running", createdAt: "2026-01-01T00:00:00Z" });
+    const terminal = snapshot("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", "stopped", { parentAgentId: root.agent.agentId, createdAt: "2026-01-01T00:01:00Z" });
+    const child = snapshot("cccccccc-cccc-4ccc-8ccc-cccccccccccc", "busy", { parentAgentId: terminal.agent.agentId, taskState: "running", createdAt: "2026-01-01T00:02:00Z" });
+    const component = new MeshAgentsPaletteComponent({ tui: { terminal: { rows: 24 }, requestRender() {} } as never, theme: { fg: (_role: string, text: string) => text, bg: (_role: string, text: string) => text, bold: (text: string) => text } as never, ui: { input: async () => undefined, confirm: async () => false }, keymap: resolvePaletteKeymap({ toggleTerminal: ["t"] }), deps: { meshId, exec: async () => ({ stdout: "", stderr: "", code: 0 }), tmux: "/tmux", historyViewerExtension: "/viewer", piCommand: "/pi", natureHandleWords: ["May"], discover: async () => ({ agents: [root, terminal, child], malformedCount: 0 }), stopAgent: async () => root }, done() {} });
+    component.replaceAgents([root, terminal, child]); component.focused = true;
+    assert.equal(component.showTerminal, false); assert.equal(component.hiddenTerminalCount, 1); assert.match(component.render(80).join("\n"), /1 terminal hidden/u);
+    component.handleInput("t"); component.handleInput("\u000e");
+    assert.equal(component.selectedAgentId, terminal.agent.agentId);
+    component.handleInput("t");
+    assert.equal(component.selectedAgentId, child.agent.agentId); assert.equal(component.focused, true); assert.deepEqual(component.visibleNodes().map(node => node.agentId), [root.agent.agentId, child.agent.agentId]);
+    component.handleInput("t");
+    assert.equal(component.showTerminal, true); assert.ok(component.visibleNodes().some(node => node.agentId === terminal.agent.agentId)); component.dispose();
+});
+
+
+// Admission: role/profile inspection and reflow are user-visible palette behavior that static type and keybinding checks cannot observe.
+// Given a resolved snapshot, when it renders at wide and narrow palette widths, the user observes immutable role/profile facts without any line exceeding the terminal width.
+void test("palette exposes immutable role and profile details at wide and narrow widths", () => {
+    const live = snapshot("dededede-dede-4ede-8ede-dededededede", "busy", { taskState: "running" });
+    const createComponent = (rows: number) => new MeshAgentsPaletteComponent({ tui: { terminal: { rows }, requestRender() {} } as never, theme: { fg: (_role: string, text: string) => text, bg: (_role: string, text: string) => text, bold: (text: string) => text } as never, ui: { input: async () => undefined, confirm: async () => false }, keymap: resolvePaletteKeymap({ toggleTerminal: ["t"] }), deps: { meshId, exec: async () => ({ stdout: "", stderr: "", code: 0 }), tmux: "/tmux", historyViewerExtension: "/viewer", piCommand: "/pi", natureHandleWords: ["May"], discover: async () => ({ agents: [live], malformedCount: 0 }), stopAgent: async () => live }, done() {} });
+    for (const [rows, width] of [[24, 80], [24, 120], [10, 60]] as const) {
+        const component = createComponent(rows); component.replaceAgents([live]);
+        const rendered = component.render(width);
+        assert.ok(rendered.every(line => visibleWidth(line) <= width));
+        const text = rendered.join("\n");
+        assert.match(text, new RegExp(live.agent.agentId, "u")); assert.match(text, /role:worker/u); assert.match(text, /profile:pi-medium/u); assert.match(text, /Synthetic worker/u); assert.match(text, /provider\/model/u); assert.match(text, /thinking medium · harness pi/u);
+        component.dispose();
+    }
+});
 
 void test("model-visible projection truncates content while preserving machine fields and task order", () => {
     const tasks = Array.from({ length: 128 }, (_, index) => ({ agentId: `agent-${index.toString().padStart(3, "0")}`, taskId: `task-${index.toString().padStart(3, "0")}`, agent: "worker", agentState: "idle", taskState: "succeeded", output: `${"界".repeat(600)}\n`.repeat(30) }));
@@ -114,12 +153,12 @@ void test("palette delegates stop authority with mesh identity and preserves the
     const component = new MeshAgentsPaletteComponent({
         tui: { terminal: { rows: 24 }, requestRender() {} } as never,
         theme: { fg: (_role: string, text: string) => text, bg: (_role: string, text: string) => text, bold: (text: string) => text } as never,
-        ui: { input: async () => "  planned cleanup  ", confirm: async () => true }, keymap: {} as never,
+        ui: { input: async () => "  planned cleanup  ", confirm: async () => true }, keymap: resolvePaletteKeymap({ toggleTerminal: ["t"] }),
         deps: { meshId, exec: async () => ({ stdout: "", stderr: "", code: 0 }), tmux: "/tmux", historyViewerExtension: "/viewer", piCommand: "/pi", natureHandleWords: ["May"], discover: async identity => { discoveries.push(identity); return { agents: [live], malformedCount: 0 }; }, stopAgent: async request => { stopRequests.push(request); return stopped; }, setTimeout: (() => ({}) as NodeJS.Timeout) as unknown as typeof setTimeout, clearTimeout: (() => {}) as typeof clearTimeout },
         done() {},
     });
     component.replaceAgents([live]); await component.action("stop");
-    assert.deepEqual(stopRequests, [{ meshId, agentId: live.agent.agentId, reason: "planned cleanup" }]); assert.deepEqual(discoveries, [{ meshId }]); assert.equal(component.selected()?.status.state, "stopped"); component.dispose();
+    assert.deepEqual(stopRequests, [{ meshId, agentId: live.agent.agentId, reason: "planned cleanup" }]); assert.deepEqual(discoveries, [{ meshId }]); assert.equal(component.selected(), undefined); assert.equal(component.hiddenTerminalCount, 1); assert.match(component.render(80).join("\n"), /No live agents.*terminal history/su); component.dispose();
 });
 
 // Given cancelled, blank, or oversized Pi-native reason input, when it crosses the Palette action boundary, no stop occurs and the same Palette selection/focus is retained.

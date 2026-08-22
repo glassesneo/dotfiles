@@ -20,7 +20,7 @@ const FEATURE_ACTIONS: Record<string, { actions: readonly string[]; required: re
     },
     interactionPolicy: { actions: ["clear", "interrupt"], required: ["clear", "interrupt"] },
     meshPalette: {
-        actions: ["moveUp", "moveDown", "collapse", "expand", "confirm", "cancel", "refresh", "stop", "preview", "unlink"],
+        actions: ["moveUp", "moveDown", "collapse", "expand", "confirm", "cancel", "refresh", "stop", "preview", "unlink", "toggleTerminal"],
         required: ["moveUp", "moveDown", "collapse", "expand", "confirm", "cancel"],
     },
     historyViewer: { actions: ["exit"], required: ["exit"] },

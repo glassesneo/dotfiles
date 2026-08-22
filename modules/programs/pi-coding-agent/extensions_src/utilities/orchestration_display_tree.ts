@@ -1,22 +1,8 @@
 import type { ThemeColor } from "@earendil-works/pi-coding-agent";
+import { assignNatureHandles, hashAgentIdentity, NATURE_HANDLE_WORDS } from "./orchestration_identity.ts";
 import { isTerminalAgent, type AgentSnapshot, type AgentState, type TaskState } from "./orchestration_types.ts";
 
-/** Nature-word dictionary for deterministic display handles. Avoid role-like or hostile words. */
-export const NATURE_HANDLE_WORDS = [
-    "Maple", "Cedar", "Oak", "Willow", "Birch", "Aspen", "Pine", "Elm",
-    "Rowan", "Hazel", "Fern", "Moss", "River", "Brook", "Lake", "Stone",
-    "Coral", "Amber", "Ivory", "Pearl", "Ember", "Frost", "Mist", "Cloud",
-    "Tide", "Reef", "Grove", "Meadow", "Harbor", "Vale", "Ridge", "Peak",
-    "Glen", "Cove", "Bay", "Shore", "Dune", "Cliff", "Spring", "Creek",
-    "Pond", "Marsh", "Delta", "Canyon", "Summit", "Hollow", "Thicket", "Glade",
-    "Orchid", "Lotus", "Daisy", "Iris", "Lilac", "Poppy", "Clover", "Heather",
-    "Juniper", "Cypress", "Sequoia", "Spruce", "Larch", "Alder", "Beech", "Poplar",
-    "Sycamore", "Magnolia", "Laurel", "Myrtle", "Olive", "Acacia", "Bamboo", "Cactus",
-    "Agate", "Jade", "Onyx", "Quartz", "Granite", "Slate", "Flint", "Marble",
-    "Aurora", "Comet", "Nova", "Orbit", "Solar", "Lunar", "Nebula", "Cosmos",
-    "Zephyr", "Breeze", "Gale", "Drift", "Cascade", "Rapids", "Eddy", "Fjord",
-    "Lagoon", "Atoll", "Islet", "Arch", "Spire", "Bluff", "Knoll", "Plateau",
-] as const;
+export { assignNatureHandles, NATURE_HANDLE_WORDS } from "./orchestration_identity.ts";
 
 export const AGENT_TYPE_COLOR_ROLES: readonly ThemeColor[] = [
     "accent", "toolTitle", "mdHeading", "mdLink", "customMessageLabel",
@@ -64,55 +50,13 @@ export interface MeshDisplayTree {
     handles: Map<string, string>;
 }
 
-function hashString(value: string): number {
-    let hash = 2166136261;
-    for (let index = 0; index < value.length; index += 1) {
-        hash ^= value.charCodeAt(index);
-        hash = Math.imul(hash, 16777619);
-    }
-    return hash >>> 0;
-}
-
-function hexSource(agentId: string): string {
-    const hex = agentId.replace(/[^a-fA-F0-9]/gu, "").toLowerCase();
-    if (hex.length >= 4) return hex;
-    return `${hex}${hashString(agentId).toString(16).padStart(8, "0")}`;
-}
-
-/** Deterministic unique Nature-xxxx handles for one mesh record set. */
-export function assignNatureHandles(
-    agentIds: readonly string[],
-    words: readonly string[] = NATURE_HANDLE_WORDS,
-): Map<string, string> {
-    if (words.length === 0) throw new Error("nature handle words must not be empty");
-    const sorted = [...new Set(agentIds)].sort((left, right) => left < right ? -1 : left > right ? 1 : 0);
-    const used = new Set<string>();
-    const result = new Map<string, string>();
-    for (const agentId of sorted) {
-        const word = words[hashString(agentId) % words.length]!;
-        const hex = hexSource(agentId);
-        let length = 4;
-        while (true) {
-            const suffix = hex.slice(0, length).padEnd(length, "0");
-            const handle = `${word}-${suffix}`;
-            if (!used.has(handle)) {
-                used.add(handle);
-                result.set(agentId, handle);
-                break;
-            }
-            length += 1;
-            if (length > hex.length + 16) {
-                result.set(agentId, `${word}-${suffix}-${result.size}`);
-                used.add(result.get(agentId)!);
-                break;
-            }
-        }
-    }
-    return result;
+export interface MeshDisplayTreeOptions {
+    /** Terminal records are history ghosts only when explicitly requested. */
+    showTerminal?: boolean;
 }
 
 export function agentColorRole(agent: string): ThemeColor {
-    return AGENT_TYPE_COLOR_ROLES[hashString(agent) % AGENT_TYPE_COLOR_ROLES.length]!;
+    return AGENT_TYPE_COLOR_ROLES[hashAgentIdentity(agent) % AGENT_TYPE_COLOR_ROLES.length]!;
 }
 
 export function formatStateBadge(state: AgentState): string {
@@ -181,29 +125,33 @@ export function breakDisplayParentCycles(
 
 /**
  * Pure display-tree projection. Does not mutate input snapshots or parentAgentId.
- * Terminal middle agents remain as inline ghosts; active descendants promote to the
- * nearest active ancestor and record viaHandle for the immediate ghost parent.
+ * By default terminal records are omitted while live descendants promote through
+ * their full-inventory terminal ancestors. Set showTerminal for history ghosts.
  */
 export function buildMeshDisplayTree(
     snapshots: readonly AgentSnapshot[],
     words: readonly string[] = NATURE_HANDLE_WORDS,
+    options: MeshDisplayTreeOptions = {},
 ): MeshDisplayTree {
     const bySnapshot = new Map(snapshots.map(snapshot => [snapshot.agent.agentId, snapshot]));
     const handles = assignNatureHandles([...bySnapshot.keys()], words);
+    const showTerminal = options.showTerminal ?? false;
     const nodes = new Map<string, MeshDisplayNode>();
     const displayParentIds = new Map<string, string | undefined>();
 
     for (const snapshot of snapshots) {
         const agentId = snapshot.agent.agentId;
+        const ghost = isTerminalAgent(snapshot.status.state);
+        if (ghost && !showTerminal) continue;
         const recordParent = snapshot.agent.parentAgentId;
         const parentMissing = recordParent !== undefined && !bySnapshot.has(recordParent);
-        const ghost = isTerminalAgent(snapshot.status.state);
         let displayParentId: string | undefined;
         let viaHandle: string | undefined;
         let promoted = false;
         let orphaned = parentMissing;
 
-        if (ghost) {
+        if (showTerminal) {
+            // The full inventory restores every recorded history edge, including live descendants.
             displayParentId = parentMissing ? undefined : recordParent;
         } else {
             const activeAncestor = nearestActiveAncestorId(agentId, bySnapshot);

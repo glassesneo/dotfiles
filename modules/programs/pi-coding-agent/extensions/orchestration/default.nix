@@ -301,6 +301,12 @@ in
               required = false;
               target = "extension";
             };
+            toggleTerminal = {
+              defaultKeys = ["t"];
+              contexts = ["meshPalette"];
+              required = false;
+              target = "extension";
+            };
           };
         };
         historyViewer = {

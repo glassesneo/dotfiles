@@ -5,13 +5,13 @@ import { paletteHelp, paletteKeyAction, type ResolvedPaletteKeymap } from "./com
 import { actionHint } from "./extension_keybindings.ts";
 import { formatPaletteBreadcrumb, renderFramedLines } from "./command_palette_tui.ts";
 import { historyAvailability, openMeshHistory } from "./orchestration_history.ts";
+import { displayIdentityForSnapshot } from "./orchestration_identity.ts";
 import {
     AGENT_STATE_BADGES,
     buildMeshDisplayTree,
     flattenVisibleDisplayNodes,
     formatStateBadge,
     formatTaskStateBadge,
-    agentColorRole,
     retainSelection,
     TASK_STATE_BADGES,
     treeConnectors,
@@ -56,6 +56,7 @@ export interface DetailPaneModel {
     role: DetailSemanticRole;
     title: string;
     badgeState?: TaskState;
+    identityLines: readonly string[];
     body: string;
     notices: ReadonlyArray<{ text: string; role: DetailSemanticRole }>;
 }
@@ -77,80 +78,51 @@ function isNonblank(text: string | undefined): text is string {
     return typeof text === "string" && text.trim().length > 0;
 }
 
-/** Width-aware identity line without summary.
- * Drop order: agent type → connector → shorten state.
- * Preserve the full handle whenever marker+expand+handle fit with any state remnant.
- * Only truncate the handle when even a minimal state symbol cannot share the row.
- */
+/** Width-aware identity line. Identity fields always precede lifecycle and summary. */
 export function composeIdentityLine(options: {
     width: number;
     marker: string;
     connector: string;
     expand: string;
     handle: string;
-    agentType: string;
+    role: string;
+    profile: string;
     state: string;
 }): string {
-    const gap = " ";
-    const fits = (text: string): boolean => visibleWidth(text) <= options.width;
-    const withState = (prefix: string, state: string): string => `${prefix}${gap}${state}`;
     const prefixes = [
-        `${options.marker}${options.connector}${options.expand}${options.handle}${gap}${options.agentType}`,
-        `${options.marker}${options.connector}${options.expand}${options.handle}`,
+        `${options.marker}${options.connector}${options.expand}${options.handle} role:${options.role} profile:${options.profile}`,
+        `${options.marker}${options.expand}${options.handle} role:${options.role} profile:${options.profile}`,
+        `${options.marker}${options.expand}${options.handle} role:${options.role}`,
         `${options.marker}${options.expand}${options.handle}`,
     ];
     for (const prefix of prefixes) {
-        const line = withState(prefix, options.state);
-        if (fits(line)) return line;
+        const line = `${prefix} ${options.state}`;
+        if (visibleWidth(line) <= options.width) return line;
     }
-    const handlePrefix = `${options.marker}${options.expand}${options.handle}`;
-    if (visibleWidth(handlePrefix) < options.width) {
-        const stateBudget = Math.max(1, options.width - visibleWidth(handlePrefix) - 1);
-        return truncateToWidth(withState(handlePrefix, truncateToWidth(options.state, stateBudget, "")), options.width, "");
-    }
-    const stateSymbol = options.state.trim().split(/\s+/u)[0] ?? "";
-    if (stateSymbol && visibleWidth(`${gap}${stateSymbol}`) < options.width) {
-        const symbolPart = `${gap}${stateSymbol}`;
-        const prefix = truncateToWidth(handlePrefix, options.width - visibleWidth(symbolPart), "");
-        return truncateToWidth(`${prefix}${symbolPart}`, options.width, "");
-    }
-    return truncateToWidth(handlePrefix, options.width, "");
+    return truncateToWidth(prefixes.at(-1)!, options.width, "");
 }
 
-/** One-row agent line: try summary-bearing forms, then fall back to identity composition. */
+/** One-row agent line, dropping summary then lifecycle before identity fields. */
 export function composeAgentRow(options: {
     width: number;
     marker: string;
     connector: string;
     expand: string;
     handle: string;
-    agentType: string;
+    role: string;
+    profile: string;
     state: string;
     summary: string;
 }): string {
-    const gap = " ";
-    const fits = (text: string): boolean => visibleWidth(text) <= options.width;
-    const summary = options.summary.trim().length > 0 ? options.summary : "";
-    if (summary) {
-        const summaryPrefixes = [
-            `${options.marker}${options.connector}${options.expand}${options.handle}${gap}${options.state}${gap}${options.agentType}`,
-            `${options.marker}${options.connector}${options.expand}${options.handle}${gap}${options.state}`,
-            `${options.marker}${options.expand}${options.handle}${gap}${options.state}`,
-        ];
-        for (const prefix of summaryPrefixes) {
-            const full = `${prefix}${gap}${summary}`;
-            if (fits(full)) return full;
-        }
-        for (const prefix of summaryPrefixes) {
-            const used = visibleWidth(prefix) + 1;
-            if (used >= options.width) continue;
-            const budget = options.width - used;
-            if (budget < 2) continue;
-            const shortened = truncateToWidth(summary, budget, "…");
-            const line = `${prefix}${gap}${shortened}`;
-            if (fits(line)) return line;
-        }
-    }
+    const identity = `${options.marker}${options.connector}${options.expand}${options.handle} role:${options.role} profile:${options.profile}`;
+    const candidates = [
+        `${identity} ${options.state} ${options.summary}`,
+        `${identity} ${options.state}`,
+        identity,
+    ];
+    for (const candidate of candidates) if (visibleWidth(candidate) <= options.width) return candidate;
+    const summaryBudget = options.width - visibleWidth(`${identity} ${options.state} `);
+    if (summaryBudget >= 2) return truncateToWidth(`${identity} ${options.state} ${truncateToWidth(options.summary, summaryBudget, "…")}`, options.width, "");
     return composeIdentityLine(options);
 }
 
@@ -170,15 +142,23 @@ function lifecycleNotices(snapshot: AgentSnapshot): Array<{ text: string; role: 
 }
 
 /** Derive detail-pane content from the selected snapshot. */
-export function detailPaneModel(snapshot: AgentSnapshot | undefined): DetailPaneModel {
+export function detailPaneModel(snapshot: AgentSnapshot | undefined, words?: readonly string[]): DetailPaneModel {
     if (!snapshot) {
-        return { role: "muted", title: "Detail", body: "", notices: [{ text: "No agent selected.", role: "muted" }] };
+        return { role: "muted", title: "Detail", identityLines: [], body: "", notices: [{ text: "No agent selected.", role: "muted" }] };
     }
+    const identity = displayIdentityForSnapshot(snapshot, words);
+    const identityLines = [
+        `Handle ${identity.handle} · ID ${identity.agentId}`,
+        `role:${identity.role ?? "unresolved"} · ${identity.roleDescription ?? "unavailable"}`,
+        `profile:${identity.profile ?? "unresolved"} · model ${identity.model ?? "unavailable"}`,
+        `thinking ${identity.thinkingLevel ?? "unavailable"} · harness ${identity.harness ?? "unavailable"}`,
+    ];
     const task = snapshot.task;
     if (!task) {
         return {
             role: "accent",
             title: "Agent",
+            identityLines,
             body: `${snapshot.agent.agent}\n\n${snapshot.agent.agentSnapshot.instructions}`,
             notices: [{ text: "No task record", role: "muted" }, ...lifecycleNotices(snapshot)],
         };
@@ -188,6 +168,7 @@ export function detailPaneModel(snapshot: AgentSnapshot | undefined): DetailPane
             role: "accent",
             title: "Instruction",
             badgeState: task.status.state,
+            identityLines,
             body: task.request.prompt,
             notices: lifecycleNotices(snapshot),
         };
@@ -195,15 +176,16 @@ export function detailPaneModel(snapshot: AgentSnapshot | undefined): DetailPane
     if (task.result) {
         const role: DetailSemanticRole = task.status.state === "succeeded" ? "success" : task.status.state === "failed" ? "error" : "warning";
         if (isNonblank(task.result.output)) {
-            return { role, title: "Answer", badgeState: task.status.state, body: task.result.output, notices: lifecycleNotices(snapshot) };
+            return { role, title: "Answer", badgeState: task.status.state, identityLines, body: task.result.output, notices: lifecycleNotices(snapshot) };
         }
         if (isNonblank(task.result.error)) {
-            return { role, title: "Answer", badgeState: task.status.state, body: task.result.error, notices: lifecycleNotices(snapshot) };
+            return { role, title: "Answer", badgeState: task.status.state, identityLines, body: task.result.error, notices: lifecycleNotices(snapshot) };
         }
         return {
             role,
             title: "Answer",
             badgeState: task.status.state,
+            identityLines,
             body: "",
             notices: [{ text: "No answer text was recorded.", role: "muted" }, ...lifecycleNotices(snapshot)],
         };
@@ -212,6 +194,7 @@ export function detailPaneModel(snapshot: AgentSnapshot | undefined): DetailPane
         role: "warning",
         title: "Answer",
         badgeState: task.status.state,
+        identityLines,
         body: task.request.prompt,
         notices: [{ text: "Answer not recorded", role: "warning" }, ...lifecycleNotices(snapshot)],
     };
@@ -292,6 +275,9 @@ export class MeshAgentsPaletteComponent implements Component, Focusable {
     readonly #deps: MeshPaletteDependencies;
     readonly #done: (value: MeshPaletteResult) => void;
     #tree: MeshDisplayTree = { roots: [], byId: new Map(), handles: new Map() };
+    #inventory: AgentSnapshot[] = [];
+    #showTerminal = false;
+    #malformedCount = 0;
     #collapsed = new Set<string>();
     #selectedRowId?: string;
     #selectedAgentId?: string;
@@ -332,6 +318,8 @@ export class MeshAgentsPaletteComponent implements Component, Focusable {
     get selectedAgentId() { return this.#selectedAgentId; }
     get selectedRowId() { return this.#selectedRowId; }
     get collapsedIds() { return new Set(this.#collapsed); }
+    get showTerminal() { return this.#showTerminal; }
+    get hiddenTerminalCount() { return this.#inventory.filter(agent => isTerminalAgent(agent.status.state)).length; }
     get acting() { return this.#acting; }
     selected(): AgentSnapshot | undefined {
         return this.#selectedAgentId ? this.#tree.byId.get(this.#selectedAgentId)?.snapshot : undefined;
@@ -395,7 +383,13 @@ export class MeshAgentsPaletteComponent implements Component, Focusable {
 
     #applySnapshots(agents: readonly AgentSnapshot[], malformedCount: number): void {
         const previousVisible = this.visibleNodes().map(node => node.agentId);
-        this.#tree = buildMeshDisplayTree(agents, this.#deps.natureHandleWords);
+        this.#inventory = [...agents];
+        this.#malformedCount = malformedCount;
+        this.#rebuildProjection(previousVisible);
+    }
+
+    #rebuildProjection(previousVisible = this.visibleNodes().map(node => node.agentId)): void {
+        this.#tree = buildMeshDisplayTree(this.#inventory, this.#deps.natureHandleWords, { showTerminal: this.#showTerminal });
         const known = new Set(this.#tree.byId.keys());
         this.#collapsed = new Set([...this.#collapsed].filter(id => known.has(id) && (this.#tree.byId.get(id)?.children.length ?? 0) > 0));
         const visible = this.visibleNodes();
@@ -403,18 +397,26 @@ export class MeshAgentsPaletteComponent implements Component, Focusable {
         if (retained) this.#selectAgent(retained);
         else this.#normalizeSelection();
         this.#previousVisibleIds = visible.map(node => node.agentId);
-        this.#statusKind = malformedCount ? "warning" : "dim";
-        this.#status = malformedCount ? `${malformedCount} incomplete agent record(s)` : `${agents.length} agent session(s)`;
+        const liveCount = this.#inventory.length - this.hiddenTerminalCount;
+        const history = this.#showTerminal ? "terminal history shown" : `${this.hiddenTerminalCount} terminal hidden`;
+        this.#statusKind = this.#malformedCount ? "warning" : "dim";
+        this.#status = this.#malformedCount ? `${this.#malformedCount} incomplete agent record(s) · ${liveCount} live · ${history}` : `${liveCount} live agent session(s) · ${history}`;
     }
 
-    /** Replace one agent in the current projection without waiting on discovery. */
+    #toggleTerminal(): void {
+        const previousVisible = this.visibleNodes().map(node => node.agentId);
+        this.#showTerminal = !this.#showTerminal;
+        this.#rebuildProjection(previousVisible);
+    }
+
+    /** Replace one agent in the full inventory without waiting on discovery. */
     #upsertSnapshot(snapshot: AgentSnapshot): void {
-        const agents = [...this.#tree.byId.values()].map(node => node.snapshot);
+        const agents = [...this.#inventory];
         const index = agents.findIndex(agent => agent.agent.agentId === snapshot.agent.agentId);
         if (index >= 0) agents[index] = snapshot;
         else agents.push(snapshot);
-        this.#applySnapshots(agents, 0);
-        this.#selectAgent(snapshot.agent.agentId);
+        this.#applySnapshots(agents, this.#malformedCount);
+        if (this.#tree.byId.has(snapshot.agent.agentId)) this.#selectAgent(snapshot.agent.agentId);
         this.invalidate();
         this.#tui.requestRender();
     }
@@ -639,6 +641,7 @@ export class MeshAgentsPaletteComponent implements Component, Focusable {
         else if (action === "refresh") void this.refresh();
         else if (action === "preview") void this.action("preview");
         else if (action === "unlink") void this.action("unlink");
+        else if (action === "toggleTerminal") this.#toggleTerminal();
         else return;
         this.invalidate();
         this.#tui.requestRender();
@@ -646,10 +649,10 @@ export class MeshAgentsPaletteComponent implements Component, Focusable {
 
     #nodeLine(node: MeshDisplayNode, selected: boolean, connector: string, width: number): string {
         const badge = AGENT_STATE_BADGES[node.snapshot.status.state];
+        const identity = displayIdentityForSnapshot(node.snapshot, this.#deps.natureHandleWords);
         const expand = node.children.length > 0 ? (this.#collapsed.has(node.agentId) ? "▸ " : "▾ ") : "  ";
         const marker = selected ? "> " : "  ";
-        const handle = dimIf(this.#theme, node.ghost, this.#theme.bold(node.handle));
-        const agentType = dimIf(this.#theme, node.ghost, this.#theme.fg(agentColorRole(node.snapshot.agent.agent), node.snapshot.agent.agent));
+        const handle = dimIf(this.#theme, node.ghost, this.#theme.bold(identity.handle));
         const lifecycle = this.#theme.fg(badge.role, formatStateBadge(node.snapshot.status.state));
         const activity = this.#theme.fg("muted", node.snapshot.activity.phase.toUpperCase());
         const acceptance = node.snapshot.activity.acceptingTask ? this.#theme.fg("success", "ACCEPTING") : this.#theme.fg("muted", "NOT ACCEPTING");
@@ -661,7 +664,8 @@ export class MeshAgentsPaletteComponent implements Component, Focusable {
             connector,
             expand,
             handle,
-            agentType,
+            role: identity.role ?? "unresolved",
+            profile: identity.profile ?? "unresolved",
             state: stateText,
             summary,
         });
@@ -673,7 +677,11 @@ export class MeshAgentsPaletteComponent implements Component, Focusable {
 
     #listViewport(allRows: readonly PaletteRow[], width: number, rows: number): string[] {
         if (allRows.length === 0) {
-            const lines = [padToWidth(truncateToWidth(this.#theme.fg("warning", " No agents in this mesh."), width, ""), width)];
+            const toggleHint = actionHint(this.#keymap, "toggleTerminal") || "the terminal-history key";
+            const empty = this.hiddenTerminalCount > 0 && !this.#showTerminal
+                ? ` No live agents. Press ${toggleHint} for terminal history.`
+                : " No agents in this mesh.";
+            const lines = [padToWidth(truncateToWidth(this.#theme.fg("warning", empty), width, ""), width)];
             while (lines.length < rows) lines.push(padToWidth("", width));
             return lines.slice(0, rows);
         }
@@ -689,7 +697,7 @@ export class MeshAgentsPaletteComponent implements Component, Focusable {
 
     #detailLines(width: number, height: number): string[] {
         const selectedRow = this.#rows().find(row => row.id === this.#selectedRowId);
-        const model = detailPaneModel(selectedRow ? this.selected() : undefined);
+        const model = detailPaneModel(selectedRow ? this.selected() : undefined, this.#deps.natureHandleWords);
         const noticeLines = model.notices.map(notice => this.#theme.fg(notice.role, notice.text));
         if (model.body.length === 0 && model.notices.length === 1 && model.title === "Detail") {
             return composeDetailSections({
@@ -705,6 +713,7 @@ export class MeshAgentsPaletteComponent implements Component, Focusable {
             : "";
         const headerLines = [
             `${this.#theme.fg(model.role, model.title)}${badge}`,
+            ...model.identityLines.map(line => this.#theme.fg("muted", line)),
             this.#theme.fg(model.role, "─".repeat(Math.max(1, width))),
         ];
         const bodyLines = isNonblank(model.body)
@@ -722,10 +731,15 @@ export class MeshAgentsPaletteComponent implements Component, Focusable {
     #viewport(allRows: readonly PaletteRow[], width: number, viewportRows: number): string[] {
         const rows = Math.max(1, viewportRows);
         const columns = splitPaletteColumns(width);
-        const list = this.#listViewport(allRows, columns.listWidth, rows);
         if (columns.detailWidth === undefined) {
-            return list.map(line => truncateToWidth(line, width, ""));
+            const selected = this.selected();
+            const identity = selected ? detailPaneModel(selected, this.#deps.natureHandleWords).identityLines : [];
+            const narrowIdentity = selected && identity.length === 4 ? [`ID ${selected.agent.agentId}`, identity[1]!, identity[2]!, identity[3]!] : identity;
+            const detail = narrowIdentity.slice(0, Math.min(4, Math.max(0, rows - 1))).map(line => padToWidth(this.#theme.fg("muted", line), width));
+            const list = this.#listViewport(allRows, width, Math.max(1, rows - detail.length));
+            return [...list, ...detail].map(line => truncateToWidth(line, width, ""));
         }
+        const list = this.#listViewport(allRows, columns.listWidth, rows);
         const detail = this.#detailLines(columns.detailWidth, rows);
         const divider = " │ ";
         return list.map((left, index) => {
@@ -740,16 +754,16 @@ export class MeshAgentsPaletteComponent implements Component, Focusable {
         const rows = Math.max(10, Math.min(22, Math.floor(this.#tui.terminal.rows * 0.7)));
         const inner = Math.max(1, w - 2);
         const allRows = this.#rows();
-        const help = paletteHelp(this.#keymap, ["moveUp", "moveDown", "collapse", "expand", "confirm", "stop", "refresh", "preview", "unlink", "cancel"]);
+        const help = paletteHelp(this.#keymap, ["moveUp", "moveDown", "collapse", "expand", "confirm", "stop", "refresh", "preview", "unlink", "toggleTerminal", "cancel"]);
         const confirmHint = actionHint(this.#keymap, "confirm");
         const terminalPreviewMessage = `Live preview is available only for live agents. Press ${confirmHint} for history.`;
         const statusLines = !this.#acting && this.#status === terminalPreviewMessage
             ? ["Live preview is available only for live agents.", `Press ${confirmHint} for history.`]
             : [this.#acting ? "WORKING" : this.#status];
+        const narrow = splitPaletteColumns(inner).detailWidth === undefined;
         const body: string[] = [
-            truncateToWidth(` ${this.#theme.fg("muted", paletteHelp(this.#keymap, ["confirm", "preview", "unlink"]))}`, inner, ""),
-            "",
-            ...this.#viewport(allRows, inner, Math.max(2, rows - 5 - statusLines.length)),
+            ...(narrow ? [] : [truncateToWidth(` ${this.#theme.fg("muted", paletteHelp(this.#keymap, ["confirm", "preview", "unlink"]))}`, inner, ""), ""]),
+            ...this.#viewport(allRows, inner, Math.max(2, rows - (narrow ? 3 : 5) - statusLines.length)),
             ...statusLines.map(line => truncateToWidth(` ${this.#theme.fg(this.#statusKind, line)}`, inner, "")),
             truncateToWidth(` ${this.#theme.fg("dim", help)}`, inner, ""),
         ];

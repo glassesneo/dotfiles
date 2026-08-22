@@ -2,14 +2,14 @@ import { matchesKey, type KeyId } from "@earendil-works/pi-tui";
 import { canonicalKeyId, isValidKeyId } from "./private_key_id.ts";
 import { keyLabel, loadFeatureKeybindings } from "./extension_keybindings.ts";
 
-export const paletteActions = ["open", "moveUp", "moveDown", "collapse", "expand", "confirm", "cancel", "refresh", "stop", "preview", "unlink"] as const;
+export const paletteActions = ["open", "moveUp", "moveDown", "collapse", "expand", "confirm", "cancel", "refresh", "stop", "preview", "unlink", "toggleTerminal"] as const;
 export type PaletteKeyAction = (typeof paletteActions)[number];
 export type PaletteKeymapConfig = Partial<Record<PaletteKeyAction, string[]>>;
 export type ResolvedPaletteKeymap = Record<PaletteKeyAction, KeyId[]>;
 
 export const defaultPaletteKeymap: ResolvedPaletteKeymap = {
     open: ["ctrl+shift+p"], moveUp: ["ctrl+p"], moveDown: ["ctrl+n"], collapse: ["left"], expand: ["right"],
-    confirm: ["enter"], cancel: ["escape", "ctrl+c"], refresh: [], stop: ["x"], preview: ["space"], unlink: [],
+    confirm: ["enter"], cancel: ["escape", "ctrl+c"], refresh: [], stop: ["x"], preview: ["space"], unlink: [], toggleTerminal: [],
 };
 
 export function validatePaletteKeymapConfig(value: unknown, path = "extension-keybindings.json"): PaletteKeymapConfig {
@@ -51,7 +51,7 @@ export function paletteKeyAction(data: string, keymap: ResolvedPaletteKeymap): P
 
 const labels: Record<PaletteKeyAction, string> = {
     open: "open", moveUp: "up", moveDown: "down", collapse: "collapse", expand: "expand", confirm: "select",
-    cancel: "cancel", refresh: "refresh", stop: "stop", preview: "preview", unlink: "unlink",
+    cancel: "cancel", refresh: "refresh", stop: "stop", preview: "preview", unlink: "unlink", toggleTerminal: "terminal history",
 };
 export function paletteHelp(keymap: ResolvedPaletteKeymap, actions: readonly PaletteKeyAction[] = ["moveUp", "moveDown", "confirm", "cancel"]): string {
     return actions.filter(action => keymap[action].length > 0).map(action => `${keyLabel(keymap[action][0]!)} ${labels[action]}`).join(" • ");

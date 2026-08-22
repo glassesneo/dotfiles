@@ -537,10 +537,11 @@ type PendingTaskIdentity = { taskId: string; agentId: string; state: "created" |
 type CompletionSource = { eventId: string; batchId: string; settledAt: string; tasks: CompletionTaskIdentity[] };
 type CompletionFrontier = { observedAt: string; pendingTasks: PendingTaskIdentity[] };
 
-function exactRecord(value: unknown, keys: readonly string[], label: string): Record<string, unknown> {
+function exactRecord(value: unknown, keys: readonly string[], label: string, optionalKeys: readonly string[] = []): Record<string, unknown> {
     if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(label);
     const raw = value as Record<string, unknown>;
-    if (Object.keys(raw).length !== keys.length || keys.some(key => !(key in raw))) throw new Error(label);
+    const allowedKeys = new Set([...keys, ...optionalKeys]);
+    if (keys.some(key => !(key in raw)) || Object.keys(raw).some(key => !allowedKeys.has(key))) throw new Error(label);
     return raw;
 }
 function validateTaskIdentity(value: unknown, eventId: string, pending: false): CompletionTaskIdentity;
@@ -579,7 +580,7 @@ export function projectMeshCompletionContext<T>(messages: readonly T[], received
         const details = message.details && typeof message.details === "object" && !Array.isArray(message.details) ? message.details as Record<string, unknown> : undefined;
         if (message.customType !== "mesh-event" || details?.kind !== "completion") continue;
         completionIndexes.add(index);
-        const raw = exactRecord(details, ["kind", "sources", "frontier"], "Malformed mesh completion bundle in model context");
+        const raw = exactRecord(details, ["kind", "sources", "frontier"], "Malformed mesh completion bundle in model context", ["identities"]);
         if (raw.kind !== "completion" || !Array.isArray(raw.sources) || !raw.sources.length) throw new Error("Malformed mesh completion bundle in model context");
         for (const valueSource of raw.sources) {
             const source = validateSource(valueSource);
