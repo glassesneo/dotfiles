@@ -12,19 +12,13 @@
     riceNames = ["vivid" "clean"];
 
     filterConfigurationsByHostNames = hostNames: configs: let
-      hostConfigurationNames = hostName:
+      allowedHostNames = lib.concatMap (hostName:
         [hostName]
-        ++ map (riceName: "${hostName}-${riceName}") riceNames;
-
-      homeConfigurationNames = hostName:
-        ["${homeManagerUser}@${hostName}"]
-        ++ map (riceName: "${homeManagerUser}@${hostName}-${riceName}") riceNames;
-
-      allowedNames = lib.concatMap (hostName:
-        hostConfigurationNames hostName ++ homeConfigurationNames hostName)
+        ++ map (riceName: "${hostName}-${riceName}") riceNames)
       hostNames;
+      configurationHostName = name: lib.last (lib.splitString "@" name);
     in
-      lib.filterAttrs (name: _: builtins.elem name allowedNames) configs;
+      lib.filterAttrs (name: _: builtins.elem (configurationHostName name) allowedHostNames) configs;
 
     mkConfigurations = moduleSystem:
       denix.lib.configurations rec {
@@ -86,7 +80,7 @@
         # VM validation lives in `checks.aarch64-linux.nixos-seiran-vm0` below.
         nixosConfigurations = {};
         homeConfigurations =
-          filterConfigurationsByHostNames ["seiran" "seiran-vm1"] (mkConfigurations "home");
+          filterConfigurationsByHostNames ["seiran" "seiran-vm1" "cloud9"] (mkConfigurations "home");
         inherit darwinConfigurations;
       };
 

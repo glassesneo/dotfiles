@@ -21,15 +21,13 @@ in
     darwin.always.home-manager = shared;
     nixos.always.home-manager = shared;
 
-    home.always = {myconfig, ...}: let
-      inherit (myconfig.constants) username;
-    in {
+    home.always = {
       home = {
-        inherit username;
+        username = homeManagerUser;
         homeDirectory =
           if pkgs.stdenv.isDarwin
-          then "/Users/${username}"
-          else "/home/${username}";
+          then "/Users/${homeManagerUser}"
+          else "/home/${homeManagerUser}";
       };
       targets.darwin = pkgs.lib.mkIf pkgs.stdenv.isDarwin {
         linkApps.enable = false;
