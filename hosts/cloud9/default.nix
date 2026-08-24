@@ -21,6 +21,7 @@ delib.host {
         orgmode.enable = false;
         skkeleton.enable = false;
         visuals.enable = false;
+        autocomplete.enable = false;
         languages = {
           c.enable = false;
           lua.enable = false;
