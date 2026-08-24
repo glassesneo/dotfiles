@@ -2,6 +2,7 @@
 delib.host {
   name = "cloud9";
   type = "server";
+  defaultFeatures = [];
   rice = "clean";
   tier = "basic";
 
@@ -13,24 +14,24 @@ delib.host {
     toplevel.secrets.enable = false;
 
     programs = {
-      agent-browser.enable = false;
-      codex.enable = false;
-      cursor-agent.enable = false;
-      git.include.enable = false;
       nvf = {
+        enable = true;
         copilot.enable = false;
+        denops.enable = false;
         orgmode.enable = false;
+        skkeleton.enable = false;
+        visuals.enable = false;
         languages = {
           c.enable = false;
+          lua.enable = false;
           moonbit.enable = false;
+          nix.enable = false;
+          nu.enable = false;
           typst.enable = false;
           zig.enable = false;
         };
       };
       pi-coding-agent.enable = false;
-      proton-pass-cli.enable = false;
-      reload.enable = false;
-      skills-deployer.enable = false;
     };
   };
 }

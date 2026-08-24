@@ -29,6 +29,17 @@ sudo darwin-rebuild switch --flake .#seiran-vm1
 
 Both commands activate the nix-darwin system and its integrated Home Manager configuration.
 
+* Installing Standalone Linux Server Packages
+
+Install the repository's wrapped Neovim and selected command-line tools without activating Home Manager:
+
+#+begin_src sh
+nix profile install .#nvim .#server-tools
+#+end_src
+
+The =nvim= package currently targets =x86_64-linux= and is assembled from the Cloud9 NVF profile.
+The =server-tools= bundle is available on both =x86_64-linux= and =aarch64-linux= and contains binaries only; it does not install shell configuration, aliases, or integrations.
+
 * Repository Layout
 
 - =hosts/= contains machine facts and host-only bindings.

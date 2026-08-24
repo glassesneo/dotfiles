@@ -63,6 +63,8 @@
         };
       };
 
+    allHomeConfigurations = mkConfigurations "home";
+
     darwinConfigurations =
       filterConfigurationsByHostNames ["seiran" "seiran-vm1"] (mkConfigurations "darwin");
   in
@@ -80,7 +82,7 @@
         # VM validation lives in `checks.aarch64-linux.nixos-seiran-vm0` below.
         nixosConfigurations = {};
         homeConfigurations =
-          filterConfigurationsByHostNames ["seiran" "seiran-vm1" "cloud9"] (mkConfigurations "home");
+          filterConfigurationsByHostNames ["seiran" "seiran-vm1"] allHomeConfigurations;
         inherit darwinConfigurations;
       };
 
@@ -93,6 +95,15 @@
         lib,
         ...
       }: {
+        packages = lib.optionalAttrs pkgs.stdenv.isLinux (
+          {
+            server-tools = import ./packages/server-tools.nix {inherit pkgs;};
+          }
+          // lib.optionalAttrs (system == "x86_64-linux") {
+            nvim = allHomeConfigurations."ec2-user@cloud9".config.programs.nvf.finalPackage;
+          }
+        );
+
         treefmt = {
           projectRootFile = "flake.nix";
 
