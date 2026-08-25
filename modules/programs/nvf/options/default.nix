@@ -23,6 +23,10 @@ delib.module {
         list = true;
         timeout = true;
         timeoutlen = 300;
+        # Default border for floats that omit an explicit border (LSP hover,
+        # signature help, diagnostics, blink.cmp, etc.). Plugins that set
+        # border themselves (fidget, orgmode, Noice cmdline) are unchanged.
+        winborder = "rounded";
       };
 
       autocmds = [
