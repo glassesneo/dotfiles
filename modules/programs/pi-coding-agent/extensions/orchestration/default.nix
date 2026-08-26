@@ -42,7 +42,7 @@
       childExtensionContributions = listOfOption str [];
     };
   };
-  meshAsyncChildGuidance = " Retain returned agent/task IDs. Treat each completion bundle as the delivery frontier; call mesh_get once only for terminal task IDs, never poll or sleep. As a nested caller, use mesh_wait when descendant results must remain open while you wait.";
+  meshAsyncChildGuidance = " Retain returned agent/task IDs and continue useful work independent of pending descendants. As a nested caller, do not end the response to wait because settling completes your active task; when descendant results are required, call mesh_wait once with all pending descendant task IDs. Treat each completion bundle as the delivery frontier and call mesh_get once only for terminal task IDs; never poll, sleep, or run time-filling commands.";
   meshReportGuidance = " Use mesh_report({summary}) only when the parent requests progress or an intermediate result could change its decisions; do not use it for heartbeats, final results, questions, or blocker waiting.";
   targetPolicyType = delib.submodule {
     options.profiles = delib.listOfOption delib.str [];
