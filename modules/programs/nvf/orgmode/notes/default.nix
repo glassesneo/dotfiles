@@ -36,10 +36,16 @@ delib.module {
         after = ["orgmode"];
         before = [];
         data = ''
-          require("nvf.orgmode.refile").setup({
-            clear_todo_destinations = {
-              ${builtins.toJSON incubate_file},
-            },
+          vim.api.nvim_create_autocmd("User", {
+            pattern = "NvfOrgmodeLoaded",
+            once = true,
+            callback = function()
+              require("nvf.orgmode.refile").setup({
+                clear_todo_destinations = {
+                  ${builtins.toJSON incubate_file},
+                },
+              })
+            end,
           })
         '';
       };

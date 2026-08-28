@@ -24,6 +24,65 @@ delib.module {
         "${pkgs.lua51Packages.tree-sitter-orgmode}/lib/lua/5.1"
       ];
 
+      pluginRC = lib.mkMerge [
+        {
+          orgmode = {
+            before = [];
+            after = [];
+            data = lib.mkBefore ''
+              local nvf_orgmode_loaded = false
+              local nvf_orgmode_loading = false
+
+              local function nvf_load_orgmode()
+                if nvf_orgmode_loaded or nvf_orgmode_loading then
+                  return
+                end
+
+                nvf_orgmode_loading = true
+                local ok, err = xpcall(function()
+            '';
+          };
+        }
+        {
+          orgmode = {
+            before = [];
+            after = [];
+            data = lib.mkAfter ''
+                end, debug.traceback)
+                nvf_orgmode_loading = false
+
+                if not ok then
+                  error(err, 0)
+                end
+
+                nvf_orgmode_loaded = true
+                vim.api.nvim_exec_autocmds("User", {
+                  pattern = "NvfOrgmodeLoaded",
+                  modeline = false,
+                })
+              end
+
+              local nvf_orgmode_group = vim.api.nvim_create_augroup("nvf_orgmode_loader", { clear = true })
+              vim.api.nvim_create_autocmd({ "BufReadPre", "BufNewFile" }, {
+                group = nvf_orgmode_group,
+                pattern = { "*.org", "*.org_archive" },
+                callback = nvf_load_orgmode,
+              })
+
+              vim.keymap.set("n", "<C-c>a", function()
+                nvf_load_orgmode()
+                require("orgmode").action("agenda.prompt")
+              end, { desc = "Org agenda", silent = true })
+
+              vim.keymap.set("n", "<C-c>c", function()
+                nvf_load_orgmode()
+                require("orgmode").action("capture.prompt")
+              end, { desc = "Org capture", silent = true })
+            '';
+          };
+        }
+      ];
+
       notes.orgmode = {
         enable = true;
         treesitter.enable = false;

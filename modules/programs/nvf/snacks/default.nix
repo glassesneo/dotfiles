@@ -8,8 +8,6 @@ delib.module {
   options = delib.singleCascadeEnableOption;
 
   home.ifEnabled = {myconfig, ...}: let
-    # Snacks path filters use false values to reject matching path segments.
-    ignoredPaths = lib.genAttrs myconfig.programs.git.ignore_names (_: false);
     pickerLayout = {
       cycle = true;
       col = 0.45;
@@ -46,27 +44,23 @@ delib.module {
             sources = {
               smart = {
                 hidden = true;
-                ignored = true;
-                filter.paths = ignoredPaths;
+                ignored = false;
                 layout.layout = pickerLayout;
               };
               files = {
                 hidden = true;
-                ignored = true;
-                filter.paths = ignoredPaths;
+                ignored = false;
                 layout.layout = pickerLayout;
               };
               grep = {
                 hidden = true;
-                ignored = true;
-                filter.paths = ignoredPaths;
+                ignored = false;
                 layout.layout = pickerLayout;
               };
               explorer = {
                 hidden = true;
-                ignored = true;
+                ignored = false;
                 git_untracked = true;
-                filter.paths = ignoredPaths;
                 layout.layout = {
                   box = "vertical";
                   position = "left";

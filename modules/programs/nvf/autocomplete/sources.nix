@@ -15,10 +15,17 @@ delib.module {
       ]);
     };
 
-  home.ifEnabled = {cfg, ...}: {
+  home.ifEnabled = {...}: {
     programs.nvf.settings.vim.autocomplete.blink-cmp = {
       setupOpts.sources = {
-        default = cfg.default_sources;
+        default = lib.mkForce [
+          "buffer"
+          "lsp"
+          "cmdline"
+          "path"
+          "snippets"
+          "ripgrep"
+        ];
         providers = {
           buffer = {
             override.enabled = lib.generators.mkLuaInline ''
