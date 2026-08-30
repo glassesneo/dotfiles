@@ -69,6 +69,12 @@ delib.module {
                 callback = nvf_load_orgmode,
               })
 
+              -- Snacks previews files through scratch buffers, so BufReadPre does
+              -- not run before the Org ftplugin starts Treesitter.
+              vim.api.nvim_create_user_command("NvfOrgmodeLoad", nvf_load_orgmode, {
+                desc = "Load orgmode configuration",
+              })
+
               vim.keymap.set("n", "<C-c>a", function()
                 nvf_load_orgmode()
                 require("orgmode").action("agenda.prompt")

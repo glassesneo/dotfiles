@@ -117,7 +117,7 @@ delib.module {
           key = "<Space>o";
           mode = ["n"];
 
-          action = "function() Snacks.picker.files({ cwd = [[${myconfig.programs.nvf.orgmode.org_directory}]]}) end";
+          action = "function() vim.cmd.NvfOrgmodeLoad(); Snacks.picker.files({ cwd = [[${myconfig.programs.nvf.orgmode.org_directory}]]}) end";
           lua = true;
           desc = "Orgmode files";
         });
