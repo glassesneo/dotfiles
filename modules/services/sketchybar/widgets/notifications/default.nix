@@ -144,8 +144,8 @@ in
           message = "services.sketchybar.widget-notifications.social.apps ids must be unique";
         }
         {
-          assertion = lib.all (app: !(builtins.elem app.id ["downloads" "popup"])) cfg.social.apps;
-          message = "services.sketchybar.widget-notifications.social.apps ids must not use reserved state names: downloads, popup";
+          assertion = lib.all (app: !(builtins.elem app.id ["downloads" "popup" "render"])) cfg.social.apps;
+          message = "services.sketchybar.widget-notifications.social.apps ids must not use reserved state names: downloads, popup, render";
         }
       ];
 

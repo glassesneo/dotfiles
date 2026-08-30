@@ -23,10 +23,23 @@ fswatch_log="$fixture/fswatch.log"
 mkdir -p "$runtime/widgets" "$bin" "$state" "$downloads"
 cp -R "$notifications_dir" "$runtime/widgets/notifications"
 cp "$notifications_dir/../../colors.nu" "$runtime/colors.nu"
+sed -i'' \
+  -e 's|@status_warning@|0xffffcc00|g' \
+  -e 's|@text_muted@|0xff8899aa|g' \
+  -e 's|@active_indicator@|0xff00ccff|g' \
+  -e 's|@island_border@|0xff334455|g' \
+  -e 's|@status_success@|0xff00cc66|g' \
+  -e 's|@status_error@|0xffff3355|g' \
+  "$runtime/colors.nu"
 
 cat >"$bin/sketchybar" <<'EOF'
 #!/usr/bin/env bash
-printf '%s\n' "$*" >>"$SKETCHYBAR_LOG"
+printf '%s %s\n' "$(/bin/date +%s%N)" "$*" >>"$SKETCHYBAR_LOG"
+if [[ -n ${SKETCHYBAR_PHASE_GATE:-} && $* == *'--animate tanh 8 --set notifications icon.y_offset=-4'* && ! -e "$SKETCHYBAR_PHASE_GATE.seen" ]]; then
+  : >"$SKETCHYBAR_PHASE_GATE.seen"
+  : >"$SKETCHYBAR_PHASE_GATE.ready"
+  while [[ ! -e $SKETCHYBAR_PHASE_GATE.release ]]; do sleep 0.01; done
+fi
 EOF
 cat >"$bin/pbcopy" <<'EOF'
 #!/usr/bin/env bash
@@ -41,7 +54,7 @@ cat >"$bin/lsappinfo" <<'EOF'
 #!/usr/bin/env bash
 case ${1:-} in
   find) printf 'pid = 42\n' ;;
-  info) printf 'StatusLabel = "%s"\n' "${MOCK_BADGE:-7}" ;;
+  info) printf 'StatusLabel = "%s"\n' "${MOCK_BADGE-7}" ;;
 esac
 EOF
 cat >"$bin/find" <<'EOF'
@@ -99,8 +112,8 @@ run_social() (
   nu --no-config-file "$runtime/widgets/notifications/services/social.nu"
 )
 write_downloads() {
-  local items=$1
-  printf '%s' "{\"schemaVersion\":1,\"source\":\"downloads\",\"observation\":\"attention\",\"count\":2,\"badgeText\":null,\"summary\":\"2 completed downloads\",\"items\":$items,\"scanIndex\":[],\"initialized\":true,\"updatedAt\":1}" >"$state/downloads.json"
+  local items=$1 version=${2:-0}
+  printf '%s' "{\"schemaVersion\":1,\"source\":\"downloads\",\"observation\":\"attention\",\"count\":2,\"badgeText\":null,\"summary\":\"2 completed downloads\",\"items\":$items,\"scanIndex\":[],\"attentionVersion\":$version,\"initialized\":true,\"updatedAt\":1}" >"$state/downloads.json"
 }
 download_item() {
   local id=$1 path=$2 detected=$3
@@ -125,26 +138,34 @@ item_b=$(download_item b "$downloads/b.txt" 2)
 write_downloads "[$item_a,$item_b]"
 write_slack
 
-# AC3: stable-ID action copies exact bytes and resolves only that ID.
+# AC3: a legacy schema-v1 pending row migrates in place; successful copy keeps
+# its stable history ID, clears only its attention, and remains re-copyable.
 run_handler copy-download b
 [[ $(<"$clipboard") == "'$downloads/b.txt'" ]] || fail "clipboard bytes were not a zsh-ready selected path"
-grep -q '"id":"a"' "$state/downloads.json" || fail "selected row resolved a different stable ID"
-! grep -q '"id":"b"' "$state/downloads.json" || fail "selected row was not resolved after clipboard success"
+grep -q '"id":"a".*"status":"pending"' "$state/downloads.json" || fail "selected row resolved a different stable ID"
+grep -q '"id":"b".*"status":"resolved"' "$state/downloads.json" || fail "clipboard success did not retain a resolved history row"
+grep -q '"count":1' "$state/downloads.json" || fail "successful copy did not clear only selected attention"
+grep -q 'label=.*Pending' "$log" || fail "pending Download row lacked a semantic state label"
+grep -q 'label=.*Copied' "$log" || fail "resolved Download row lacked a semantic state label"
+run_handler copy-download b
+[[ $(<"$clipboard") == "'$downloads/b.txt'" ]] || fail "resolved history row was not re-copyable"
+grep -q '"id":"b".*"status":"resolved"' "$state/downloads.json" || fail "re-copy changed resolved history state"
 
-# Clipboard failure retains the record and emits no false success transition.
+# Clipboard failure retains the pending row and its attention.
 write_downloads "[$item_a,$item_b]"
 PBCOPY_FAIL=1 run_handler copy-download a
 [[ -f "$state/downloads.json" ]] || fail "clipboard failure removed state"
-grep -q '"id":"a"' "$state/downloads.json" || fail "clipboard failure resolved a record"
+grep -q '"id":"a".*"status":"pending"' "$state/downloads.json" || fail "clipboard failure resolved a record"
+grep -q '"count":2' "$state/downloads.json" || fail "clipboard failure cleared attention"
 
-# Missing files are stale-resolved atomically while remaining records keep an
-# attention observation and matching count.
+# Missing files remain as unavailable history while other pending attention is
+# preserved. A symlink substituted after scan is also never sent to pbcopy.
 rm "$downloads/b.txt"
 run_handler copy-download b
+grep -q '"id":"b".*"status":"unavailable"' "$state/downloads.json" || fail "missing row was not retained as unavailable"
 grep -q '"observation":"attention"' "$state/downloads.json" || fail "stale resolution cleared remaining attention"
 grep -q '"count":1' "$state/downloads.json" || fail "stale resolution did not update count"
-
-# A symlink substituted after scan is not a regular-file action target.
+grep -q 'label=.*Unavailable' "$log" || fail "unavailable Download row lacked a semantic state label"
 printf target >"$downloads/target.txt"
 ln -s "$downloads/target.txt" "$downloads/replaced-link.txt"
 link_item=$(download_item link "$downloads/replaced-link.txt" 3)
@@ -152,6 +173,14 @@ write_downloads "[$link_item]"
 clipboard_before=${clipboard:+$(cksum "$clipboard")}
 run_handler copy-download link
 [[ ! -e $clipboard || $(cksum "$clipboard") == "$clipboard_before" ]] || fail "symlink replacement reached pbcopy"
+grep -q '"id":"link".*"status":"unavailable"' "$state/downloads.json" || fail "symlink row was not retained as unavailable"
+# An already-unavailable row flashes but must not retry the clipboard.
+clipboard_before=$(cksum "$clipboard")
+: >"$log"
+run_handler copy-download link
+[[ $(cksum "$clipboard") == "$clipboard_before" ]] || fail "unavailable history row retried pbcopy"
+grep -q 'background.border_color' "$log" || fail "unavailable history row did not flash an error"
+grep -q '"status":"unavailable"' "$state"/downloads.json || fail "unavailable history row did not remain visible"
 
 # AC6: only the Nix-authored allowlisted bundle is opened and no state is cleared.
 slack_before=$(cksum "$state/slack.json")
@@ -168,6 +197,19 @@ after_identical=$(grep -c 'trigger notifications_changed' "$log" || true)
 MOCK_BADGE=9 run_social
 [[ $(grep -c 'trigger notifications_changed' "$log" || true) == 1 ]] || fail "changed social badge did not publish exactly once"
 
+# Idle Downloads history is popup content even when its aggregate attention is
+# zero: hover and pin must open it without inventing a main-item count.
+write_downloads "[$item_a]"
+run_handler copy-download a
+[[ $(grep -o '"count":[0-9]*' "$state/downloads.json" | head -1) == '"count":0' ]] || fail "resolved idle history retained attention"
+: >"$log"
+SENDER=mouse.entered run_handler
+sleep 0.6
+grep -q 'popup.drawing=on' "$log" || fail "idle Downloads history did not open on hover"
+run_handler click-main
+[[ $(grep -o '"pinned":[^,]*' "$state/popup.json") == '"pinned":true' ]] || fail "idle Downloads history did not pin"
+run_handler click-main
+
 # AC2/AC7: forced render resets and closes; a subsequent transition animates
 # once, while an unchanged event cannot replay it. Pinning is a single route.
 : >"$log"
@@ -175,16 +217,79 @@ SENDER=forced run_handler
 popup=$(<"$state/popup.json")
 [[ $popup == *'"pinned":false'* && $popup == *'"mainHovered":false'* && $popup == *'"popupHovered":false'* ]] || fail "forced render did not reset popup interaction"
 grep -q 'popup.drawing=off' "$log" || fail "forced render did not close popup"
+# A fourth capped Download completion advances its signal even when unresolved
+# count stays at three, so it still selects the Downloads source animation.
+printf c >"$downloads/c.txt"
+item_c=$(download_item c "$downloads/c.txt" 3)
+MOCK_BADGE=' ' run_social
+write_downloads "[$item_a,$item_b,$item_c]" 1
+SENDER=notifications_changed run_handler
+: >"$log"
+write_downloads "[$item_a,$item_b,$item_c]" 2
+SENDER=notifications_changed run_handler
+grep -q 'icon= icon.y_offset=4 icon.color=0x00ffcc00' "$log" || fail "new capped Download completion did not trigger its source animation"
+write_downloads "[$item_a]" 0
+run_handler copy-download a
+SENDER=forced run_handler
+: >"$log"
 MOCK_BADGE=10 run_social
 SENDER=notifications_changed run_handler
 first_animation=$(grep -c -- '--animate' "$log" || true)
 grep -q 'icon=S' "$log" || fail "Slack increase did not select its source icon while Downloads was pending"
-[[ $first_animation -gt 0 ]] || fail "new attention did not animate"
+# The consumer-visible command sequence fades through ARGB color, swaps the
+# source only while transparent, holds it, then returns to opaque active bell.
+exit_line=$(grep -n -m1 -- '--animate tanh 8 --set notifications icon.y_offset=-4 icon.color=0x00ffcc00' "$log" | cut -d: -f1 || true)
+source_line=$(grep -n -m1 -- 'icon=S icon.y_offset=4 icon.color=0x00ffcc00 --animate tanh 10 --set notifications icon.y_offset=0 icon.color=0xffffcc00' "$log" | cut -d: -f1 || true)
+bell_line=$(grep -n -m1 -- 'icon= icon.y_offset=4 icon.color=0x00ffcc00 --animate tanh 10 --set notifications icon.y_offset=0' "$log" | cut -d: -f1 || true)
+[[ -n $exit_line && -n $source_line && -n $bell_line && $exit_line -lt $source_line && $source_line -lt $bell_line ]] || fail "glyph swaps did not occur only after transparent exit phases"
+source_ns=$(grep -m1 -- 'icon=S icon.y_offset=4 icon.color=0x00ffcc00' "$log" | cut -d' ' -f1)
+bell_ns=$(grep -m1 -- 'icon= icon.y_offset=4 icon.color=0x00ffcc00' "$log" | cut -d' ' -f1)
+[[ $((bell_ns - source_ns)) -ge 500000000 ]] || fail "source glyph did not remain visible through its reveal, hold, and exit"
+grep -q -- 'icon= icon.y_offset=4 icon.color=0x00ffcc00 --animate tanh 10 --set notifications icon.y_offset=0 label=10 label.drawing=on icon.color=0xffffcc00' "$log" || fail "attention did not settle at opaque warning bell"
+[[ $first_animation -ge 4 ]] || fail "attention animation did not complete its semantic phases"
 SENDER=notifications_changed run_handler
 [[ $(grep -c -- '--animate' "$log" || true) == "$first_animation" ]] || fail "unchanged attention replayed animation"
 write_slack_unknown 10
 SENDER=notifications_changed run_handler
 [[ $(grep -c -- '--animate' "$log" || true) == "$first_animation" ]] || fail "same-count unknown latch replayed animation"
+# A gated first exit makes the commit race deterministic: the newer projection
+# must invalidate the old generation before it can stage a source or settle.
+: >"$log"
+gate="$fixture/animation-gate"
+rm -f "$gate".*
+MOCK_BADGE=11 run_social
+SKETCHYBAR_PHASE_GATE="$gate" SENDER=notifications_changed run_handler &
+stale_animation=$!
+for _ in {1..100}; do
+  [[ -e $gate.ready ]] && break
+  sleep 0.01
+done
+[[ -e $gate.ready ]] || fail "first animation phase did not reach synchronization gate"
+MOCK_BADGE=12 run_social
+SENDER=notifications_changed run_handler &
+fresh_animation=$!
+: >"$gate.release"
+wait "$stale_animation"
+wait "$fresh_animation"
+[[ $(grep -c 'icon=S icon.y_offset=4 icon.color=0x00ffcc00' "$log" || true) == 1 ]] || fail "stale generation emitted a post-invalidation source command"
+grep -q 'icon= icon.y_offset=4 icon.color=0x00ffcc00 --animate tanh 10 --set notifications icon.y_offset=0 label=12 label.drawing=on icon.color=0xffffcc00' "$log" || fail "newest synchronized projection did not win final active state"
+# Clear uses the muted transparent setup and returns to the quiet idle bell.
+printf '%s' '{"schemaVersion":1,"source":"downloads","observation":"clear","count":0,"badgeText":null,"summary":"No download attention","items":[{"id":"idle","path":"/tmp/idle","fingerprint":"idle","label":"idle","detail":"/tmp","action":"copy-download","status":"resolved","detectedAt":1}],"scanIndex":[],"attentionVersion":0,"initialized":true,"updatedAt":1}' >"$state/downloads.json"
+: >"$log"
+MOCK_BADGE=' ' run_social
+SENDER=notifications_changed run_handler
+grep -q -- '--set notifications icon= icon.y_offset=4 icon.color=0x008899aa --animate tanh 10 --set notifications icon.y_offset=0 label="" label.drawing=off icon.color=0xff8899aa' "$log" || fail "clear did not settle at opaque muted idle bell"
+# An abandoned active generation is bounded by its persisted deadline, so a
+# later render restores the stable icon instead of suppressing it forever.
+printf '%s' '{"schemaVersion":1,"mainHovered":false,"popupHovered":false,"pinned":false,"generation":0,"animationGeneration":77,"animationActive":true,"animationDeadline":0,"lastCount":0,"primarySource":"","sourceProjection":[]}' >"$state/popup.json"
+: >"$log"
+SENDER=notifications_changed run_handler
+grep -q '"animationActive":false' "$state/popup.json" || fail "expired animation state was not recovered"
+grep -q 'icon= icon.y_offset=0 label="" label.drawing=off icon.color=0xff8899aa' "$log" || fail "expired animation did not restore idle icon"
+# Existing malformed popup state must be quarantined rather than silently reset.
+printf '%s' '{"schemaVersion":1,"broken"' >"$state/popup.json"
+SENDER=notifications_changed run_handler
+find "$state" -name 'popup.json.corrupt-*' -print -quit | grep -q . || fail "malformed popup state was not quarantined"
 # A main→popup move cancels the delayed close; leaving the popup closes later.
 : >"$log"
 SENDER=mouse.entered run_handler &
