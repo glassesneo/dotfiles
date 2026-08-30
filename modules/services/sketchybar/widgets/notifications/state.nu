@@ -64,7 +64,7 @@ def valid_provider [value: any, source: string] {
 }
 
 export def default_popup [] {
-  {schemaVersion: 1 mainHovered: false popupHovered: false pinned: false generation: 0 animationGeneration: 0 animationActive: false lastCount: 0 primarySource: "" sourceProjection: []}
+  {schemaVersion: 1 mainHovered: false popupHovered: false pinned: false generation: 0 animationGeneration: 0 animationActive: false animationDeadline: 0 lastCount: 0 primarySource: "" sourceProjection: []}
 }
 
 def valid_source_projection [entry: any] {
@@ -72,13 +72,16 @@ def valid_source_projection [entry: any] {
 }
 
 def valid_popup [value: any] {
-  (is_record $value) and ($value.schemaVersion? | default 0) == 1 and (is_bool ($value.mainHovered? | default null)) and (is_bool ($value.popupHovered? | default null)) and (is_bool ($value.pinned? | default null)) and (is_int ($value.generation? | default null)) and (is_int ($value.animationGeneration? | default null)) and (is_bool ($value.animationActive? | default null)) and (is_int ($value.lastCount? | default null)) and (is_string ($value.primarySource? | default null)) and (is_list ($value.sourceProjection? | default null)) and ($value.sourceProjection | all {|entry| valid_source_projection $entry })
+  (is_record $value) and ($value.schemaVersion? | default 0) == 1 and (is_bool ($value.mainHovered? | default null)) and (is_bool ($value.popupHovered? | default null)) and (is_bool ($value.pinned? | default null)) and (is_int ($value.generation? | default null)) and (is_int ($value.animationGeneration? | default null)) and (is_bool ($value.animationActive? | default null)) and (is_int ($value.animationDeadline? | default null)) and (is_int ($value.lastCount? | default null)) and (is_string ($value.primarySource? | default null)) and (is_list ($value.sourceProjection? | default null)) and ($value.sourceProjection | all {|entry| valid_source_projection $entry })
 }
 
 def normalize_popup [value: any] {
   if not (is_record $value) { return null }
   let projection = ($value.sourceProjection? | default [] | each {|entry| $entry | upsert signal ($entry.signal? | default 0) })
-  $value | upsert animationActive ($value.animationActive? | default false) | upsert sourceProjection $projection
+  let active = ($value.animationActive? | default false)
+  let deadline = ($value.animationDeadline? | default 0)
+  let expired = $active and $deadline <= (now)
+  $value | upsert animationActive (if $expired { false } else { $active }) | upsert animationDeadline (if $expired { 0 } else { $deadline }) | upsert sourceProjection $projection
 }
 
 def recover_corrupt [path: string, source: string] {
@@ -135,13 +138,18 @@ export def read_provider [source: string] {
 
 export def read_popup [] {
   let path = (popup_path)
-  let loaded = if ($path | path exists) { try { open $path } catch { null } } else { null }
-  let value = if $loaded == null { default_popup } else { try { normalize_popup $loaded } catch { null } }
+  if not ($path | path exists) { return (default_popup) }
+  let loaded = try { open $path } catch { null }
+  if $loaded == null {
+    recover_corrupt $path "popup"
+    return (default_popup)
+  }
+  let value = try { normalize_popup $loaded } catch { null }
   if $value != null and (valid_popup $value) {
-    if $loaded != null and $loaded != $value { atomic_save $path $value }
+    if $loaded != $value { atomic_save $path $value }
     return $value
   }
-  if ($path | path exists) { recover_corrupt $path "popup" }
+  recover_corrupt $path "popup"
   default_popup
 }
 

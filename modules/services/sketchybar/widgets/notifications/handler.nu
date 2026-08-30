@@ -24,6 +24,8 @@ def provider_states [] {
 def attention_states [states: list<any>] { $states | where {|provider| contributes_attention $provider } }
 
 def popup_has_content [data: record] { $data.count > 0 or (($data.downloads | length) > 0) }
+def acquire_render [] { state acquire "render" }
+def release_render [] { state release "render" }
 
 def source_icon [source: string] {
   if $source == "downloads" { "" } else {
@@ -90,7 +92,8 @@ def render_rows [data: record] {
 # Every popup RMW takes the popup lock. A failed write returns null and leaves
 # both the previous file and the visible state untouched.
 def update_popup [patch: record] {
-  if not (state acquire "popup") { return null }
+  if not (acquire_render) { return null }
+  if not (state acquire "popup") { release_render; return null }
   let result = try {
     let current = (state read_popup)
     let next = ($current | merge $patch | upsert generation (($current.generation) + 1))
@@ -101,6 +104,7 @@ def update_popup [patch: record] {
     null
   }
   state release "popup"
+  release_render
   $result
 }
 
@@ -135,7 +139,8 @@ def handle_popup_hover [entered: bool] {
 }
 
 def toggle_pin [] {
-  if not (state acquire "popup") { return }
+  if not (acquire_render) { return }
+  if not (state acquire "popup") { release_render; return }
   let next = try {
     let current = (state read_popup)
     let value = ($current | upsert pinned (not $current.pinned) | upsert generation ($current.generation + 1))
@@ -146,6 +151,7 @@ def toggle_pin [] {
     null
   }
   state release "popup"
+  release_render
   if $next == null { return }
   let data = (aggregate)
   if $next.pinned and (popup_has_content $data) { popup_open }
@@ -155,12 +161,22 @@ def toggle_pin [] {
 def flash [color: string] {
   ^$sketchybar_exe --set $name $"background.border_color=($color)"
   sleep 700ms
-  # Do not let a delayed action flash overwrite a still-running icon phase.
-  let popup = (state read_popup_locked)
-  if not $popup.animationActive {
-    let data = (aggregate)
-    ^$sketchybar_exe --set $name ...(main_options $data.count)
+  # Serialize the delayed stable repaint with commits and icon phases. Its
+  # render→popup/provider lock order matches all animation critical sections.
+  if not (acquire_render) { return }
+  let repaint = try {
+    let popup = (state read_popup_locked)
+    if not $popup.animationActive {
+      let data = (aggregate)
+      ^$sketchybar_exe --set $name ...(main_options $data.count)
+    }
+    true
+  } catch {|err|
+    log warning $"Could not restore notifications flash: ($err.msg)"
+    false
   }
+  release_render
+  $repaint | ignore
 }
 
 def download_state [current: record, items: list<any>] {
@@ -248,7 +264,7 @@ def commit_render [data: record, forced: bool] {
       $current | merge {mainHovered: false popupHovered: false pinned: false}
     } else { $current }
     let primary = if $trigger == null { $current.primarySource } else { $trigger.source }
-    let next = ($base | upsert lastCount $data.count | upsert primarySource $primary | upsert sourceProjection $data.projection | upsert animationGeneration (if $invalidate { $current.animationGeneration + 1 } else { $current.animationGeneration }) | upsert animationActive (if $attention or $clear { true } else if $invalidate { false } else { $current.animationActive }) | upsert generation (if $forced { $current.generation + 1 } else { $current.generation }))
+    let next = ($base | upsert lastCount $data.count | upsert primarySource $primary | upsert sourceProjection $data.projection | upsert animationGeneration (if $invalidate { $current.animationGeneration + 1 } else { $current.animationGeneration }) | upsert animationActive (if $attention or $clear { true } else if $invalidate { false } else { $current.animationActive }) | upsert animationDeadline (if $attention or $clear { (state now) + 2 } else if $invalidate { 0 } else { $current.animationDeadline }) | upsert generation (if $forced { $current.generation + 1 } else { $current.generation }))
     if $changed { state write_popup $next }
     {popup: $next attention: $attention clear: $clear generation: $next.animationGeneration trigger: $trigger animating: $next.animationActive}
   } catch {|err|
@@ -259,20 +275,55 @@ def commit_render [data: record, forced: bool] {
   $result
 }
 
+# Call only while holding render: the popup generation check and SketchyBar
+# icon command must be one critical section relative to a newer render commit.
 def animation_current [generation: int] {
   let popup = (state read_popup_locked)
   $popup.animationGeneration == $generation and $popup.animationActive
 }
 
+def animation_alive [generation: int] {
+  if not (acquire_render) { return false }
+  let alive = (animation_current $generation)
+  release_render
+  $alive
+}
+
 def finish_animation [generation: int] {
-  if not (state acquire "popup") { return }
-  try {
-    let current = (state read_popup)
-    if $current.animationGeneration == $generation and $current.animationActive {
-      state write_popup ($current | upsert animationActive false)
+  if not (acquire_render) { return }
+  if (state acquire "popup") {
+    try {
+      let current = (state read_popup)
+      if $current.animationGeneration == $generation and $current.animationActive {
+        state write_popup ($current | upsert animationActive false | upsert animationDeadline 0)
+      }
+    } catch {|err| log warning $"Could not finish notifications animation: ($err.msg)" }
+    state release "popup"
+  }
+  release_render
+}
+
+def animation_command [generation: int, arguments: list<string>] {
+  if not (acquire_render) { return false }
+  let result = try {
+    if not (animation_current $generation) {
+      {ok: false failed: false}
+    } else {
+      let command = (do { ^$sketchybar_exe ...$arguments } | complete)
+      if $command.exit_code == 0 {
+        {ok: true failed: false}
+      } else {
+        log warning $"SketchyBar notifications animation command failed (exit ($command.exit_code))"
+        {ok: false failed: true}
+      }
     }
-  } catch {|err| log warning $"Could not finish notifications animation: ($err.msg)" }
-  state release "popup"
+  } catch {|err|
+    log warning $"Could not issue SketchyBar notifications animation: ($err.msg)"
+    {ok: false failed: true}
+  }
+  release_render
+  if $result.failed { finish_animation $generation }
+  $result.ok
 }
 
 def transparent_color [color: string] { $"0x00($color | str substring 4..)" }
@@ -288,23 +339,25 @@ const source_hold = 200ms
 def play_attention [count: int, icon: string, generation: int] {
   let warning = $colors.status_warning
   let transparent_warning = (transparent_color $warning)
-  if not (animation_current $generation) { return }
-  ^$sketchybar_exe --animate tanh $exit_frames --set $name icon.y_offset=-4 $"icon.color=($transparent_warning)"
+  let exit = ["--animate" "tanh" ($exit_frames | into string) "--set" $name "icon.y_offset=-4" $"icon.color=($transparent_warning)"]
+  if not (animation_command $generation $exit) { return }
   sleep $exit_wait
-  if not (animation_current $generation) { return }
+  if not (animation_alive $generation) { return }
   # The glyph swap happens only while transparent; setup and reveal share one
   # CLI invocation so the nonanimated string cannot join an animation keyframe.
-  ^$sketchybar_exe --set $name $"icon=($icon)" icon.y_offset=4 $"icon.color=($transparent_warning)" --animate tanh $reveal_frames --set $name icon.y_offset=0 $"icon.color=($warning)" $"label=($count)" label.drawing=on $"label.color=($warning)" $"background.border_color=($colors.active_indicator)"
+  let reveal = ["--set" $name $"icon=($icon)" "icon.y_offset=4" $"icon.color=($transparent_warning)" "--animate" "tanh" ($reveal_frames | into string) "--set" $name "icon.y_offset=0" $"icon.color=($warning)" $"label=($count)" "label.drawing=on" $"label.color=($warning)" $"background.border_color=($colors.active_indicator)"]
+  if not (animation_command $generation $reveal) { return }
   sleep $reveal_wait
-  if not (animation_current $generation) { return }
+  if not (animation_alive $generation) { return }
   sleep $source_hold
-  if not (animation_current $generation) { return }
-  ^$sketchybar_exe --animate tanh $exit_frames --set $name icon.y_offset=-4 $"icon.color=($transparent_warning)"
+  if not (animation_alive $generation) { return }
+  if not (animation_command $generation $exit) { return }
   sleep $exit_wait
-  if not (animation_current $generation) { return }
-  ^$sketchybar_exe --set $name icon= icon.y_offset=4 $"icon.color=($transparent_warning)" --animate tanh $reveal_frames --set $name ...(settled_options $count)
+  if not (animation_alive $generation) { return }
+  let bell = ["--set" $name "icon=" "icon.y_offset=4" $"icon.color=($transparent_warning)" "--animate" "tanh" ($reveal_frames | into string) "--set" $name ...(settled_options $count)]
+  if not (animation_command $generation $bell) { return }
   sleep $reveal_wait
-  if not (animation_current $generation) { return }
+  if not (animation_alive $generation) { return }
   finish_animation $generation
 }
 
@@ -312,28 +365,43 @@ def play_clear [generation: int] {
   let warning_transparent = (transparent_color $colors.status_warning)
   let muted = $colors.text_muted
   let transparent_muted = (transparent_color $muted)
-  if not (animation_current $generation) { return }
-  ^$sketchybar_exe --animate tanh $exit_frames --set $name icon.y_offset=-4 $"icon.color=($warning_transparent)"
+  let exit = ["--animate" "tanh" ($exit_frames | into string) "--set" $name "icon.y_offset=-4" $"icon.color=($warning_transparent)"]
+  if not (animation_command $generation $exit) { return }
   sleep $exit_wait
-  if not (animation_current $generation) { return }
-  ^$sketchybar_exe --set $name icon= icon.y_offset=4 $"icon.color=($transparent_muted)" --animate tanh $reveal_frames --set $name ...(settled_options 0)
+  if not (animation_alive $generation) { return }
+  let bell = ["--set" $name "icon=" "icon.y_offset=4" $"icon.color=($transparent_muted)" "--animate" "tanh" ($reveal_frames | into string) "--set" $name ...(settled_options 0)]
+  if not (animation_command $generation $bell) { return }
   sleep $reveal_wait
-  if not (animation_current $generation) { return }
+  if not (animation_alive $generation) { return }
   finish_animation $generation
 }
 
+# Render preparation is serialized from provider snapshots through popup commit,
+# rows, and any stable icon write. Sleeps and animation waits deliberately run
+# after release so a newer render can invalidate the old generation promptly.
 def render [--forced] {
-  let data = (aggregate)
-  let transition = (commit_render $data $forced)
-  if $transition == null { return }
-  render_rows $data
-  if $forced { popup_close } else if not (popup_has_content $data) and not $transition.popup.pinned { popup_close } else if (popup_has_content $data) and ($transition.popup.pinned or $transition.popup.mainHovered or $transition.popup.popupHovered) { popup_open }
-  if $transition.attention {
-    play_attention $data.count $transition.trigger.icon $transition.generation
-  } else if $transition.clear {
-    play_clear $transition.generation
-  } else if not $transition.animating {
-    ^$sketchybar_exe --set $name ...(main_options $data.count)
+  if not (acquire_render) { return }
+  let prepared = try {
+    let data = (aggregate)
+    let transition = (commit_render $data $forced)
+    if $transition == null { null } else {
+      render_rows $data
+      if $forced { popup_close } else if not (popup_has_content $data) and not $transition.popup.pinned { popup_close } else if (popup_has_content $data) and ($transition.popup.pinned or $transition.popup.mainHovered or $transition.popup.popupHovered) { popup_open }
+      if not $transition.attention and not $transition.clear and not $transition.animating {
+        ^$sketchybar_exe --set $name ...(main_options $data.count)
+      }
+      {data: $data transition: $transition}
+    }
+  } catch {|err|
+    log warning $"Could not prepare notifications render: ($err.msg)"
+    null
+  }
+  release_render
+  if $prepared == null { return }
+  if $prepared.transition.attention {
+    play_attention $prepared.data.count $prepared.transition.trigger.icon $prepared.transition.generation
+  } else if $prepared.transition.clear {
+    play_clear $prepared.transition.generation
   }
 }
 

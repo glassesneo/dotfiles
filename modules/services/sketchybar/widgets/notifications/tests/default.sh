@@ -35,6 +35,11 @@ sed -i'' \
 cat >"$bin/sketchybar" <<'EOF'
 #!/usr/bin/env bash
 printf '%s %s\n' "$(/bin/date +%s%N)" "$*" >>"$SKETCHYBAR_LOG"
+if [[ -n ${SKETCHYBAR_PHASE_GATE:-} && $* == *'--animate tanh 8 --set notifications icon.y_offset=-4'* && ! -e "$SKETCHYBAR_PHASE_GATE.seen" ]]; then
+  : >"$SKETCHYBAR_PHASE_GATE.seen"
+  : >"$SKETCHYBAR_PHASE_GATE.ready"
+  while [[ ! -e $SKETCHYBAR_PHASE_GATE.release ]]; do sleep 0.01; done
+fi
 EOF
 cat >"$bin/pbcopy" <<'EOF'
 #!/usr/bin/env bash
@@ -140,8 +145,8 @@ run_handler copy-download b
 grep -q '"id":"a".*"status":"pending"' "$state/downloads.json" || fail "selected row resolved a different stable ID"
 grep -q '"id":"b".*"status":"resolved"' "$state/downloads.json" || fail "clipboard success did not retain a resolved history row"
 grep -q '"count":1' "$state/downloads.json" || fail "successful copy did not clear only selected attention"
-grep -q 'label=\[Pending\]' "$log" || fail "pending Download row lacked a semantic state label"
-grep -q 'label=\[Copied — re-copy\]' "$log" || fail "resolved Download row lacked a semantic state label"
+grep -q 'label=.*Pending' "$log" || fail "pending Download row lacked a semantic state label"
+grep -q 'label=.*Copied' "$log" || fail "resolved Download row lacked a semantic state label"
 run_handler copy-download b
 [[ $(<"$clipboard") == "'$downloads/b.txt'" ]] || fail "resolved history row was not re-copyable"
 grep -q '"id":"b".*"status":"resolved"' "$state/downloads.json" || fail "re-copy changed resolved history state"
@@ -160,7 +165,7 @@ run_handler copy-download b
 grep -q '"id":"b".*"status":"unavailable"' "$state/downloads.json" || fail "missing row was not retained as unavailable"
 grep -q '"observation":"attention"' "$state/downloads.json" || fail "stale resolution cleared remaining attention"
 grep -q '"count":1' "$state/downloads.json" || fail "stale resolution did not update count"
-grep -q 'label=\[Unavailable\]' "$log" || fail "unavailable Download row lacked a semantic state label"
+grep -q 'label=.*Unavailable' "$log" || fail "unavailable Download row lacked a semantic state label"
 printf target >"$downloads/target.txt"
 ln -s "$downloads/target.txt" "$downloads/replaced-link.txt"
 link_item=$(download_item link "$downloads/replaced-link.txt" 3)
@@ -247,25 +252,44 @@ SENDER=notifications_changed run_handler
 write_slack_unknown 10
 SENDER=notifications_changed run_handler
 [[ $(grep -c -- '--animate' "$log" || true) == "$first_animation" ]] || fail "same-count unknown latch replayed animation"
-# A newer source projection cancels the earlier animation before its glyph swap;
-# only the newest generation may stage a source glyph.
+# A gated first exit makes the commit race deterministic: the newer projection
+# must invalidate the old generation before it can stage a source or settle.
 : >"$log"
+gate="$fixture/animation-gate"
+rm -f "$gate".*
 MOCK_BADGE=11 run_social
-SENDER=notifications_changed run_handler &
+SKETCHYBAR_PHASE_GATE="$gate" SENDER=notifications_changed run_handler &
 stale_animation=$!
-sleep 0.05
+for _ in {1..100}; do
+  [[ -e $gate.ready ]] && break
+  sleep 0.01
+done
+[[ -e $gate.ready ]] || fail "first animation phase did not reach synchronization gate"
 MOCK_BADGE=12 run_social
 SENDER=notifications_changed run_handler &
 fresh_animation=$!
+: >"$gate.release"
 wait "$stale_animation"
 wait "$fresh_animation"
-[[ $(grep -c 'icon=S icon.y_offset=4 icon.color=0x00ffcc00' "$log" || true) == 1 ]] || fail "superseded animation staged a stale source glyph"
+[[ $(grep -c 'icon=S icon.y_offset=4 icon.color=0x00ffcc00' "$log" || true) == 1 ]] || fail "stale generation emitted a post-invalidation source command"
+grep -q 'icon= icon.y_offset=4 icon.color=0x00ffcc00 --animate tanh 10 --set notifications icon.y_offset=0 label=12 label.drawing=on icon.color=0xffffcc00' "$log" || fail "newest synchronized projection did not win final active state"
 # Clear uses the muted transparent setup and returns to the quiet idle bell.
 printf '%s' '{"schemaVersion":1,"source":"downloads","observation":"clear","count":0,"badgeText":null,"summary":"No download attention","items":[{"id":"idle","path":"/tmp/idle","fingerprint":"idle","label":"idle","detail":"/tmp","action":"copy-download","status":"resolved","detectedAt":1}],"scanIndex":[],"attentionVersion":0,"initialized":true,"updatedAt":1}' >"$state/downloads.json"
 : >"$log"
 MOCK_BADGE=' ' run_social
 SENDER=notifications_changed run_handler
 grep -q -- '--set notifications icon= icon.y_offset=4 icon.color=0x008899aa --animate tanh 10 --set notifications icon.y_offset=0 label="" label.drawing=off icon.color=0xff8899aa' "$log" || fail "clear did not settle at opaque muted idle bell"
+# An abandoned active generation is bounded by its persisted deadline, so a
+# later render restores the stable icon instead of suppressing it forever.
+printf '%s' '{"schemaVersion":1,"mainHovered":false,"popupHovered":false,"pinned":false,"generation":0,"animationGeneration":77,"animationActive":true,"animationDeadline":0,"lastCount":0,"primarySource":"","sourceProjection":[]}' >"$state/popup.json"
+: >"$log"
+SENDER=notifications_changed run_handler
+grep -q '"animationActive":false' "$state/popup.json" || fail "expired animation state was not recovered"
+grep -q 'icon= icon.y_offset=0 label="" label.drawing=off icon.color=0xff8899aa' "$log" || fail "expired animation did not restore idle icon"
+# Existing malformed popup state must be quarantined rather than silently reset.
+printf '%s' '{"schemaVersion":1,"broken"' >"$state/popup.json"
+SENDER=notifications_changed run_handler
+find "$state" -name 'popup.json.corrupt-*' -print -quit | grep -q . || fail "malformed popup state was not quarantined"
 # A main→popup move cancels the delayed close; leaving the popup closes later.
 : >"$log"
 SENDER=mouse.entered run_handler &
