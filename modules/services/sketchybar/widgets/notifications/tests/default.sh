@@ -125,26 +125,34 @@ item_b=$(download_item b "$downloads/b.txt" 2)
 write_downloads "[$item_a,$item_b]"
 write_slack
 
-# AC3: stable-ID action copies exact bytes and resolves only that ID.
+# AC3: a legacy schema-v1 pending row migrates in place; successful copy keeps
+# its stable history ID, clears only its attention, and remains re-copyable.
 run_handler copy-download b
 [[ $(<"$clipboard") == "'$downloads/b.txt'" ]] || fail "clipboard bytes were not a zsh-ready selected path"
-grep -q '"id":"a"' "$state/downloads.json" || fail "selected row resolved a different stable ID"
-! grep -q '"id":"b"' "$state/downloads.json" || fail "selected row was not resolved after clipboard success"
+grep -q '"id":"a".*"status":"pending"' "$state/downloads.json" || fail "selected row resolved a different stable ID"
+grep -q '"id":"b".*"status":"resolved"' "$state/downloads.json" || fail "clipboard success did not retain a resolved history row"
+grep -q '"count":1' "$state/downloads.json" || fail "successful copy did not clear only selected attention"
+grep -q 'label=\[Pending\]' "$log" || fail "pending Download row lacked a semantic state label"
+grep -q 'label=\[Copied — re-copy\]' "$log" || fail "resolved Download row lacked a semantic state label"
+run_handler copy-download b
+[[ $(<"$clipboard") == "'$downloads/b.txt'" ]] || fail "resolved history row was not re-copyable"
+grep -q '"id":"b".*"status":"resolved"' "$state/downloads.json" || fail "re-copy changed resolved history state"
 
-# Clipboard failure retains the record and emits no false success transition.
+# Clipboard failure retains the pending row and its attention.
 write_downloads "[$item_a,$item_b]"
 PBCOPY_FAIL=1 run_handler copy-download a
 [[ -f "$state/downloads.json" ]] || fail "clipboard failure removed state"
-grep -q '"id":"a"' "$state/downloads.json" || fail "clipboard failure resolved a record"
+grep -q '"id":"a".*"status":"pending"' "$state/downloads.json" || fail "clipboard failure resolved a record"
+grep -q '"count":2' "$state/downloads.json" || fail "clipboard failure cleared attention"
 
-# Missing files are stale-resolved atomically while remaining records keep an
-# attention observation and matching count.
+# Missing files remain as unavailable history while other pending attention is
+# preserved. A symlink substituted after scan is also never sent to pbcopy.
 rm "$downloads/b.txt"
 run_handler copy-download b
+grep -q '"id":"b".*"status":"unavailable"' "$state/downloads.json" || fail "missing row was not retained as unavailable"
 grep -q '"observation":"attention"' "$state/downloads.json" || fail "stale resolution cleared remaining attention"
 grep -q '"count":1' "$state/downloads.json" || fail "stale resolution did not update count"
-
-# A symlink substituted after scan is not a regular-file action target.
+grep -q 'label=\[Unavailable\]' "$log" || fail "unavailable Download row lacked a semantic state label"
 printf target >"$downloads/target.txt"
 ln -s "$downloads/target.txt" "$downloads/replaced-link.txt"
 link_item=$(download_item link "$downloads/replaced-link.txt" 3)
@@ -152,6 +160,14 @@ write_downloads "[$link_item]"
 clipboard_before=${clipboard:+$(cksum "$clipboard")}
 run_handler copy-download link
 [[ ! -e $clipboard || $(cksum "$clipboard") == "$clipboard_before" ]] || fail "symlink replacement reached pbcopy"
+grep -q '"id":"link".*"status":"unavailable"' "$state/downloads.json" || fail "symlink row was not retained as unavailable"
+# An already-unavailable row flashes but must not retry the clipboard.
+clipboard_before=$(cksum "$clipboard")
+: >"$log"
+run_handler copy-download link
+[[ $(cksum "$clipboard") == "$clipboard_before" ]] || fail "unavailable history row retried pbcopy"
+grep -q 'background.border_color' "$log" || fail "unavailable history row did not flash an error"
+grep -q '"status":"unavailable"' "$state"/downloads.json || fail "unavailable history row did not remain visible"
 
 # AC6: only the Nix-authored allowlisted bundle is opened and no state is cleared.
 slack_before=$(cksum "$state/slack.json")
@@ -168,6 +184,19 @@ after_identical=$(grep -c 'trigger notifications_changed' "$log" || true)
 MOCK_BADGE=9 run_social
 [[ $(grep -c 'trigger notifications_changed' "$log" || true) == 1 ]] || fail "changed social badge did not publish exactly once"
 
+# Idle Downloads history is popup content even when its aggregate attention is
+# zero: hover and pin must open it without inventing a main-item count.
+write_downloads "[$item_a]"
+run_handler copy-download a
+[[ $(grep -o '"count":[0-9]*' "$state/downloads.json" | head -1) == '"count":0' ]] || fail "resolved idle history retained attention"
+: >"$log"
+SENDER=mouse.entered run_handler
+sleep 0.6
+grep -q 'popup.drawing=on' "$log" || fail "idle Downloads history did not open on hover"
+run_handler click-main
+[[ $(grep -o '"pinned":[^,]*' "$state/popup.json") == '"pinned":true' ]] || fail "idle Downloads history did not pin"
+run_handler click-main
+
 # AC2/AC7: forced render resets and closes; a subsequent transition animates
 # once, while an unchanged event cannot replay it. Pinning is a single route.
 : >"$log"
@@ -179,12 +208,30 @@ MOCK_BADGE=10 run_social
 SENDER=notifications_changed run_handler
 first_animation=$(grep -c -- '--animate' "$log" || true)
 grep -q 'icon=S' "$log" || fail "Slack increase did not select its source icon while Downloads was pending"
-[[ $first_animation -gt 0 ]] || fail "new attention did not animate"
+# The consumer-visible command sequence fades the old glyph before a source
+# swap, uses restrained offsets, and finishes at the shared bell glyph.
+grep -q 'icon.y_offset=-4 icon.alpha=0' "$log" || fail "attention animation did not fade the prior glyph before swapping"
+grep -q 'icon=S icon.y_offset=4 icon.alpha=0' "$log" || fail "attention animation did not stage the source glyph after fade-out"
+grep -q 'icon= icon.y_offset=3 icon.alpha=0' "$log" || fail "attention animation did not settle through the common pending glyph"
+[[ $first_animation -ge 4 ]] || fail "attention animation did not complete its semantic phases"
 SENDER=notifications_changed run_handler
 [[ $(grep -c -- '--animate' "$log" || true) == "$first_animation" ]] || fail "unchanged attention replayed animation"
 write_slack_unknown 10
 SENDER=notifications_changed run_handler
 [[ $(grep -c -- '--animate' "$log" || true) == "$first_animation" ]] || fail "same-count unknown latch replayed animation"
+# A newer source projection cancels the earlier animation before its glyph swap;
+# only the newest generation may stage a source glyph.
+: >"$log"
+MOCK_BADGE=11 run_social
+SENDER=notifications_changed run_handler &
+stale_animation=$!
+sleep 0.05
+MOCK_BADGE=12 run_social
+SENDER=notifications_changed run_handler &
+fresh_animation=$!
+wait "$stale_animation"
+wait "$fresh_animation"
+[[ $(grep -c 'icon=S icon.y_offset=4 icon.alpha=0' "$log" || true) == 1 ]] || fail "superseded animation staged a stale source glyph"
 # A main→popup move cancels the delayed close; leaving the popup closes later.
 : >"$log"
 SENDER=mouse.entered run_handler &

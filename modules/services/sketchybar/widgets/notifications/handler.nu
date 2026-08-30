@@ -7,7 +7,6 @@ const name = "notifications"
 const sketchybar_exe = "@sketchybar-exe@"
 const pbcopy = "@pbcopy@"
 const open_app = "@open@"
-const visible_limit = @visible-limit@
 def apps [] { '@apps-json@' | from json }
 def enabled_sources [] { '@enabled-sources-json@' | from json }
 
@@ -17,9 +16,13 @@ def contributes_attention [provider: record] {
   } else { false }
 }
 
-def attention_states [] {
-  (enabled_sources) | each {|source| state read_provider_locked $source } | compact | where {|provider| contributes_attention $provider }
+def provider_states [] {
+  (enabled_sources) | each {|source| state read_provider_locked $source } | compact
 }
+
+def attention_states [states: list<any>] { $states | where {|provider| contributes_attention $provider } }
+
+def popup_has_content [data: record] { $data.count > 0 or (($data.downloads | length) > 0) }
 
 def source_icon [source: string] {
   if $source == "downloads" { "" } else {
@@ -29,13 +32,16 @@ def source_icon [source: string] {
 }
 
 def aggregate [] {
-  let states = (attention_states)
+  let states = (provider_states)
+  let attention = (attention_states $states)
+  # Downloads history is independently visible while idle; its count remains
+  # only unresolved available attention, unlike its retained popup rows.
   let downloads_state = ($states | where source == "downloads")
-  let downloads_items = if ($downloads_state | length) == 0 { [] } else { downloads visible_items $downloads_state.0 $visible_limit }
-  let social_states = ($states | where source != "downloads")
+  let downloads_items = if ($downloads_state | length) == 0 { [] } else { downloads visible_items $downloads_state.0 3 }
+  let social_states = ($attention | where source != "downloads")
   let social_items = ($social_states | each {|item| $item.items } | flatten)
   let projection = ((enabled_sources) | each {|source|
-    let match = ($states | where source == $source)
+    let match = ($attention | where source == $source)
     {source: $source icon: (source_icon $source) count: (if ($match | length) == 1 { $match.0.count } else { 0 })}
   })
   let total = ($projection | get count | math sum)
@@ -44,9 +50,9 @@ def aggregate [] {
 
 def main_options [count: int] {
   if $count == 0 {
-    [icon= icon.y_offset=0 label="" label.drawing=off $"icon.color=($colors.text_muted)" $"background.border_color=($colors.island_border)"]
+    [icon= icon.y_offset=0 icon.alpha=1 label="" label.drawing=off $"icon.color=($colors.text_muted)" $"background.border_color=($colors.island_border)"]
   } else {
-    [icon= icon.y_offset=0 $"label=($count)" label.drawing=on $"icon.color=($colors.status_warning)" $"label.color=($colors.status_warning)" $"background.border_color=($colors.active_indicator)"]
+    [icon= icon.y_offset=0 icon.alpha=1 $"label=($count)" label.drawing=on $"icon.color=($colors.status_warning)" $"label.color=($colors.status_warning)" $"background.border_color=($colors.active_indicator)"]
   }
 }
 
@@ -60,8 +66,10 @@ def render_rows [data: record] {
   for item in $data.downloads {
     let row = (row_name $item.id)
     ^$sketchybar_exe --add item $row $"popup.($name)"
-    let label = if ($item.detail | is-empty) { $item.label } else { $"($item.label) — ($item.detail)" }
-    ^$sketchybar_exe --set $row icon= $"label=(trunc $label)" icon.padding_left=8 label.padding_right=8 script="__script_path__ popup-event" $"click_script=__script_path__ copy-download ($item.id)"
+    let state_label = if $item.status == "pending" { "Pending" } else if $item.status == "resolved" { "Copied — re-copy" } else { "Unavailable" }
+    let label = if ($item.detail | is-empty) { $"[($state_label)] ($item.label)" } else { $"[($state_label)] ($item.label) — ($item.detail)" }
+    let color = if $item.status == "pending" { $colors.status_warning } else if $item.status == "resolved" { $colors.text_muted } else { $colors.status_error }
+    ^$sketchybar_exe --set $row icon= $"icon.color=($color)" $"label=(trunc $label)" $"label.color=($color)" icon.padding_left=8 label.padding_right=8 script="__script_path__ popup-event" $"click_script=__script_path__ copy-download ($item.id)"
     ^$sketchybar_exe --subscribe $row mouse.entered mouse.exited
   }
   for item in $data.social {
@@ -103,7 +111,7 @@ def delayed_visibility [open: bool, generation: int, delay: duration] {
   if $popup.generation != $generation { return }
   if $open {
     let data = (aggregate)
-    if ($popup.pinned or $popup.mainHovered or $popup.popupHovered) and $data.count > 0 { popup_open }
+    if ($popup.pinned or $popup.mainHovered or $popup.popupHovered) and (popup_has_content $data) { popup_open }
   } else if not $popup.pinned and not $popup.mainHovered and not $popup.popupHovered {
     popup_close
   }
@@ -135,7 +143,7 @@ def toggle_pin [] {
   state release "popup"
   if $next == null { return }
   let data = (aggregate)
-  if $next.pinned and $data.count > 0 { popup_open }
+  if $next.pinned and (popup_has_content $data) { popup_open }
   if not $next.pinned and not $next.mainHovered and not $next.popupHovered { popup_close }
 }
 
@@ -147,13 +155,13 @@ def flash [color: string] {
 }
 
 def download_state [current: record, items: list<any>] {
-  let count = ($items | length)
-  $current | upsert items $items | upsert count $count | upsert observation (if $count == 0 { "clear" } else { "attention" }) | upsert summary (if $count == 0 { "No completed downloads" } else if $count == 1 { "1 completed download" } else { $"($count) completed downloads" }) | upsert updatedAt (state now)
+  let count = ($items | where status == "pending" | length)
+  $current | upsert items $items | upsert count $count | upsert observation (if $count == 0 { "clear" } else { "attention" }) | upsert summary (if $count == 0 { "No download attention" } else if $count == 1 { "1 completed download needs attention" } else { $"($count) completed downloads need attention" }) | upsert updatedAt (state now)
 }
 
-# Stable IDs are looked up while holding the Downloads lock. Missing files are
-# stale-resolved only after the replacement state has committed; clipboard
-# failure keeps the exact record for retry.
+# Stable IDs are looked up while holding the Downloads lock. Clipboard success
+# resolves attention without erasing history; unavailable records are never
+# passed to pbcopy and remain visible until ordinary last-three eviction.
 def copy_download [id: string] {
   if not (state acquire "downloads") { flash $colors.status_error; return }
   let result = try {
@@ -161,17 +169,24 @@ def copy_download [id: string] {
     let matches = if $current == null { [] } else { $current.items | where id == $id }
     if ($matches | length) != 1 { {changed: false success: false} } else {
       let item = $matches.0
-      let remaining = ($current.items | where id != $id)
-      let regular = (do { ^/bin/test -f $item.path } | complete)
-      let file_type = try { ^/usr/bin/stat -f %HT $item.path | str trim } catch { "" }
-      if $regular.exit_code != 0 or $file_type != "Regular File" {
-        state write_provider "downloads" (download_state $current $remaining)
-        {changed: true success: false}
+      if $item.status == "unavailable" {
+        log warning $"Download history row ($id) is unavailable"
+        {changed: false success: false}
       } else {
-        let copied = (do { downloads zsh_quote $item.path | ^$pbcopy } | complete)
-        if $copied.exit_code != 0 { {changed: false success: false} } else {
-          state write_provider "downloads" (download_state $current $remaining)
-          {changed: true success: true}
+        let regular = (do { ^/bin/test -f $item.path } | complete)
+        let file_type = try { ^/usr/bin/stat -f %HT $item.path | str trim } catch { "" }
+        if $regular.exit_code != 0 or $file_type != "Regular File" {
+          let items = ($current.items | each {|row| if $row.id == $id { $row | upsert status "unavailable" } else { $row } })
+          state write_provider "downloads" (download_state $current $items)
+          log warning $"Download history row ($id) became unavailable"
+          {changed: true success: false}
+        } else {
+          let copied = (do { downloads zsh_quote $item.path | ^$pbcopy } | complete)
+          if $copied.exit_code != 0 { {changed: false success: false} } else {
+            let items = ($current.items | each {|row| if $row.id == $id { $row | upsert status "resolved" } else { $row } })
+            state write_provider "downloads" (download_state $current $items)
+            {changed: true success: true}
+          }
         }
       }
     }
@@ -232,23 +247,40 @@ def animation_current [generation: int] {
   $popup.animationGeneration == $generation
 }
 
+# SketchyBar durations are 60 Hz frame counts. Keep every wait beyond the
+# matching duration so a same-property phase can finish before a glyph swap or
+# a later queue replaces it. The restrained offsets stay within the 32 px bar.
+const attention_frames = 18
+const attention_wait = 330ms
+const clear_frames = 10
+const clear_wait = 190ms
+
 def play_attention [count: int, icon: string, generation: int] {
-  # Preserve the prior visible icon until it has left, then guard every later
-  # phase against a newer generation before sliding the triggering icon in.
-  ^$sketchybar_exe --animate tanh 14 --set $name icon.y_offset=-12
-  sleep 120ms
   if not (animation_current $generation) { return }
-  ^$sketchybar_exe --set $name $"icon=($icon)" icon.y_offset=12
-  ^$sketchybar_exe --animate tanh 14 --set $name icon.y_offset=0
-  sleep 180ms
-  if (animation_current $generation) { ^$sketchybar_exe --set $name ...(main_options $count) }
+  # Let the old glyph visibly leave before switching strings. Numeric alpha and
+  # offset animate together; glyphs themselves switch immediately by design.
+  ^$sketchybar_exe --animate tanh $attention_frames --set $name icon.y_offset=-4 icon.alpha=0
+  sleep $attention_wait
+  if not (animation_current $generation) { return }
+  ^$sketchybar_exe --set $name $"icon=($icon)" icon.y_offset=4 icon.alpha=0
+  ^$sketchybar_exe --animate tanh $attention_frames --set $name icon.y_offset=0 icon.alpha=1
+  sleep $attention_wait
+  if not (animation_current $generation) { return }
+  # The source icon has appeared, then yields to the quiet shared pending icon.
+  ^$sketchybar_exe --animate tanh $clear_frames --set $name icon.y_offset=-3 icon.alpha=0
+  sleep $clear_wait
+  if not (animation_current $generation) { return }
+  ^$sketchybar_exe --set $name icon= icon.y_offset=3 icon.alpha=0
+  ^$sketchybar_exe --animate tanh $clear_frames --set $name ...(main_options $count)
 }
 
 def play_clear [generation: int] {
-  ^$sketchybar_exe --animate tanh 14 --set $name icon.y_offset=-12
-  sleep 120ms
   if not (animation_current $generation) { return }
-  ^$sketchybar_exe --set $name ...(main_options 0)
+  ^$sketchybar_exe --animate tanh $clear_frames --set $name icon.y_offset=-3 icon.alpha=0
+  sleep $clear_wait
+  if not (animation_current $generation) { return }
+  ^$sketchybar_exe --set $name icon= icon.y_offset=3 icon.alpha=0
+  ^$sketchybar_exe --animate tanh $clear_frames --set $name ...(main_options 0)
 }
 
 def render [--forced] {
@@ -256,7 +288,7 @@ def render [--forced] {
   let transition = (commit_render $data $forced)
   if $transition == null { return }
   render_rows $data
-  if $forced { popup_close } else if $data.count == 0 and not $transition.popup.pinned { popup_close } else if $data.count > 0 and ($transition.popup.pinned or $transition.popup.mainHovered or $transition.popup.popupHovered) { popup_open }
+  if $forced { popup_close } else if not (popup_has_content $data) and not $transition.popup.pinned { popup_close } else if (popup_has_content $data) and ($transition.popup.pinned or $transition.popup.mainHovered or $transition.popup.popupHovered) { popup_open }
   if $transition.attention {
     play_attention $data.count $transition.trigger.icon $transition.generation
   } else if $transition.clear {

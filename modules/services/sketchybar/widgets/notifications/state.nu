@@ -1,4 +1,5 @@
 use std/log
+use providers/downloads.nu
 
 const state_dir = "@state-dir@"
 const sketchybar_exe = "@sketchybar-exe@"
@@ -21,14 +22,14 @@ def valid_item [item: any, source: string] {
   let action = ($item.action? | default null)
   if not ($action in ["copy-download" "activate-app" "none"]) { return false }
   if $source == "downloads" {
-    (is_string ($item.path? | default null)) and (is_string ($item.fingerprint? | default null)) and (is_int ($item.detectedAt? | default null)) and $action == "copy-download"
+    (is_string ($item.path? | default null)) and (is_string ($item.fingerprint? | default null)) and (is_int ($item.detectedAt? | default null)) and (($item.status? | default null) in ["pending" "resolved" "unavailable"]) and $action == "copy-download"
   } else {
     (is_string ($item.bundleId? | default null)) and (is_string ($item.icon? | default null)) and $action == "activate-app"
   }
 }
 
 def valid_scan_entry [entry: any] {
-  (is_record $entry) and (is_string ($entry.path? | default null)) and (is_string ($entry.fingerprint? | default null)) and (is_int ($entry.size? | default null)) and (is_int ($entry.mtime? | default null)) and (is_int ($entry.stableSince? | default null)) and (is_bool ($entry.baseline? | default null))
+  (is_record $entry) and (is_string ($entry.path? | default null)) and (is_string ($entry.fingerprint? | default null)) and (is_int ($entry.size? | default null)) and (is_int ($entry.mtime? | default null)) and (is_int ($entry.stableSince? | default null)) and (is_bool ($entry.baseline? | default null)) and (is_bool ($entry.notified? | default null))
 }
 
 # Provider records are a persisted internal protocol. Validate every field that
@@ -45,7 +46,8 @@ def valid_provider [value: any, source: string] {
   if not (is_list $items) or not ($items | all {|item| valid_item $item $source }) { return false }
   if $source == "downloads" {
     let index = ($value.scanIndex? | default null)
-    (is_int $count) and (($value.observation == "clear" and $count == 0) or ($value.observation == "attention" and $count > 0)) and (is_bool ($value.initialized? | default null)) and (is_list $index) and ($index | all {|entry| valid_scan_entry $entry }) and ($value.badgeText? | default null) == null
+    let pending = ($items | where status == "pending" | length)
+    (is_int $count) and $count == $pending and (($value.observation == "clear" and $count == 0) or ($value.observation == "attention" and $count > 0)) and (is_bool ($value.initialized? | default null)) and (is_list $index) and ($index | all {|entry| valid_scan_entry $entry }) and ($value.badgeText? | default null) == null
   } else {
     let badge = ($value.badgeText? | default null)
     let badge_valid = $badge == null or (is_string $badge)
@@ -84,11 +86,19 @@ def recover_corrupt [path: string, source: string] {
 
 # Read-only snapshots never rename corrupt input. They are safe while another
 # process holds the lock because provider publication is an atomic rename.
+def normalized_provider [value: any, source: string] {
+  if $value == null { return null }
+  if $source == "downloads" {
+    try { downloads normalize_state $value } catch { null }
+  } else { $value }
+}
+
 def provider_snapshot [source: string] {
   let path = (provider_path $source)
   if not ($path | path exists) { return null }
   let loaded = try { open $path } catch { null }
-  if $loaded == null or not (valid_provider $loaded $source) { null } else { $loaded }
+  let normalized = (normalized_provider $loaded $source)
+  if $normalized == null or not (valid_provider $normalized $source) { null } else { $normalized }
 }
 def popup_snapshot [] {
   let path = (popup_path)
@@ -98,9 +108,19 @@ def popup_snapshot [] {
 }
 
 export def read_provider [source: string] {
-  let value = (provider_snapshot $source)
-  if $value != null { return $value }
   let path = (provider_path $source)
+  let loaded = if ($path | path exists) { try { open $path } catch { null } } else { null }
+  let value = (normalized_provider $loaded $source)
+  if $value != null and (valid_provider $value $source) {
+    # Downloads normalization is an explicit schema-v1 migration. Callers hold
+    # the source lock, so publishing it here preserves seen fingerprints across
+    # a restart without discarding legacy pending rows.
+    if $source == "downloads" and $loaded != $value {
+      atomic_save $path $value
+      log info "Normalized legacy Downloads notifications state"
+    }
+    return $value
+  }
   if ($path | path exists) { recover_corrupt $path $source }
   null
 }

@@ -44,7 +44,6 @@ in
           sketchybar-exe = lib.getExe pkgs.sketchybar;
           pbcopy = "/usr/bin/pbcopy";
           open = "/usr/bin/open";
-          visible-limit = toString self.downloads.visibleLimit;
           apps-json = builtins.toJSON self.social.apps;
           enabled-sources-json = builtins.toJSON (
             lib.optional self.downloads.enable "downloads"
@@ -75,7 +74,6 @@ in
           options = {
             enable = boolOption (pkgs.stdenv.isDarwin && enabled);
             path = strOption "${homeConfig.home.homeDirectory}/Downloads";
-            visibleLimit = intOption 3;
             stabilitySeconds = intOption 2;
           };
         } {};
@@ -118,10 +116,6 @@ in
         {
           assertion = lib.hasPrefix "/" cfg.downloads.path;
           message = "services.sketchybar.widget-notifications.downloads.path must be absolute";
-        }
-        {
-          assertion = cfg.downloads.visibleLimit > 0;
-          message = "services.sketchybar.widget-notifications.downloads.visibleLimit must be positive";
         }
         {
           assertion = cfg.downloads.stabilitySeconds > 0;
