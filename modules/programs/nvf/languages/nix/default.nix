@@ -1,6 +1,5 @@
 {
   delib,
-  host,
   lib,
   ...
 }:
@@ -11,45 +10,38 @@ delib.module {
 
   home.ifEnabled = {myconfig, ...}: {
     programs.nvf = {
-      settings.vim.languages.nix = {
-        enable = true;
-        treesitter.enable = myconfig.programs.nvf.treesitter.enable;
-        lsp = {
-          servers = ["nixd"];
-        };
-        format = {
+      settings.vim = {
+        languages.nix = {
           enable = true;
-          type = ["alejandra"];
-        };
-        extraDiagnostics.enable = true;
-      };
-      settings.vim.lsp.servers.nixd = {
-        # cmd = lib.mkForce ["nixd"];
-        settings.nixd = {
-          nixpkgs = {
-            expr = "import <nixpkgs> { }";
+          treesitter.enable = myconfig.programs.nvf.treesitter.enable;
+          lsp = {
+            servers = ["nil"];
           };
-
-          formatting = {
-            command = ["alejandra"];
+          format = {
+            enable = true;
+            type = ["alejandra"];
           };
+          extraDiagnostics.enable = true;
         };
+        lsp.servers.nil.settings.nil = {
+          formatting.command = ["alejandra"];
+        };
+        autocmds = [
+          {
+            event = ["FileType"];
+            pattern = ["nix"];
+            desc = "Match Nix buffer indentation to Alejandra defaults";
+            callback = lib.generators.mkLuaInline ''
+              function(args)
+                vim.bo[args.buf].expandtab = true
+                vim.bo[args.buf].tabstop = 2
+                vim.bo[args.buf].shiftwidth = 2
+                vim.bo[args.buf].softtabstop = 2
+              end
+            '';
+          }
+        ];
       };
-      settings.vim.autocmds = [
-        {
-          event = ["FileType"];
-          pattern = ["nix"];
-          desc = "Match Nix buffer indentation to Alejandra defaults";
-          callback = lib.generators.mkLuaInline ''
-            function(args)
-              vim.bo[args.buf].expandtab = true
-              vim.bo[args.buf].tabstop = 2
-              vim.bo[args.buf].shiftwidth = 2
-              vim.bo[args.buf].softtabstop = 2
-            end
-          '';
-        }
-      ];
     };
   };
 }
