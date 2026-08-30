@@ -23,10 +23,18 @@ fswatch_log="$fixture/fswatch.log"
 mkdir -p "$runtime/widgets" "$bin" "$state" "$downloads"
 cp -R "$notifications_dir" "$runtime/widgets/notifications"
 cp "$notifications_dir/../../colors.nu" "$runtime/colors.nu"
+sed -i'' \
+  -e 's|@status_warning@|0xffffcc00|g' \
+  -e 's|@text_muted@|0xff8899aa|g' \
+  -e 's|@active_indicator@|0xff00ccff|g' \
+  -e 's|@island_border@|0xff334455|g' \
+  -e 's|@status_success@|0xff00cc66|g' \
+  -e 's|@status_error@|0xffff3355|g' \
+  "$runtime/colors.nu"
 
 cat >"$bin/sketchybar" <<'EOF'
 #!/usr/bin/env bash
-printf '%s\n' "$*" >>"$SKETCHYBAR_LOG"
+printf '%s %s\n' "$(/bin/date +%s%N)" "$*" >>"$SKETCHYBAR_LOG"
 EOF
 cat >"$bin/pbcopy" <<'EOF'
 #!/usr/bin/env bash
@@ -41,7 +49,7 @@ cat >"$bin/lsappinfo" <<'EOF'
 #!/usr/bin/env bash
 case ${1:-} in
   find) printf 'pid = 42\n' ;;
-  info) printf 'StatusLabel = "%s"\n' "${MOCK_BADGE:-7}" ;;
+  info) printf 'StatusLabel = "%s"\n' "${MOCK_BADGE-7}" ;;
 esac
 EOF
 cat >"$bin/find" <<'EOF'
@@ -99,8 +107,8 @@ run_social() (
   nu --no-config-file "$runtime/widgets/notifications/services/social.nu"
 )
 write_downloads() {
-  local items=$1
-  printf '%s' "{\"schemaVersion\":1,\"source\":\"downloads\",\"observation\":\"attention\",\"count\":2,\"badgeText\":null,\"summary\":\"2 completed downloads\",\"items\":$items,\"scanIndex\":[],\"initialized\":true,\"updatedAt\":1}" >"$state/downloads.json"
+  local items=$1 version=${2:-0}
+  printf '%s' "{\"schemaVersion\":1,\"source\":\"downloads\",\"observation\":\"attention\",\"count\":2,\"badgeText\":null,\"summary\":\"2 completed downloads\",\"items\":$items,\"scanIndex\":[],\"attentionVersion\":$version,\"initialized\":true,\"updatedAt\":1}" >"$state/downloads.json"
 }
 download_item() {
   local id=$1 path=$2 detected=$3
@@ -204,15 +212,35 @@ SENDER=forced run_handler
 popup=$(<"$state/popup.json")
 [[ $popup == *'"pinned":false'* && $popup == *'"mainHovered":false'* && $popup == *'"popupHovered":false'* ]] || fail "forced render did not reset popup interaction"
 grep -q 'popup.drawing=off' "$log" || fail "forced render did not close popup"
+# A fourth capped Download completion advances its signal even when unresolved
+# count stays at three, so it still selects the Downloads source animation.
+printf c >"$downloads/c.txt"
+item_c=$(download_item c "$downloads/c.txt" 3)
+MOCK_BADGE=' ' run_social
+write_downloads "[$item_a,$item_b,$item_c]" 1
+SENDER=notifications_changed run_handler
+: >"$log"
+write_downloads "[$item_a,$item_b,$item_c]" 2
+SENDER=notifications_changed run_handler
+grep -q 'icon= icon.y_offset=4 icon.color=0x00ffcc00' "$log" || fail "new capped Download completion did not trigger its source animation"
+write_downloads "[$item_a]" 0
+run_handler copy-download a
+SENDER=forced run_handler
+: >"$log"
 MOCK_BADGE=10 run_social
 SENDER=notifications_changed run_handler
 first_animation=$(grep -c -- '--animate' "$log" || true)
 grep -q 'icon=S' "$log" || fail "Slack increase did not select its source icon while Downloads was pending"
-# The consumer-visible command sequence fades the old glyph before a source
-# swap, uses restrained offsets, and finishes at the shared bell glyph.
-grep -q 'icon.y_offset=-4 icon.alpha=0' "$log" || fail "attention animation did not fade the prior glyph before swapping"
-grep -q 'icon=S icon.y_offset=4 icon.alpha=0' "$log" || fail "attention animation did not stage the source glyph after fade-out"
-grep -q 'icon= icon.y_offset=3 icon.alpha=0' "$log" || fail "attention animation did not settle through the common pending glyph"
+# The consumer-visible command sequence fades through ARGB color, swaps the
+# source only while transparent, holds it, then returns to opaque active bell.
+exit_line=$(grep -n -m1 -- '--animate tanh 8 --set notifications icon.y_offset=-4 icon.color=0x00ffcc00' "$log" | cut -d: -f1 || true)
+source_line=$(grep -n -m1 -- 'icon=S icon.y_offset=4 icon.color=0x00ffcc00 --animate tanh 10 --set notifications icon.y_offset=0 icon.color=0xffffcc00' "$log" | cut -d: -f1 || true)
+bell_line=$(grep -n -m1 -- 'icon= icon.y_offset=4 icon.color=0x00ffcc00 --animate tanh 10 --set notifications icon.y_offset=0' "$log" | cut -d: -f1 || true)
+[[ -n $exit_line && -n $source_line && -n $bell_line && $exit_line -lt $source_line && $source_line -lt $bell_line ]] || fail "glyph swaps did not occur only after transparent exit phases"
+source_ns=$(grep -m1 -- 'icon=S icon.y_offset=4 icon.color=0x00ffcc00' "$log" | cut -d' ' -f1)
+bell_ns=$(grep -m1 -- 'icon= icon.y_offset=4 icon.color=0x00ffcc00' "$log" | cut -d' ' -f1)
+[[ $((bell_ns - source_ns)) -ge 500000000 ]] || fail "source glyph did not remain visible through its reveal, hold, and exit"
+grep -q -- 'icon= icon.y_offset=4 icon.color=0x00ffcc00 --animate tanh 10 --set notifications icon.y_offset=0 label=10 label.drawing=on icon.color=0xffffcc00' "$log" || fail "attention did not settle at opaque warning bell"
 [[ $first_animation -ge 4 ]] || fail "attention animation did not complete its semantic phases"
 SENDER=notifications_changed run_handler
 [[ $(grep -c -- '--animate' "$log" || true) == "$first_animation" ]] || fail "unchanged attention replayed animation"
@@ -231,7 +259,13 @@ SENDER=notifications_changed run_handler &
 fresh_animation=$!
 wait "$stale_animation"
 wait "$fresh_animation"
-[[ $(grep -c 'icon=S icon.y_offset=4 icon.alpha=0' "$log" || true) == 1 ]] || fail "superseded animation staged a stale source glyph"
+[[ $(grep -c 'icon=S icon.y_offset=4 icon.color=0x00ffcc00' "$log" || true) == 1 ]] || fail "superseded animation staged a stale source glyph"
+# Clear uses the muted transparent setup and returns to the quiet idle bell.
+printf '%s' '{"schemaVersion":1,"source":"downloads","observation":"clear","count":0,"badgeText":null,"summary":"No download attention","items":[{"id":"idle","path":"/tmp/idle","fingerprint":"idle","label":"idle","detail":"/tmp","action":"copy-download","status":"resolved","detectedAt":1}],"scanIndex":[],"attentionVersion":0,"initialized":true,"updatedAt":1}' >"$state/downloads.json"
+: >"$log"
+MOCK_BADGE=' ' run_social
+SENDER=notifications_changed run_handler
+grep -q -- '--set notifications icon= icon.y_offset=4 icon.color=0x008899aa --animate tanh 10 --set notifications icon.y_offset=0 label="" label.drawing=off icon.color=0xff8899aa' "$log" || fail "clear did not settle at opaque muted idle bell"
 # A main→popup move cancels the delayed close; leaving the popup closes later.
 : >"$log"
 SENDER=mouse.entered run_handler &

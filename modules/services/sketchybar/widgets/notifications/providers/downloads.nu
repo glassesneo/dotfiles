@@ -20,6 +20,7 @@ export def empty_state [now: int] {
     summary: "No completed downloads"
     items: []
     scanIndex: []
+    attentionVersion: 0
     initialized: false
     updatedAt: $now
   }
@@ -98,6 +99,7 @@ export def reduce [previous: any, snapshot: list<any>, now: int, stability_secon
     } else { $entry }
   })
   let count = (attention_count $items)
+  let attention_version = ($prior.attentionVersion? | default 0) + (if ($additions | length) > 0 { 1 } else { 0 })
   {
     schemaVersion: 1
     source: "downloads"
@@ -107,25 +109,33 @@ export def reduce [previous: any, snapshot: list<any>, now: int, stability_secon
     summary: (summary $count)
     items: $items
     scanIndex: $finalized_index
+    attentionVersion: $attention_version
     initialized: true
     updatedAt: $now
   }
 }
 
-# Schema-v1 originally stored only pending rows and did not persist whether a
-# stable fingerprint had already notified. Normalize in place without dropping
-# those rows, then cap the now-explicit history to its public last-three bound.
+# Schema-v1 originally stored only pending rows and did not persist either a
+# completion signal or whether a stable fingerprint had already notified.
+# Normalize in place without dropping pending rows, then cap history at three.
+# If an old index has no notified fields at all, mark its whole known set seen:
+# avoiding a baseline notification storm is safer than rediscovering old rows
+# trimmed by the new history bound.
 export def normalize_state [value: record] {
   let raw_items = ($value.items? | default [])
   let items = ($raw_items | each {|item| $item | upsert status ($item.status? | default "pending") } | sort-by --reverse detectedAt id | first $history_limit)
-  let index = ($value.scanIndex? | default [] | each {|entry|
+  let raw_index = ($value.scanIndex? | default [])
+  let legacy_index = ($raw_index | all {|entry| not ("notified" in ($entry | columns)) })
+  let index = ($raw_index | each {|entry|
     let retained = (try { $items | where fingerprint == $entry.fingerprint | length } catch { 0 })
-    $entry | upsert notified ($entry.notified? | default (($entry.baseline? | default false) or $retained > 0))
+    let seen = if $legacy_index { true } else { ($entry.baseline? | default false) or $retained > 0 }
+    $entry | upsert notified ($entry.notified? | default $seen)
   })
   let count = (attention_count $items)
   $value
   | upsert items $items
   | upsert scanIndex $index
+  | upsert attentionVersion ($value.attentionVersion? | default 0)
   | upsert count $count
   | upsert observation (if $count == 0 { "clear" } else { "attention" })
   | upsert summary (summary $count)

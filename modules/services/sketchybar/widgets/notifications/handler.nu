@@ -7,6 +7,7 @@ const name = "notifications"
 const sketchybar_exe = "@sketchybar-exe@"
 const pbcopy = "@pbcopy@"
 const open_app = "@open@"
+const visible_limit = @visible-limit@
 def apps [] { '@apps-json@' | from json }
 def enabled_sources [] { '@enabled-sources-json@' | from json }
 
@@ -37,24 +38,28 @@ def aggregate [] {
   # Downloads history is independently visible while idle; its count remains
   # only unresolved available attention, unlike its retained popup rows.
   let downloads_state = ($states | where source == "downloads")
-  let downloads_items = if ($downloads_state | length) == 0 { [] } else { downloads visible_items $downloads_state.0 3 }
+  let downloads_items = if ($downloads_state | length) == 0 { [] } else { downloads visible_items $downloads_state.0 $visible_limit }
   let social_states = ($attention | where source != "downloads")
   let social_items = ($social_states | each {|item| $item.items } | flatten)
   let projection = ((enabled_sources) | each {|source|
     let match = ($attention | where source == $source)
-    {source: $source icon: (source_icon $source) count: (if ($match | length) == 1 { $match.0.count } else { 0 })}
+    let state_match = ($states | where source == $source)
+    let signal = if $source == "downloads" and ($state_match | length) == 1 { $state_match.0.attentionVersion } else { 0 }
+    {source: $source icon: (source_icon $source) count: (if ($match | length) == 1 { $match.0.count } else { 0 }) signal: $signal}
   })
   let total = ($projection | get count | math sum)
   {count: $total downloads: $downloads_items social: $social_items projection: $projection}
 }
 
-def main_options [count: int] {
+def settled_options [count: int] {
   if $count == 0 {
-    [icon= icon.y_offset=0 icon.alpha=1 label="" label.drawing=off $"icon.color=($colors.text_muted)" $"background.border_color=($colors.island_border)"]
+    [icon.y_offset=0 label="" label.drawing=off $"icon.color=($colors.text_muted)" $"background.border_color=($colors.island_border)"]
   } else {
-    [icon= icon.y_offset=0 icon.alpha=1 $"label=($count)" label.drawing=on $"icon.color=($colors.status_warning)" $"label.color=($colors.status_warning)" $"background.border_color=($colors.active_indicator)"]
+    [icon.y_offset=0 $"label=($count)" label.drawing=on $"icon.color=($colors.status_warning)" $"label.color=($colors.status_warning)" $"background.border_color=($colors.active_indicator)"]
   }
 }
+
+def main_options [count: int] { [icon= ...(settled_options $count)] }
 
 def row_name [id: string] { $"notifications.row.($id)" }
 def trunc [text: string] { $text | str substring 0..70 }
@@ -150,8 +155,12 @@ def toggle_pin [] {
 def flash [color: string] {
   ^$sketchybar_exe --set $name $"background.border_color=($color)"
   sleep 700ms
-  let data = (aggregate)
-  ^$sketchybar_exe --set $name ...(main_options $data.count)
+  # Do not let a delayed action flash overwrite a still-running icon phase.
+  let popup = (state read_popup_locked)
+  if not $popup.animationActive {
+    let data = (aggregate)
+    ^$sketchybar_exe --set $name ...(main_options $data.count)
+  }
 }
 
 def download_state [current: record, items: list<any>] {
@@ -206,34 +215,42 @@ def activate_app [id: string] {
   if $result.exit_code != 0 { log warning $"Could not activate ($allowed.0.label)"; flash $colors.status_error }
 }
 
-def prior_source_count [projection: list<any>, source: string] {
+def prior_source [projection: list<any>, source: string] {
   let match = ($projection | where source == $source)
-  if ($match | length) == 1 { $match.0.count } else { 0 }
+  if ($match | length) == 1 { $match.0 } else { {source: $source count: 0 signal: 0} }
 }
 
+# Downloads signals a new completion independently of its capped unresolved
+# count; social providers retain their count-increase trigger semantics.
 def triggering_source [previous: list<any>, current: list<any>] {
-  let increases = ($current | where {|entry| $entry.count > (prior_source_count $previous $entry.source) })
-  if ($increases | length) == 0 { null } else { $increases | first }
+  let triggers = ($current | where {|entry|
+    let prior = (prior_source $previous $entry.source)
+    if $entry.source == "downloads" { $entry.signal > $prior.signal } else { $entry.count > $prior.count }
+  })
+  if ($triggers | length) == 0 { null } else { $triggers | first }
 }
 
-# Compare a persisted per-source projection while holding the popup lock. This
-# selects the provider that actually gained attention even if Downloads already
-# has pending rows; equal re-events select nothing and therefore never replay.
+# Compare a persisted per-source projection while holding the popup lock. Equal
+# renders leave an active animation alone; a real stable projection change
+# invalidates it so stale later phases cannot paint an obsolete count.
 def commit_render [data: record, forced: bool] {
   if not (state acquire "popup") { return null }
   let result = try {
     let current = (state read_popup)
+    let projection_changed = $current.lastCount != $data.count or $current.sourceProjection != $data.projection
     let trigger = if $forced { null } else { triggering_source $current.sourceProjection $data.projection }
     let attention = $trigger != null
     let clear = not $forced and $data.count == 0 and $current.lastCount > 0
-    let changed = $forced or $current.lastCount != $data.count or $current.sourceProjection != $data.projection or $attention or $clear
+    let interrupt = not $forced and $current.animationActive and $projection_changed and not $attention and not $clear
+    let invalidate = $attention or $clear or $forced or $interrupt
+    let changed = $forced or $projection_changed or $invalidate
     let base = if $forced {
       $current | merge {mainHovered: false popupHovered: false pinned: false}
     } else { $current }
     let primary = if $trigger == null { $current.primarySource } else { $trigger.source }
-    let next = ($base | upsert lastCount $data.count | upsert primarySource $primary | upsert sourceProjection $data.projection | upsert animationGeneration (if $attention or $clear or $forced { $current.animationGeneration + 1 } else { $current.animationGeneration }) | upsert generation (if $forced { $current.generation + 1 } else { $current.generation }))
+    let next = ($base | upsert lastCount $data.count | upsert primarySource $primary | upsert sourceProjection $data.projection | upsert animationGeneration (if $invalidate { $current.animationGeneration + 1 } else { $current.animationGeneration }) | upsert animationActive (if $attention or $clear { true } else if $invalidate { false } else { $current.animationActive }) | upsert generation (if $forced { $current.generation + 1 } else { $current.generation }))
     if $changed { state write_popup $next }
-    {popup: $next attention: $attention clear: $clear generation: $next.animationGeneration trigger: $trigger}
+    {popup: $next attention: $attention clear: $clear generation: $next.animationGeneration trigger: $trigger animating: $next.animationActive}
   } catch {|err|
     log warning $"Could not commit notifications render state: ($err.msg)"
     null
@@ -244,43 +261,65 @@ def commit_render [data: record, forced: bool] {
 
 def animation_current [generation: int] {
   let popup = (state read_popup_locked)
-  $popup.animationGeneration == $generation
+  $popup.animationGeneration == $generation and $popup.animationActive
 }
 
-# SketchyBar durations are 60 Hz frame counts. Keep every wait beyond the
-# matching duration so a same-property phase can finish before a glyph swap or
-# a later queue replaces it. The restrained offsets stay within the 32 px bar.
-const attention_frames = 18
-const attention_wait = 330ms
-const clear_frames = 10
-const clear_wait = 190ms
+def finish_animation [generation: int] {
+  if not (state acquire "popup") { return }
+  try {
+    let current = (state read_popup)
+    if $current.animationGeneration == $generation and $current.animationActive {
+      state write_popup ($current | upsert animationActive false)
+    }
+  } catch {|err| log warning $"Could not finish notifications animation: ($err.msg)" }
+  state release "popup"
+}
+
+def transparent_color [color: string] { $"0x00($color | str substring 4..)" }
+
+# SketchyBar durations are 60 Hz frame counts. All waits exceed their matching
+# duration: exit 8/60s → 150ms, reveal 10/60s → 180ms, then source hold 200ms.
+const exit_frames = 8
+const exit_wait = 150ms
+const reveal_frames = 10
+const reveal_wait = 180ms
+const source_hold = 200ms
 
 def play_attention [count: int, icon: string, generation: int] {
+  let warning = $colors.status_warning
+  let transparent_warning = (transparent_color $warning)
   if not (animation_current $generation) { return }
-  # Let the old glyph visibly leave before switching strings. Numeric alpha and
-  # offset animate together; glyphs themselves switch immediately by design.
-  ^$sketchybar_exe --animate tanh $attention_frames --set $name icon.y_offset=-4 icon.alpha=0
-  sleep $attention_wait
+  ^$sketchybar_exe --animate tanh $exit_frames --set $name icon.y_offset=-4 $"icon.color=($transparent_warning)"
+  sleep $exit_wait
   if not (animation_current $generation) { return }
-  ^$sketchybar_exe --set $name $"icon=($icon)" icon.y_offset=4 icon.alpha=0
-  ^$sketchybar_exe --animate tanh $attention_frames --set $name icon.y_offset=0 icon.alpha=1
-  sleep $attention_wait
+  # The glyph swap happens only while transparent; setup and reveal share one
+  # CLI invocation so the nonanimated string cannot join an animation keyframe.
+  ^$sketchybar_exe --set $name $"icon=($icon)" icon.y_offset=4 $"icon.color=($transparent_warning)" --animate tanh $reveal_frames --set $name icon.y_offset=0 $"icon.color=($warning)" $"label=($count)" label.drawing=on $"label.color=($warning)" $"background.border_color=($colors.active_indicator)"
+  sleep $reveal_wait
   if not (animation_current $generation) { return }
-  # The source icon has appeared, then yields to the quiet shared pending icon.
-  ^$sketchybar_exe --animate tanh $clear_frames --set $name icon.y_offset=-3 icon.alpha=0
-  sleep $clear_wait
+  sleep $source_hold
   if not (animation_current $generation) { return }
-  ^$sketchybar_exe --set $name icon= icon.y_offset=3 icon.alpha=0
-  ^$sketchybar_exe --animate tanh $clear_frames --set $name ...(main_options $count)
+  ^$sketchybar_exe --animate tanh $exit_frames --set $name icon.y_offset=-4 $"icon.color=($transparent_warning)"
+  sleep $exit_wait
+  if not (animation_current $generation) { return }
+  ^$sketchybar_exe --set $name icon= icon.y_offset=4 $"icon.color=($transparent_warning)" --animate tanh $reveal_frames --set $name ...(settled_options $count)
+  sleep $reveal_wait
+  if not (animation_current $generation) { return }
+  finish_animation $generation
 }
 
 def play_clear [generation: int] {
+  let warning_transparent = (transparent_color $colors.status_warning)
+  let muted = $colors.text_muted
+  let transparent_muted = (transparent_color $muted)
   if not (animation_current $generation) { return }
-  ^$sketchybar_exe --animate tanh $clear_frames --set $name icon.y_offset=-3 icon.alpha=0
-  sleep $clear_wait
+  ^$sketchybar_exe --animate tanh $exit_frames --set $name icon.y_offset=-4 $"icon.color=($warning_transparent)"
+  sleep $exit_wait
   if not (animation_current $generation) { return }
-  ^$sketchybar_exe --set $name icon= icon.y_offset=3 icon.alpha=0
-  ^$sketchybar_exe --animate tanh $clear_frames --set $name ...(main_options 0)
+  ^$sketchybar_exe --set $name icon= icon.y_offset=4 $"icon.color=($transparent_muted)" --animate tanh $reveal_frames --set $name ...(settled_options 0)
+  sleep $reveal_wait
+  if not (animation_current $generation) { return }
+  finish_animation $generation
 }
 
 def render [--forced] {
@@ -293,7 +332,7 @@ def render [--forced] {
     play_attention $data.count $transition.trigger.icon $transition.generation
   } else if $transition.clear {
     play_clear $transition.generation
-  } else {
+  } else if not $transition.animating {
     ^$sketchybar_exe --set $name ...(main_options $data.count)
   }
 }

@@ -34,9 +34,10 @@ def main [] {
   let d_done = (downloads reduce $d_candidate [$a $b $c $d] 112 2)
   assert (($d_done.items | length) == 3) "a fourth completion must retain exactly three history rows"
   assert (($d_done.items | get label) == ["d.txt" "c.txt" "b.txt"]) "a fourth completion must evict the oldest record even when it is pending"
+  assert ($d_done.count == 3 and $d_done.attentionVersion == ($c_done.attentionVersion + 1)) "a capped unchanged count must still signal a new completion"
 
   let missing = (downloads reduce $d_done [$a $b $d] 114 2)
-  assert ((item $missing "c.txt").status == "unavailable" and $missing.count == 2) "a missing retained record must remain unavailable while resolving its attention"
+  assert ((item $missing "c.txt").status == "unavailable" and $missing.count == 2 and $missing.attentionVersion == $d_done.attentionVersion) "deletion must resolve attention without creating a completion signal"
 
   let resolved = ($a_done | upsert items [($a_done.items.0 | upsert status "resolved")] | upsert count 0 | upsert observation "clear")
   let restarted = (downloads reduce $resolved [$a] 120 2)
@@ -46,12 +47,20 @@ def main [] {
   let legacy = {
     schemaVersion: 1 source: "downloads" observation: "attention" count: 1 badgeText: null summary: "old"
     items: [{id: "legacy" path: "/Downloads/legacy.txt" fingerprint: "legacy-fingerprint" label: "legacy.txt" detail: "/Downloads" action: "copy-download" detectedAt: 1}]
-    scanIndex: [{path: "/Downloads/legacy.txt" fingerprint: "legacy-fingerprint" size: 1 mtime: 1 stableSince: 1 baseline: false}]
+    scanIndex: [
+      {path: "/Downloads/legacy.txt" fingerprint: "legacy-fingerprint" size: 1 mtime: 1 stableSince: 1 baseline: false}
+      {path: "/Downloads/trimmed.txt" fingerprint: "trimmed-fingerprint" size: 2 mtime: 2 stableSince: 1 baseline: false}
+    ]
     initialized: true updatedAt: 1
   }
   let migrated = (downloads normalize_state $legacy)
   assert ($migrated.items.0.id == "legacy" and $migrated.items.0.status == "pending" and $migrated.count == 1) "legacy pending rows must migrate without loss"
-  assert ($migrated.scanIndex.0.notified) "legacy rows must migrate to an already-seen fingerprint"
+  assert (($migrated.scanIndex | all {|entry| $entry.notified }) and $migrated.attentionVersion == 0) "legacy indexes without notified fields must all migrate seen without fabricating a signal"
+  let after_legacy_restart = (downloads reduce $migrated [
+    {path: "/Downloads/legacy.txt" size: 1 mtime: 1 regular: true fingerprint: "legacy-fingerprint"}
+    {path: "/Downloads/trimmed.txt" size: 2 mtime: 2 regular: true fingerprint: "trimmed-fingerprint"}
+  ] 100 2)
+  assert (($after_legacy_restart.items | length) == 1 and $after_legacy_restart.attentionVersion == 0) "trimmed legacy rows must remain seen on the next scan"
 
   assert ((downloads zsh_quote "/Downloads/a b's.txt") == "'/Downloads/a b'\\''s.txt'") "clipboard paths must use POSIX single-quote encoding"
 

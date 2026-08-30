@@ -47,7 +47,8 @@ def valid_provider [value: any, source: string] {
   if $source == "downloads" {
     let index = ($value.scanIndex? | default null)
     let pending = ($items | where status == "pending" | length)
-    (is_int $count) and $count == $pending and (($value.observation == "clear" and $count == 0) or ($value.observation == "attention" and $count > 0)) and (is_bool ($value.initialized? | default null)) and (is_list $index) and ($index | all {|entry| valid_scan_entry $entry }) and ($value.badgeText? | default null) == null
+    let attention_version = ($value.attentionVersion? | default null)
+    (is_int $attention_version) and $attention_version >= 0 and (is_int $count) and $count == $pending and (($value.observation == "clear" and $count == 0) or ($value.observation == "attention" and $count > 0)) and (is_bool ($value.initialized? | default null)) and (is_list $index) and ($index | all {|entry| valid_scan_entry $entry }) and ($value.badgeText? | default null) == null
   } else {
     let badge = ($value.badgeText? | default null)
     let badge_valid = $badge == null or (is_string $badge)
@@ -63,15 +64,21 @@ def valid_provider [value: any, source: string] {
 }
 
 export def default_popup [] {
-  {schemaVersion: 1 mainHovered: false popupHovered: false pinned: false generation: 0 animationGeneration: 0 lastCount: 0 primarySource: "" sourceProjection: []}
+  {schemaVersion: 1 mainHovered: false popupHovered: false pinned: false generation: 0 animationGeneration: 0 animationActive: false lastCount: 0 primarySource: "" sourceProjection: []}
 }
 
 def valid_source_projection [entry: any] {
-  (is_record $entry) and (is_string ($entry.source? | default null)) and (is_string ($entry.icon? | default null)) and (is_int ($entry.count? | default null)) and $entry.count >= 0
+  (is_record $entry) and (is_string ($entry.source? | default null)) and (is_string ($entry.icon? | default null)) and (is_int ($entry.count? | default null)) and $entry.count >= 0 and (is_int ($entry.signal? | default null)) and $entry.signal >= 0
 }
 
 def valid_popup [value: any] {
-  (is_record $value) and ($value.schemaVersion? | default 0) == 1 and (is_bool ($value.mainHovered? | default null)) and (is_bool ($value.popupHovered? | default null)) and (is_bool ($value.pinned? | default null)) and (is_int ($value.generation? | default null)) and (is_int ($value.animationGeneration? | default null)) and (is_int ($value.lastCount? | default null)) and (is_string ($value.primarySource? | default null)) and (is_list ($value.sourceProjection? | default null)) and ($value.sourceProjection | all {|entry| valid_source_projection $entry })
+  (is_record $value) and ($value.schemaVersion? | default 0) == 1 and (is_bool ($value.mainHovered? | default null)) and (is_bool ($value.popupHovered? | default null)) and (is_bool ($value.pinned? | default null)) and (is_int ($value.generation? | default null)) and (is_int ($value.animationGeneration? | default null)) and (is_bool ($value.animationActive? | default null)) and (is_int ($value.lastCount? | default null)) and (is_string ($value.primarySource? | default null)) and (is_list ($value.sourceProjection? | default null)) and ($value.sourceProjection | all {|entry| valid_source_projection $entry })
+}
+
+def normalize_popup [value: any] {
+  if not (is_record $value) { return null }
+  let projection = ($value.sourceProjection? | default [] | each {|entry| $entry | upsert signal ($entry.signal? | default 0) })
+  $value | upsert animationActive ($value.animationActive? | default false) | upsert sourceProjection $projection
 }
 
 def recover_corrupt [path: string, source: string] {
@@ -104,7 +111,8 @@ def popup_snapshot [] {
   let path = (popup_path)
   if not ($path | path exists) { return (default_popup) }
   let loaded = try { open $path } catch { null }
-  if $loaded == null or not (valid_popup $loaded) { null } else { $loaded }
+  let normalized = try { normalize_popup $loaded } catch { null }
+  if $normalized == null or not (valid_popup $normalized) { null } else { $normalized }
 }
 
 export def read_provider [source: string] {
@@ -126,9 +134,13 @@ export def read_provider [source: string] {
 }
 
 export def read_popup [] {
-  let value = (popup_snapshot)
-  if $value != null { return $value }
   let path = (popup_path)
+  let loaded = if ($path | path exists) { try { open $path } catch { null } } else { null }
+  let value = if $loaded == null { default_popup } else { try { normalize_popup $loaded } catch { null } }
+  if $value != null and (valid_popup $value) {
+    if $loaded != null and $loaded != $value { atomic_save $path $value }
+    return $value
+  }
   if ($path | path exists) { recover_corrupt $path "popup" }
   default_popup
 }
