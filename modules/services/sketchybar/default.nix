@@ -105,7 +105,7 @@ in
         );
         layout = submoduleOption layoutModule {
           a = ["workspace"];
-          b = [];
+          b = ["notifications"];
           c = [];
           x = ["media"];
           y = ["battery"];

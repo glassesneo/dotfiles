@@ -209,6 +209,13 @@
               ./modules/services/sketchybar/widgets/media/tests
             ];
           };
+          notificationsTestSource = fileset.toSource {
+            root = ./modules/services/sketchybar;
+            fileset = fileset.unions [
+              ./modules/services/sketchybar/colors.nu
+              ./modules/services/sketchybar/widgets/notifications
+            ];
+          };
           piCustomizations = {
             pi-customizations = pkgs.stdenvNoCC.mkDerivation {
               pname = "pi-customizations-check";
@@ -316,6 +323,18 @@
                 cd sketchybar/widgets/media/tests
                 bash default.sh
                 bash service.sh
+                touch $out
+              '';
+
+            sketchybar-notifications-tests =
+              pkgs.runCommand "sketchybar-notifications-tests" {
+                nativeBuildInputs = [pkgs.nushell];
+                src = notificationsTestSource;
+              } ''
+                cp -r "$src" sketchybar
+                chmod -R u+w sketchybar
+                cd sketchybar/widgets/notifications/tests
+                bash default.sh
                 touch $out
               '';
           }
