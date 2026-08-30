@@ -168,7 +168,7 @@
             src = piSource;
             pnpm = piPnpm;
             fetcherVersion = 4;
-            hash = "sha256-u12YG+k5gpl8KsT9wmnovxMphME/e6aY8dFdwwWsiu4=";
+            hash = "sha256-KljNp2wByjqQLmpon8DOccPxgyfQCzdj8bhL4I+jyUw=";
           };
           configurationSource = fileset.toSource {
             root = ./.;
