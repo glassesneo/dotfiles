@@ -17,12 +17,13 @@ def is_list [value: any] { ($value | describe) =~ '^(list|table)' }
 def valid_item [item: any, source: string] {
   if not (is_record $item) { return false }
   if not (is_string ($item.id? | default null)) or not (is_string ($item.label? | default null)) { return false }
+  if not ("detail" in ($item | columns)) or not (($item.detail == null) or (is_string $item.detail)) { return false }
   let action = ($item.action? | default null)
   if not ($action in ["copy-download" "activate-app" "none"]) { return false }
   if $source == "downloads" {
     (is_string ($item.path? | default null)) and (is_string ($item.fingerprint? | default null)) and (is_int ($item.detectedAt? | default null)) and $action == "copy-download"
   } else {
-    (is_string ($item.bundleId? | default null)) and $action == "activate-app"
+    (is_string ($item.bundleId? | default null)) and (is_string ($item.icon? | default null)) and $action == "activate-app"
   }
 }
 
@@ -51,11 +52,15 @@ def valid_provider [value: any, source: string] {
 }
 
 export def default_popup [] {
-  {schemaVersion: 1 mainHovered: false popupHovered: false pinned: false generation: 0 animationGeneration: 0 lastCount: 0 primarySource: ""}
+  {schemaVersion: 1 mainHovered: false popupHovered: false pinned: false generation: 0 animationGeneration: 0 lastCount: 0 primarySource: "" sourceProjection: []}
+}
+
+def valid_source_projection [entry: any] {
+  (is_record $entry) and (is_string ($entry.source? | default null)) and (is_string ($entry.icon? | default null)) and (is_int ($entry.count? | default null)) and $entry.count >= 0
 }
 
 def valid_popup [value: any] {
-  (is_record $value) and ($value.schemaVersion? | default 0) == 1 and (is_bool ($value.mainHovered? | default null)) and (is_bool ($value.popupHovered? | default null)) and (is_bool ($value.pinned? | default null)) and (is_int ($value.generation? | default null)) and (is_int ($value.animationGeneration? | default null)) and (is_int ($value.lastCount? | default null)) and (is_string ($value.primarySource? | default null))
+  (is_record $value) and ($value.schemaVersion? | default 0) == 1 and (is_bool ($value.mainHovered? | default null)) and (is_bool ($value.popupHovered? | default null)) and (is_bool ($value.pinned? | default null)) and (is_int ($value.generation? | default null)) and (is_int ($value.animationGeneration? | default null)) and (is_int ($value.lastCount? | default null)) and (is_string ($value.primarySource? | default null)) and (is_list ($value.sourceProjection? | default null)) and ($value.sourceProjection | all {|entry| valid_source_projection $entry })
 }
 
 def recover_corrupt [path: string, source: string] {
@@ -88,6 +93,22 @@ export def read_popup [] {
     return (default_popup)
   }
   $loaded
+}
+
+# Recovery can rename corrupt input, so read paths used outside an existing
+# source lock acquire that source first. Writers already holding a lock use the
+# raw readers above to avoid self-deadlock.
+export def read_provider_locked [source: string] {
+  if not (acquire $source) { return null }
+  let value = (read_provider $source)
+  release $source
+  $value
+}
+export def read_popup_locked [] {
+  if not (acquire "popup") { return (default_popup) }
+  let value = (read_popup)
+  release "popup"
+  $value
 }
 
 def atomic_save [path: string, value: record] {

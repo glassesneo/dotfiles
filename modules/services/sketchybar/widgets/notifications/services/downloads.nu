@@ -69,9 +69,9 @@ def main [] {
     }
     reduce_scan
     try {
-      # fswatch latency batches event bursts. Each emitted batch receives the
-      # guaranteed delayed rescan above, so a quiet writer can still complete.
-      for _event in (^$fswatch -r --latency 0.2 $downloads_path | lines) { process_event }
+      # -o emits one marker per fswatch batch rather than one pathname. The
+      # delayed scan observes every path created during that quiet interval.
+      for _batch in (^$fswatch -o -r --latency 0.2 $downloads_path | lines) { process_event }
     } catch {|err|
       log warning $"Downloads watcher failed; retrying in 60 seconds: ($err.msg)"
       sleep 60sec

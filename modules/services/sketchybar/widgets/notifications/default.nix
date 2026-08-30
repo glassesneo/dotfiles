@@ -141,6 +141,10 @@ in
           assertion = lib.length (lib.unique (map (app: app.id) cfg.social.apps)) == lib.length cfg.social.apps;
           message = "services.sketchybar.widget-notifications.social.apps ids must be unique";
         }
+        {
+          assertion = lib.all (app: !(builtins.elem app.id ["downloads" "popup"])) cfg.social.apps;
+          message = "services.sketchybar.widget-notifications.social.apps ids must not use reserved state names: downloads, popup";
+        }
       ];
 
       home.packages = lib.optionals cfg.downloads.enable [pkgs.fswatch];

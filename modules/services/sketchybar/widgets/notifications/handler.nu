@@ -12,7 +12,14 @@ def apps [] { '@apps-json@' | from json }
 def enabled_sources [] { '@enabled-sources-json@' | from json }
 
 def attention_states [] {
-  enabled_sources | each {|source| state read_provider $source } | compact | where observation == "attention"
+  enabled_sources | each {|source| state read_provider_locked $source } | compact | where observation == "attention"
+}
+
+def source_icon [source: string] {
+  if $source == "downloads" { "" } else {
+    let app = ((apps) | where id == $source)
+    if ($app | length) == 1 { $app.0.icon } else { "" }
+  }
 }
 
 def aggregate [] {
@@ -21,10 +28,12 @@ def aggregate [] {
   let downloads_items = if ($downloads_state | length) == 0 { [] } else { downloads visible_items $downloads_state.0 $visible_limit }
   let social_states = ($states | where source != "downloads")
   let social_items = ($social_states | each {|item| $item.items } | flatten)
-  let total = ($states | each {|item| $item.count } | math sum)
-  let source = if ($downloads_items | length) > 0 { "downloads" } else if ($social_states | length) > 0 { $social_states.0.source } else { "" }
-  let icon = if $source == "downloads" { "" } else if ($social_items | length) > 0 { $social_items.0.icon } else { "" }
-  {count: $total downloads: $downloads_items social: $social_items source: $source icon: $icon}
+  let projection = (enabled_sources | each {|source|
+    let match = ($states | where source == $source)
+    {source: $source icon: (source_icon $source) count: (if ($match | length) == 1 { $match.0.count } else { 0 })}
+  })
+  let total = ($projection | get count | math sum)
+  {count: $total downloads: $downloads_items social: $social_items projection: $projection}
 }
 
 def main_options [count: int] {
@@ -45,7 +54,8 @@ def render_rows [data: record] {
   for item in $data.downloads {
     let row = (row_name $item.id)
     ^$sketchybar_exe --add item $row $"popup.($name)"
-    ^$sketchybar_exe --set $row icon= $"label=(trunc $item.label)" $"label.tooltip=($item.detail)" icon.padding_left=8 label.padding_right=8 script="__script_path__ popup-event" $"click_script=__script_path__ copy-download ($item.id)"
+    let label = if ($item.detail | is-empty) { $item.label } else { $"($item.label) — ($item.detail)" }
+    ^$sketchybar_exe --set $row icon= $"label=(trunc $label)" icon.padding_left=8 label.padding_right=8 script="__script_path__ popup-event" $"click_script=__script_path__ copy-download ($item.id)"
     ^$sketchybar_exe --subscribe $row mouse.entered mouse.exited
   }
   for item in $data.social {
@@ -83,7 +93,7 @@ def clear_global_hover [] { update_popup {mainHovered: false popupHovered: false
 
 def delayed_visibility [open: bool, generation: int, delay: duration] {
   sleep $delay
-  let popup = (state read_popup)
+  let popup = (state read_popup_locked)
   if $popup.generation != $generation { return }
   if $open {
     let data = (aggregate)
@@ -147,7 +157,8 @@ def copy_download [id: string] {
       let item = $matches.0
       let remaining = ($current.items | where id != $id)
       let regular = (do { ^/bin/test -f $item.path } | complete)
-      if $regular.exit_code != 0 {
+      let file_type = try { ^/usr/bin/stat -f %HT $item.path | str trim } catch { "" }
+      if $regular.exit_code != 0 or $file_type != "Regular File" {
         state write_provider "downloads" (download_state $current $remaining)
         {changed: true success: false}
       } else {
@@ -174,22 +185,34 @@ def activate_app [id: string] {
   if $result.exit_code != 0 { log warning $"Could not activate ($allowed.0.label)"; flash $colors.status_error }
 }
 
-# Atomically compare aggregate state with its prior rendered projection. Only a
-# clear→attention, increase, or primary-source change gets a one-shot slide;
-# a clear transition gets one idle animation; forced refreshes never animate.
+def prior_source_count [projection: list<any>, source: string] {
+  let match = ($projection | where source == $source)
+  if ($match | length) == 1 { $match.0.count } else { 0 }
+}
+
+def triggering_source [previous: list<any>, current: list<any>] {
+  let increases = ($current | where {|entry| $entry.count > (prior_source_count $previous $entry.source) })
+  if ($increases | length) == 0 { null } else { $increases | first }
+}
+
+# Compare a persisted per-source projection while holding the popup lock. This
+# selects the provider that actually gained attention even if Downloads already
+# has pending rows; equal re-events select nothing and therefore never replay.
 def commit_render [data: record, forced: bool] {
   if not (state acquire "popup") { return null }
   let result = try {
     let current = (state read_popup)
-    let attention = not $forced and $data.count > 0 and ($current.lastCount == 0 or $data.count > $current.lastCount or $data.source != $current.primarySource)
+    let trigger = if $forced { null } else { triggering_source $current.sourceProjection $data.projection }
+    let attention = $trigger != null
     let clear = not $forced and $data.count == 0 and $current.lastCount > 0
-    let changed = $forced or $current.lastCount != $data.count or $current.primarySource != $data.source or $attention or $clear
+    let changed = $forced or $current.lastCount != $data.count or $current.sourceProjection != $data.projection or $attention or $clear
     let base = if $forced {
       $current | merge {mainHovered: false popupHovered: false pinned: false}
     } else { $current }
-    let next = ($base | upsert lastCount $data.count | upsert primarySource $data.source | upsert animationGeneration (if $attention or $clear or $forced { $current.animationGeneration + 1 } else { $current.animationGeneration }) | upsert generation (if $forced { $current.generation + 1 } else { $current.generation }))
+    let primary = if $trigger == null { $current.primarySource } else { $trigger.source }
+    let next = ($base | upsert lastCount $data.count | upsert primarySource $primary | upsert sourceProjection $data.projection | upsert animationGeneration (if $attention or $clear or $forced { $current.animationGeneration + 1 } else { $current.animationGeneration }) | upsert generation (if $forced { $current.generation + 1 } else { $current.generation }))
     if $changed { state write_popup $next }
-    {popup: $next attention: $attention clear: $clear generation: $next.animationGeneration}
+    {popup: $next attention: $attention clear: $clear generation: $next.animationGeneration trigger: $trigger}
   } catch {|err|
     log warning $"Could not commit notifications render state: ($err.msg)"
     null
@@ -199,22 +222,27 @@ def commit_render [data: record, forced: bool] {
 }
 
 def animation_current [generation: int] {
-  let popup = (state read_popup)
+  let popup = (state read_popup_locked)
   $popup.animationGeneration == $generation
 }
 
-def play_attention [data: record, generation: int] {
+def play_attention [count: int, icon: string, generation: int] {
+  # Preserve the prior visible icon until it has left, then guard every later
+  # phase against a newer generation before sliding the triggering icon in.
   ^$sketchybar_exe --animate tanh 14 --set $name icon.y_offset=-12
-  ^$sketchybar_exe --set $name $"icon=($data.icon)" icon.y_offset=12
+  sleep 120ms
+  if not (animation_current $generation) { return }
+  ^$sketchybar_exe --set $name $"icon=($icon)" icon.y_offset=12
   ^$sketchybar_exe --animate tanh 14 --set $name icon.y_offset=0
   sleep 180ms
-  if (animation_current $generation) { ^$sketchybar_exe --set $name ...(main_options $data.count) }
+  if (animation_current $generation) { ^$sketchybar_exe --set $name ...(main_options $count) }
 }
 
 def play_clear [generation: int] {
-  ^$sketchybar_exe --animate tanh 14 --set $name icon.y_offset=-12 label.drawing=off
+  ^$sketchybar_exe --animate tanh 14 --set $name icon.y_offset=-12
   sleep 120ms
-  if (animation_current $generation) { ^$sketchybar_exe --set $name ...(main_options 0) }
+  if not (animation_current $generation) { return }
+  ^$sketchybar_exe --set $name ...(main_options 0)
 }
 
 def render [--forced] {
@@ -223,9 +251,13 @@ def render [--forced] {
   if $transition == null { return }
   render_rows $data
   if $forced { popup_close } else if $data.count == 0 and not $transition.popup.pinned { popup_close } else if $data.count > 0 and ($transition.popup.pinned or $transition.popup.mainHovered or $transition.popup.popupHovered) { popup_open }
-  ^$sketchybar_exe --set $name ...(main_options $data.count)
-  if $transition.attention { play_attention $data $transition.generation }
-  if $transition.clear { play_clear $transition.generation }
+  if $transition.attention {
+    play_attention $data.count $transition.trigger.icon $transition.generation
+  } else if $transition.clear {
+    play_clear $transition.generation
+  } else {
+    ^$sketchybar_exe --set $name ...(main_options $data.count)
+  }
 }
 
 def main [action?: string, arg?: string] {

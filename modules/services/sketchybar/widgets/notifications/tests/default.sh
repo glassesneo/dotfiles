@@ -49,7 +49,9 @@ path=
 for argument in "$@"; do path=$argument; done
 sleep 0.1
 printf 'new download\n' >"$path/from-fswatch.txt"
+printf 'second download\n' >"$path/from-fswatch-second.txt"
 printf '%s\n' "$path/from-fswatch.txt"
+printf '%s\n' "$path/from-fswatch-second.txt"
 EOF
 chmod +x "$bin"/*
 
@@ -122,6 +124,15 @@ run_handler copy-download b
 grep -q '"observation":"attention"' "$state/downloads.json" || fail "stale resolution cleared remaining attention"
 grep -q '"count":1' "$state/downloads.json" || fail "stale resolution did not update count"
 
+# A symlink substituted after scan is not a regular-file action target.
+printf target >"$downloads/target.txt"
+ln -s "$downloads/target.txt" "$downloads/replaced-link.txt"
+link_item=$(download_item link "$downloads/replaced-link.txt" 3)
+write_downloads "[$link_item]"
+clipboard_before=${clipboard:+$(cksum "$clipboard")}
+run_handler copy-download link
+[[ ! -e $clipboard || $(cksum "$clipboard") == "$clipboard_before" ]] || fail "symlink replacement reached pbcopy"
+
 # AC6: only the Nix-authored allowlisted bundle is opened and no state is cleared.
 slack_before=$(cksum "$state/slack.json")
 run_handler activate-app slack
@@ -147,9 +158,26 @@ grep -q 'popup.drawing=off' "$log" || fail "forced render did not close popup"
 MOCK_BADGE=10 run_social
 SENDER=notifications_changed run_handler
 first_animation=$(grep -c -- '--animate' "$log" || true)
+grep -q 'icon=S' "$log" || fail "Slack increase did not select its source icon while Downloads was pending"
 [[ $first_animation -gt 0 ]] || fail "new attention did not animate"
 SENDER=notifications_changed run_handler
 [[ $(grep -c -- '--animate' "$log" || true) == "$first_animation" ]] || fail "unchanged attention replayed animation"
+# A main→popup move cancels the delayed close; leaving the popup closes later.
+: >"$log"
+SENDER=mouse.entered run_handler &
+main_enter=$!
+sleep 0.05
+SENDER=mouse.exited run_handler &
+main_exit=$!
+sleep 0.05
+SENDER=mouse.entered run_handler popup-event
+wait "$main_enter"
+wait "$main_exit"
+sleep 0.25
+grep -q 'popup.drawing=on' "$log" || fail "popup did not remain traversable from the main item"
+! grep -q 'popup.drawing=off' "$log" || fail "delayed main close won after popup entry"
+SENDER=mouse.exited run_handler popup-event
+grep -q 'popup.drawing=off' "$log" || fail "popup exit did not schedule delayed close"
 run_handler click-main
 [[ $(grep -o '"pinned":[^,]*' "$state/popup.json") == '"pinned":true' ]] || fail "main click did not pin exactly once"
 SENDER=mouse.exited.global run_handler
@@ -173,6 +201,14 @@ grep -q '"source":"slack"' "$state/slack.json" || fail "concurrent Download acti
 printf '%s' '{"schemaVersion":1,"source":"downloads","items":"bad"}' >"$state/downloads.json"
 SENDER=notifications_changed run_handler
 find "$state" -name 'downloads.json.corrupt-*' -print -quit | grep -q . || fail "malformed provider state was not quarantined"
+rm -f "$state"/downloads.json.corrupt-*
+# Fields consumed by rendering are schema fields too, not merely optional text.
+printf '%s' '{"schemaVersion":1,"source":"downloads","observation":"attention","count":1,"badgeText":null,"summary":"bad","items":[{"id":"bad","path":"/tmp/bad","fingerprint":"bad","label":"bad","detail":1,"action":"copy-download","detectedAt":1}],"scanIndex":[],"initialized":true,"updatedAt":1}' >"$state/downloads.json"
+SENDER=notifications_changed run_handler
+find "$state" -name 'downloads.json.corrupt-*' -print -quit | grep -q . || fail "malformed download detail was not quarantined"
+printf '%s' '{"schemaVersion":1,"source":"slack","observation":"attention","count":1,"badgeText":"1","summary":"bad","items":[{"id":"slack","label":"Slack","detail":"1","action":"activate-app","bundleId":"com.example.slack","icon":1}],"updatedAt":1}' >"$state/slack.json"
+SENDER=notifications_changed run_handler
+find "$state" -name 'slack.json.corrupt-*' -print -quit | grep -q . || fail "malformed social icon was not quarantined"
 
 # AC4: a mocked fswatch event is followed by the stability rescan even when no
 # second event arrives, producing a completion record.
@@ -189,7 +225,7 @@ rm -f "$state/downloads.json" "$downloads"/*
   export PATH="$bin:$PATH" SKETCHYBAR_LOG="$log" PBCOPY_OUT="$clipboard" OPEN_LOG="$open_log"
   nu --no-config-file -c "use $runtime/widgets/notifications/services/downloads.nu; downloads process_event"
 )
-if ! grep -q 'from-fswatch.txt' "$state/downloads.json"; then
+if ! grep -q 'from-fswatch.txt' "$state/downloads.json" && grep -q 'from-fswatch-second.txt' "$state/downloads.json"; then
   if [[ -f "$state/downloads.json" ]]; then sed -n '1,20p' "$state/downloads.json" >&2; fi
   fail "fswatch event lacked a delayed stability rescan"
 fi
