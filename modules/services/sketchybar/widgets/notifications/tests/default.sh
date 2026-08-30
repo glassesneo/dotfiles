@@ -19,6 +19,7 @@ downloads="$fixture/Downloads"
 log="$fixture/sketchybar.log"
 clipboard="$fixture/clipboard"
 open_log="$fixture/open.log"
+fswatch_log="$fixture/fswatch.log"
 mkdir -p "$runtime/widgets" "$bin" "$state" "$downloads"
 cp -R "$notifications_dir" "$runtime/widgets/notifications"
 cp "$notifications_dir/../../colors.nu" "$runtime/colors.nu"
@@ -45,6 +46,7 @@ esac
 EOF
 cat >"$bin/fswatch" <<'EOF'
 #!/usr/bin/env bash
+printf '%s\n' "$*" >>"$FSWATCH_LOG"
 path=
 for argument in "$@"; do path=$argument; done
 sleep 0.1
@@ -92,6 +94,10 @@ download_item() {
 }
 write_slack() {
   printf '%s' '{"schemaVersion":1,"source":"slack","observation":"attention","count":7,"badgeText":"7","summary":"Slack 7","items":[{"id":"slack","label":"Slack","detail":"7","action":"activate-app","bundleId":"com.example.slack","icon":"S"}],"updatedAt":1}' >"$state/slack.json"
+}
+write_slack_unknown() {
+  local count=$1
+  printf '%s' "{\"schemaVersion\":1,\"source\":\"slack\",\"observation\":\"unknown\",\"count\":$count,\"badgeText\":\"$count\",\"summary\":\"Slack badge unavailable; retaining prior attention\",\"items\":[{\"id\":\"slack\",\"label\":\"Slack\",\"detail\":\"$count\",\"action\":\"activate-app\",\"bundleId\":\"com.example.slack\",\"icon\":\"S\"}],\"updatedAt\":1}" >"$state/slack.json"
 }
 
 # Reducer contracts remain the narrow boundary for baseline/temporary/restart
@@ -162,6 +168,9 @@ grep -q 'icon=S' "$log" || fail "Slack increase did not select its source icon w
 [[ $first_animation -gt 0 ]] || fail "new attention did not animate"
 SENDER=notifications_changed run_handler
 [[ $(grep -c -- '--animate' "$log" || true) == "$first_animation" ]] || fail "unchanged attention replayed animation"
+write_slack_unknown 10
+SENDER=notifications_changed run_handler
+[[ $(grep -c -- '--animate' "$log" || true) == "$first_animation" ]] || fail "same-count unknown latch replayed animation"
 # A main→popup move cancels the delayed close; leaving the popup closes later.
 : >"$log"
 SENDER=mouse.entered run_handler &
@@ -213,6 +222,17 @@ find "$state" -name 'slack.json.corrupt-*' -print -quit | grep -q . || fail "mal
 # AC4: a mocked fswatch event is followed by the stability rescan even when no
 # second event arrives, producing a completion record.
 rm -f "$state/downloads.json" "$downloads"/*
+# The service must request one marker per batch from its fswatch consumer.
+(
+  export PATH="$bin:$PATH" FSWATCH_LOG="$fswatch_log" SKETCHYBAR_LOG="$log" PBCOPY_OUT="$clipboard" OPEN_LOG="$open_log"
+  nu --no-config-file "$runtime/widgets/notifications/services/downloads.nu"
+) &
+watcher=$!
+sleep 1
+kill "$watcher" 2>/dev/null || true
+wait "$watcher" 2>/dev/null || true
+grep -q -- '-o -r' "$fswatch_log" || fail "Downloads watcher did not request one fswatch marker per batch"
+rm -f "$state/downloads.json" "$downloads"/*
 # Establish the non-notifying baseline before the injected event.
 (
   export PATH="$bin:$PATH" SKETCHYBAR_LOG="$log" PBCOPY_OUT="$clipboard" OPEN_LOG="$open_log"
@@ -220,12 +240,10 @@ rm -f "$state/downloads.json" "$downloads"/*
 )
 # Injected fswatch creates one event and exits; process_event then performs the
 # delayed scan explicitly, proving that no second watcher event is required.
-"$bin/fswatch" -r --latency 0.2 "$downloads" >/dev/null
+FSWATCH_LOG="$fswatch_log" "$bin/fswatch" -o -r --latency 0.2 "$downloads" >/dev/null
 (
   export PATH="$bin:$PATH" SKETCHYBAR_LOG="$log" PBCOPY_OUT="$clipboard" OPEN_LOG="$open_log"
   nu --no-config-file -c "use $runtime/widgets/notifications/services/downloads.nu; downloads process_event"
 )
-if ! grep -q 'from-fswatch.txt' "$state/downloads.json" && grep -q 'from-fswatch-second.txt' "$state/downloads.json"; then
-  if [[ -f "$state/downloads.json" ]]; then sed -n '1,20p' "$state/downloads.json" >&2; fi
-  fail "fswatch event lacked a delayed stability rescan"
-fi
+grep -q 'from-fswatch.txt' "$state/downloads.json" || fail "first fswatch batch file lacked a delayed stability rescan"
+grep -q 'from-fswatch-second.txt' "$state/downloads.json" || fail "second fswatch batch file was omitted from the follow-up scan"

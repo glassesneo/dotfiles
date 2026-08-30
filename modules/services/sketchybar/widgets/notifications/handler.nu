@@ -11,8 +11,14 @@ const visible_limit = @visible-limit@
 def apps [] { '@apps-json@' | from json }
 def enabled_sources [] { '@enabled-sources-json@' | from json }
 
+def contributes_attention [provider: record] {
+  if $provider.observation == "attention" { true } else if $provider.observation == "unknown" {
+    $provider.count != null and $provider.count > 0 and (($provider.items | length) > 0)
+  } else { false }
+}
+
 def attention_states [] {
-  enabled_sources | each {|source| state read_provider_locked $source } | compact | where observation == "attention"
+  (enabled_sources) | each {|source| state read_provider_locked $source } | compact | where {|provider| contributes_attention $provider }
 }
 
 def source_icon [source: string] {
@@ -28,7 +34,7 @@ def aggregate [] {
   let downloads_items = if ($downloads_state | length) == 0 { [] } else { downloads visible_items $downloads_state.0 $visible_limit }
   let social_states = ($states | where source != "downloads")
   let social_items = ($social_states | each {|item| $item.items } | flatten)
-  let projection = (enabled_sources | each {|source|
+  let projection = ((enabled_sources) | each {|source|
     let match = ($states | where source == $source)
     {source: $source icon: (source_icon $source) count: (if ($match | length) == 1 { $match.0.count } else { 0 })}
   })

@@ -38,16 +38,25 @@ def valid_provider [value: any, source: string] {
   if not (is_record $value) { return false }
   if ($value.schemaVersion? | default 0) != 1 or ($value.source? | default "") != $source { return false }
   if not (($value.observation? | default "") in ["clear" "attention" "unknown"]) { return false }
-  if not (is_int ($value.count? | default null)) or $value.count < 0 { return false }
+  let count = ($value.count? | default null)
+  if $count != null and (not (is_int $count) or $count < 0) { return false }
   if not (is_string ($value.summary? | default null)) or not (is_int ($value.updatedAt? | default null)) { return false }
   let items = ($value.items? | default null)
   if not (is_list $items) or not ($items | all {|item| valid_item $item $source }) { return false }
   if $source == "downloads" {
     let index = ($value.scanIndex? | default null)
-    (is_bool ($value.initialized? | default null)) and (is_list $index) and ($index | all {|entry| valid_scan_entry $entry }) and ($value.badgeText? | default null) == null
+    (is_int $count) and (($value.observation == "clear" and $count == 0) or ($value.observation == "attention" and $count > 0)) and (is_bool ($value.initialized? | default null)) and (is_list $index) and ($index | all {|entry| valid_scan_entry $entry }) and ($value.badgeText? | default null) == null
   } else {
     let badge = ($value.badgeText? | default null)
-    $badge == null or (is_string $badge)
+    let badge_valid = $badge == null or (is_string $badge)
+    if not $badge_valid { return false }
+    if $value.observation == "attention" {
+      (is_int $count) and $count > 0 and (($items | length) > 0)
+    } else if $value.observation == "clear" {
+      $count == 0 and (($items | length) == 0) and $badge == null
+    } else {
+      ($count == null and (($items | length) == 0) and $badge == null) or ((is_int $count) and $count > 0 and (($items | length) > 0))
+    }
   }
 }
 

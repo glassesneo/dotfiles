@@ -14,21 +14,29 @@ export def observation [running: bool, badge: any, failed: bool] {
   {observation: "attention" count: 1 badgeText: $text}
 }
 
+# `unknown` describes the current observation, not the visible latch. A prior
+# nonzero state remains actionable while unavailable, but its observation never
+# becomes a fabricated `attention` answer.
 export def reduce [id: string, label: string, bundle_id: string, icon: string, previous: any, running: bool, badge: any, failed: bool, now: int] {
   let next = (observation $running $badge $failed)
-  let prior_attention = if $previous == null { false } else { ($previous.observation? | default "clear") == "attention" }
-  let keep_latch = $next.observation == "unknown" and $prior_attention
-  let visible = $next.observation == "attention" or $keep_latch
-  let effective_count = if $next.observation == "attention" { $next.count } else if $keep_latch { $previous.count } else { 0 }
-  let effective_badge = if $next.observation == "attention" { $next.badgeText } else if $keep_latch { $previous.badgeText } else { null }
+  let prior_latched = if $previous == null { false } else {
+    let prior_count = ($previous.count? | default null)
+    $prior_count != null and $prior_count > 0 and (($previous.items? | default []) | length) > 0
+  }
+  let keep_latch = $next.observation == "unknown" and $prior_latched
+  let count = if $next.observation == "attention" { $next.count } else if $keep_latch { $previous.count } else { $next.count }
+  let badge_text = if $next.observation == "attention" { $next.badgeText } else if $keep_latch { $previous.badgeText } else { null }
+  let items = if $next.observation == "attention" or $keep_latch {
+    if $keep_latch { $previous.items } else { [{id: $id label: $label detail: $badge_text action: "activate-app" bundleId: $bundle_id icon: $icon}] }
+  } else { [] }
   {
     schemaVersion: 1
     source: $id
-    observation: (if $visible { "attention" } else { $next.observation })
-    count: $effective_count
-    badgeText: $effective_badge
-    summary: (if $visible { $"($label) ($effective_badge | default $effective_count)" } else { $"($label) has no visible Dock badge" })
-    items: (if $visible { [{id: $id label: $label detail: $effective_badge action: "activate-app" bundleId: $bundle_id icon: $icon}] } else { [] })
+    observation: $next.observation
+    count: $count
+    badgeText: $badge_text
+    summary: (if $next.observation == "unknown" and $keep_latch { $"($label) badge unavailable; retaining prior attention" } else if $next.observation == "attention" { $"($label) ($badge_text | default $count)" } else { $"($label) has no visible Dock badge" })
+    items: $items
     updatedAt: $now
   }
 }

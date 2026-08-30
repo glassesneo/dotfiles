@@ -41,7 +41,11 @@ def main [] {
   let marker = (dock-badge reduce "discord" "Discord" "com.example.discord" "D" null true "•" false 1)
   assert ($marker.observation == "attention" and $marker.count == 1 and $marker.badgeText == "•") "nonnumeric badges must remain visible markers"
   let unknown = (dock-badge reduce "slack" "Slack" "com.example.slack" "S" $numeric false null false 2)
-  assert ($unknown.observation == "attention" and $unknown.count == 12) "stopped applications must preserve a prior latch"
+  assert ($unknown.observation == "unknown" and $unknown.count == 12 and ($unknown.items | length) == 1) "stopped applications must retain a prior latch without fabricating attention"
+  let failed = (dock-badge reduce "slack" "Slack" "com.example.slack" "S" $unknown true null true 3)
+  assert ($failed.observation == "unknown" and $failed.count == 12) "failed observations must keep the unknown latch"
+  let fresh_unknown = (dock-badge reduce "slack" "Slack" "com.example.slack" "S" null false null false 3)
+  assert ($fresh_unknown.observation == "unknown" and $fresh_unknown.count == null and ($fresh_unknown.items | length) == 0) "unknown without a latch must contribute no attention"
   let clear = (dock-badge reduce "slack" "Slack" "com.example.slack" "S" $unknown true "" false 3)
   assert ($clear.observation == "clear" and $clear.count == 0) "only an observed running empty badge may clear a latch"
 }
