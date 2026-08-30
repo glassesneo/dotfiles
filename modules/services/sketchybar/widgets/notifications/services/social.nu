@@ -18,15 +18,25 @@ def app_observation [bundle_id: string] {
   }
 }
 
+def semantic [value: record] { $value | reject updatedAt }
+
+# Poll time is not attention state. Persist and publish only an observable latch
+# transition, so unchanged Dock badges cannot restart a bar animation.
 def poll [app: record] {
   if not (state acquire $app.id) { return }
-  let previous = (state read_provider $app.id)
-  let observed = (app_observation $app.bundleId)
-  let next = (dock-badge reduce $app.id $app.label $app.bundleId $app.icon $previous $observed.running $observed.badge $observed.failed (state now))
-  let changed = $previous == null or $previous != $next
-  try { state write_provider $app.id $next } catch {|err| log warning $"Could not save ($app.label) Dock state: ($err.msg)" }
+  let published = try {
+    let previous = (state read_provider $app.id)
+    let observed = (app_observation $app.bundleId)
+    let next = (dock-badge reduce $app.id $app.label $app.bundleId $app.icon $previous $observed.running $observed.badge $observed.failed (state now))
+    let changed = $previous == null or (semantic $previous) != (semantic $next)
+    if $changed { state write_provider $app.id $next }
+    $changed
+  } catch {|err|
+    log warning $"Could not save ($app.label) Dock state: ($err.msg)"
+    false
+  }
   state release $app.id
-  if $changed { state publish }
+  if $published { state publish }
 }
 
 def main [] {

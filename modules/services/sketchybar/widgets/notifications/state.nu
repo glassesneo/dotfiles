@@ -8,8 +8,54 @@ export def provider_path [source: string] { [$state_dir $"($source).json"] | pat
 export def popup_path [] { [$state_dir "popup.json"] | path join }
 def lock_path [source: string] { [$state_dir $"($source).lock"] | path join }
 
+def is_record [value: any] { ($value | describe) =~ '^record' }
+def is_int [value: any] { ($value | describe) == "int" }
+def is_string [value: any] { ($value | describe) == "string" }
+def is_bool [value: any] { ($value | describe) == "bool" }
+def is_list [value: any] { ($value | describe) =~ '^(list|table)' }
+
+def valid_item [item: any, source: string] {
+  if not (is_record $item) { return false }
+  if not (is_string ($item.id? | default null)) or not (is_string ($item.label? | default null)) { return false }
+  let action = ($item.action? | default null)
+  if not ($action in ["copy-download" "activate-app" "none"]) { return false }
+  if $source == "downloads" {
+    (is_string ($item.path? | default null)) and (is_string ($item.fingerprint? | default null)) and (is_int ($item.detectedAt? | default null)) and $action == "copy-download"
+  } else {
+    (is_string ($item.bundleId? | default null)) and $action == "activate-app"
+  }
+}
+
+def valid_scan_entry [entry: any] {
+  (is_record $entry) and (is_string ($entry.path? | default null)) and (is_string ($entry.fingerprint? | default null)) and (is_int ($entry.size? | default null)) and (is_int ($entry.mtime? | default null)) and (is_int ($entry.stableSince? | default null)) and (is_bool ($entry.baseline? | default null))
+}
+
+# Provider records are a persisted internal protocol. Validate every field that
+# later drives a UI row or action; a merely versioned-but-malformed file is not
+# safe to retry forever.
 def valid_provider [value: any, source: string] {
-  ($value | describe) =~ '^record' and ($value.schemaVersion? | default 0) == 1 and ($value.source? | default "") == $source
+  if not (is_record $value) { return false }
+  if ($value.schemaVersion? | default 0) != 1 or ($value.source? | default "") != $source { return false }
+  if not (($value.observation? | default "") in ["clear" "attention" "unknown"]) { return false }
+  if not (is_int ($value.count? | default null)) or $value.count < 0 { return false }
+  if not (is_string ($value.summary? | default null)) or not (is_int ($value.updatedAt? | default null)) { return false }
+  let items = ($value.items? | default null)
+  if not (is_list $items) or not ($items | all {|item| valid_item $item $source }) { return false }
+  if $source == "downloads" {
+    let index = ($value.scanIndex? | default null)
+    (is_bool ($value.initialized? | default null)) and (is_list $index) and ($index | all {|entry| valid_scan_entry $entry }) and ($value.badgeText? | default null) == null
+  } else {
+    let badge = ($value.badgeText? | default null)
+    $badge == null or (is_string $badge)
+  }
+}
+
+export def default_popup [] {
+  {schemaVersion: 1 mainHovered: false popupHovered: false pinned: false generation: 0 animationGeneration: 0 lastCount: 0 primarySource: ""}
+}
+
+def valid_popup [value: any] {
+  (is_record $value) and ($value.schemaVersion? | default 0) == 1 and (is_bool ($value.mainHovered? | default null)) and (is_bool ($value.popupHovered? | default null)) and (is_bool ($value.pinned? | default null)) and (is_int ($value.generation? | default null)) and (is_int ($value.animationGeneration? | default null)) and (is_int ($value.lastCount? | default null)) and (is_string ($value.primarySource? | default null))
 }
 
 def recover_corrupt [path: string, source: string] {
@@ -22,8 +68,6 @@ def recover_corrupt [path: string, source: string] {
   }
 }
 
-# Unsupported schemas are deliberately not interpreted. Downloads callers pass
-# a baseline state, so recovery cannot create a first-run notification storm.
 export def read_provider [source: string] {
   let path = (provider_path $source)
   if not ($path | path exists) { return null }
@@ -37,11 +81,11 @@ export def read_provider [source: string] {
 
 export def read_popup [] {
   let path = (popup_path)
-  if not ($path | path exists) { return {schemaVersion: 1 mainHovered: false popupHovered: false pinned: false generation: 0} }
+  if not ($path | path exists) { return (default_popup) }
   let loaded = try { open $path } catch { null }
-  if $loaded == null or ($loaded.schemaVersion? | default 0) != 1 {
+  if $loaded == null or not (valid_popup $loaded) {
     recover_corrupt $path "popup"
-    return {schemaVersion: 1 mainHovered: false popupHovered: false pinned: false generation: 0}
+    return (default_popup)
   }
   $loaded
 }
@@ -49,20 +93,32 @@ export def read_popup [] {
 def atomic_save [path: string, value: record] {
   mkdir $state_dir
   let temporary = $"($path).tmp-(random uuid)"
-  $value | to json --raw | save --raw --force $temporary
-  mv --force $temporary $path
+  let published = try {
+    $value | to json --raw | save --raw --force $temporary
+    mv --force $temporary $path
+    true
+  } catch {|err|
+    log warning $"Could not atomically save notifications state ($path): ($err.msg)"
+    false
+  }
+  if ($temporary | path exists) { try { rm --force $temporary } }
+  if not $published { error make {msg: $"notifications state write failed: ($path)"} }
 }
 
-export def write_provider [source: string, value: record] { atomic_save (provider_path $source) $value }
-export def write_popup [value: record] { atomic_save (popup_path) $value }
+export def write_provider [source: string, value: record] {
+  if not (valid_provider $value $source) { error make {msg: $"refusing invalid provider state for ($source)"} }
+  atomic_save (provider_path $source) $value
+}
+export def write_popup [value: record] {
+  if not (valid_popup $value) { error make {msg: "refusing invalid popup state"} }
+  atomic_save (popup_path) $value
+}
 
 def stale_lock [path: string] {
   if not ($path | path exists) { return false }
   try { ((now) - (^/usr/bin/stat -f %m $path | into int)) > 30 } catch { false }
 }
 
-# mkdir is atomic. A bounded retry and stale-lock recovery protects separate
-# short-lived SketchyBar handlers without turning a failed lock into a write.
 export def acquire [source: string] {
   mkdir $state_dir
   let path = (lock_path $source)
@@ -82,8 +138,3 @@ export def release [source: string] {
 }
 
 export def publish [] { try { ^$sketchybar_exe --trigger notifications_changed | ignore } catch {} }
-
-export def reset_popup [] {
-  let popup = (read_popup)
-  write_popup ($popup | merge {mainHovered: false popupHovered: false pinned: false generation: (($popup.generation? | default 0) + 1)})
-}

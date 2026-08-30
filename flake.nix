@@ -210,8 +210,11 @@
             ];
           };
           notificationsTestSource = fileset.toSource {
-            root = ./modules/services/sketchybar/widgets/notifications;
-            fileset = ./modules/services/sketchybar/widgets/notifications;
+            root = ./modules/services/sketchybar;
+            fileset = fileset.unions [
+              ./modules/services/sketchybar/colors.nu
+              ./modules/services/sketchybar/widgets/notifications
+            ];
           };
           piCustomizations = {
             pi-customizations = pkgs.stdenvNoCC.mkDerivation {
@@ -328,10 +331,10 @@
                 nativeBuildInputs = [pkgs.nushell];
                 src = notificationsTestSource;
               } ''
-                cp -r "$src" notifications
-                chmod -R u+w notifications
-                cd notifications/tests
-                nu --no-config-file default.nu
+                cp -r "$src" sketchybar
+                chmod -R u+w sketchybar
+                cd sketchybar/widgets/notifications/tests
+                bash default.sh
                 touch $out
               '';
           }

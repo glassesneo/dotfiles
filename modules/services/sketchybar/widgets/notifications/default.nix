@@ -46,6 +46,10 @@ in
           open = "/usr/bin/open";
           visible-limit = toString self.downloads.visibleLimit;
           apps-json = builtins.toJSON self.social.apps;
+          enabled-sources-json = builtins.toJSON (
+            lib.optional self.downloads.enable "downloads"
+            ++ lib.optionals self.social.enable (map (app: app.id) self.social.apps)
+          );
         };
         state = pkgs.replaceVars ./state.nu {
           state-dir = self.stateDir;
@@ -110,6 +114,10 @@ in
     }: {
       assertions = [
         {
+          assertion = lib.hasPrefix "/" cfg.downloads.path;
+          message = "services.sketchybar.widget-notifications.downloads.path must be absolute";
+        }
+        {
           assertion = cfg.downloads.visibleLimit > 0;
           message = "services.sketchybar.widget-notifications.downloads.visibleLimit must be positive";
         }
@@ -129,9 +137,13 @@ in
           assertion = lib.all (app: builtins.match "[A-Za-z0-9._-]+" app.id != null) cfg.social.apps;
           message = "services.sketchybar.widget-notifications.social.apps ids must be safe SketchyBar identifiers";
         }
+        {
+          assertion = lib.length (lib.unique (map (app: app.id) cfg.social.apps)) == lib.length cfg.social.apps;
+          message = "services.sketchybar.widget-notifications.social.apps ids must be unique";
+        }
       ];
 
-      home.packages = [pkgs.fswatch];
+      home.packages = lib.optionals cfg.downloads.enable [pkgs.fswatch];
       home.activation.sketchybarNotificationDirectories = homeConfig.lib.dag.entryAfter ["writeBoundary"] ''
         mkdir -p ${lib.escapeShellArg cfg.stateDir} ${lib.escapeShellArg logDir}
       '';

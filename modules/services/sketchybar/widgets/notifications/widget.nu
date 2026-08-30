@@ -33,6 +33,7 @@ def main [direction: string] {
   sketchybar --add event notifications_changed
   sketchybar --add item $name $direction
   sketchybar --set $name ...$options
-  sketchybar --subscribe $name notifications_changed forced display_change mouse.entered mouse.exited mouse.exited.global mouse.clicked
+  # Main clicks use click_script only; subscribing mouse.clicked too would toggle twice.
+  sketchybar --subscribe $name notifications_changed forced display_change mouse.entered mouse.exited mouse.exited.global
   log info "Rendered notifications widget"
 }
