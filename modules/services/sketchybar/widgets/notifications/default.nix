@@ -59,8 +59,10 @@ in
         dockBadgeProvider = ./providers/dock-badge.nu;
         downloadsService = pkgs.replaceVars ./services/downloads.nu {
           downloads-path = self.downloads.path;
+          find = "/usr/bin/find";
           fswatch = lib.getExe pkgs.fswatch;
           stability-seconds = toString self.downloads.stabilitySeconds;
+          retry-seconds = "60";
         };
         socialService = pkgs.replaceVars ./services/social.nu {
           lsappinfo = "/usr/bin/lsappinfo";

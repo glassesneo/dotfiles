@@ -82,39 +82,56 @@ def recover_corrupt [path: string, source: string] {
   }
 }
 
-export def read_provider [source: string] {
+# Read-only snapshots never rename corrupt input. They are safe while another
+# process holds the lock because provider publication is an atomic rename.
+def provider_snapshot [source: string] {
   let path = (provider_path $source)
   if not ($path | path exists) { return null }
   let loaded = try { open $path } catch { null }
-  if $loaded == null or not (valid_provider $loaded $source) {
-    recover_corrupt $path $source
-    return null
-  }
-  $loaded
+  if $loaded == null or not (valid_provider $loaded $source) { null } else { $loaded }
 }
-
-export def read_popup [] {
+def popup_snapshot [] {
   let path = (popup_path)
   if not ($path | path exists) { return (default_popup) }
   let loaded = try { open $path } catch { null }
-  if $loaded == null or not (valid_popup $loaded) {
-    recover_corrupt $path "popup"
-    return (default_popup)
-  }
-  $loaded
+  if $loaded == null or not (valid_popup $loaded) { null } else { $loaded }
 }
 
-# Recovery can rename corrupt input, so read paths used outside an existing
-# source lock acquire that source first. Writers already holding a lock use the
-# raw readers above to avoid self-deadlock.
+export def read_provider [source: string] {
+  let value = (provider_snapshot $source)
+  if $value != null { return $value }
+  let path = (provider_path $source)
+  if ($path | path exists) { recover_corrupt $path $source }
+  null
+}
+
+export def read_popup [] {
+  let value = (popup_snapshot)
+  if $value != null { return $value }
+  let path = (popup_path)
+  if ($path | path exists) { recover_corrupt $path "popup" }
+  default_popup
+}
+
+# Recovery can rename corrupt input, so successful lock acquisition is required
+# for quarantine. On bounded lock failure use the last atomically published,
+# validated snapshot rather than treating another provider as cleared.
 export def read_provider_locked [source: string] {
-  if not (acquire $source) { return null }
+  if not (acquire $source) {
+    let fallback = (provider_snapshot $source)
+    if $fallback == null { log warning $"No safe notifications snapshot available for locked source ($source)" }
+    return $fallback
+  }
   let value = (read_provider $source)
   release $source
   $value
 }
 export def read_popup_locked [] {
-  if not (acquire "popup") { return (default_popup) }
+  if not (acquire "popup") {
+    let fallback = (popup_snapshot)
+    if $fallback == null { log warning "No safe notifications popup snapshot available while locked"; return (default_popup) }
+    return $fallback
+  }
   let value = (read_popup)
   release "popup"
   $value

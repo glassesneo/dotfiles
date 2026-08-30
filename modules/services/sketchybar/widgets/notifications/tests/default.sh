@@ -44,9 +44,21 @@ case ${1:-} in
   info) printf 'StatusLabel = "%s"\n' "${MOCK_BADGE:-7}" ;;
 esac
 EOF
+cat >"$bin/find" <<'EOF'
+#!/usr/bin/env bash
+if [[ ${FIND_FAIL:-0} == 1 ]]; then
+  printf 'permission denied\n' >&2
+  exit 1
+fi
+exec /usr/bin/find "$@"
+EOF
 cat >"$bin/fswatch" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >>"$FSWATCH_LOG"
+if [[ ${FSWATCH_FAIL:-0} == 1 ]]; then
+  printf 'watch failed\n' >&2
+  exit 1
+fi
 path=
 for argument in "$@"; do path=$argument; done
 sleep 0.1
@@ -60,7 +72,9 @@ chmod +x "$bin"/*
 find "$runtime/widgets/notifications" -type f -name '*.nu' -exec sed -i'' \
   -e "s|@state-dir@|$state|g" \
   -e "s|@downloads-path@|$downloads|g" \
+  -e "s|@find@|$bin/find|g" \
   -e 's|@stability-seconds@|1|g' \
+  -e 's|@retry-seconds@|1|g' \
   -e 's|@visible-limit@|3|g' \
   -e "s|@sketchybar-exe@|$bin/sketchybar|g" \
   -e "s|@pbcopy@|$bin/pbcopy|g" \
@@ -231,6 +245,8 @@ watcher=$!
 sleep 1
 kill "$watcher" 2>/dev/null || true
 wait "$watcher" 2>/dev/null || true
+# The test deliberately terminates a service that may be inside its lock.
+rm -rf "$state/downloads.lock"
 grep -q -- '-o -r' "$fswatch_log" || fail "Downloads watcher did not request one fswatch marker per batch"
 rm -f "$state/downloads.json" "$downloads"/*
 # Establish the non-notifying baseline before the injected event.
@@ -247,3 +263,38 @@ FSWATCH_LOG="$fswatch_log" "$bin/fswatch" -o -r --latency 0.2 "$downloads" >/dev
 )
 grep -q 'from-fswatch.txt' "$state/downloads.json" || fail "first fswatch batch file lacked a delayed stability rescan"
 grep -q 'from-fswatch-second.txt' "$state/downloads.json" || fail "second fswatch batch file was omitted from the follow-up scan"
+
+# A failing scan is unavailable data, never an empty snapshot: prior pending
+# state and the rendered event stream remain intact.
+write_downloads "[$item_a]"
+: >"$log"
+(
+  export PATH="$bin:$PATH" FIND_FAIL=1 SKETCHYBAR_LOG="$log" PBCOPY_OUT="$clipboard" OPEN_LOG="$open_log"
+  nu --no-config-file -c "use $runtime/widgets/notifications/services/downloads.nu; downloads process_event"
+) || true
+grep -q '"id":"a"' "$state/downloads.json" || fail "failed scan cleared prior Downloads state"
+! grep -q 'trigger notifications_changed' "$log" || fail "failed scan published a clear transition"
+rm -rf "$state/downloads.lock"
+
+# A terminating watcher backs off before launchd can observe a tight loop. The
+# test substitution uses one second, so sub-second observation must see one run.
+: >"$fswatch_log"
+(
+  export PATH="$bin:$PATH" FSWATCH_LOG="$fswatch_log" FSWATCH_FAIL=1 SKETCHYBAR_LOG="$log" PBCOPY_OUT="$clipboard" OPEN_LOG="$open_log"
+  nu --no-config-file "$runtime/widgets/notifications/services/downloads.nu"
+) &
+failing_watcher=$!
+sleep 0.4
+[[ $(wc -l <"$fswatch_log") == 1 ]] || fail "failed fswatch restarted without backoff"
+kill "$failing_watcher" 2>/dev/null || true
+wait "$failing_watcher" 2>/dev/null || true
+rm -rf "$state/downloads.lock"
+
+# A contended source lock falls back to its atomic validated snapshot rather
+# than committing an aggregate that silently drops that provider.
+write_downloads "[$item_a,$item_b]"
+mkdir "$state/downloads.lock"
+SENDER=notifications_changed run_handler
+rmdir "$state/downloads.lock"
+grep -q '"source":"downloads"' "$state/popup.json" || fail "lock contention dropped the existing Downloads projection"
+grep -q '"count":2' "$state/popup.json" || fail "lock contention reduced the existing Downloads count"
