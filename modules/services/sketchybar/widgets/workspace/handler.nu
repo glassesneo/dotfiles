@@ -262,6 +262,13 @@ def workspace_widget_options [workspace: record] {
   ]
 }
 
+def ensure_listener [direction: string] {
+  sketchybar --add event workspace_change
+  sketchybar --add item $listener $direction
+  sketchybar --set $listener script="__script_path__"
+  sketchybar --subscribe $listener display_change space_change workspace_change
+}
+
 def render_items [snapshot: record, direction: string] {
   try { sketchybar --remove $workspace_selector } catch {}
   for workspace in $snapshot.workspaces {
@@ -269,13 +276,8 @@ def render_items [snapshot: record, direction: string] {
     sketchybar --set $workspace.item_name ...(workspace_widget_options $workspace)
   }
   try { sketchybar --remove workspaces } catch {}
-  try { sketchybar --remove $listener } catch {}
   sketchybar --add bracket workspaces $workspace_selector
   sketchybar --set workspaces background.color=0x00000000
-  sketchybar --add item $listener $direction
-  sketchybar --add event workspace_change
-  sketchybar --set $listener script="__script_path__"
-  sketchybar --subscribe $listener display_change space_change workspace_change
 }
 
 def focused_names [snapshot: record] {
@@ -420,6 +422,7 @@ def main [action?: string, arg?: string] {
   match ($action | default "event") {
     "render" => {
       save_direction $arg
+      ensure_listener $arg
       let snapshot = (stable_workspace_snapshot)
       if $snapshot != null {
         render_items $snapshot $arg

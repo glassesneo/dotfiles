@@ -13,6 +13,9 @@ originating_rift_is_alive() {
 
 while originating_rift_is_alive; do
   if "$rift_cli" subscribe cli --event workspace_changed --command /bin/bash --args "$event_bridge"; then
+    # Reconcile SketchyBar after every Rift generation, including crash
+    # recovery that rebuilt Rift's virtual workspace state.
+    /bin/bash "$event_bridge"
     exit 0
   fi
   /bin/sleep 0.1

@@ -194,6 +194,7 @@
             root = ./modules/services/sketchybar/widgets/workspace;
             fileset = fileset.unions [
               ./modules/services/sketchybar/widgets/workspace/tests
+              ./modules/services/sketchybar/widgets/workspace/handler.nu
               ./modules/services/sketchybar/widgets/workspace/providers/aerospace.nu
               ./modules/services/sketchybar/widgets/workspace/providers/rift.nu
               ./modules/services/sketchybar/widgets/workspace/rift-subscribe-on-start.sh
@@ -300,6 +301,7 @@
                 chmod -R u+w workspace
                 cd workspace/tests
                 nu default.nu
+                bash listener-bootstrap.sh
                 bash rift-subscribe-on-start.sh
                 touch $out
               '';
