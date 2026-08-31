@@ -320,6 +320,7 @@
                 cd workspace/tests
                 nu default.nu
                 bash listener-bootstrap.sh
+                bash cluster-local-rebuild.sh
                 bash rift-subscribe-on-start.sh
                 touch $out
               '';

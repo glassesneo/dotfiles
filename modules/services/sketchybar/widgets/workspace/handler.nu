@@ -270,10 +270,16 @@ def ensure_listener [direction: string] {
 }
 
 def render_items [snapshot: record, direction: string] {
+  # Rebuild only workspace.* items, then --move them relative to
+  # workspaces-listener / sibling workspace.* so side-tail --add cannot push
+  # the cluster past later widgets (e.g. notifications) on the same side.
   try { sketchybar --remove $workspace_selector } catch {}
+  mut previous = $listener
   for workspace in $snapshot.workspaces {
-    sketchybar --add item $workspace.item_name $direction
-    sketchybar --set $workspace.item_name ...(workspace_widget_options $workspace)
+    let name = $workspace.item_name
+    let args = ["--add" "item" $name $direction "--move" $name "after" $previous "--set" $name] ++ (workspace_widget_options $workspace)
+    run-external sketchybar ...$args
+    $previous = $name
   }
   try { sketchybar --remove workspaces } catch {}
   sketchybar --add bracket workspaces $workspace_selector
