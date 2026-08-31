@@ -33,6 +33,14 @@
   questionDisabled = base.extendModules {
     modules = [{myconfig.programs.pi-coding-agent.question.enable = lib.mkForce false;}];
   };
+  artifactDisabled = base.extendModules {
+    modules = [
+      {
+        myconfig.programs.pi-coding-agent.question.enable = lib.mkForce false;
+        myconfig.programs.pi-coding-agent.agent_artifact.enable = lib.mkForce false;
+      }
+    ];
+  };
   questionKeybindingOverride = base.extendModules {
     modules = [
       {
@@ -176,6 +184,13 @@ in
           packageSources = questionDisabled.config.programs.pi-coding-agent.settings.packages;
           extensionPaths = questionDisabled.config.programs.pi-coding-agent.settings.extensions;
           modes = builtins.fromJSON (builtins.unsafeDiscardStringContext questionDisabled.config.home.file."${questionDisabled.config.home.homeDirectory}/.pi/agent/agent-modes.json".text);
+        };
+        artifactDisabled = {
+          packageSources = artifactDisabled.config.programs.pi-coding-agent.settings.packages;
+          runtimeLinks = {
+            extensionsSource = builtins.hasAttr "${artifactDisabled.config.home.homeDirectory}/.pi/agent/extensions-runtime/extensions_src" artifactDisabled.config.home.file;
+            nodeModules = builtins.hasAttr "${artifactDisabled.config.home.homeDirectory}/.pi/agent/extensions-runtime/node_modules" artifactDisabled.config.home.file;
+          };
         };
         catalog = builtins.fromJSON (builtins.unsafeDiscardStringContext base.config.home.file."${base.config.home.homeDirectory}/.pi/agent/role-catalog.json".text);
         profiles = builtins.fromJSON (builtins.unsafeDiscardStringContext base.config.home.file."${base.config.home.homeDirectory}/.pi/agent/execution-profiles.json".text);

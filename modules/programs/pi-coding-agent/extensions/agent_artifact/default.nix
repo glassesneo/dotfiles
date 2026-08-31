@@ -1,6 +1,13 @@
-{delib, ...}:
+{
+  delib,
+  piArtifactRuntime,
+  ...
+}:
 delib.module {
   name = "programs.pi-coding-agent.agent_artifact";
   options = delib.singleCascadeEnableOption;
-  home.ifEnabled.programs.pi-coding-agent.settings.extensions = ["${./../../extensions_src}/agent_artifact.ts"];
+  myconfig.always = {cfg, ...}: {
+    args.shared.piArtifact.enabled = cfg.enable;
+  };
+  home.ifEnabled.programs.pi-coding-agent.settings.extensions = [piArtifactRuntime.extensionPath];
 }

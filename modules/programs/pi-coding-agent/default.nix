@@ -3,10 +3,15 @@
   homeConfig,
   lib,
   llm-agents,
+  piArtifact,
+  piOrchestration,
+  piQuestion,
   pkgs,
   ...
 }: let
   configDir = "${homeConfig.home.homeDirectory}/.pi/agent";
+  artifactRuntimeDir = "${configDir}/extensions-runtime";
+  artifactExtensionPath = "${artifactRuntimeDir}/extensions_src/agent_artifact.ts";
   emergencyConfigDir = "${homeConfig.home.homeDirectory}/.pi/emergency-agent";
   modelDefaults = {
     defaultProvider = "openai-codex";
@@ -50,6 +55,7 @@
     options = with delib; {
       enabled = boolOption true;
       source = noDefault (strOption null);
+      extensions = allowNull (listOfOption str null);
     };
   };
 in
@@ -75,61 +81,74 @@ in
         ]);
       };
 
-    myconfig.always.programs.pi-coding-agent = {
-      packageContributions.codex-compaction.source = "npm:@ogulcancelik/pi-codex-compaction@0.1.3";
-      profiles = lib.mapAttrs (_: profile: lib.mapAttrs (_: lib.mkDefault) profile) {
-        sol-high = {
-          model = "openai-codex/gpt-5.6-sol";
-          thinkingLevel = "high";
-        };
-        sol-medium = {
-          model = "openai-codex/gpt-5.6-sol";
-          thinkingLevel = "medium";
-        };
-        luna-high = {
-          model = "openai-codex/gpt-5.6-luna";
-          thinkingLevel = "high";
-        };
-        luna-xhigh = {
-          model = "openai-codex/gpt-5.6-luna";
-          thinkingLevel = "xhigh";
-        };
-        terra-high = {
-          model = "openai-codex/gpt-5.6-terra";
-          thinkingLevel = "high";
-        };
-        cursor-read = {
-          model = "cursor/cursor-grok-4.5-high-fast";
-          thinkingLevel = null;
-          harness = "cursor-agent";
-          harnessOptions = {
-            mode = "ask";
-            permissionPolicy = "reject";
-            sandbox = "disabled";
-            trustWorkspace = true;
-            worktree = false;
+    myconfig.always = {...}: {
+      args.shared.piArtifactRuntime.extensionPath = artifactExtensionPath;
+      programs.pi-coding-agent = {
+        packageContributions = {
+          codex-compaction.source = "npm:@ogulcancelik/pi-codex-compaction@0.1.3";
+          decision-ui = {
+            enabled = piQuestion.enabled || piArtifact.enabled || piOrchestration.enabled;
+            source = "npm:@glassesneo/pi-decision-ui@0.1.1";
+            extensions =
+              if piQuestion.enabled
+              then null
+              else [];
           };
         };
-        cursor-write = {
-          model = "cursor/cursor-grok-4.5-high-fast";
-          thinkingLevel = null;
-          harness = "cursor-agent";
-          harnessOptions = {
-            mode = "agent";
-            permissionPolicy = "allow-always";
-            sandbox = "disabled";
-            trustWorkspace = true;
-            worktree = false;
+        profiles = lib.mapAttrs (_: profile: lib.mapAttrs (_: lib.mkDefault) profile) {
+          sol-high = {
+            model = "openai-codex/gpt-5.6-sol";
+            thinkingLevel = "high";
           };
-        };
-        codex-search = {
-          model = "codex/gpt-5.6-luna";
-          thinkingLevel = "high";
-          harness = "codex";
-          harnessOptions = {
-            mode = "read-only";
-            permissionPolicy = "reject";
-            webSearch = "cached";
+          sol-medium = {
+            model = "openai-codex/gpt-5.6-sol";
+            thinkingLevel = "medium";
+          };
+          luna-high = {
+            model = "openai-codex/gpt-5.6-luna";
+            thinkingLevel = "high";
+          };
+          luna-xhigh = {
+            model = "openai-codex/gpt-5.6-luna";
+            thinkingLevel = "xhigh";
+          };
+          terra-high = {
+            model = "openai-codex/gpt-5.6-terra";
+            thinkingLevel = "high";
+          };
+          cursor-read = {
+            model = "cursor/cursor-grok-4.5-high-fast";
+            thinkingLevel = null;
+            harness = "cursor-agent";
+            harnessOptions = {
+              mode = "ask";
+              permissionPolicy = "reject";
+              sandbox = "disabled";
+              trustWorkspace = true;
+              worktree = false;
+            };
+          };
+          cursor-write = {
+            model = "cursor/cursor-grok-4.5-high-fast";
+            thinkingLevel = null;
+            harness = "cursor-agent";
+            harnessOptions = {
+              mode = "agent";
+              permissionPolicy = "allow-always";
+              sandbox = "disabled";
+              trustWorkspace = true;
+              worktree = false;
+            };
+          };
+          codex-search = {
+            model = "codex/gpt-5.6-luna";
+            thinkingLevel = "high";
+            harness = "codex";
+            harnessOptions = {
+              mode = "read-only";
+              permissionPolicy = "reject";
+              webSearch = "cached";
+            };
           };
         };
       };
@@ -142,7 +161,15 @@ in
     }: let
       packageContributionNames = builtins.attrNames cfg.packageContributions;
       enabledPackageContributionNames = builtins.filter (name: cfg.packageContributions.${name}.enabled) packageContributionNames;
-      packageSources = map (name: cfg.packageContributions.${name}.source) enabledPackageContributionNames;
+      packageSources = map (name: let
+        contribution = cfg.packageContributions.${name};
+      in
+        if contribution.extensions == null
+        then contribution.source
+        else {
+          inherit (contribution) source extensions;
+        })
+      enabledPackageContributionNames;
       packageContributionSources = map (name: cfg.packageContributions.${name}.source) packageContributionNames;
       duplicateValues = values:
         builtins.filter
@@ -180,6 +207,7 @@ in
       disabledNames = map (item: item.name) (builtins.filter (item: item.module != null && !(item.module ? enable && item.module.enable)) selected);
       emptyPathNames = map (item: item.name) (builtins.filter (item: item.module != null && !(item.module ? extensionPaths && item.module.extensionPaths != [])) selected);
       names = values: lib.concatStringsSep ", " values;
+      artifactRuntimeRequired = piArtifact.enabled || piOrchestration.enabled;
       emergencySettings =
         modelDefaults
         // nativeLifecycleSettings
@@ -273,6 +301,10 @@ in
             schemaVersion = 1;
             profiles = lib.mapAttrs (_: profile: lib.filterAttrs (_name: value: value != null && value != {}) profile) cfg.profiles;
           };
+        }
+        // lib.optionalAttrs artifactRuntimeRequired {
+          "${artifactRuntimeDir}/extensions_src".source = homeConfig.lib.file.mkOutOfStoreSymlink "${./extensions_src}";
+          "${artifactRuntimeDir}/node_modules".source = homeConfig.lib.file.mkOutOfStoreSymlink "${cfg.configDir}/npm/node_modules";
         }
         // lib.optionalAttrs cfg.emergency.enable (sharedEmergencyFiles
           // {

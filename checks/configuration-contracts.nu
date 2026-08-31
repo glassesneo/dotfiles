@@ -43,10 +43,20 @@ def main [] {
     ...($pi.enabledQuestion.extensionPaths | each {|path| $path | path basename })
     ...($pi.disabledQuestion.extensionPaths | each {|path| $path | path basename })
   ]
-  assert-contract (
-    ($pi.enabledQuestion.packageSources | any {|source| $source == $decision_ui_package })
-    and not ($pi.disabledQuestion.packageSources | any {|source| $source == $decision_ui_package })
-  ) "question-decision-ui-package-gating"
+  let package_filter = {|packages|
+    $packages
+    | where {|package| ($package | describe | str starts-with "record") }
+    | where {|package| $package.source == $decision_ui_package }
+    | first
+  }
+  let disabled_question_decision_ui = (do $package_filter $pi.disabledQuestion.packageSources)
+  let artifact_disabled_decision_ui = (do $package_filter $pi.artifactDisabled.packageSources)
+  assert-contract (($pi.enabledQuestion.packageSources | any {|source| $source == $decision_ui_package })) "decision-ui-package-present-for-question"
+  assert-contract (($pi.disabledQuestion.extensionPaths | any {|path| ($path | str ends-with "/extensions-runtime/extensions_src/agent_artifact.ts") })) "local-artifact-extension-uses-managed-runtime"
+  assert-contract (($pi.catalog.roles.reviewer.childExtensionContributions | any {|path| ($path | str ends-with "/extensions-runtime/extensions_src/agent_artifact.ts") })) "reviewer-artifact-extension-uses-managed-runtime"
+  assert-contract ($pi.artifactDisabled.runtimeLinks.extensionsSource and $pi.artifactDisabled.runtimeLinks.nodeModules) "reviewer-artifact-runtime-links-present"
+  assert-contract (($disabled_question_decision_ui | get source) == $decision_ui_package and ($disabled_question_decision_ui | get extensions) == []) "decision-ui-question-extension-filtered-for-local-artifact"
+  assert-contract (($artifact_disabled_decision_ui | get source) == $decision_ui_package and ($artifact_disabled_decision_ui | get extensions) == []) "decision-ui-question-extension-filtered-for-reviewer"
   assert-contract ($question_extension_names | all {|name| $name != "question.ts" }) "question-local-extension-absent"
   assert-contract (($pi.enabledQuestion.modes.modes | values | any {|mode| $mode.tools | any {|tool| $tool == "question" } })) "question-tool-enabled"
   assert-contract (not ($pi.disabledQuestion.modes.modes | values | any {|mode| $mode.tools | any {|tool| $tool == "question" } })) "question-tool-disabled"
@@ -190,11 +200,7 @@ def main [] {
   '#
   let validator_path = ($env.TMPDIR | path join configuration-contract-validator.mjs)
   $validator_source | save --force $validator_path
-  let agent_types_validator = (
-    $pi.catalog.roles.reviewer.childExtensionContributions
-    | first
-    | str replace --regex 'agent_artifact\.ts$' 'utilities/agent_types.ts'
-  )
+  let agent_types_validator = ($package_root | path join "extensions_src" "utilities" "agent_types.ts")
   let validator = with-env {
     AGENT_TYPES_VALIDATOR: $agent_types_validator
     GENERATED_ROLE_CATALOG: ($pi.catalog | to json --raw)

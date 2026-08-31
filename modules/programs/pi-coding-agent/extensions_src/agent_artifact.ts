@@ -4,6 +4,12 @@ import {
     type ExtensionContext,
     type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
+import {
+    runDecisionFlow,
+    type DecisionFlowPolicy,
+    type DecisionItem,
+    type DecisionResult,
+} from "@glassesneo/pi-decision-ui";
 import { Text } from "@earendil-works/pi-tui";
 import {
     approvePendingArtifact,
@@ -17,13 +23,6 @@ import {
     type ArtifactKind,
     type ArtifactSummary,
 } from "./utilities/agent_artifact_store.ts";
-import {
-    type DecisionFlowPolicy,
-    type DecisionItem,
-    type DecisionResultDetails,
-} from "./utilities/decision_core.ts";
-import { runStandardDecisionFlow } from "./utilities/decision_standard_ui.ts";
-import { runTuiDecisionFlow } from "./utilities/decision_tui.ts";
 
 export type AgentArtifactStatus = "approved" | "revision_requested" | "rejected" | "unavailable";
 
@@ -141,11 +140,11 @@ async function askApprovalDecision(
     ctx: ExtensionContext,
     summary: ArtifactSummary,
     signal?: AbortSignal,
-): Promise<DecisionResultDetails> {
-    const questions = [approvalQuestion(summary)];
-    return ctx.mode === "tui"
-        ? runTuiDecisionFlow(ctx, questions, signal, approvalDecisionPolicy)
-        : runStandardDecisionFlow({ hasUI: ctx.hasUI, ui: ctx.ui }, questions, signal, approvalDecisionPolicy);
+): Promise<DecisionResult> {
+    return runDecisionFlow(ctx, [approvalQuestion(summary)], {
+        signal,
+        policy: approvalDecisionPolicy,
+    });
 }
 
 async function selectApprovalAction(

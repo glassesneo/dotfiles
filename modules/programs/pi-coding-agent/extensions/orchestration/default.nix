@@ -3,6 +3,7 @@
   homeConfig,
   lib,
   llm-agents,
+  piArtifactRuntime,
   piKeybindings,
   pkgs,
   tmux,
@@ -12,7 +13,7 @@
   popupExtension = "${./../../extensions_src}/popup.ts";
   orchestrationExtension = "${./../../extensions_src}/orchestration.ts";
   childBridgeExtension = "${./../../extensions_src}/orchestration_child_bridge.ts";
-  artifactExtension = "${./../../extensions_src}/agent_artifact.ts";
+  artifactExtension = piArtifactRuntime.extensionPath;
   webSearchExtension = "${./../../extensions_src}/web_search.ts";
   webFetchExtension = "${./../../extensions_src}/web_fetch.ts";
   historyViewerExtension = "${./../../extensions_src}/orchestration_history_viewer.ts";
@@ -172,6 +173,7 @@ in
         } {};
       });
     myconfig.always = {cfg, ...}: {
+      args.shared.piOrchestration.enabled = cfg.enable;
       programs.pi-coding-agent.orchestration = {
         roles = lib.mapAttrs (_: role: lib.mapAttrs (_: lib.mkDefault) role) settledRoles;
         callPolicy = {

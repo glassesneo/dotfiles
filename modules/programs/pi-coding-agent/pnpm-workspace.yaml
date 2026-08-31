@@ -3,3 +3,5 @@ frozenLockfile: true
 allowBuilds:
   "@google/genai": false
   protobufjs: false
+minimumReleaseAgeExclude:
+  - '@glassesneo/pi-decision-ui@0.1.1'
