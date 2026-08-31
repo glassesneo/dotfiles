@@ -6,7 +6,10 @@ function record(value: unknown): JsonObject | undefined { return value && typeof
 function scalar(value: unknown): string { return typeof value === "string" || typeof value === "number" || typeof value === "boolean" ? String(value) : ""; }
 function textFrom(value: unknown): string { if (typeof value === "string") return value; if (Array.isArray(value)) return value.map(textFrom).filter(Boolean).join(""); const item = record(value); if (!item) return ""; for (const key of ["text", "content", "message", "title", "name", "detail"]) { const text = textFrom(item[key]); if (text) return text; } return ""; }
 function supportsMode(session: JsonObject, mode: string): boolean { const modes = record(session.modes)?.availableModes; return Array.isArray(modes) && modes.some(candidate => candidate === mode || record(candidate)?.id === mode); }
-const cursorAcpModelIds: Readonly<Record<string, string>> = { "cursor-grok-4.5-high-fast": "grok-4.5[effort=high,fast=true]" };
+const cursorAcpModelIds: Readonly<Record<string, string>> = {
+    "cursor-grok-4.5-high-fast": "grok-4.5[effort=high,fast=true]",
+    "cursor-grok-4.6-high-fast": "grok-4.6[effort=high,fast=true]",
+};
 function expectedAcpModelId(model: string): string { const modelId = cursorAcpModelIds[model]; if (!modelId) throw new Error(`Cursor ACP model mapping is unavailable for ${model}`); return modelId; }
 function matchesModelCandidate(candidate: unknown, model: string): boolean { const value = record(candidate); return candidate === model || [value?.modelId, value?.value, value?.id, value?.name].includes(model); }
 function supportsModel(session: JsonObject, model: string): boolean {

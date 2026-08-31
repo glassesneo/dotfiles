@@ -61,19 +61,19 @@ const cursorProfile: ExecutionProfile = { model: "cursor/cursor-grok-4.5-high-fa
 const externalConfig: ExternalWorkerConfig = { adapter: "cursor-acp", command: "/cursor", cwd: "/work", mode: "agent", permissionPolicy: "allow-always" };
 
 async function externalFixture(root: string) {
-    const delegateRole = role({ instructions: "Make bounded generalist progress.", tools: [] });
-    const profileConfig: ExecutionProfileConfig = { schemaVersion: 1, profiles: { "cursor-write": cursorProfile } };
+    const generalRole = role({ instructions: "Independently own one problem through exploration, implementation, and validation.", tools: [] });
+    const profileConfig: ExecutionProfileConfig = { schemaVersion: 1, profiles: { "cursor-standard": cursorProfile } };
     const mesh = await initializeMesh(root, { rootSessionId: "root", recoverable: false, budgets: externalBudgets });
-    const epoch = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", catalog: { schemaVersion: 4, roles: { delegate: delegateRole } }, profiles: profileConfig, callPolicy: { modes: { ops: { targets: { delegate: { profiles: ["cursor-write"] } } } }, roles: {} } });
+    const epoch = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", catalog: { schemaVersion: 4, roles: { general: generalRole } }, profiles: profileConfig, callPolicy: { modes: { ops: { targets: { general: { profiles: ["cursor-standard"] } } } }, roles: {} } });
     const reservation = await reserveMeshCapacity(root, mesh.meshId, "new-agent-task");
-    const prepared = await prepareAgent(root, mesh.meshId, { reservationId: reservation.reservationId, role: "delegate", selectedProfile: "cursor-write", harness: "cursor-agent", cwd: "/work", roleSnapshot: delegateRole, profileSnapshot: cursorProfile, launchEnvelope: "pending", epochId: epoch.epochId, provenance: { creatorSessionId: "parent" }, capabilities: externalCapabilities });
-    const launchEnvelope = buildLaunchEnvelope({ meshId: mesh.meshId, agentId: prepared.agentId, epochId: epoch.epochId, role: "delegate", selectedProfile: "cursor-write", snapshot: epoch, childExtensions: { delegate: [] } });
+    const prepared = await prepareAgent(root, mesh.meshId, { reservationId: reservation.reservationId, role: "general", selectedProfile: "cursor-standard", harness: "cursor-agent", cwd: "/work", roleSnapshot: generalRole, profileSnapshot: cursorProfile, launchEnvelope: "pending", epochId: epoch.epochId, provenance: { creatorSessionId: "parent" }, capabilities: externalCapabilities });
+    const launchEnvelope = buildLaunchEnvelope({ meshId: mesh.meshId, agentId: prepared.agentId, epochId: epoch.epochId, role: "general", selectedProfile: "cursor-standard", snapshot: epoch, childExtensions: { general: [] } });
     const envelopePath = join(prepared.paths.directory, "launch-envelope.json");
     await writeFile(envelopePath, JSON.stringify(launchEnvelope));
-    await publishAgent(root, mesh.meshId, prepared.paths, { agentId: prepared.agentId, epochId: epoch.epochId, role: "delegate", selectedProfile: "cursor-write", harness: "cursor-agent", cwd: "/work", roleSnapshot: delegateRole, profileSnapshot: cursorProfile, launchEnvelope: envelopePath, creatorSessionId: "parent", tmux: externalTmux, capabilities: externalCapabilities });
+    await publishAgent(root, mesh.meshId, prepared.paths, { agentId: prepared.agentId, epochId: epoch.epochId, role: "general", selectedProfile: "cursor-standard", harness: "cursor-agent", cwd: "/work", roleSnapshot: generalRole, profileSnapshot: cursorProfile, launchEnvelope: envelopePath, creatorSessionId: "parent", tmux: externalTmux, capabilities: externalCapabilities });
     const taskId = randomUUID();
     const env = { PI_MESH_ID: mesh.meshId, PI_MESH_AGENT_ID: prepared.agentId, PI_MESH_AGENT_DIR: prepared.paths.directory, PI_MESH_EPOCH_ID: epoch.epochId, PI_MESH_TASK_PATH: taskPaths(root, mesh.meshId, taskId).directory, PI_AGENT_RESOLVED_AGENT: envelopePath, PI_MESH_EXTERNAL_CONFIG: JSON.stringify(externalConfig) };
-    return { root, meshId: mesh.meshId, agentId: prepared.agentId, epochId: epoch.epochId, delegateRole, launchEnvelope, envelopePath, env };
+    return { root, meshId: mesh.meshId, agentId: prepared.agentId, epochId: epoch.epochId, generalRole, launchEnvelope, envelopePath, env };
 }
 
 // Admission: launch isolation is repository-owned, a leaked context/tool/resource flag materially violates the role boundary, and neither types nor schema validation observes the final Pi argv.
@@ -97,16 +97,16 @@ void test("Pi launch descriptors isolate prompt-only roles and expose outbound o
 });
 
 // Admission: selected-profile misrouting changes the actual model/harness while preserving an apparently correct purpose identity; final worker config and prompt composition are not guaranteed by envelope validation alone.
-// Given delegate/cursor-write and searcher/codex-search envelopes, when they cross harness and external-driver routing, each worker observes the selected execution profile while retaining the role-owned instructions and caller task.
+// Given general/cursor-standard and searcher/codex-search envelopes, when they cross harness and external-driver routing, each worker observes the selected execution profile while retaining the role-owned instructions and caller task.
 void test("external routing consumes selected profiles without turning profiles into purpose identities", () => {
-    const delegateRole = role({ instructions: "Make bounded generalist progress.", tools: [] });
-    const delegateEnvelope = envelope({ role: "delegate", selfRole: delegateRole, selectedProfile: "cursor-write", executionProfile: cursorProfile });
+    const generalRole = role({ instructions: "Independently own one problem through exploration, implementation, and validation.", tools: [] });
+    const generalEnvelope = envelope({ role: "general", selfRole: generalRole, selectedProfile: "cursor-standard", executionProfile: cursorProfile });
     const cursor = resolveHarnessAdapter(runtime, cursorProfile.harness, cursorProfile);
-    const cursorLaunch = cursor.adapter.launch(runtime, cursor.harness, launchInput("delegate", delegateEnvelope));
+    const cursorLaunch = cursor.adapter.launch(runtime, cursor.harness, launchInput("general", generalEnvelope));
     assert.deepEqual(validateExternalWorkerConfig(JSON.parse(cursorLaunch.env.PI_MESH_EXTERNAL_CONFIG!)), { adapter: "cursor-acp", command: "/cursor", cwd: "/work", mode: "agent", permissionPolicy: "allow-always" });
     assert.equal(resolveExternalDriver(validateExternalWorkerConfig(JSON.parse(cursorLaunch.env.PI_MESH_EXTERNAL_CONFIG!)), cursorProfile).display, "cursor-agent");
-    assert.equal(delegateEnvelope.role, "delegate");
-    assert.equal(externalTaskPrompt(delegateEnvelope.selfRole.instructions, "Repair file A."), "Make bounded generalist progress.\n\nDelegated task:\nRepair file A.");
+    assert.equal(generalEnvelope.role, "general");
+    assert.equal(externalTaskPrompt(generalEnvelope.selfRole.instructions, "Repair file A."), "Independently own one problem through exploration, implementation, and validation.\n\nDelegated task:\nRepair file A.");
 
     const searcherRole = role({ instructions: "Answer one bounded external question." });
     const codexProfile: ExecutionProfile = { model: "codex/gpt-5.6-luna", thinkingLevel: "high", harness: "codex", harnessOptions: { mode: "read-only", permissionPolicy: "reject", webSearch: "cached" } };
@@ -148,7 +148,7 @@ void test("external worker separates idle stop probes from full task claims", as
 }));
 
 // Admission: external active cancellation cadence is process-owned behavior not established by schemas or the idle-claim test.
-// Given a published delegate role under cursor-write, when the external worker crosses readiness and successive task boundaries, durable state records completion, recoverable failure, 50 ms cancellation monitoring, and later reuse under the same role/profile identity.
+// Given a published general role under cursor-standard, when the external worker crosses readiness and successive task boundaries, durable state records completion, recoverable failure, 50 ms cancellation monitoring, and later reuse under the same role/profile identity.
 void test("external worker persists readiness and reusable completion, failure, and cancellation lifecycle", async () => withTemporaryRoot("orchestration-external-lifecycle-", async root => {
     const fixture = await externalFixture(root);
     const prompts: string[] = [];
@@ -175,7 +175,7 @@ void test("external worker persists readiness and reusable completion, failure, 
     try {
     await waitUntil(async () => { const snapshot = await readAgentSnapshot(root, fixture.meshId, fixture.agentId); return snapshot.status.bridgeReady && snapshot.activity.phase === "idle"; });
     const ready = await readAgentSnapshot(root, fixture.meshId, fixture.agentId);
-    assert.deepEqual({ role: ready.agent.role, selectedProfile: ready.agent.selectedProfile, harness: ready.agent.harness, usage: ready.agent.capabilities.usage, context: ready.activity.context.state, accepting: ready.activity.acceptingTask }, { role: "delegate", selectedProfile: "cursor-write", harness: "cursor-agent", usage: false, context: "unsupported", accepting: true });
+    assert.deepEqual({ role: ready.agent.role, selectedProfile: ready.agent.selectedProfile, harness: ready.agent.harness, usage: ready.agent.capabilities.usage, context: ready.activity.context.state, accepting: ready.activity.acceptingTask }, { role: "general", selectedProfile: "cursor-standard", harness: "cursor-agent", usage: false, context: "unsupported", accepting: true });
 
     const submit = (prompt: string) => createTask(root, fixture.meshId, fixture.agentId, prompt, { requesterEndpointId: `root:${fixture.meshId}` });
     const complete = await submit("complete");
@@ -208,7 +208,7 @@ void test("external worker persists readiness and reusable completion, failure, 
     await worker;
     workerStopped = true;
     assert.equal((await readAgentSnapshot(root, fixture.meshId, fixture.agentId)).status.state, "stopping");
-    assert.deepEqual(prompts, ["complete", "fail", "reuse", "cancel"].map(prompt => externalTaskPrompt(fixture.delegateRole.instructions, prompt)));
+    assert.deepEqual(prompts, ["complete", "fail", "reuse", "cancel"].map(prompt => externalTaskPrompt(fixture.generalRole.instructions, prompt)));
     } finally {
         if (!workerStopped) {
             await markAgentStopping(root, fixture.meshId, fixture.agentId).catch(() => {});

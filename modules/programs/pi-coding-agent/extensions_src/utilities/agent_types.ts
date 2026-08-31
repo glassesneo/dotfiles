@@ -62,7 +62,7 @@ function strings(value: unknown, label: string): string[] { if (!Array.isArray(v
 function positive(value: unknown, label: string): number { if (!Number.isInteger(value) || Number(value) <= 0) throw new Error(`${label} must be a positive integer`); return Number(value); }
 function nonnegative(value: unknown, label: string): number { if (!Number.isInteger(value) || Number(value) < 0) throw new Error(`${label} must be a non-negative integer`); return Number(value); }
 function uuid(value: unknown, label: string): string { const result = text(value, label); if (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(result)) throw new Error(`${label} must be a UUID`); return result; }
-function model(value: unknown, label: string): string { const result = text(value, label); if (!/^[^/\s]+\/[^/\s]+$/u.test(result)) throw new Error(`${label} must use provider/model format`); return result; }
+function model(value: unknown, label: string): string { const result = text(value, label); if (!/^[^/\s]+\/\S+$/u.test(result)) throw new Error(`${label} must use provider/model format`); return result; }
 function exactOptions(value: Record<string, unknown> | undefined, expected: Record<string, unknown>, label: string): void { if (!value || canonicalJson(value) !== canonicalJson(expected)) throw new Error(`${label} requires exact harnessOptions`); }
 const thinkingLevels = new Set(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);
 

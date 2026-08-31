@@ -108,10 +108,10 @@
       contextPolicy = "prompt-only";
       childExtensionContributions = [];
     };
-    delegate = {
-      description = "Make bounded generalist progress or provide an independent Cursor perspective.";
-      tools = [];
-      instructions = "Take the bounded goal and use available repository search, reading, reasoning, and mutation tools autonomously to make useful progress or provide a distinct perspective. Return the outcome, evidence or changes, material reasoning, and any blocker or uncertainty. If required access or evidence is missing, return the useful partial result and state what is missing.";
+    general = {
+      description = "Independently own one problem through exploration, implementation, and validation.";
+      tools = ["read" "grep" "find" "ls" "bash" "write" "edit" "mesh_report"];
+      instructions = "Take the problem as a self-contained assignment. Independently explore, plan locally, implement, validate, recover from mistakes, and report completion without requiring the parent to decompose the work. Prefer finishing with an outcome the parent can integrate; if required access or evidence is missing, return the useful partial result and state what is missing.${meshReportGuidance}";
       contextPolicy = "project";
       childExtensionContributions = [];
     };
@@ -124,24 +124,23 @@
         researcher.profiles = ["terra-high"];
         searcher.profiles = ["codex-search"];
         gyaru.profiles = ["luna-high"];
-        delegate.profiles = ["cursor-read"];
       };
       ops.targets = {
         explorer.profiles = ["luna-high"];
         worker.profiles = ["luna-xhigh" "terra-high" "sol-medium"];
-        validator.profiles = ["luna-high"];
+        validator.profiles = ["north-mini-free"];
         reviewer.profiles = ["luna-xhigh" "terra-high" "sol-medium"];
         review-lens.profiles = ["luna-high"];
         researcher.profiles = ["terra-high"];
         searcher.profiles = ["codex-search"];
         gyaru.profiles = ["luna-high"];
-        delegate.profiles = ["cursor-read" "cursor-write"];
+        general.profiles = ["cursor-standard" "cursor-fast" "pi-deliberate"];
       };
     };
     roles = {
       reviewer.targets = {
         review-lens.profiles = ["luna-high"];
-        validator.profiles = ["luna-high"];
+        validator.profiles = ["north-mini-free"];
       };
       researcher.targets.searcher.profiles = ["codex-search"];
     };
@@ -231,7 +230,7 @@ in
               retain = 1;
               pressureFloor = 0;
             };
-            delegate = {
+            general = {
               collectAt = 8;
               retain = 4;
               pressureFloor = 1;

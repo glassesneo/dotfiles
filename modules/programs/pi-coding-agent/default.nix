@@ -209,19 +209,19 @@ in
             model = "openai-codex/gpt-5.6-terra";
             thinkingLevel = "high";
           };
-          cursor-read = {
-            model = "cursor/cursor-grok-4.5-high-fast";
+          cursor-standard = {
+            model = "cursor/cursor-grok-4.6-high-fast";
             thinkingLevel = null;
             harness = "cursor-agent";
             harnessOptions = {
-              mode = "ask";
-              permissionPolicy = "reject";
+              mode = "agent";
+              permissionPolicy = "allow-always";
               sandbox = "disabled";
               trustWorkspace = true;
               worktree = false;
             };
           };
-          cursor-write = {
+          cursor-fast = {
             model = "cursor/cursor-grok-4.5-high-fast";
             thinkingLevel = null;
             harness = "cursor-agent";
@@ -232,6 +232,14 @@ in
               trustWorkspace = true;
               worktree = false;
             };
+          };
+          pi-deliberate = {
+            model = "openrouter/z-ai/glm-5.2:free";
+            thinkingLevel = "high";
+          };
+          north-mini-free = {
+            model = "openrouter/cohere/north-mini-code:free";
+            thinkingLevel = "high";
           };
           codex-search = {
             model = "codex/gpt-5.6-luna";

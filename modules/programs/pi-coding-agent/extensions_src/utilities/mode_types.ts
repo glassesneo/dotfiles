@@ -46,7 +46,7 @@ function strings(value: unknown, label: string): string[] {
 }
 function model(value: unknown, label: string): string {
     const result = text(value, label);
-    if (!/^[^/\s]+\/[^/\s]+$/u.test(result)) throw new Error(`${label} must use provider/model format`);
+    if (!/^[^/\s]+\/\S+$/u.test(result)) throw new Error(`${label} must use provider/model format`);
     return result;
 }
 function thinkingLevel(value: unknown, label: string): ThinkingLevel {
