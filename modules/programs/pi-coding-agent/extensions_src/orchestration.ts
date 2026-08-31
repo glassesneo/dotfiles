@@ -14,7 +14,7 @@ import { cleanupMeshAgents, failStartedMeshAgent, readReconciledAgentSnapshot, r
 import { reserveNewAgentCapacityWithPressure, runPeriodicAgentGc } from "./utilities/orchestration_gc.ts";
 import { awaitPressureAdmission, failOpenPressureAdmissions, processPressureAdmissions, reconcilePressureAdmissions } from "./utilities/orchestration_admission.ts";
 import { exceedsModelVisibleLimit, projectDebugSnapshot, projectMeshCompletionContext, projectMeshRetrievalTask, projectMinimalAgentTask, projectMinimalSubmitResult, receiptIdsFromToolResults, sanitizeSnapshot, serializeModelVisibleJson, type AgentToolDetails, type MeshOutputMode, type SubmitDetails } from "./utilities/orchestration_projection.ts";
-import { acknowledgeMeshContextInterventions, acknowledgeMeshEvents, bindMeshEndpoint, isLiveMeshEndpointBinding, markMeshEventsInjected, materializeMeshCompletionEvents, readEndpointDeliverySnapshot, registerMeshReport, registerStateAwareMeshSend, reserveNewAgentMeshSendSubmission, resolveRouteEndpoint, setMeshEndpointOffline, type FrozenTask, type MeshEndpoint, type MeshSendResult } from "./utilities/orchestration_events.ts";
+import { acknowledgeMeshContextInterventions, acknowledgeMeshEvents, bindMeshEndpoint, isLiveMeshEndpointBinding, markMeshEventsInjected, materializeMeshCompletionEvents, readEndpointDeliverySnapshot, registerMeshReport, registerStateAwareMeshSend, reserveNewAgentMeshSendSubmission, resolveRouteEndpoint, setMeshEndpointOffline, type FrozenTask, type MeshDelivery, type MeshEndpoint, type MeshSendResult } from "./utilities/orchestration_events.ts";
 import { OrchestrationDeadlineScheduler } from "./utilities/orchestration_cadence.ts";
 import { createCompletionReceipt, readCompletionLedger, reconcileCompletionReceipts, rollbackCompletionReceipt, type CompletionReceiptCreationResult } from "./utilities/orchestration_completion.ts";
 import { attachRootMesh, beginMeshClose, claimTaskUsage, completeMeshClose, createTask, ensurePolicyEpoch, heartbeatRootLease, initializeMesh, prepareAgent, publishAgent, readAgentSnapshot, readMesh, readPersistedCompletionReceiptEvidence, readPolicyEpoch, readTask, reconcileMeshReservations, reconcileMeshState, reconcileMeshUsageClaims, releaseMeshReservation, removePreparedAgent, taskPaths, validateStopReason } from "./utilities/orchestration_store.ts";
@@ -34,7 +34,7 @@ import { displayIdentityForSnapshot, type AgentDisplayIdentity } from "./utiliti
 import { createDirectoryWake, endpointBindingInboxDirectory, rootCompletionQueueDirectory, type DirectoryWake, type DirectoryWakeDependencies } from "./utilities/orchestration_wake.ts";
 
 const CONFIG = join(getAgentDir(), "orchestration.json"); const CATALOG = join(getAgentDir(), "role-catalog.json"); const PROFILES = join(getAgentDir(), "execution-profiles.json"); const MODES = join(getAgentDir(), "agent-modes.json");
-const ROOT_BINDING = "mesh-root-binding"; const POLICY_BINDING = "mesh-policy-epoch"; const PARENT_STATUS = "mesh-parent-navigation"; const PUMP_STATUS = "mesh-event-pump"; const NOTICE_PUMP_STATUS = "mesh-notice-pump"; const NOTICE_ENTRY = "mesh-tui-notice";
+const ROOT_BINDING = "mesh-root-binding"; const POLICY_BINDING = "mesh-policy-epoch"; const PARENT_STATUS = "mesh-parent-navigation"; const PUMP_STATUS = "mesh-event-pump"; const NOTICE_PUMP_STATUS = "mesh-notice-pump"; const NOTICE_ENTRY = "mesh-tui-notice"; const COMPLETION_DELIVERY_WINDOW_MS = 5_000;
 interface RootBinding { schemaVersion: 1; meshId: string }
 interface EpochBinding { schemaVersion: 1; meshId: string; mode: string; epochId: string; policyDigest: string }
 export interface ActiveCaller { identity: string; meshId: string; epoch: PolicyEpoch; catalog: RoleCatalog; envelope?: AgentLaunchEnvelope; agentId?: string; runtimeId?: string; endpointId: string; sessionFile?: string; error?: string }
@@ -228,7 +228,7 @@ export async function registerOrchestration(pi: ExtensionAPI, options: Orchestra
     pi.registerEntryRenderer(NOTICE_ENTRY, (entry, renderOptions, theme) => renderTuiNotice(entry.data as TuiNotice, renderOptions.expanded, theme));
     loadFeatureKeybindings("meshPalette"); loadFeatureKeybindings("tmuxPreview"); const configPath = options.configPath ?? CONFIG; const catalogPath = options.catalogPath ?? CATALOG; const profilePath = options.profilePath ?? (configPath === CONFIG ? PROFILES : join(dirname(configPath), "execution-profiles.json")); const modePath = options.modePath ?? (configPath === CONFIG ? MODES : join(dirname(configPath), "agent-modes.json")); const env = options.env ?? process.env; const [runtime, catalog, profiles, modes] = await Promise.all([loadOrchestrationConfig(configPath), loadRoleCatalog(catalogPath), loadExecutionProfiles(profilePath), loadAgentModes(modePath)]); validateOrchestrationReferences(runtime, catalog, profiles, Object.keys(modes.modes)); const exec: CommandExecutor = async (command, args) => { const value = await pi.exec(command, args); return { stdout: value.stdout, stderr: value.stderr, code: value.code }; };
     pi.registerMessageRenderer("mesh-event", (message, renderOptions, theme) => renderMeshEventMessage(message, renderOptions, theme, runtime.natureHandleWords));
-    let current: ActiveCaller | undefined; let rootLeaseId: string | undefined; let endpoint: MeshEndpoint | undefined; let sessionContext: ExtensionContext | undefined; let latestMode: ActiveModeEvent | undefined; let cadence: OrchestrationDeadlineScheduler | undefined; let materializationPass: Promise<void> | undefined; let pumpPass: Promise<boolean> | undefined; let waitForTerminalSnapshots: WaitForTerminalSnapshots = async () => { throw new Error("mesh_wait completion pump is not initialized"); }; const pumpWaiters = new Set<{ resolve: () => void; reject: (error: unknown) => void }>(); let noticePumping = false; let wakeHints: DirectoryWake[] = []; const closeWakeHints = () => { const closing = wakeHints; wakeHints = []; for (const wake of closing) void wake.close(); }; let shuttingDown = false; let lastPumpError: string | undefined; let lastNoticePumpError: string | undefined; let modeBarrier: ActiveModeBarrier; const maintenance = new AbortController(); const waitLifecycle = new AbortController(); const injectedThisRuntime = new Set<string>(); const confirmedReceiptIds = new Set<string>(); const appendedNotices = new Set<string>(); const notifiedNotices = new Set<string>(); const reportedNoticeErrors = new Set<string>(); let resolvedEnvelope: AgentLaunchEnvelope | undefined; const childAgentId = env.PI_MESH_AGENT_ID; const childMeshId = env.PI_MESH_ID;
+    let current: ActiveCaller | undefined; let rootLeaseId: string | undefined; let endpoint: MeshEndpoint | undefined; let sessionContext: ExtensionContext | undefined; let latestMode: ActiveModeEvent | undefined; let cadence: OrchestrationDeadlineScheduler | undefined; let completionDeliveryDeadline: number | undefined; let scheduledNow = 0; const deliveryNow = options.now ?? (options.setInterval ? () => scheduledNow : () => performance.now()); let materializationPass: Promise<void> | undefined; let pumpPass: Promise<boolean> | undefined; let waitForTerminalSnapshots: WaitForTerminalSnapshots = async () => { throw new Error("mesh_wait completion pump is not initialized"); }; const pumpWaiters = new Set<{ resolve: () => void; reject: (error: unknown) => void }>(); let noticePumping = false; let wakeHints: DirectoryWake[] = []; const closeWakeHints = () => { const closing = wakeHints; wakeHints = []; for (const wake of closing) void wake.close(); }; let shuttingDown = false; let lastPumpError: string | undefined; let lastNoticePumpError: string | undefined; let modeBarrier: ActiveModeBarrier; const maintenance = new AbortController(); const waitLifecycle = new AbortController(); const injectedThisRuntime = new Set<string>(); const confirmedReceiptIds = new Set<string>(); const appendedNotices = new Set<string>(); const notifiedNotices = new Set<string>(); const reportedNoticeErrors = new Set<string>(); let resolvedEnvelope: AgentLaunchEnvelope | undefined; const childAgentId = env.PI_MESH_AGENT_ID; const childMeshId = env.PI_MESH_ID;
     if (env.PI_AGENT_RESOLVED_AGENT) try { resolvedEnvelope = validateLaunchEnvelope(JSON.parse(await readFile(env.PI_AGENT_RESOLVED_AGENT, "utf8"))); } catch (error) { current = { identity: "agent:invalid", meshId: childMeshId ?? randomUUID(), epoch: {} as PolicyEpoch, catalog, endpointId: "invalid", error: errorText(error) }; }
     const isolatedPromptOnly = resolvedEnvelope?.selfRole.contextPolicy === "prompt-only";
     const deps: OrchestrationDependencies = { configPath, catalogPath, profilePath, modePath, env, exec, activeCaller: () => current, authorityBarrier: () => { options.onAuthorityWait?.(); return modeBarrier.wait(); }, rootLeaseId: () => rootLeaseId, natureHandleWords: () => runtime.natureHandleWords };
@@ -265,14 +265,48 @@ export async function registerOrchestration(pi: ExtensionAPI, options: Orchestra
         }));
         return Object.fromEntries(resolved.filter((entry): entry is readonly [string, AgentDisplayIdentity] => entry !== undefined));
     };
+    const deliverRoutedMeshEvent = async (message: Parameters<typeof pi.sendMessage>[0], deliverAs: MeshDelivery, target: { meshId: string; endpoint: MeshEndpoint }): Promise<boolean> => {
+        if (shuttingDown || endpoint !== target.endpoint || current?.meshId !== target.meshId) return false;
+        if (!await isLiveMeshEndpointBinding(runtime.stateRoot, target.meshId, target.endpoint)) return false;
+        if (shuttingDown || endpoint !== target.endpoint || current?.meshId !== target.meshId) return false;
+        pi.sendMessage(message, { deliverAs, triggerTurn: true });
+        return true;
+    };
+    const deliverAndMarkRoutedMeshEvents = async (message: Parameters<typeof pi.sendMessage>[0], deliverAs: MeshDelivery, target: { meshId: string; endpoint: MeshEndpoint }, eventIds: readonly string[]): Promise<boolean> => {
+        if (!await deliverRoutedMeshEvent(message, deliverAs, target)) return false;
+        await markMeshEventsInjected(runtime.stateRoot, target.meshId, target.endpoint, eventIds);
+        for (const eventId of eventIds) injectedThisRuntime.add(eventId);
+        return true;
+    };
+    const openCompletionDeliveryWindow = () => {
+        if (completionDeliveryDeadline !== undefined) return;
+        completionDeliveryDeadline = deliveryNow() + COMPLETION_DELIVERY_WINDOW_MS;
+        cadence?.setEnabled("completion-delivery", true);
+    };
+    const closeCompletionDeliveryWindow = () => {
+        completionDeliveryDeadline = undefined;
+        cadence?.setEnabled("completion-delivery", false);
+    };
     const pumpEvents = async (): Promise<boolean> => {
         if (isolatedPromptOnly || shuttingDown || !endpoint || !current || !endpoint.online) return false;
-        const snapshot = await readEndpointDeliverySnapshot(runtime.stateRoot, current.meshId, endpoint);
+        const target = { meshId: current.meshId, endpoint };
+        let snapshot = await readEndpointDeliverySnapshot(runtime.stateRoot, target.meshId, target.endpoint);
         if (shuttingDown) return false;
-        const deliverable = snapshot.events.filter(event => !injectedThisRuntime.has(event.eventId));
-        const completions = deliverable.filter(event => event.kind === "completion");
+        let deliverable = snapshot.events.filter(event => !injectedThisRuntime.has(event.eventId));
+        let completions = deliverable.filter(event => event.kind === "completion");
+        if (completions.length && completionDeliveryDeadline === undefined) openCompletionDeliveryWindow();
+        let flushCompletions = completionDeliveryDeadline !== undefined && deliveryNow() >= completionDeliveryDeadline;
+        if (flushCompletions) {
+            // The root settles completions once more at the fixed boundary before taking its delivery snapshot.
+            await requestMaterializationPass();
+            snapshot = await readEndpointDeliverySnapshot(runtime.stateRoot, target.meshId, target.endpoint);
+            deliverable = snapshot.events.filter(event => !injectedThisRuntime.has(event.eventId));
+            completions = deliverable.filter(event => event.kind === "completion");
+            flushCompletions = completions.length > 0;
+            if (!flushCompletions) closeCompletionDeliveryWindow();
+        }
         const deliveryAcks = deliverable.filter(event => event.kind === "delivery-ack");
-        const firstCompletionId = completions[0]?.eventId; const firstDeliveryAckId = deliveryAcks[0]?.eventId;
+        const firstCompletionId = flushCompletions ? completions[0]?.eventId : undefined; const firstDeliveryAckId = deliveryAcks[0]?.eventId;
         for (const event of deliverable) {
             if (shuttingDown) return false;
             if (event.kind === "completion") {
@@ -288,9 +322,8 @@ export async function registerOrchestration(pi: ExtensionAPI, options: Orchestra
                 if (exceedsModelVisibleLimit(content)) throw new Error("Completion identity bundle exceeds the model-visible budget");
                 const identities = await eventDisplayIdentities([...completedById.values(), ...pendingTasks].map(task => task.agentId));
                 const details = attachDisplayIdentities({ kind: "completion", sources, frontier: { observedAt: snapshot.observedAt, pendingTasks } }, identities);
-                pi.sendMessage({ customType: "mesh-event", content, display: true, details }, { deliverAs: "steer", triggerTurn: sessionContext?.isIdle() ?? false });
-                await markMeshEventsInjected(runtime.stateRoot, current.meshId, endpoint, completions.map(source => source.eventId));
-                for (const source of completions) injectedThisRuntime.add(source.eventId);
+                if (!await deliverAndMarkRoutedMeshEvents({ customType: "mesh-event", content, display: true, details }, event.delivery, target, completions.map(source => source.eventId))) return false;
+                closeCompletionDeliveryWindow();
                 continue;
             }
             if (event.kind === "delivery-ack") {
@@ -298,18 +331,14 @@ export async function registerOrchestration(pi: ExtensionAPI, options: Orchestra
                 const eventIds = deliveryAcks.map(source => source.eventId); const payloads = deliveryAcks.map(source => source.payload); const content = serializeModelVisibleJson({ acknowledgments: payloads });
                 const identities = await eventDisplayIdentities(payloads.map(payload => typeof payload.agentId === "string" ? payload.agentId : "").filter(Boolean));
                 const details = attachDisplayIdentities({ eventIds, kind: "delivery-ack", payloads }, identities);
-                pi.sendMessage({ customType: "mesh-event", content, display: true, details }, { deliverAs: "steer", triggerTurn: sessionContext?.isIdle() ?? false });
-                await markMeshEventsInjected(runtime.stateRoot, current.meshId, endpoint, eventIds);
-                for (const source of deliveryAcks) injectedThisRuntime.add(source.eventId);
+                if (!await deliverAndMarkRoutedMeshEvents({ customType: "mesh-event", content, display: true, details }, event.delivery, target, eventIds)) return false;
                 continue;
             }
             const content = `[mesh-event ${event.eventId}] ${event.kind}\n${serializeModelVisibleJson(event.payload)}`;
             const agentId = typeof event.payload.agentId === "string" ? event.payload.agentId : undefined;
             const identities = agentId ? await eventDisplayIdentities([agentId]) : {};
             const details = attachDisplayIdentities({ eventId: event.eventId, kind: event.kind, payload: event.payload }, identities);
-            pi.sendMessage({ customType: "mesh-event", content, display: true, details }, { deliverAs: event.delivery, triggerTurn: sessionContext?.isIdle() ?? false });
-            await markMeshEventsInjected(runtime.stateRoot, current.meshId, endpoint, [event.eventId]);
-            injectedThisRuntime.add(event.eventId);
+            if (!await deliverAndMarkRoutedMeshEvents({ customType: "mesh-event", content, display: true, details }, event.delivery, target, [event.eventId])) return false;
         }
         return true;
     };
@@ -353,10 +382,9 @@ export async function registerOrchestration(pi: ExtensionAPI, options: Orchestra
             const tmux = await probeTmux(exec, runtime.tmux, env); const lease = await attachRootMesh(runtime.stateRoot, mesh.meshId, { rootSessionId: sessionId, budgets: runtime.budgets, ...(sessionFile ? { rootSessionFile: sessionFile } : {}), ...(tmux ? { tmuxServerPid: tmux.serverPid, tmuxSessionId: tmux.sessionId } : {}), inspectExisting: inspectRootLease(sessionId, sessionFile, tmux) }); rootLeaseId = lease.leaseId; const fallbackEpoch = mesh.currentEpochId ? await readPolicyEpoch(runtime.stateRoot, mesh.meshId, mesh.currentEpochId) : { schemaVersion: 4 as const, meshId: mesh.meshId, epochId: randomUUID(), mode: "pending", directTargets: {}, roles: {}, profiles: {}, policies: {}, roleSet: [], policyDigest: "", createdAt: new Date().toISOString() }; current = { identity: "mode:pending", meshId: mesh.meshId, epoch: fallbackEpoch, catalog, endpointId: `root:${mesh.meshId}`, ...(sessionFile ? { sessionFile } : {}) }; if (sessionFile) endpoint = await bindMeshEndpoint(runtime.stateRoot, mesh.meshId, { endpointId: current.endpointId, kind: "root", harness: "pi", sessionId, sessionFile }); if (latestMode) await applyMode(latestMode); await reconcileMeshState(runtime.stateRoot, mesh.meshId); if (sessionFile) await reconcileMeshUsageClaims(runtime.stateRoot, mesh.meshId, sessionFile); const protectedReservations = await reconcilePressureAdmissions(runtime.stateRoot, mesh.meshId, async requester => { const inspected = await inspectAgentTmux(exec, runtime.tmux, requester.agent.tmux); if (inspected.server === "unavailable" || inspected.server === "match" && inspected.paneState === "unavailable") throw new Error("Requester tmux evidence is temporarily unavailable"); return inspected.server === "match" && inspected.sessionAlive && inspected.paneState === "alive"; }); await reconcileMeshReservations(runtime.stateRoot, mesh.meshId, agentId => inspectMeshAgentWindow(exec, runtime.tmux, tmux, mesh.meshId, agentId), protectedReservations); await recoverPendingAgentStops({ stateRoot: runtime.stateRoot, meshId: mesh.meshId, exec, tmux: runtime.tmux });
         }
         if (sessionFile && current && endpoint) { const persistedReceipts = await readPersistedCompletionReceiptEvidence(sessionFile); await reconcileCompletionReceipts(runtime.stateRoot, current.meshId, { endpointId: current.endpointId, endpointSessionFile: sessionFile, claimantSessionFile: sessionFile, persistedReceipts }); confirmedReceiptIds.clear(); for (const receiptId of persistedReceipts.keys()) confirmedReceiptIds.add(receiptId); }
-        let injectedNow = 0;
-        const schedule = options.setInterval ? (callback: () => void | Promise<void>, delay: number) => options.setInterval!(() => { injectedNow += delay; return callback(); }, delay) : (callback: () => void | Promise<void>, delay: number) => globalThis.setTimeout(() => { void callback(); }, delay);
+        const schedule = options.setInterval ? (callback: () => void | Promise<void>, delay: number) => options.setInterval!(() => { scheduledNow += delay; return callback(); }, delay) : (callback: () => void | Promise<void>, delay: number) => globalThis.setTimeout(() => { void callback(); }, delay);
         const cancel = options.clearInterval ?? (timer => globalThis.clearTimeout(timer as NodeJS.Timeout));
-        cadence = new OrchestrationDeadlineScheduler({ now: options.now ?? (options.setInterval ? () => injectedNow : undefined), setTimeout: schedule, clearTimeout: cancel });
+        cadence = new OrchestrationDeadlineScheduler({ now: deliveryNow, setTimeout: schedule, clearTimeout: cancel });
         if (rootLeaseId && current) {
             const rootOptions = () => ({ stateRoot: runtime.stateRoot, meshId: current!.meshId, leaseId: rootLeaseId!, gc: runtime.gc, exec, tmux: runtime.tmux, signal: maintenance.signal });
             cadence.add("materialize", 1000, async () => { await materializeWithDiagnostics(); });
@@ -365,6 +393,7 @@ export async function registerOrchestration(pi: ExtensionAPI, options: Orchestra
             cadence.add("gc", runtime.gc.periodicIntervalMs, async () => { try { const maintenanceOptions = rootOptions(); await recoverPendingAgentStops(maintenanceOptions); await runPeriodicAgentGc(maintenanceOptions); } catch (error) { if (!maintenance.signal.aborted) sessionContext?.ui.setStatus("mesh-agent-gc", `Mesh agent GC: ${errorText(error)}`); } });
         }
         cadence.add("delivery", 2000, async () => { if (!await materializeWithDiagnostics()) return; await pumpWithDiagnostics(); });
+        cadence.add("completion-delivery", COMPLETION_DELIVERY_WINDOW_MS, pumpWithDiagnostics, { enabled: false });
         cadence.add("wait-delivery", 250, pumpWithDiagnostics, { enabled: false });
         cadence.add("notices", 3000, pumpTuiNotices);
         const reportWakeError = (label: string, error: unknown) => { const diagnostic = `Mesh event pump: ${label} wake: ${errorText(error)}`; try { sessionContext?.ui.setStatus(PUMP_STATUS, diagnostic); } catch {} try { sessionContext?.ui.notify(diagnostic, "error"); } catch {} };

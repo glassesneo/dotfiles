@@ -10,7 +10,7 @@ import { buildLaunchEnvelope as buildLaunchEnvelopeV4, buildPolicySnapshot, vali
 import type { ExecutionProfileConfig } from "../extensions_src/utilities/mode_types.ts";
 import { availableContext, publishAgentActivity } from "../extensions_src/utilities/orchestration_activity.ts";
 import { bindAgentRuntime, readAgentRuntimeBinding } from "../extensions_src/utilities/orchestration_runtime.ts";
-import { bindMeshEndpoint, materializeMeshCompletionEvents, readEndpointDeliverySnapshot, readMeshEndpoint, resolveRouteEndpoint, setMeshEndpointOffline } from "../extensions_src/utilities/orchestration_events.ts";
+import { bindMeshEndpoint, materializeMeshCompletionEvents, readEndpointDeliverySnapshot, readMeshEndpoint, registerMeshSignal, resolveRouteEndpoint, setMeshEndpointOffline } from "../extensions_src/utilities/orchestration_events.ts";
 import { createExplicitStopNotice, listPendingTuiNotices } from "../extensions_src/utilities/orchestration_notices.ts";
 import { readPressureAdmission, requestPressureAdmission } from "../extensions_src/utilities/orchestration_admission.ts";
 import { completionLedgerPath, createCompletionReceipt, readCompletionLedger } from "../extensions_src/utilities/orchestration_completion.ts";
@@ -445,8 +445,8 @@ void test("intervention context acknowledgement bundles a shared delivery fronti
 }));
 
 // Admission: root materialization and endpoint delivery are repository-owned production wiring; schemas cannot detect endpoint-count multiplication or a read pass that settles ledgers.
-// Given a restored root and routed terminal work, startup and deadline advancement expose immediate/one-second materialization followed by two-second read-only delivery without duplicate settlement when another endpoint exists.
-void test("root registration materializes once per deadline and delivers on its independent read cadence", async () => withRoot("mesh-root-cadence-", async root => {
+// Given a restored root and routed terminal work, startup and deadline advancement expose one-second materialization followed by a fixed five-second delivery window without duplicate settlement when another endpoint exists.
+void test("root registration materializes once per deadline and opens a fixed delivery window", async () => withRoot("mesh-root-cadence-", async root => {
     const sessionFile = join(root, "root-session.jsonl"); await writeFile(sessionFile, "");
     const mesh = await initializeMesh(root, { rootSessionId: "root-session", rootSessionFile: sessionFile, recoverable: true, budgets });
     const epoch = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", roleSet: ["worker"], roles: { worker: settledAgentDefinition("worker") } });
@@ -459,13 +459,14 @@ void test("root registration materializes once per deadline and delivers on its 
     const second = await createTaskStore(root, mesh.meshId, worker.agentId, "cadenced completion", { requesterEndpointId: endpointId, completion }); await finishTask(root, mesh.meshId, second.request.taskId, { outcome: "failed" });
     await clock.advance(999); assert.equal(await readCompletionLedger(root, mesh.meshId, endpointId, sessionFile), undefined); assert.equal(pi.messages.length, 0);
     await clock.advance(1); assert.equal((await readCompletionLedger(root, mesh.meshId, endpointId, sessionFile))!.batches.length, 1); assert.equal(pi.messages.length, 0);
-    await clock.advance(1000); assert.equal(pi.messages.length, 1); assert.equal((await readCompletionLedger(root, mesh.meshId, endpointId, sessionFile))!.batches.length, 1);
+    await clock.advance(1000); assert.equal(pi.messages.length, 0); assert.equal((await readCompletionLedger(root, mesh.meshId, endpointId, sessionFile))!.batches.length, 1);
+    await clock.advance(5000); assert.equal(pi.messages.length, 1);
     await pi.handlers.get("session_shutdown")![0]!({ reason: "reload" });
 }));
 
-// Admission: pump-level bundling and frontier capture cross persisted source events and Pi message delivery; schemas cannot observe notification count or metadata loss.
-// Given two materialization passes and one pending peer before a shared delivery deadline, the endpoint receives one completion message containing both sources and the current pending frontier.
-void test("delivery pump bundles completion sources and preserves the pending frontier", async () => withRoot("mesh-completion-bundle-", async root => {
+// Admission: delivery-window state spans durable sources and Pi routing; schemas cannot observe a fixed deadline, source grouping, or whether an unrelated routed event waits behind completions.
+// Given completions before and after a fixed boundary plus a signal during the first window, the endpoint observes two completion bundles while the signal routes before the first deadline.
+void test("delivery pump coalesces a fixed completion window without delaying a signal", async () => withRoot("mesh-completion-bundle-", async root => {
     const sessionFile = join(root, "root-bundle.jsonl"); await writeFile(sessionFile, "");
     const mesh = await initializeMesh(root, { rootSessionId: "root-bundle", rootSessionFile: sessionFile, recoverable: true, budgets: { ...budgets, maxConcurrentTasks: 8 } });
     const epoch = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", roleSet: ["worker"], roles: { worker: settledAgentDefinition("worker") } });
@@ -477,18 +478,24 @@ void test("delivery pump bundles completion sources and preserves the pending fr
     const first = await createTaskStore(root, mesh.meshId, firstAgent.agentId, "first private prompt", { requesterEndpointId: endpointId, completion }); const second = await createTaskStore(root, mesh.meshId, secondAgent.agentId, "second private prompt", { requesterEndpointId: endpointId, completion }); const pending = await createTaskStore(root, mesh.meshId, pendingAgent.agentId, "pending private prompt", { requesterEndpointId: endpointId, completion });
     await finishTask(root, mesh.meshId, first.request.taskId, { outcome: "succeeded", output: "private first output" }); await clock.advance(1000);
     await finishTask(root, mesh.meshId, second.request.taskId, { outcome: "failed", error: "private second error" }); await clock.advance(1000);
-    const completionMessages = pi.messages.filter(item => (item.message as any).details?.kind === "completion");
-    assert.equal(completionMessages.length, 1);
+    const liveEndpoint = await readMeshEndpoint(root, mesh.meshId, endpointId); const pendingSources = (await readEndpointDeliverySnapshot(root, mesh.meshId, liveEndpoint)).events.filter(event => event.kind === "completion"); assert.equal(pendingSources.length, 2); assert.equal(pendingSources.every(event => event.state === "pending"), true);
+    await registerMeshSignal(root, mesh.meshId, { callerEndpointId: endpointId, toolCallId: "completion-window-signal", endpoint: liveEndpoint, delivery: "followUp", topic: "status", text: "unblocked", canonicalArguments: { topic: "status" } }); await clock.advance(2000);
+    const signalMessages = pi.messages.filter(item => (item.message as any).details?.kind === "signal"); assert.equal(signalMessages.length, 1); assert.deepEqual(signalMessages[0]!.options, { deliverAs: "followUp", triggerTurn: true }); assert.equal(pi.messages.filter(item => (item.message as any).details?.kind === "completion").length, 0);
+    await clock.advance(2999); assert.equal(pi.messages.filter(item => (item.message as any).details?.kind === "completion").length, 0);
+    await clock.advance(1);
+    let completionMessages = pi.messages.filter(item => (item.message as any).details?.kind === "completion"); assert.equal(completionMessages.length, 1);
     const message = completionMessages[0]!.message as any; assert.equal(message.details.sources.length, 2);
     const restoredDetails = JSON.parse(JSON.stringify(message.details)); for (const agentId of [firstAgent.agentId, secondAgent.agentId, pendingAgent.agentId]) assert.deepEqual({ agentId: restoredDetails.identities[agentId].agentId, role: restoredDetails.identities[agentId].role, profile: restoredDetails.identities[agentId].profile }, { agentId, role: "worker", profile: "pi-default" });
     const visible = JSON.parse(message.content) as { tasks: Array<{ taskId: string }>; pendingTasks: Array<{ taskId: string }> };
     assert.deepEqual(visible.tasks.map(task => task.taskId), [first.request.taskId, second.request.taskId]); assert.deepEqual(visible.pendingTasks.map(task => task.taskId), [pending.request.taskId]);
-    assert.doesNotMatch(message.content, /prompt|output|error|usage/u); assert.deepEqual(completionMessages[0]!.options, { deliverAs: "steer", triggerTurn: false });
+    assert.doesNotMatch(message.content, /prompt|output|error|usage/u); assert.deepEqual(completionMessages[0]!.options, { deliverAs: "steer", triggerTurn: true });
+    await finishTask(root, mesh.meshId, pending.request.taskId, { outcome: "succeeded" }); await clock.advance(1000); await clock.advance(4999); assert.equal(pi.messages.filter(item => (item.message as any).details?.kind === "completion").length, 1); await clock.advance(1);
+    completionMessages = pi.messages.filter(item => (item.message as any).details?.kind === "completion"); assert.equal(completionMessages.length, 2); assert.equal((completionMessages[1]!.message as any).details.sources.length, 1);
     await pi.handlers.get("session_shutdown")![0]!({ reason: "reload" });
 }));
 
-// Given direct task completions while the Pi runtime is idle and busy, the completion pump requests a turn only for idle delivery and uses turn-boundary steer in both cases.
-void test("completion pump triggers an idle turn but leaves busy steer non-triggering", async () => withRoot("mesh-completion-trigger-", async root => {
+// Given direct task completions while the Pi runtime is idle and busy, the completion pump preserves steer delivery and requests a follow-up turn in both states.
+void test("completion pump triggers a turn for idle and busy steer delivery", async () => withRoot("mesh-completion-trigger-", async root => {
     const mesh = await initializeMesh(root, { rootSessionId: "root", recoverable: true, budgets }); const lease = await attachRootMesh(root, mesh.meshId, { rootSessionId: "root", budgets }); const epoch = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", roleSet: ["worker"], roles: { worker: settledAgentDefinition("worker") } });
     const receiver = await publishWorker(root, mesh.meshId, epoch.epochId); const peer = await publishWorker(root, mesh.meshId, epoch.epochId); const files = await writeRuntimeFiles(root); const sessionFile = join(root, "completion-session.jsonl"); await writeFile(sessionFile, ""); const endpointId = `agent:${receiver.agentId}`; const completion = { endpointId, endpointSessionFile: sessionFile };
     let idle = true; const ctx = { sessionManager: { getSessionId: () => "completion-session", getSessionFile: () => sessionFile, getBranch: () => [] }, ui: { setStatus() {}, notify() {} }, isIdle: () => idle } as never; let tick!: () => Promise<void>; const pi = new PiMock();
@@ -496,7 +503,7 @@ void test("completion pump triggers an idle turn but leaves busy steer non-trigg
     const requester = { requesterEndpointId: endpointId, requesterAgentId: receiver.agentId, completion }; const first = await createTaskStore(root, mesh.meshId, receiver.agentId, "idle completion", requester); const second = await createTaskStore(root, mesh.meshId, peer.agentId, "busy completion", requester);
     await finishTask(root, mesh.meshId, first.request.taskId, { outcome: "succeeded", output: "idle done" }); await materializeMeshCompletionEvents(root, mesh.meshId, lease.leaseId); for (let attempt = 0; attempt < 5 && pi.messages.length < 1; attempt += 1) await tick(); assert.deepEqual(pi.messages.at(-1)!.options, { deliverAs: "steer", triggerTurn: true });
     const receipt = await createCompletionReceipt(root, mesh.meshId, { endpointId, endpointSessionFile: sessionFile, claimantSessionFile: sessionFile, toolCallId: "context-get", toolName: "mesh_get", canonicalArguments: { taskId: first.request.taskId }, taskIds: [first.request.taskId], maxTasksPerMesh: budgets.maxTasksPerMesh }); const toolResult = { role: "toolResult", toolName: "mesh_get", details: { accounting: { receiptIds: [receipt.receipt!.receiptId], receivedTaskIds: [first.request.taskId], claimedTaskIds: [] } } }; const projected = await pi.handlers.get("context")![0]!({ messages: [(pi.messages[0]!.message as object), toolResult] }, ctx) as { messages: unknown[] }; assert.equal(projected.messages.length, 2); const projectedCompletion = projected.messages[0] as { content: string }; assert.deepEqual(JSON.parse(projectedCompletion.content), { tasks: [], pendingTasks: [{ taskId: second.request.taskId, agentId: peer.agentId, state: "created" }] }); assert.equal(projected.messages[1], toolResult); const firstEventId = ((pi.messages[0]!.message as any).details.sources[0].eventId as string); assert.equal((JSON.parse(await readFile(join(meshPaths(root, mesh.meshId).events, `${firstEventId}.json`), "utf8")) as { state: string }).state, "acknowledged");
-    idle = false; await finishTask(root, mesh.meshId, second.request.taskId, { outcome: "failed", error: "busy done" }); await materializeMeshCompletionEvents(root, mesh.meshId, lease.leaseId); for (let attempt = 0; attempt < 5 && pi.messages.length < 2; attempt += 1) await tick(); assert.deepEqual(pi.messages.at(-1)!.options, { deliverAs: "steer", triggerTurn: false }); assert.equal(pi.messages.length, 2);
+    idle = false; await finishTask(root, mesh.meshId, second.request.taskId, { outcome: "failed", error: "busy done" }); await materializeMeshCompletionEvents(root, mesh.meshId, lease.leaseId); for (let attempt = 0; attempt < 5 && pi.messages.length < 2; attempt += 1) await tick(); assert.deepEqual(pi.messages.at(-1)!.options, { deliverAs: "steer", triggerTurn: true }); assert.equal(pi.messages.length, 2);
     await pi.handlers.get("session_shutdown")![0]!({ reason: "reload" });
 }));
 
