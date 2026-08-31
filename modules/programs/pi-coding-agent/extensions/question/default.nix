@@ -11,7 +11,7 @@ delib.module {
     };
     programs.pi-coding-agent.packageContributions.decision-ui = {
       enabled = cfg.enable;
-      source = "npm:@glassesneo/pi-decision-ui@0.1.0";
+      source = "npm:@glassesneo/pi-decision-ui@0.1.1";
     };
     programs.pi-coding-agent.keybindings.contributions.question = {
       enabled = cfg.enable;

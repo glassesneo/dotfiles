@@ -38,7 +38,7 @@ def main [] {
   pass "colorscheme-owner-projection"
 
   let pi = $result.generated.pi
-  let decision_ui_package = "npm:@glassesneo/pi-decision-ui@0.1.0"
+  let decision_ui_package = "npm:@glassesneo/pi-decision-ui@0.1.1"
   let question_extension_names = [
     ...($pi.enabledQuestion.extensionPaths | each {|path| $path | path basename })
     ...($pi.disabledQuestion.extensionPaths | each {|path| $path | path basename })
