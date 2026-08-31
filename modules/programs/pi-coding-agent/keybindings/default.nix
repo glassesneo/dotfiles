@@ -583,6 +583,10 @@ in
         schemaVersion = 1;
         features = lib.mapAttrs (_: contribution: lib.mapAttrs (_: spec: spec.keys) contribution.actions) (lib.filterAttrs (name: _: name != "pi") resolved);
       };
+      decisionUiConfig = {
+        schemaVersion = 1;
+        keybindings = lib.mapAttrs (_: spec: spec.keys) resolved.question.actions;
+      };
     in {
       assertions = [
         {
@@ -622,6 +626,12 @@ in
         }
       ];
       programs.pi-coding-agent.keybindings = lib.mapAttrs (_: spec: spec.keys) resolved.pi.actions;
-      home.file."${myconfig.programs.pi-coding-agent.configDir}/extension-keybindings.json".text = builtins.toJSON extensionMap;
+      home.file =
+        {
+          "${myconfig.programs.pi-coding-agent.configDir}/extension-keybindings.json".text = builtins.toJSON extensionMap;
+        }
+        // lib.optionalAttrs (resolved ? question) {
+          "${myconfig.programs.pi-coding-agent.configDir}/pi-decision-ui.json".text = builtins.toJSON decisionUiConfig;
+        };
     };
   }

@@ -9,6 +9,10 @@ delib.module {
       enabled = cfg.enable;
       tool = "question";
     };
+    programs.pi-coding-agent.packageContributions.decision-ui = {
+      enabled = cfg.enable;
+      source = "npm:@glassesneo/pi-decision-ui@0.1.0";
+    };
     programs.pi-coding-agent.keybindings.contributions.question = {
       enabled = cfg.enable;
       actions = {
@@ -111,8 +115,4 @@ delib.module {
       };
     };
   };
-
-  home.ifEnabled.programs.pi-coding-agent.settings.extensions = [
-    "${./../../extensions_src}/question.ts"
-  ];
 }

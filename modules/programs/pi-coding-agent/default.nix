@@ -18,7 +18,6 @@
   modelOverrides = {
     providers."openai-codex".modelOverrides."gpt-5.6-sol".contextWindow = 272000;
   };
-  codexCompactionPackage = "npm:@ogulcancelik/pi-codex-compaction@0.1.3";
   codexCompactionConfig = {
     autoCompact = true;
     thresholdRatio = 0.9;
@@ -47,6 +46,12 @@
       harnessOptions = attrsOfOption lib.types.anything {};
     };
   };
+  packageContributionType = delib.submodule {
+    options = with delib; {
+      enabled = boolOption true;
+      source = noDefault (strOption null);
+    };
+  };
 in
   delib.module {
     name = "programs.pi-coding-agent";
@@ -59,6 +64,7 @@ in
           options.enable = boolOption true;
         } {};
         profiles = attrsOfOption profileType {};
+        packageContributions = attrsOfOption packageContributionType {};
         defaultExtensions = readOnly (listOfOption str [
           "popup"
           "mode"
@@ -69,59 +75,62 @@ in
         ]);
       };
 
-    myconfig.always.programs.pi-coding-agent.profiles = lib.mapAttrs (_: profile: lib.mapAttrs (_: lib.mkDefault) profile) {
-      sol-high = {
-        model = "openai-codex/gpt-5.6-sol";
-        thinkingLevel = "high";
-      };
-      sol-medium = {
-        model = "openai-codex/gpt-5.6-sol";
-        thinkingLevel = "medium";
-      };
-      luna-high = {
-        model = "openai-codex/gpt-5.6-luna";
-        thinkingLevel = "high";
-      };
-      luna-xhigh = {
-        model = "openai-codex/gpt-5.6-luna";
-        thinkingLevel = "xhigh";
-      };
-      terra-high = {
-        model = "openai-codex/gpt-5.6-terra";
-        thinkingLevel = "high";
-      };
-      cursor-read = {
-        model = "cursor/cursor-grok-4.5-high-fast";
-        thinkingLevel = null;
-        harness = "cursor-agent";
-        harnessOptions = {
-          mode = "ask";
-          permissionPolicy = "reject";
-          sandbox = "disabled";
-          trustWorkspace = true;
-          worktree = false;
+    myconfig.always.programs.pi-coding-agent = {
+      packageContributions.codex-compaction.source = "npm:@ogulcancelik/pi-codex-compaction@0.1.3";
+      profiles = lib.mapAttrs (_: profile: lib.mapAttrs (_: lib.mkDefault) profile) {
+        sol-high = {
+          model = "openai-codex/gpt-5.6-sol";
+          thinkingLevel = "high";
         };
-      };
-      cursor-write = {
-        model = "cursor/cursor-grok-4.5-high-fast";
-        thinkingLevel = null;
-        harness = "cursor-agent";
-        harnessOptions = {
-          mode = "agent";
-          permissionPolicy = "allow-always";
-          sandbox = "disabled";
-          trustWorkspace = true;
-          worktree = false;
+        sol-medium = {
+          model = "openai-codex/gpt-5.6-sol";
+          thinkingLevel = "medium";
         };
-      };
-      codex-search = {
-        model = "codex/gpt-5.6-luna";
-        thinkingLevel = "high";
-        harness = "codex";
-        harnessOptions = {
-          mode = "read-only";
-          permissionPolicy = "reject";
-          webSearch = "cached";
+        luna-high = {
+          model = "openai-codex/gpt-5.6-luna";
+          thinkingLevel = "high";
+        };
+        luna-xhigh = {
+          model = "openai-codex/gpt-5.6-luna";
+          thinkingLevel = "xhigh";
+        };
+        terra-high = {
+          model = "openai-codex/gpt-5.6-terra";
+          thinkingLevel = "high";
+        };
+        cursor-read = {
+          model = "cursor/cursor-grok-4.5-high-fast";
+          thinkingLevel = null;
+          harness = "cursor-agent";
+          harnessOptions = {
+            mode = "ask";
+            permissionPolicy = "reject";
+            sandbox = "disabled";
+            trustWorkspace = true;
+            worktree = false;
+          };
+        };
+        cursor-write = {
+          model = "cursor/cursor-grok-4.5-high-fast";
+          thinkingLevel = null;
+          harness = "cursor-agent";
+          harnessOptions = {
+            mode = "agent";
+            permissionPolicy = "allow-always";
+            sandbox = "disabled";
+            trustWorkspace = true;
+            worktree = false;
+          };
+        };
+        codex-search = {
+          model = "codex/gpt-5.6-luna";
+          thinkingLevel = "high";
+          harness = "codex";
+          harnessOptions = {
+            mode = "read-only";
+            permissionPolicy = "reject";
+            webSearch = "cached";
+          };
         };
       };
     };
@@ -131,6 +140,25 @@ in
       myconfig,
       ...
     }: let
+      packageContributionNames = builtins.attrNames cfg.packageContributions;
+      enabledPackageContributionNames = builtins.filter (name: cfg.packageContributions.${name}.enabled) packageContributionNames;
+      packageSources = map (name: cfg.packageContributions.${name}.source) enabledPackageContributionNames;
+      packageContributionSources = map (name: cfg.packageContributions.${name}.source) packageContributionNames;
+      duplicateValues = values:
+        builtins.filter
+        (value: lib.count (candidate: candidate == value) values > 1)
+        (lib.unique values);
+      semverNumericIdentifier = "(0|[1-9][0-9]*)";
+      semverPrereleaseIdentifier = "(${semverNumericIdentifier}|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)";
+      semverPrerelease = "${semverPrereleaseIdentifier}(\\.${semverPrereleaseIdentifier})*";
+      semverBuild = "[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*";
+      concreteNpmSourcePattern = "^npm:.+@${semverNumericIdentifier}\\.${semverNumericIdentifier}\\.${semverNumericIdentifier}(-${semverPrerelease})?(\\+${semverBuild})?$";
+      invalidNpmPackageContributionNames = builtins.filter (name: let
+        source = cfg.packageContributions.${name}.source;
+      in
+        lib.hasPrefix "npm:" source
+        && builtins.match concreteNpmSourcePattern source == null)
+      packageContributionNames;
       resolveModule = name: let
         path = ["programs" "pi-coding-agent"] ++ lib.splitString "." name;
       in
@@ -195,6 +223,14 @@ in
     in {
       assertions = [
         {
+          assertion = duplicateValues packageContributionSources == [];
+          message = "Pi package contributions must not duplicate sources: ${lib.concatStringsSep ", " (duplicateValues packageContributionSources)}.";
+        }
+        {
+          assertion = invalidNpmPackageContributionNames == [];
+          message = "Pi npm package contributions must use concrete semver versions: ${lib.concatStringsSep ", " invalidNpmPackageContributionNames}.";
+        }
+        {
           assertion = builtins.all (item: item.module != null) selected;
           message = "Pi defaultExtensions must reference existing modules below programs.pi-coding-agent; missing: ${names missingNames}.";
         }
@@ -216,7 +252,7 @@ in
           modelDefaults
           // nativeLifecycleSettings
           // {
-            packages = [codexCompactionPackage];
+            packages = packageSources;
             extensions = lib.mkBefore extensionPaths;
             prompts = [
               "${./prompts}"

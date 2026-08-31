@@ -33,6 +33,14 @@
   questionDisabled = base.extendModules {
     modules = [{myconfig.programs.pi-coding-agent.question.enable = lib.mkForce false;}];
   };
+  questionKeybindingOverride = base.extendModules {
+    modules = [
+      {
+        myconfig.programs.pi-coding-agent.question.enable = lib.mkForce true;
+        myconfig.programs.pi-coding-agent.keybindings.overrides.question."choice.select-and-note" = ["f12"];
+      }
+    ];
+  };
   partialSecrets = {
     myconfig.toplevel.secrets.entries = lib.mkForce {
       ai-mop-api-key = {};
@@ -160,10 +168,12 @@ in
       };
       pi = {
         enabledQuestion = {
+          packageSources = questionEnabled.config.programs.pi-coding-agent.settings.packages;
           extensionPaths = questionEnabled.config.programs.pi-coding-agent.settings.extensions;
           modes = builtins.fromJSON (builtins.unsafeDiscardStringContext questionEnabled.config.home.file."${questionEnabled.config.home.homeDirectory}/.pi/agent/agent-modes.json".text);
         };
         disabledQuestion = {
+          packageSources = questionDisabled.config.programs.pi-coding-agent.settings.packages;
           extensionPaths = questionDisabled.config.programs.pi-coding-agent.settings.extensions;
           modes = builtins.fromJSON (builtins.unsafeDiscardStringContext questionDisabled.config.home.file."${questionDisabled.config.home.homeDirectory}/.pi/agent/agent-modes.json".text);
         };
@@ -173,6 +183,7 @@ in
         settings = base.config.programs.pi-coding-agent.settings;
         models = builtins.fromJSON (builtins.unsafeDiscardStringContext base.config.home.file."${base.config.home.homeDirectory}/.pi/agent/models.json".text);
         extensionKeybindings = builtins.fromJSON (builtins.unsafeDiscardStringContext aliasOverride.config.home.file."${aliasOverride.config.home.homeDirectory}/.pi/agent/extension-keybindings.json".text);
+        decisionUi = builtins.fromJSON (builtins.unsafeDiscardStringContext questionKeybindingOverride.config.home.file."${questionKeybindingOverride.config.home.homeDirectory}/.pi/agent/pi-decision-ui.json".text);
         navigationTmux = navigation.config.programs.tmux.extraConfig;
         darwinTmux = darwin.config.home-manager.users.neo.programs.tmux.extraConfig;
       };

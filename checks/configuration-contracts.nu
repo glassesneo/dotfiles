@@ -38,13 +38,22 @@ def main [] {
   pass "colorscheme-owner-projection"
 
   let pi = $result.generated.pi
-  let enabled_question_extensions = ($pi.enabledQuestion.extensionPaths | each {|path| $path | path basename })
-  let disabled_question_extensions = ($pi.disabledQuestion.extensionPaths | each {|path| $path | path basename })
-  assert-contract ($enabled_question_extensions | any {|name| $name == "question.ts" }) "question-extension-enabled"
-  assert-contract (not ($disabled_question_extensions | any {|name| $name == "question.ts" })) "question-extension-disabled"
+  let decision_ui_package = "npm:@glassesneo/pi-decision-ui@0.1.0"
+  let question_extension_names = [
+    ...($pi.enabledQuestion.extensionPaths | each {|path| $path | path basename })
+    ...($pi.disabledQuestion.extensionPaths | each {|path| $path | path basename })
+  ]
+  assert-contract (
+    ($pi.enabledQuestion.packageSources | any {|source| $source == $decision_ui_package })
+    and not ($pi.disabledQuestion.packageSources | any {|source| $source == $decision_ui_package })
+  ) "question-decision-ui-package-gating"
+  assert-contract ($question_extension_names | all {|name| $name != "question.ts" }) "question-local-extension-absent"
   assert-contract (($pi.enabledQuestion.modes.modes | values | any {|mode| $mode.tools | any {|tool| $tool == "question" } })) "question-tool-enabled"
   assert-contract (not ($pi.disabledQuestion.modes.modes | values | any {|mode| $mode.tools | any {|tool| $tool == "question" } })) "question-tool-disabled"
   assert-contract (($pi.extensionKeybindings.features | get historyViewer | get exit | first) == "f12") "native-key-alias"
+  assert-contract ($pi.settings.packages | any {|source| $source == "npm:@ogulcancelik/pi-codex-compaction@0.1.3" }) "codex-compaction-package-contribution"
+  assert-contract ($pi.decisionUi.schemaVersion == 1) "decision-ui-config-schema"
+  assert-contract (($pi.decisionUi.keybindings | get 'choice.select-and-note' | first) == "f12") "decision-ui-config-question-override"
   assert-contract (($pi.models.providers | get openai-codex | get modelOverrides | get 'gpt-5.6-sol' | get contextWindow) == 272000) "sol-soft-context-ceiling"
   assert-contract ($pi.settings.compaction.enabled and $pi.settings.compaction.reserveTokens == 16384 and $pi.settings.compaction.keepRecentTokens == 20000) "native-compaction-settings"
   assert-contract ($pi.settings.retry.enabled and $pi.settings.retry.maxRetries == 3 and $pi.settings.retry.baseDelayMs == 2000) "agent-retry-settings"
