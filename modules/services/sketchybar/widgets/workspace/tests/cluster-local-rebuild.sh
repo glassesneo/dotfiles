@@ -56,10 +56,16 @@ HOME="$test_root" \
   PATH="$test_root/bin:$PATH" \
   nu "$test_root/config/widgets/workspace/handler.nu" render left
 
-grep -Fq '<--add><item><workspace.1><left><--move><workspace.1><after><workspaces-listener>' "$COMMANDS_FILE" \
-  || { echo 'workspace.1 must be moved after workspaces-listener in the same add transaction' >&2; exit 1; }
-grep -Fq '<--add><item><workspace.A><left><--move><workspace.A><after><workspace.1>' "$COMMANDS_FILE" \
-  || { echo 'workspace.A must be moved after workspace.1 in the same add transaction' >&2; exit 1; }
+grep -Fq '<--add><item><workspace.1><left><--move><workspace.1><after><workspaces-listener>' "$COMMANDS_FILE" ||
+  {
+    echo 'workspace.1 must be moved after workspaces-listener in the same add transaction' >&2
+    exit 1
+  }
+grep -Fq '<--add><item><workspace.A><left><--move><workspace.A><after><workspace.1>' "$COMMANDS_FILE" ||
+  {
+    echo 'workspace.A must be moved after workspace.1 in the same add transaction' >&2
+    exit 1
+  }
 
 if grep -E '<--move><workspace\.[^>]+><after><' "$COMMANDS_FILE" | grep -vE '<after><(workspaces-listener|workspace\.)'; then
   echo 'workspace --move referenced a foreign anchor' >&2
