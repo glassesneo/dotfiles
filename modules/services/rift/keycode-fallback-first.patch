@@ -1,0 +1,35 @@
+diff --git a/src/sys/hotkey.rs b/src/sys/hotkey.rs
+--- a/src/sys/hotkey.rs
++++ b/src/sys/hotkey.rs
+@@ -1007,4 +1007,5 @@
+-    generate_virtual_keymap()
+-        .get(&ch.to_lowercase())
+-        .copied()
+-        .or_else(|| fallback_keycode_from_char(ch))
++    fallback_keycode_from_char(ch).or_else(|| {
++        generate_virtual_keymap()
++            .get(&ch.to_lowercase())
++            .copied()
++    })
+@@ -1058,0 +1060,21 @@
++        '!' => Digit1,
++        '@' => Digit2,
++        '#' => Digit3,
++        '$' => Digit4,
++        '%' => Digit5,
++        '^' => Digit6,
++        '&' => Digit7,
++        '*' => Digit8,
++        '(' => Digit9,
++        ')' => Digit0,
++        '-' | '_' => Minus,
++        '=' | '+' => Equal,
++        '[' | '{' => BracketLeft,
++        ']' | '}' => BracketRight,
++        '\\' | '|' => Backslash,
++        ';' | ':' => Semicolon,
++        '\'' | '"' => Quote,
++        '`' | '~' => Backquote,
++        ',' | '<' => Comma,
++        '.' | '>' => Period,
++        '/' | '?' => Slash,

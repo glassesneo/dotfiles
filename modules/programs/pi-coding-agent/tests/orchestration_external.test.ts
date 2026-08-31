@@ -133,7 +133,7 @@ void test("external worker rejects mismatched immutable envelope identity before
 void test("external worker separates idle stop probes from full task claims", async () => withTemporaryRoot("orchestration-external-cadence-", async root => {
     const fixture = await externalFixture(root);
     let now = 0;
-    const claimTimes: number[] = []; const probeTimes: number[] = [];
+    const claimTimes: number[] = []; const probeTimes: number[] = []; const suppressedWatcher = { close() {}, on() { return suppressedWatcher; }, unref() {} };
     const driver: ExternalDriver = { async start() {}, async runTask() { return { output: "", stopReason: "end_turn" }; }, async cancel() {}, async shutdown() {}, waitForClose: () => new Promise(() => {}), fatalError: () => undefined };
     await runExternalWorker(fixture.env, {
         createDriver: () => driver,
@@ -141,6 +141,7 @@ void test("external worker separates idle stop probes from full task claims", as
         sleep: async milliseconds => { now += milliseconds; },
         readAgentStatus: async (...args) => { probeTimes.push(now); return readAgentStatus(...args); },
         claimPendingTask: async (...args) => { claimTimes.push(now); const task = await claimPendingTask(...args); if (claimTimes.length === 2) await markAgentStopping(root, fixture.meshId, fixture.agentId); return task; },
+        wake: { watch: () => suppressedWatcher },
     });
     assert.deepEqual(claimTimes, [0, 3000]);
     assert.deepEqual(probeTimes.slice(0, 31), Array.from({ length: 31 }, (_value, index) => index * 100));

@@ -6,7 +6,8 @@ import { join } from "node:path";
 import test from "node:test";
 import { buildLaunchEnvelope, type CallPolicy, type MeshGcConfig, type RoleCatalog, type RoleDefinition } from "../extensions_src/utilities/agent_types.ts";
 import type { ExecutionProfileConfig } from "../extensions_src/utilities/mode_types.ts";
-import { availableContext, publishAgentActivity } from "../extensions_src/utilities/orchestration_activity.ts";
+import { availableContext, publishAgentActivity, readAgentActivity } from "../extensions_src/utilities/orchestration_activity.ts";
+import { setOrchestrationLockObserverForTest, type OrchestrationLockObservation } from "../extensions_src/utilities/orchestration_lock.ts";
 import { reserveNewAgentCapacityWithPressure, runPeriodicAgentGc } from "../extensions_src/utilities/orchestration_gc.ts";
 import { readReconciledAgentSnapshot, recoverPendingAgentStops, stopMeshAgentWithDisposition } from "../extensions_src/utilities/orchestration_management.ts";
 import { bindMeshEndpoint, setMeshEndpointOffline } from "../extensions_src/utilities/orchestration_events.ts";
@@ -199,6 +200,43 @@ void test("cross-process termination attempts fence a delayed kill after failure
     assert.equal(delayed.snapshot.stop?.state, "failed");
     await createTask(root, f.mesh.meshId, target.agentId, "safe reuse after failed stop");
     assert.equal((await readAgentSnapshot(root, f.mesh.meshId, target.agentId)).status.state, "busy");
+}));
+
+// Behavioral admission: GC claiming and activity publication share an agent lifecycle boundary. A stale heartbeat after a GC claim would incorrectly revive an agent's activity projection; type checks and atomic writes cannot observe this interleaving.
+// Given a GC claim holding mesh→agent locks, when a prior runtime's non-terminal heartbeat waits for that agent lock, the heartbeat is rejected after the claim persists stopping state.
+void test("GC claim fences a stale non-terminal heartbeat", async () => withRoot(async root => {
+    const f = await fixture(root);
+    const target = await agent(root, f.mesh.meshId, f.epoch.epochId, "worker", new Date().toISOString());
+    const current = await readAgentActivity(root, f.mesh.meshId, target.agentId);
+    let meshAcquired = false;
+    let gcAgentLockHeld = false;
+    let gcAgentLockHeldResolve!: () => void;
+    const gcAgentLockHeldPromise = new Promise<void>(resolve => { gcAgentLockHeldResolve = resolve; });
+    let releaseGcAgentLock!: () => void;
+    const releaseGcAgentLockPromise = new Promise<void>(resolve => { releaseGcAgentLock = resolve; });
+    const events: OrchestrationLockObservation[] = [];
+    const resetObserver = setOrchestrationLockObserverForTest(async event => {
+        events.push(event);
+        if (event.phase === "acquired" && event.scope === "mesh" && event.meshId === f.mesh.meshId) meshAcquired = true;
+        if (meshAcquired && !gcAgentLockHeld && event.phase === "acquired" && event.scope === "agent" && event.agentId === target.agentId) {
+            gcAgentLockHeld = true;
+            gcAgentLockHeldResolve();
+            await releaseGcAgentLockPromise;
+        }
+    });
+    try {
+        const claim = claimIdleAgentForStop(root, f.mesh.meshId, target.agentId, { source: "gc-role", reason: "deterministic stale heartbeat race", activitySequence: current!.sequence, staleMs: 10_000 });
+        await gcAgentLockHeldPromise;
+        const at = new Date(Date.now() + 1_000).toISOString();
+        const staleHeartbeat = publishAgentActivity(root, f.mesh.meshId, target.agentId, { runtimeId: target.runtimeId, phase: "running", acceptingTask: false, pendingMessages: false, phaseSince: at, observedAt: at, heartbeatAt: at, context: availableContext(10, 100_000, 100) });
+        assert.deepEqual(events.map(event => `${event.phase}:${event.scope}`), ["waiting:mesh", "acquired:mesh", "waiting:agent", "acquired:agent", "waiting:agent"]);
+        releaseGcAgentLock();
+        assert.notEqual(await claim, undefined);
+        await assert.rejects(staleHeartbeat, /cannot publish non-terminal/u);
+        assert.equal((await readAgentSnapshot(root, f.mesh.meshId, target.agentId)).status.state, "stopping");
+    } finally {
+        resetObserver();
+    }
 }));
 
 void test("replaced runtimes cannot project activity, win GC admission, or claim external work", async () => withRoot(async root => { const f = await fixture(root); const target = await agent(root, f.mesh.meshId, f.epoch.epochId, "worker", new Date().toISOString()); const sequence = (await import("../extensions_src/utilities/orchestration_activity.ts")).readAgentActivity(root, f.mesh.meshId, target.agentId).then(value => value!.sequence); await bindAgentRuntime(root, f.mesh.meshId, target.agentId, { runtimeId: randomUUID(), kind: "external" }); assert.equal((await readAgentSnapshot(root, f.mesh.meshId, target.agentId)).activity.phase, "unknown"); await assert.rejects(createTask(root, f.mesh.meshId, target.agentId, "stale admission"), /not accepting tasks/u); assert.equal(await claimIdleAgentForStop(root, f.mesh.meshId, target.agentId, { source: "gc-role", reason: "stale GC", activitySequence: await sequence, staleMs: 10_000 }), undefined); const worker = await agent(root, f.mesh.meshId, f.epoch.epochId, "worker", new Date().toISOString()); await createTask(root, f.mesh.meshId, worker.agentId, "external work"); await bindAgentRuntime(root, f.mesh.meshId, worker.agentId, { runtimeId: randomUUID(), kind: "external" }); await assert.rejects(claimPendingTask(root, f.mesh.meshId, worker.agentId, worker.runtimeId), /stale or unbound/u); }));

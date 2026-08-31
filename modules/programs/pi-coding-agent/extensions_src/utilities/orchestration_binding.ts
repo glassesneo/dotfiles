@@ -1,19 +1,15 @@
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { readOptionalJson } from "./orchestration_json.ts";
 import { meshDirectory, withMeshLock } from "./orchestration_lock.ts";
 
 export interface ExpectedEndpointBinding { endpointId: string; endpointSessionFile: string; bindingId?: string }
 
-function endpointPath(stateRoot: string, meshId: string, endpointId: string): string {
-    const key = createHash("sha256").update(endpointId).digest("hex");
-    return join(meshDirectory(stateRoot, meshId), "endpoints", `${key}.json`);
-}
+export function endpointRecordKey(endpointId: string): string { return createHash("sha256").update(endpointId).digest("hex"); }
+export function endpointRecordPath(stateRoot: string, meshId: string, endpointId: string): string { return join(meshDirectory(stateRoot, meshId), "endpoints", `${endpointRecordKey(endpointId)}.json`); }
 
 export async function hasExpectedEndpointBindingUnlocked(stateRoot: string, meshId: string, expected: ExpectedEndpointBinding): Promise<boolean> {
-    let raw: Record<string, unknown> | undefined;
-    try { raw = JSON.parse(await readFile(endpointPath(stateRoot, meshId, expected.endpointId), "utf8")) as Record<string, unknown>; }
-    catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+    const raw = await readOptionalJson<Record<string, unknown>>(endpointRecordPath(stateRoot, meshId, expected.endpointId));
     return Boolean(raw && raw.schemaVersion === 2 && raw.meshId === meshId && raw.endpointId === expected.endpointId && raw.online === true && raw.sessionFile === expected.endpointSessionFile && (expected.bindingId === undefined || raw.bindingId === expected.bindingId));
 }
 

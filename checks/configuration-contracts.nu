@@ -132,7 +132,7 @@ def main [] {
     const roleCatalog = validateRoleCatalog(catalog);
     const executionProfiles = validateExecutionProfileConfig(profiles);
     const orchestrationConfig = validateOrchestrationConfig(orchestration);
-    assert.match(orchestrationConfig.stateRoot, /\/pi\/orchestration-v5$/u);
+    assert.match(orchestrationConfig.stateRoot, /\/pi\/orchestration-v6$/u);
     assert.deepEqual(executionProfiles, {
       schemaVersion: 1,
       profiles: {

@@ -123,8 +123,30 @@ async function tryReclaim(lockDirectory: string): Promise<boolean> {
 }
 
 /** Low-level cross-process lock. Lifecycle code should use the mesh helpers below. */
-async function withDirectoryLock<T>(runDirectory: string, operation: () => Promise<T>): Promise<T> {
+export type OrchestrationLockScope = "mesh" | "agent" | "termination";
+export interface OrchestrationLockObservation {
+    phase: "waiting" | "acquired" | "released";
+    scope: OrchestrationLockScope;
+    meshId: string;
+    agentId?: string;
+}
+
+type OrchestrationLockObserver = (observation: OrchestrationLockObservation) => void | Promise<void>;
+let testLockObserver: OrchestrationLockObserver | undefined;
+
+/** Test-only in-memory seam; production code never persists lock observations. */
+export function setOrchestrationLockObserverForTest(observer: OrchestrationLockObserver | undefined): () => void {
+    testLockObserver = observer;
+    return () => { if (testLockObserver === observer) testLockObserver = undefined; };
+}
+
+async function observeLock(observation: OrchestrationLockObservation): Promise<void> {
+    await testLockObserver?.(observation);
+}
+
+async function withDirectoryLock<T>(runDirectory: string, scope: Omit<OrchestrationLockObservation, "phase">, operation: () => Promise<T>): Promise<T> {
     const lockDirectory = join(runDirectory, ".lock");
+    await observeLock({ phase: "waiting", ...scope });
     const owner: LockOwner = { pid: process.pid, acquiredAt: new Date().toISOString(), token: randomUUID() };
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
         if (!await acquireLock(lockDirectory, owner)) {
@@ -136,6 +158,7 @@ async function withDirectoryLock<T>(runDirectory: string, operation: () => Promi
         let operationError: unknown;
         let operationSucceeded = false;
         try {
+            await observeLock({ phase: "acquired", ...scope });
             operationResult = await operation();
             operationSucceeded = true;
         } catch (error) {
@@ -152,6 +175,7 @@ async function withDirectoryLock<T>(runDirectory: string, operation: () => Promi
                 if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
             }
         }
+        await observeLock({ phase: "released", ...scope });
         if (!operationSucceeded) throw operationError;
         return operationResult;
     }
@@ -169,13 +193,18 @@ export function meshDirectory(stateRoot: string, meshId: string): string {
 
 /** Serialize all mesh-wide accounting and lifecycle mutations. */
 export function withMeshLock<T>(stateRoot: string, meshId: string, operation: () => Promise<T>): Promise<T> {
-    return withDirectoryLock(meshDirectory(stateRoot, meshId), operation);
+    return withDirectoryLock(meshDirectory(stateRoot, meshId), { scope: "mesh", meshId }, operation);
+}
+
+/** Serialize activity and other agent-local projections without acquiring the mesh lock. */
+export function withAgentLock<T>(stateRoot: string, meshId: string, agentId: string, operation: () => Promise<T>): Promise<T> {
+    assertUuid(agentId, "agent ID");
+    return withDirectoryLock(join(meshDirectory(stateRoot, meshId), "agents", agentId), { scope: "agent", meshId, agentId }, operation);
 }
 
 /** Enforce the only valid nested lock order: mesh, then agent. */
 export function withMeshAgentLock<T>(stateRoot: string, meshId: string, agentId: string, operation: () => Promise<T>): Promise<T> {
-    assertUuid(agentId, "agent ID");
-    return withMeshLock(stateRoot, meshId, () => withDirectoryLock(join(meshDirectory(stateRoot, meshId), "agents", agentId), operation));
+    return withMeshLock(stateRoot, meshId, () => withAgentLock(stateRoot, meshId, agentId, operation));
 }
 
 /** Serialize one agent's complete external termination attempt without holding store locks over tmux I/O. */
@@ -183,5 +212,5 @@ export async function withAgentTerminationLock<T>(stateRoot: string, meshId: str
     assertUuid(agentId, "agent ID");
     const directory = join(meshDirectory(stateRoot, meshId), "agents", agentId, "termination");
     await mkdir(directory, { recursive: true, mode: 0o700 });
-    return withDirectoryLock(directory, operation);
+    return withDirectoryLock(directory, { scope: "termination", meshId, agentId }, operation);
 }

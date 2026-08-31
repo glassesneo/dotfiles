@@ -82,7 +82,7 @@ in
         social = submoduleOption {
           options = {
             enable = boolOption (enabled && socialApps != []);
-            pollIntervalSeconds = intOption 5;
+            pollIntervalSeconds = intOption 15;
             apps =
               listOfOption (submodule {
                 options = {

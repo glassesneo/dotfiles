@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { writeAtomicJson as atomicJson } from "./orchestration_json.ts";
-import { meshDirectory, withMeshAgentLock } from "./orchestration_lock.ts";
+import { readOptionalJson, writeAtomicJson as atomicJson } from "./orchestration_json.ts";
+import { meshDirectory, withAgentLock } from "./orchestration_lock.ts";
 import { assertCurrentAgentRuntime } from "./orchestration_runtime.ts";
 import { isTerminalAgent, type AgentStatus } from "./orchestration_types.ts";
 
@@ -123,12 +123,12 @@ export function validateAgentActivity(value: unknown, expected?: { meshId: strin
 }
 
 async function optionalActivity(path: string, identity: { meshId: string; agentId: string }): Promise<AgentActivity | undefined> {
-    try { return validateAgentActivity(JSON.parse(await readFile(path, "utf8")), identity); }
-    catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined; throw error; }
+    const value = await readOptionalJson(path);
+    return value === undefined ? undefined : validateAgentActivity(value, identity);
 }
 
 export async function publishAgentActivity(stateRoot: string, meshId: string, agentId: string, publication: ActivityPublication): Promise<AgentActivity> {
-    return withMeshAgentLock(stateRoot, meshId, agentId, async () => {
+    return withAgentLock(stateRoot, meshId, agentId, async () => {
         await assertCurrentAgentRuntime(stateRoot, meshId, agentId, publication.runtimeId);
         const status = JSON.parse(await readFile(join(meshDirectory(stateRoot, meshId), "agents", agentId, "status.json"), "utf8")) as AgentStatus;
         if ((status.state === "stopping" || isTerminalAgent(status.state)) && publication.phase !== "offline") throw new Error(`Agent ${agentId} cannot publish non-terminal activity while ${status.state}`);

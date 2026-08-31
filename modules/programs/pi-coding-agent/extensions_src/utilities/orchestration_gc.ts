@@ -8,6 +8,8 @@ import type { CommandExecutor } from "./orchestration_tmux.ts";
 import type { AgentSnapshot, BudgetReservation } from "./orchestration_types.ts";
 import type { ExpectedEndpointBinding } from "./orchestration_binding.ts";
 import { reconcileGcStopNotices } from "./orchestration_notices.ts";
+import { collectRetiredOrchestrationIndexReferences } from "./orchestration_index.ts";
+import { withMeshLock } from "./orchestration_lock.ts";
 
 interface GcOptions { stateRoot: string; meshId: string; leaseId: string; gc: MeshGcConfig; exec: CommandExecutor; tmux: string; signal?: AbortSignal; expectedCurrentEpochId?: string; beforeClaim?: (candidate: { agentId: string; source: "gc-role" | "gc-context" | "gc-pressure" }) => Promise<void> }
 interface Candidate { snapshot: AgentSnapshot; sequence: number; kind: "context" | "reusable"; roleMinimum?: IdleStopRoleMinimum }
@@ -55,7 +57,7 @@ export async function runPeriodicAgentGc(options: GcOptions): Promise<GcPassResu
     current = await candidates(options); const byRole = new Map<string, Candidate[]>();
     for (const candidate of current.filter(item => item.kind === "reusable")) { const role = candidate.snapshot.agent.agent; const items = byRole.get(role) ?? []; items.push(candidate); byRole.set(role, items); }
     for (const role of [...byRole.keys()].sort()) { const items = byRole.get(role)!; const policy = options.gc.roles[role]; if (policy && items.length >= policy.collectAt) await collect(options, items.slice(0, Math.max(0, items.length - policy.retain)).map(candidate => ({ ...candidate, roleMinimum: { role, tier: "retain" as const, minimum: policy.retain } })), "gc-role", result); }
-    await createGcPassNotices(options, result); return result;
+    await withMeshLock(options.stateRoot, options.meshId, () => collectRetiredOrchestrationIndexReferences(options.stateRoot, options.meshId)); await createGcPassNotices(options, result); return result;
 }
 function pressureCandidate(items: Candidate[], gc: MeshGcConfig, attempted: ReadonlySet<string> = new Set()): Candidate | undefined {
     const context = items.filter(item => item.kind === "context" && !attempted.has(item.snapshot.agent.agentId)); if (context.length) return context[0];

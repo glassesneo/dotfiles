@@ -1,9 +1,10 @@
 import { createHash, randomUUID } from "node:crypto";
-import { readFile, readdir } from "node:fs/promises";
+import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { canonicalJson } from "./agent_types.ts";
-import { assertExpectedEndpointBindingUnlocked, hasExpectedEndpointBindingUnlocked } from "./orchestration_binding.ts";
-import { writeAtomicJson } from "./orchestration_json.ts";
+import { assertExpectedEndpointBindingUnlocked, endpointRecordPath, hasExpectedEndpointBindingUnlocked } from "./orchestration_binding.ts";
+import { readCompletionQueueReferences, removeOrchestrationIndexReference, type CompletionQueueReference, type OrchestrationIndexReadObserver } from "./orchestration_index.ts";
+import { readOptionalJson as optionalJson, writeAtomicJson } from "./orchestration_json.ts";
 import { meshDirectory, withMeshLock } from "./orchestration_lock.ts";
 import { TASK_STATES, isTerminalTask, type CompletionBatch, type CompletionLedger, type CompletionReceipt, type CompletionReceiptToolName, type CompletionTarget, type TaskState } from "./orchestration_types.ts";
 
@@ -46,16 +47,12 @@ export interface CompletionReceiptInput {
     maxTasksPerMesh: number;
 }
 
-function deliveryKey(endpointId: string, endpointSessionFile: string): string {
-    return createHash("sha256").update(`${endpointId}\0${endpointSessionFile}`).digest("hex");
+function deliveryKey(endpointId: string, endpointSessionFile: string, bindingId: string): string {
+    return createHash("sha256").update(`${endpointId}\0${endpointSessionFile}\0${bindingId}`).digest("hex");
 }
 
-export function completionLedgerPath(stateRoot: string, meshId: string, endpointId: string, endpointSessionFile: string): string {
-    return join(meshDirectory(stateRoot, meshId), "deliveries", `${deliveryKey(endpointId, endpointSessionFile)}.json`);
-}
-
-async function optionalJson(path: string): Promise<unknown> {
-    return readFile(path, "utf8").then(text => JSON.parse(text) as unknown).catch(error => (error as NodeJS.ErrnoException).code === "ENOENT" ? undefined : Promise.reject(error));
+export function completionLedgerPath(stateRoot: string, meshId: string, endpointId: string, endpointSessionFile: string, bindingId = "legacy-unbound"): string {
+    return join(meshDirectory(stateRoot, meshId), "deliveries", `${deliveryKey(endpointId, endpointSessionFile, bindingId)}.json`);
 }
 
 function text(value: unknown, label: string): string {
@@ -90,11 +87,23 @@ function taskIds(value: unknown, label: string): string[] {
 export function validateCompletionTarget(value: unknown, requesterEndpointId?: string): CompletionTarget {
     if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("task completion target must be an object");
     const raw = value as Record<string, unknown>;
-    exactKeys(raw, ["endpointId", "endpointSessionFile"], [], "task completion target");
+    exactKeys(raw, ["endpointId", "endpointSessionFile"], ["bindingId"], "task completion target");
     const endpointId = text(raw.endpointId, "task completion endpointId");
     const endpointSessionFile = text(raw.endpointSessionFile, "task completion endpointSessionFile");
+    const bindingId = raw.bindingId === undefined ? undefined : uuid(raw.bindingId, "task completion bindingId");
     if (requesterEndpointId !== undefined && endpointId !== requesterEndpointId) throw new Error("task completion endpoint must match requester endpoint");
-    return { endpointId, endpointSessionFile };
+    return { endpointId, endpointSessionFile, ...(bindingId ? { bindingId } : {}) };
+}
+
+/** Caller must hold the mesh lock. Captures the current generation before a durable reference is written. */
+export async function bindCompletionTargetUnlocked(stateRoot: string, meshId: string, target: CompletionTarget): Promise<CompletionTarget> {
+    const raw = await optionalJson(endpointRecordPath(stateRoot, meshId, target.endpointId));
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error("Mesh caller endpoint/session binding is stale or offline");
+    const endpoint = raw as Record<string, unknown>;
+    if (endpoint.schemaVersion !== 2 || endpoint.meshId !== meshId || endpoint.endpointId !== target.endpointId || endpoint.sessionFile !== target.endpointSessionFile || endpoint.online !== true) throw new Error("Mesh caller endpoint/session binding is stale or offline");
+    const bindingId = uuid(endpoint.bindingId, "task completion bindingId");
+    if (target.bindingId !== undefined && target.bindingId !== bindingId) throw new Error("Mesh caller endpoint/session binding is stale or offline");
+    return { endpointId: target.endpointId, endpointSessionFile: target.endpointSessionFile, bindingId };
 }
 
 function validateBatch(value: unknown): CompletionBatch {
@@ -122,14 +131,15 @@ function validateReceipt(value: unknown): CompletionReceipt {
     return value as CompletionReceipt;
 }
 
-function validateLedger(value: unknown, meshId: string, endpointId?: string, endpointSessionFile?: string): CompletionLedger {
+function validateLedger(value: unknown, meshId: string, endpointId?: string, endpointSessionFile?: string, bindingId?: string): CompletionLedger {
     if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("completion ledger must be an object");
     const raw = value as Record<string, unknown>;
-    exactKeys(raw, ["schemaVersion", "meshId", "endpointId", "endpointSessionFile", "batches", "receipts", "updatedAt"], [], "completion ledger");
-    if (raw.schemaVersion !== 3 || raw.meshId !== meshId) throw new Error("Unsupported completion ledger schemaVersion");
-    if (endpointId !== undefined && raw.endpointId !== endpointId || endpointSessionFile !== undefined && raw.endpointSessionFile !== endpointSessionFile) throw new Error("completion ledger identity does not match path");
+    exactKeys(raw, ["schemaVersion", "meshId", "endpointId", "endpointSessionFile", "bindingId", "batches", "receipts", "updatedAt"], [], "completion ledger");
+    if (raw.schemaVersion !== 4 || raw.meshId !== meshId) throw new Error("Unsupported completion ledger schemaVersion");
+    if (endpointId !== undefined && raw.endpointId !== endpointId || endpointSessionFile !== undefined && raw.endpointSessionFile !== endpointSessionFile || bindingId !== undefined && raw.bindingId !== bindingId) throw new Error("completion ledger identity does not match path");
     const normalizedEndpointId = text(raw.endpointId, "completion ledger endpointId");
     const normalizedSessionFile = text(raw.endpointSessionFile, "completion ledger endpointSessionFile");
+    const normalizedBindingId = uuid(raw.bindingId, "completion ledger bindingId");
     const updatedAt = timestamp(raw.updatedAt, "completion ledger updatedAt");
     if (!Array.isArray(raw.batches) || !Array.isArray(raw.receipts)) throw new Error("completion ledger batches and receipts must be arrays");
     const batches = raw.batches.map(validateBatch);
@@ -141,11 +151,11 @@ function validateLedger(value: unknown, meshId: string, endpointId?: string, end
     if (new Set(receipts.map(receipt => receipt.receiptId)).size !== receipts.length) throw new Error("completion ledger repeats a receipt ID");
     const retryKeys = receipts.map(receipt => `${receipt.claimantSessionFile}\0${receipt.toolCallId}`);
     if (new Set(retryKeys).size !== retryKeys.length) throw new Error("completion ledger repeats a receipt tool call");
-    return { schemaVersion: 3, meshId, endpointId: normalizedEndpointId, endpointSessionFile: normalizedSessionFile, batches, receipts, updatedAt };
+    return { schemaVersion: 4, meshId, endpointId: normalizedEndpointId, endpointSessionFile: normalizedSessionFile, bindingId: normalizedBindingId, batches, receipts, updatedAt };
 }
 
-function emptyLedger(meshId: string, endpointId: string, endpointSessionFile: string): CompletionLedger {
-    return { schemaVersion: 3, meshId, endpointId, endpointSessionFile, batches: [], receipts: [], updatedAt: new Date().toISOString() };
+function emptyLedger(meshId: string, target: Required<CompletionTarget>): CompletionLedger {
+    return { schemaVersion: 4, meshId, ...target, batches: [], receipts: [], updatedAt: new Date().toISOString() };
 }
 
 function assertLedgerBudget(ledger: CompletionLedger, maxTasksPerMesh: number): void {
@@ -153,16 +163,17 @@ function assertLedgerBudget(ledger: CompletionLedger, maxTasksPerMesh: number): 
     if (distinct.size > maxTasksPerMesh) throw new Error(`Completion ledger exceeds mesh task budget (${maxTasksPerMesh})`);
 }
 
-export async function readCompletionLedger(stateRoot: string, meshId: string, endpointId: string, endpointSessionFile: string): Promise<CompletionLedger | undefined> {
-    const value = await optionalJson(completionLedgerPath(stateRoot, meshId, endpointId, endpointSessionFile));
-    return value === undefined ? undefined : validateLedger(value, meshId, endpointId, endpointSessionFile);
+async function readCompletionLedgerForTarget(stateRoot: string, meshId: string, target: Required<CompletionTarget>): Promise<CompletionLedger | undefined> {
+    const value = await optionalJson(completionLedgerPath(stateRoot, meshId, target.endpointId, target.endpointSessionFile, target.bindingId));
+    return value === undefined ? undefined : validateLedger(value, meshId, target.endpointId, target.endpointSessionFile, target.bindingId);
+}
+export async function readCompletionLedger(stateRoot: string, meshId: string, endpointId: string, endpointSessionFile: string, bindingId?: string): Promise<CompletionLedger | undefined> {
+    const target = await bindCompletionTargetUnlocked(stateRoot, meshId, { endpointId, endpointSessionFile, ...(bindingId ? { bindingId } : {}) });
+    return readCompletionLedgerForTarget(stateRoot, meshId, target as Required<CompletionTarget>);
 }
 
-async function completionTasksUnlocked(stateRoot: string, meshId: string): Promise<CompletionTask[]> {
-    const directory = join(meshDirectory(stateRoot, meshId), "tasks");
-    const names = await readdir(directory).catch(error => (error as NodeJS.ErrnoException).code === "ENOENT" ? [] : Promise.reject(error));
-    const tasks = await Promise.all(names.filter(name => UUID.test(name)).map(async taskId => {
-        const taskDirectory = join(directory, taskId);
+async function completionTaskUnlocked(stateRoot: string, meshId: string, taskId: string): Promise<CompletionTask | undefined> {
+        const taskDirectory = join(meshDirectory(stateRoot, meshId), "tasks", taskId);
         const requestValue = await optionalJson(join(taskDirectory, "request.json"));
         if (!requestValue || typeof requestValue !== "object" || Array.isArray(requestValue)) return undefined;
         const request = requestValue as Record<string, unknown>;
@@ -176,22 +187,21 @@ async function completionTasksUnlocked(stateRoot: string, meshId: string): Promi
         const createdAt = timestamp(status.createdAt, "completion task createdAt");
         const startedAt = status.startedAt === undefined ? undefined : timestamp(status.startedAt, "completion task startedAt");
         const finishedAt = status.finishedAt === undefined ? undefined : timestamp(status.finishedAt, "completion task finishedAt");
-        const completion = validateCompletionTarget(request.completion, request.requesterEndpointId);
+        const completion = validateCompletionTarget(request.completion, request.requesterEndpointId); if (!completion.bindingId) throw new Error("durable task completion target requires bindingId");
         const cancelledByCompletionEndpoint = Boolean(cancellationValue && typeof cancellationValue === "object" && !Array.isArray(cancellationValue) && (cancellationValue as Record<string, unknown>).schemaVersion === 1 && (cancellationValue as Record<string, unknown>).meshId === meshId && (cancellationValue as Record<string, unknown>).agentId === request.agentId && (cancellationValue as Record<string, unknown>).taskId === taskId && (cancellationValue as Record<string, unknown>).requesterEndpointId === completion.endpointId);
         const stoppedByCompletionEndpoint = Boolean(stopValue && typeof stopValue === "object" && !Array.isArray(stopValue) && (stopValue as Record<string, unknown>).schemaVersion === 1 && (stopValue as Record<string, unknown>).meshId === meshId && (stopValue as Record<string, unknown>).agentId === request.agentId && (stopValue as Record<string, unknown>).state === "confirmed" && ((stopValue as Record<string, unknown>).source === "user" || (stopValue as Record<string, unknown>).source === "peer") && (stopValue as Record<string, unknown>).affectedTaskId === taskId && (stopValue as Record<string, unknown>).requesterEndpointId === completion.endpointId);
         return { taskId, agentId: request.agentId, state: status.state as TaskState, createdAt, ...(startedAt ? { startedAt } : {}), ...(finishedAt ? { finishedAt } : {}), completion, suppressCompletion: status.state === "stopped" && (cancelledByCompletionEndpoint || stoppedByCompletionEndpoint) } satisfies CompletionTask;
-    }));
-    return tasks.filter((task): task is CompletionTask => task !== undefined).sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.taskId.localeCompare(b.taskId));
 }
+async function completionTasksByIdUnlocked(stateRoot: string, meshId: string, taskIdsToRead: readonly string[]): Promise<CompletionTask[]> { return (await Promise.all([...new Set(taskIdsToRead)].map(taskId => completionTaskUnlocked(stateRoot, meshId, taskId)))).filter((task): task is CompletionTask => task !== undefined).sort((left, right) => left.createdAt.localeCompare(right.createdAt) || left.taskId.localeCompare(right.taskId)); }
 
-async function ledgerIdentitiesUnlocked(stateRoot: string, meshId: string, tasks: readonly CompletionTask[]): Promise<CompletionTarget[]> {
+async function ledgerIdentitiesUnlocked(stateRoot: string, meshId: string, references: readonly CompletionQueueReference[]): Promise<CompletionTarget[]> {
     const identities = new Map<string, CompletionTarget>();
-    for (const task of tasks) identities.set(deliveryKey(task.completion.endpointId, task.completion.endpointSessionFile), task.completion);
+    for (const reference of references) identities.set(deliveryKey(reference.endpointId, reference.endpointSessionFile, reference.bindingId), { endpointId: reference.endpointId, endpointSessionFile: reference.endpointSessionFile, bindingId: reference.bindingId });
     const directory = join(meshDirectory(stateRoot, meshId), "deliveries");
     const names = await readdir(directory).catch(error => (error as NodeJS.ErrnoException).code === "ENOENT" ? [] : Promise.reject(error));
     for (const name of names.filter(name => /^[0-9a-f]{64}\.json$/u.test(name))) {
         const value = validateLedger(await optionalJson(join(directory, name)), meshId);
-        if (name !== `${deliveryKey(value.endpointId, value.endpointSessionFile)}.json`) throw new Error("completion ledger identity does not match path");
+        if (name !== `${deliveryKey(value.endpointId, value.endpointSessionFile, value.bindingId)}.json`) throw new Error("completion ledger identity does not match path");
         identities.set(name.slice(0, -5), value);
     }
     return [...identities.values()];
@@ -203,23 +213,26 @@ export interface CompletionSettlement {
 }
 
 /** Caller must hold the mesh lock. Persists event IDs before any event file is materialized. */
-export async function settleCompletionDeliveriesUnlocked(stateRoot: string, meshId: string, maxTasksPerMesh: number): Promise<CompletionSettlement> {
-    const tasks = await completionTasksUnlocked(stateRoot, meshId);
+export async function settleCompletionDeliveriesUnlocked(stateRoot: string, meshId: string, maxTasksPerMesh: number, observer?: OrchestrationIndexReadObserver): Promise<CompletionSettlement> {
+    const references = await readCompletionQueueReferences(stateRoot, meshId, observer);
     const eventBatches: CompletionSettlement["eventBatches"] = [];
     let ledgersPersisted = false;
-    for (const identity of await ledgerIdentitiesUnlocked(stateRoot, meshId, tasks)) {
+    for (const identity of await ledgerIdentitiesUnlocked(stateRoot, meshId, references)) {
         if (!await hasExpectedEndpointBindingUnlocked(stateRoot, meshId, identity)) continue;
-        let ledger = await readCompletionLedger(stateRoot, meshId, identity.endpointId, identity.endpointSessionFile) ?? emptyLedger(meshId, identity.endpointId, identity.endpointSessionFile);
+        const target = identity as Required<CompletionTarget>; let ledger = await readCompletionLedgerForTarget(stateRoot, meshId, target) ?? emptyLedger(meshId, target);
         const assigned = new Set(ledger.batches.flatMap(batch => batch.taskIds));
         const received = new Set(ledger.receipts.flatMap(receipt => receipt.taskIds));
-        const terminal = tasks.filter(task => task.completion.endpointId === identity.endpointId && task.completion.endpointSessionFile === identity.endpointSessionFile && isTerminalTask(task.state) && !task.suppressCompletion && !assigned.has(task.taskId) && !received.has(task.taskId));
+        const matchingReferences = references.filter(reference => reference.endpointId === identity.endpointId && reference.endpointSessionFile === identity.endpointSessionFile && reference.bindingId === identity.bindingId);
+        const tasks = await completionTasksByIdUnlocked(stateRoot, meshId, [...matchingReferences.map(reference => reference.taskId), ...ledger.batches.flatMap(batch => batch.taskIds)]);
+        const terminal = tasks.filter(task => task.completion.endpointId === identity.endpointId && task.completion.endpointSessionFile === identity.endpointSessionFile && task.completion.bindingId === identity.bindingId && isTerminalTask(task.state) && !task.suppressCompletion && !assigned.has(task.taskId) && !received.has(task.taskId));
         if (terminal.length) {
             const settledAt = new Date().toISOString();
             ledger = { ...ledger, batches: [...ledger.batches, { batchId: randomUUID(), taskIds: terminal.map(task => task.taskId), settledAt, eventId: randomUUID() }], updatedAt: settledAt };
             assertLedgerBudget(ledger, maxTasksPerMesh);
-            await writeAtomicJson(completionLedgerPath(stateRoot, meshId, identity.endpointId, identity.endpointSessionFile), ledger);
+            await writeAtomicJson(completionLedgerPath(stateRoot, meshId, identity.endpointId, identity.endpointSessionFile, identity.bindingId), ledger);
             ledgersPersisted = true;
         }
+        for (const reference of matchingReferences) if (tasks.some(task => task.taskId === reference.taskId && task.suppressCompletion)) await removeOrchestrationIndexReference(stateRoot, meshId, "completion-queue", reference);
         for (const batch of ledger.batches) {
             const batchTasks = batch.taskIds.map(taskId => tasks.find(task => task.taskId === taskId)).filter((task): task is CompletionTask => task !== undefined);
             if (batchTasks.length === batch.taskIds.length) eventBatches.push({ ledger, batch, tasks: batchTasks });
@@ -240,15 +253,15 @@ async function createCompletionReceiptUnlocked(stateRoot: string, meshId: string
     if (!Number.isInteger(input.maxTasksPerMesh) || input.maxTasksPerMesh < 1) throw new Error("maxTasksPerMesh must be a positive integer");
     const requestedIds = taskIds(input.taskIds, "completion receipt taskIds");
     if (requestedIds.length > 16) throw new Error("completion receipt accepts at most 16 tasks");
-    let ledger = await readCompletionLedger(stateRoot, meshId, input.endpointId, input.endpointSessionFile) ?? emptyLedger(meshId, input.endpointId, input.endpointSessionFile);
+    const target = await bindCompletionTargetUnlocked(stateRoot, meshId, input); let ledger = await readCompletionLedgerForTarget(stateRoot, meshId, target as Required<CompletionTarget>) ?? emptyLedger(meshId, target as Required<CompletionTarget>);
     const digest = argumentsDigest(input.canonicalArguments);
     const existing = ledger.receipts.find(receipt => receipt.claimantSessionFile === input.claimantSessionFile && receipt.toolCallId === input.toolCallId);
     if (existing && (existing.toolName !== input.toolName || existing.argumentsDigest !== digest)) throw new Error(`${input.toolName} retry reused toolCallId with different arguments`);
-    const currentTasks = tasks ?? await completionTasksUnlocked(stateRoot, meshId);
+    const currentTasks = tasks ?? await completionTasksByIdUnlocked(stateRoot, meshId, existing?.taskIds ?? requestedIds);
     const byId = new Map(currentTasks.map(task => [task.taskId, task]));
     for (const taskId of existing?.taskIds ?? requestedIds) {
         const task = byId.get(taskId);
-        if (!task || task.completion.endpointId !== input.endpointId || task.completion.endpointSessionFile !== input.endpointSessionFile) throw new Error(`Task ${taskId} is not routed to the caller endpoint session`);
+        if (!task || task.completion.endpointId !== input.endpointId || task.completion.endpointSessionFile !== input.endpointSessionFile || task.completion.bindingId !== target.bindingId) throw new Error(`Task ${taskId} is not routed to the caller endpoint session`);
         if (!isTerminalTask(task.state)) throw new Error(`Task ${taskId} is not terminal`);
     }
     if (existing) return { receipt: existing, created: false, receivedTaskIds: [] };
@@ -259,7 +272,7 @@ async function createCompletionReceiptUnlocked(stateRoot: string, meshId: string
     const receipt: CompletionReceipt = { receiptId: randomUUID(), claimantSessionFile: input.claimantSessionFile, toolCallId: input.toolCallId, toolName: input.toolName, argumentsDigest: digest, taskIds: newlyReceived, receivedAt };
     ledger = { ...ledger, receipts: [...ledger.receipts, receipt], updatedAt: receivedAt };
     assertLedgerBudget(ledger, input.maxTasksPerMesh);
-    await writeAtomicJson(completionLedgerPath(stateRoot, meshId, input.endpointId, input.endpointSessionFile), ledger);
+    await writeAtomicJson(completionLedgerPath(stateRoot, meshId, input.endpointId, input.endpointSessionFile, target.bindingId), ledger);
     return { receipt, created: true, receivedTaskIds: newlyReceived };
 }
 
@@ -273,7 +286,7 @@ export async function rollbackCompletionReceipt(stateRoot: string, meshId: strin
         const ledger = await readCompletionLedger(stateRoot, meshId, input.endpointId, input.endpointSessionFile);
         if (!ledger || !ledger.receipts.some(receipt => receipt.receiptId === receiptId)) return false;
         const updatedAt = new Date().toISOString();
-        await writeAtomicJson(completionLedgerPath(stateRoot, meshId, input.endpointId, input.endpointSessionFile), { ...ledger, receipts: ledger.receipts.filter(receipt => receipt.receiptId !== receiptId), updatedAt });
+        await writeAtomicJson(completionLedgerPath(stateRoot, meshId, input.endpointId, input.endpointSessionFile, ledger.bindingId), { ...ledger, receipts: ledger.receipts.filter(receipt => receipt.receiptId !== receiptId), updatedAt });
         return true;
     });
 }
@@ -287,10 +300,9 @@ export async function reconcileCompletionReceipts(stateRoot: string, meshId: str
         if (!ledger) return { removedReceiptIds: [] };
         const committed = (receipt: CompletionReceipt): boolean => (input.persistedReceipts.get(receipt.receiptId) ?? []).some(evidence => evidence.toolCallId === receipt.toolCallId && evidence.toolName === receipt.toolName && (evidence.receivedTaskIds.length === 0 || canonicalJson(evidence.receivedTaskIds) === canonicalJson(receipt.taskIds)) && evidence.claimedTaskIds.every(taskId => receipt.taskIds.includes(taskId)));
         const removed = ledger.receipts.filter(receipt => receipt.claimantSessionFile === input.claimantSessionFile && !committed(receipt));
-        if (!removed.length) return { removedReceiptIds: [] };
-        const removedIds = new Set(removed.map(receipt => receipt.receiptId));
-        const updatedAt = new Date().toISOString();
-        await writeAtomicJson(completionLedgerPath(stateRoot, meshId, input.endpointId, input.endpointSessionFile), { ...ledger, receipts: ledger.receipts.filter(receipt => !removedIds.has(receipt.receiptId)), updatedAt });
+        const retainedCommitted = ledger.receipts.filter(receipt => receipt.claimantSessionFile === input.claimantSessionFile && committed(receipt));
+        if (removed.length) { const removedIds = new Set(removed.map(receipt => receipt.receiptId)); const updatedAt = new Date().toISOString(); await writeAtomicJson(completionLedgerPath(stateRoot, meshId, input.endpointId, input.endpointSessionFile, ledger.bindingId), { ...ledger, receipts: ledger.receipts.filter(receipt => !removedIds.has(receipt.receiptId)), updatedAt }); }
+        for (const taskId of new Set(retainedCommitted.flatMap(receipt => receipt.taskIds))) await removeOrchestrationIndexReference(stateRoot, meshId, "completion-queue", { endpointId: ledger.endpointId, endpointSessionFile: ledger.endpointSessionFile, bindingId: ledger.bindingId, taskId });
         return { removedReceiptIds: removed.map(receipt => receipt.receiptId) };
     });
 }

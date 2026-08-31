@@ -18,10 +18,19 @@ delib.module {
       for f in \
         "$out/zeno.zsh" \
         "$out/bin/zeno" \
-        "$out/bin/zeno-server"
+        "$out/bin/zeno-server" \
+        "$out/shells/zsh/functions/zeno"
       do
         sed -i 's/--node-modules-dir=auto/--node-modules-dir=none/g' "$f"
       done
+
+      sed -i \
+        's|export ZENO_ROOT=''${ZENO_ROOT:-''${zeno_source:h}}|export ZENO_ROOT=''${zeno_source:h}|' \
+        "$out/zeno-bootstrap.zsh"
+
+      grep -Fq -- '--node-modules-dir=none' "$out/shells/zsh/functions/zeno"
+      ! grep -Fq -- '--node-modules-dir=auto' "$out/shells/zsh/functions/zeno"
+      grep -Fq -- 'export ZENO_ROOT=''${zeno_source:h}' "$out/zeno-bootstrap.zsh"
     '';
   in {
     programs.zsh = {
@@ -36,6 +45,8 @@ delib.module {
         ZENO_ENABLE_FZF_TMUX = "1";
         ZENO_FZF_TMUX_OPTIONS = "-p 80%,50%";
         ZENO_DISABLE_EXECUTE_CACHE_COMMAND = "1";
+        ZENO_ROOT = "${zenoPatched}";
+        ZENO_DISABLE_SOCK = "1";
         DENO_DIR = "${homeConfig.xdg.cacheHome}/deno";
         DENO_NO_UPDATE_CHECK = "1";
         DENO_NO_PROMPT = "1";

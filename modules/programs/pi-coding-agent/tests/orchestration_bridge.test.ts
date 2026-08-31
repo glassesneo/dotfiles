@@ -59,7 +59,7 @@ async function bridgeFixture(options: { publish?: boolean; contextPolicy?: "proj
         sendUserMessage(prompt: string) { delivered.push(prompt); },
     } as unknown as ExtensionAPI;
     registerMeshChildBridge(pi, { PI_MESH_ID: mesh.meshId, PI_MESH_AGENT_ID: agentId, PI_MESH_AGENT_DIR: prepared.paths.directory, PI_MESH_EPOCH_ID: epoch.epochId, PI_AGENT_RESOLVED_AGENT: envelopePath }, {
-        cadenceSetTimeout(callback) { intervalCallback = callback; return 1; }, cadenceClearTimeout() {}, resolveCompactionReserveTokens: () => 68, contextHeadroomTokens: 32, standaloneRuntimeBinding: true, idleClaimIntervalMs: 0, ...options.dependencies,
+        wake: { watch: () => ({ close() {}, on() { return this; }, unref() {} }) }, cadenceSetTimeout(callback) { intervalCallback = callback; return 1; }, cadenceClearTimeout() {}, resolveCompactionReserveTokens: () => 68, contextHeadroomTokens: 32, standaloneRuntimeBinding: true, idleClaimIntervalMs: 0, ...options.dependencies,
     });
     const activate = (value: unknown = envelope) => { for (const handler of eventHandlers) handler({ schemaVersion: 1, identity: envelope.identity, envelope: value }); };
     const start = () => handlers.get("session_start")?.({}, { cwd: "/work", sessionManager: { getSessionId: () => "child", getSessionFile: () => join(root, "child.jsonl") }, getContextUsage: () => ({ tokens: 99, contextWindow: 200, percent: 49.5 }), isIdle: () => idle, hasPendingMessages: () => pendingMessages, abort() { aborts += 1; }, shutdown() { shutdowns += 1; } });
@@ -208,6 +208,13 @@ void test("stalled completion persistence shuts down the settled child after a b
     now += 2; expire(); await settling;
     assert.equal(fixture.shutdowns, 1);
     await fixture.emit("session_shutdown", { reason: "quit" });
+});
+
+// Given a healthy task-inbox watcher, a child observes newly indexed work after debounce without waiting for the three-second correctness fallback, and shutdown closes the watcher.
+void test("Pi child task-inbox wake immediately runs the idempotent claim pass and closes", async () => {
+    const clock = new FakeMonotonicTimers(); clock.now = Date.now(); let changed: ((event: string, filename: string | Buffer | null) => void) | undefined; let closed = 0;
+    const fixture = await bridgeFixture({ dependencies: { now: () => clock.now, idleClaimIntervalMs: 3000, cadenceSetTimeout: clock.setTimeout, cadenceClearTimeout: clock.clearTimeout, wake: { watch: (_path, _options, listener) => { changed = listener; return { close() { closed += 1; }, on() { return this; }, unref() {} }; }, setTimeout: clock.setTimeout, clearTimeout: clock.clearTimeout } } });
+    fixture.activate(); await fixture.start(); await createTask(fixture.root, fixture.meshId, fixture.agentId, "wake task", `root:${fixture.meshId}`); changed!("change", "task.json"); await clock.advance(10); assert.deepEqual(fixture.delivered, ["wake task"]); await fixture.emit("session_shutdown", { reason: "reload" }); assert.equal(closed, 1); assert.equal(clock.pendingCount, 0);
 });
 
 // Admission: child claim cadence is repository-owned state behavior; types cannot distinguish an idle full-store claim from an active cancellation probe.

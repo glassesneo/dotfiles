@@ -251,9 +251,20 @@
                 touch $out
               '';
           };
+
+          fullValidationRunnerTests = {
+            full-validation-runner-tests =
+              pkgs.runCommand "full-validation-runner-tests" {
+                nativeBuildInputs = [pkgs.bash pkgs.coreutils];
+              } ''
+                bash ${./checks/full-validation-test.sh} ${./checks/full-validation.sh}
+                touch $out
+              '';
+          };
         in
           piCustomizations
           // repositoryConsistency
+          // fullValidationRunnerTests
           // lib.optionalAttrs (system == "aarch64-darwin") {
             configuration-contracts = pkgs.stdenvNoCC.mkDerivation {
               pname = "configuration-contracts";

@@ -39,6 +39,15 @@ nix flake show
 nix build .#checks.<system>.<name> --no-link
 ```
 
+For focused Pi orchestration iteration, run the full TypeScript typecheck with orchestration-only lint and behavioral tests:
+
+```sh
+cd modules/programs/pi-coding-agent
+pnpm check:orchestration
+```
+
+This command shortens iteration only; the unscoped `pnpm check` and the full repository gate retain final authority.
+
 Current focused check owners are:
 
 - `pi-customizations`: Pi TypeScript typechecking, linting, and admitted Node behavioral tests;
@@ -47,6 +56,7 @@ Current focused check owners are:
 - `sketchybar-workspace-adapter-tests` on `aarch64-darwin`: workspace-provider normalization behavior;
 - `sketchybar-media-hover-tests` on `aarch64-darwin`: media hover state transitions and concurrency;
 - `repository-consistency`: repository-owned path, documentation-link, and Skill-package integrity;
+- `full-validation-runner-tests`: fake-Nix full-validation inventory and transactional-retention behavior;
 - `treefmt`: repository formatting conformance;
 - `nixos-seiran-vm0` on `aarch64-linux`: representative NixOS system closure realization.
 
@@ -60,9 +70,9 @@ From the repository root, run:
 nix run .#check-full
 ```
 
-The app builds all checks applicable to the current system once and reports the elapsed time for each validation stage. On Darwin it then builds `seiran`, `seiran-vm1`, and the standalone `neo@seiran-clean` Home Manager configuration. On aarch64 Linux, the applicable flake check builds `nixos-seiran-vm0`; other systems evaluate that incompatible derivation without claiming its build passed.
+The app first performs structural evaluation with `nix flake check --no-build --no-update-lock-file`, then dynamically enumerates and prints every `checks.<current-system>` name. An empty inventory fails. It builds that complete check inventory and the applicable platform representatives in one realization wave: Darwin adds `seiran`, `seiran-vm1`, and standalone `neo@seiran-clean`; aarch64 Linux relies on its applicable checks; x86_64 Linux evaluates the incompatible aarch64 NixOS representative's `drvPath` without claiming a build passed. It reports elapsed time for every stage and a final total.
 
-The latest successful representative and dependency-heavy check outputs are retained through stable links below `.direnv/check-full/`. These links keep their closures reusable across automatic garbage collection; each successful retention stage replaces the corresponding prior links.
+A successful realization is retained as a fresh generation below `.direnv/check-full/generations/`, then atomically selected through `.direnv/check-full/current`. A failed realization removes its staging generation and leaves the prior `current` roots intact. The selected generation keeps its closures reusable across automatic garbage collection; a later success removes the former generation.
 
 ## Flake source visibility
 

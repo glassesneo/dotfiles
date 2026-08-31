@@ -7,8 +7,9 @@ import { bindAgentRuntime } from "./utilities/orchestration_runtime.ts";
 import { agentPaths, claimPendingTask, failAgent, finishTask, markBridgeReady, readAgentSnapshot, readAgentStatus, readTaskCancellation } from "./utilities/orchestration_store.ts";
 import { emptyUsage, isTerminalAgent } from "./utilities/orchestration_types.ts";
 import { resolveExternalDriver, validateExternalWorkerConfig, type ExternalDriver, type ExternalWorkerConfig, type ExternalWorkerEvent } from "./utilities/orchestration_external_driver.ts";
+import { createDirectoryWake, workerTaskInboxDirectory, type DirectoryWake, type DirectoryWakeDependencies } from "./utilities/orchestration_wake.ts";
 
-interface WorkerDependencies { claimPendingTask?: typeof claimPendingTask; readAgentStatus?: typeof readAgentStatus; readAgentSnapshot?: typeof readAgentSnapshot; readTaskCancellation?: typeof readTaskCancellation; createDriver?: (config: ExternalWorkerConfig, event: (event: ExternalWorkerEvent) => void) => ExternalDriver; publishAgentActivity?: typeof publishAgentActivity; activityHeartbeatMs?: number; idleClaimIntervalMs?: number; idleStopProbeMs?: number; activeCancellationIntervalMs?: number; now?: () => number; sleep?: (ms: number) => Promise<void> }
+interface WorkerDependencies { claimPendingTask?: typeof claimPendingTask; readAgentStatus?: typeof readAgentStatus; readAgentSnapshot?: typeof readAgentSnapshot; readTaskCancellation?: typeof readTaskCancellation; createDriver?: (config: ExternalWorkerConfig, event: (event: ExternalWorkerEvent) => void) => ExternalDriver; publishAgentActivity?: typeof publishAgentActivity; activityHeartbeatMs?: number; idleClaimIntervalMs?: number; idleStopProbeMs?: number; activeCancellationIntervalMs?: number; now?: () => number; sleep?: (ms: number) => Promise<void>; wake?: DirectoryWakeDependencies }
 
 function requireEnv(env: NodeJS.ProcessEnv, name: string): string { const value = env[name]; if (!value?.trim()) throw new Error(`${name} is required`); return value; }
 function sleep(ms: number): Promise<void> { return new Promise(resolve => setTimeout(resolve, ms)); }
@@ -75,10 +76,14 @@ export async function runExternalWorker(env: NodeJS.ProcessEnv = process.env, de
     let shutdownPromise: Promise<void> | undefined;
     let activeTaskId: string | undefined;
     let parentTerminalOutcome: "stopped" | "failed" | undefined;
+    let taskWake: DirectoryWake | undefined; let wakePending = false; let wakeResolve: (() => void) | undefined; let wakePromise = new Promise<void>(resolveWake => { wakeResolve = resolveWake; });
+    const signalWake = () => { wakePending = true; wakeResolve?.(); };
+    const resetWake = () => { wakePromise = new Promise<void>(resolveWake => { wakeResolve = resolveWake; }); };
     const shutdown = (): Promise<void> => shutdownPromise ??= driver.shutdown().catch(() => {});
     const stop = (reason: string, preserveTerminalOutcome?: "stopped" | "failed", rootManagedStopping = false): Promise<void> => {
         stopPromise ??= (async () => {
             stopping = true;
+            await taskWake?.close(); taskWake = undefined;
             parentTerminalOutcome = preserveTerminalOutcome;
             await driver.cancel().catch(() => {});
             if (activeTaskId) await finishTask(stateRoot, meshId, activeTaskId, { outcome: preserveTerminalOutcome ?? "stopped", usage: emptyUsage(), turns: 1, error: reason }, runtimeId).catch(() => {});
@@ -98,6 +103,7 @@ export async function runExternalWorker(env: NodeJS.ProcessEnv = process.env, de
         await markBridgeReady(stateRoot, meshId, agentId, launchEnvelopeDigest(envelope), runtimeId);
         view.event({ type: "state", text: "ready" });
         await publishActivity("idle");
+        taskWake = await createDirectoryWake({ directory: workerTaskInboxDirectory(stateRoot, meshId, agentId), run: signalWake, onError: error => view.event({ type: "state", text: `Task wake error: ${errorText(error)}` }), dependencies: dependencies.wake });
         let nextClaimAt = Number.NEGATIVE_INFINITY;
         while (!stopping) {
             await publishActivity(activityPhase, true).catch(() => {});
@@ -105,10 +111,12 @@ export async function runExternalWorker(env: NodeJS.ProcessEnv = process.env, de
             if (isTerminalAgent(status.state)) { await stop(status.exitReason ?? "Stopped by parent", status.state === "failed" ? "failed" : "stopped"); break; }
             if (status.state === "stopping") { await stop(status.exitReason ?? "Stopped by parent", undefined, true); break; }
             const now = (dependencies.now ?? Date.now)();
-            const task = now >= nextClaimAt ? await (dependencies.claimPendingTask ?? claimPendingTask)(stateRoot, meshId, agentId, runtimeId) : undefined;
-            if (now >= nextClaimAt) nextClaimAt = now + (dependencies.idleClaimIntervalMs ?? 3000);
+            const shouldClaim = wakePending || now >= nextClaimAt; wakePending = false;
+            const task = shouldClaim ? await (dependencies.claimPendingTask ?? claimPendingTask)(stateRoot, meshId, agentId, runtimeId) : undefined;
+            if (shouldClaim) nextClaimAt = now + (dependencies.idleClaimIntervalMs ?? 3000);
             if (!task) {
-                const closed = await Promise.race([wait(Math.min(dependencies.idleStopProbeMs ?? 100, Math.max(0, nextClaimAt - now))).then(() => undefined), driverClosed]);
+                const closed = await Promise.race([wait(Math.min(dependencies.idleStopProbeMs ?? 100, Math.max(0, nextClaimAt - now))).then(() => undefined), driverClosed, wakePromise.then(() => "wake" as const)]);
+                if (closed === "wake") { resetWake(); continue; }
                 if (closed) throw closed.driverError;
                 const fatal = driver.fatalError();
                 if (fatal) throw fatal;
@@ -179,6 +187,7 @@ export async function runExternalWorker(env: NodeJS.ProcessEnv = process.env, de
         await failAgent(stateRoot, meshId, agentId, message, false, { expectedRuntimeId: runtimeId });
         throw error;
     } finally {
+        await taskWake?.close(); taskWake = undefined;
         await publishActivity("offline").catch(() => {});
         await shutdown();
     }

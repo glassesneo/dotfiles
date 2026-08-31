@@ -31,43 +31,112 @@ if [[ ! -f flake.nix ]]; then
 fi
 
 root_dir="$PWD/.direnv/check-full"
-mkdir -p "$root_dir"
+generations_dir="$root_dir/generations"
+current_link="$root_dir/current"
+pending_generation=""
+pending_current=""
+check_names=()
+installables=()
 
-run_stage "build applicable flake checks for $system" \
-  nix flake check --no-update-lock-file -L
+cleanup_pending_generation() {
+  local status=$?
 
-check_roots=(".#checks.$system.pi-customizations")
-retention_label="retain reusable check closures"
+  if ((status != 0)); then
+    [[ -z $pending_current ]] || rm -f "$pending_current"
+    [[ -z $pending_generation ]] || rm -rf "$pending_generation"
+  fi
+
+  return "$status"
+}
+trap cleanup_pending_generation EXIT
+
+inventory_checks() {
+  local inventory
+
+  if ! inventory=$(nix eval --no-update-lock-file --raw --apply 'checks: builtins.concatStringsSep "\n" (map builtins.toJSON (builtins.attrNames checks))' ".#checks.$system"); then
+    return 1
+  fi
+
+  if [[ -z $inventory ]]; then
+    echo "error: no flake checks were found for $system" >&2
+    return 1
+  fi
+
+  mapfile -t check_names <<<"$inventory"
+  printf 'Discovered %d flake checks for %s:\n' "${#check_names[@]}" "$system" >&2
+  printf '  %s\n' "${check_names[@]}" >&2
+}
+
+realize_and_retain() {
+  local generation_name
+  local generation_dir
+  local former_target=""
+
+  if [[ -e $current_link && ! -L $current_link ]]; then
+    echo "error: $current_link must be a symlink" >&2
+    return 1
+  fi
+
+  if ! pending_generation=$(mktemp -d "$generations_dir/generation-XXXXXXXX"); then
+    return 1
+  fi
+  if ! nix build --no-update-lock-file -L --out-link "$pending_generation/result" "${installables[@]}"; then
+    return 1
+  fi
+
+  generation_dir="$pending_generation"
+  generation_name="${generation_dir##*/}"
+
+  if [[ -L $current_link ]] && ! former_target=$(readlink "$current_link"); then
+    return 1
+  fi
+
+  pending_current="$root_dir/.current.$generation_name"
+  if ! ln -s "generations/$generation_name" "$pending_current"; then
+    return 1
+  fi
+  if ! mv -Tf "$pending_current" "$current_link"; then
+    return 1
+  fi
+  pending_current=""
+  pending_generation=""
+
+  if [[ $former_target =~ ^generations/[A-Za-z0-9][A-Za-z0-9_-]*$ ]] && ! rm -rf -- "${root_dir:?}/${former_target:?}"; then
+    return 1
+  fi
+}
+
+mkdir -p "$generations_dir"
+
+run_stage "structural flake evaluation" \
+  nix flake check --no-build --no-update-lock-file
+run_stage "inventory applicable flake checks for $system" inventory_checks
+
+for check_name in "${check_names[@]}"; do
+  installables+=(".#checks.$system.$check_name")
+done
+
 case "$system" in
 aarch64-darwin)
-  check_roots+=(".#checks.$system.configuration-contracts")
+  installables+=(
+    .#darwinConfigurations.seiran.system
+    .#darwinConfigurations.seiran-vm1.system
+    '.#homeConfigurations."neo@seiran-clean".activationPackage'
+  )
   ;;
 aarch64-linux)
-  check_roots+=(".#checks.$system.nixos-seiran-vm0")
-  retention_label="retain reusable check and representative closures"
   ;;
-x86_64-linux) ;;
+x86_64-linux)
+  run_stage "evaluate the incompatible aarch64-linux NixOS representative without building it" \
+    nix eval --no-update-lock-file --raw .#checks.aarch64-linux.nixos-seiran-vm0.drvPath >/dev/null
+  ;;
 *)
   echo "unsupported system: $system" >&2
   exit 1
   ;;
 esac
 
-run_stage "$retention_label" \
-  nix build -L --out-link "$root_dir/checks" "${check_roots[@]}"
-
-case "$system" in
-aarch64-darwin)
-  run_stage "build and retain representative Darwin and standalone Home Manager configurations" \
-    nix build -L --out-link "$root_dir/representatives" \
-    .#darwinConfigurations.seiran.system \
-    .#darwinConfigurations.seiran-vm1.system \
-    '.#homeConfigurations."neo@seiran-clean".activationPackage'
-  ;;
-x86_64-linux)
-  run_stage "evaluate the incompatible aarch64-linux NixOS representative without building it" \
-    nix eval --raw .#checks.aarch64-linux.nixos-seiran-vm0.drvPath >/dev/null
-  ;;
-esac
+run_stage "realize and retain ${#installables[@]} applicable checks and representatives" \
+  realize_and_retain
 
 printf '\nFull validation passed for %s in %ss\n' "$system" "$((SECONDS - validation_started))" >&2

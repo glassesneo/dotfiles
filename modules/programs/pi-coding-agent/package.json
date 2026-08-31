@@ -9,14 +9,17 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "lint": "oxlint --deny-warnings --report-unused-disable-directives extensions_src scripts tests",
+    "lint:orchestration": "oxlint --deny-warnings --report-unused-disable-directives extensions_src/orchestration*.ts extensions_src/utilities/orchestration_*.ts tests/orchestration*.test.ts",
     "test": "PI_EXTENSION_KEYBINDINGS_PATH=tests/fixtures/extension-keybindings.json node --test \"tests/**/*.test.ts\"",
+    "test:orchestration": "PI_EXTENSION_KEYBINDINGS_PATH=tests/fixtures/extension-keybindings.json node --test \"tests/orchestration*.test.ts\"",
     "test:question": "PI_EXTENSION_KEYBINDINGS_PATH=tests/fixtures/extension-keybindings.json node --test \"tests/question*.test.ts\"",
     "test:command-palette": "PI_EXTENSION_KEYBINDINGS_PATH=tests/fixtures/extension-keybindings.json node --test \"tests/command_palette*.test.ts\"",
     "test:mesh": "PI_EXTENSION_KEYBINDINGS_PATH=tests/fixtures/extension-keybindings.json node --test \"tests/{orchestration,mesh}*.test.ts\"",
     "test:agent-artifact": "PI_EXTENSION_KEYBINDINGS_PATH=tests/fixtures/extension-keybindings.json node --test tests/agent_artifact.test.ts",
     "test:web-search": "PI_EXTENSION_KEYBINDINGS_PATH=tests/fixtures/extension-keybindings.json node --test tests/web_search.test.ts",
     "test:web-retrieval": "PI_EXTENSION_KEYBINDINGS_PATH=tests/fixtures/extension-keybindings.json node --test tests/{web_search,web_fetch}.test.ts",
-    "check": "node scripts/run-check.mts"
+    "check": "node scripts/run-check.mts",
+    "check:orchestration": "node scripts/run-check.mts orchestration"
   },
   "devDependencies": {
     "@earendil-works/pi-ai": "0.84.4",

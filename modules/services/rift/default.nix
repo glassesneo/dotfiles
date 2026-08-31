@@ -38,6 +38,7 @@
       };
     };
     cargoBuildFlags = ["--bins"];
+    patches = [./keycode-fallback-first.patch];
     buildInputs = lib.optionals pkgs.stdenv.isDarwin [
       pkgs.apple-sdk_15
     ];
@@ -123,7 +124,7 @@ in
           ProgramArguments = [(lib.getExe cfg.package)];
           EnvironmentVariables = {
             RUST_BACKTRACE = "1";
-            RUST_LOG = "error,warn,info";
+            RUST_LOG = "warn";
           };
           RunAtLoad = true;
           KeepAlive = {
@@ -133,8 +134,10 @@ in
           LimitLoadToSessionType = "Aqua";
           ProcessType = "Interactive";
           Nice = -20;
-          StandardOutPath = "${homeConfig.xdg.stateHome}/rift/stdout.log";
-          StandardErrorPath = "${homeConfig.xdg.stateHome}/rift/stderr.log";
+          # For temporary diagnostics, unload this agent and run Rift interactively
+          # with an explicit filter such as `RUST_LOG=info rift`; reload it afterward.
+          StandardOutPath = "/dev/null";
+          StandardErrorPath = "/dev/null";
         };
       };
     };

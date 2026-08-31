@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import test from "node:test";
 import { completionLedgerPath, createCompletionReceipt, readCompletionLedger, reconcileCompletionReceipts, rollbackCompletionReceipt, settleCompletionDeliveriesUnlocked, validateCompletionTarget } from "../extensions_src/utilities/orchestration_completion.ts";
+import { indexTaskSubmission, indexTerminalTransition, orchestrationIndexPath } from "../extensions_src/utilities/orchestration_index.ts";
 import { initializeMesh, readPersistedCompletionReceiptEvidence, readTask, taskPaths } from "../extensions_src/utilities/orchestration_store.ts";
 import { meshDirectory, withMeshLock } from "../extensions_src/utilities/orchestration_lock.ts";
 import { withTemporaryRoot as withRoot } from "./test_helpers.ts";
@@ -24,10 +25,14 @@ async function persistTask(root: string, meshId: string, input: { endpointId: st
     const agentId = input.agentId ?? randomUUID();
     const paths = taskPaths(root, meshId, taskId);
     const createdAt = input.createdAt ?? new Date().toISOString();
-    const completion = input.completion ?? { endpointId: input.endpointId, endpointSessionFile: "/root.jsonl" };
+    const endpointKey = createHash("sha256").update(input.endpointId).digest("hex");
+    const endpoint = JSON.parse(await readFile(join(meshDirectory(root, meshId), "endpoints", `${endpointKey}.json`), "utf8")) as { bindingId: string };
+    const completion = input.completion ?? { endpointId: input.endpointId, endpointSessionFile: "/root.jsonl", bindingId: endpoint.bindingId };
     await mkdir(paths.directory, { recursive: true });
     await writeFile(paths.request, JSON.stringify({ schemaVersion: input.schemaVersion ?? 3, meshId, agentId, taskId, prompt: "bounded", requesterEndpointId: input.endpointId, completion, createdAt }));
     await writeFile(paths.status, JSON.stringify({ schemaVersion: 1, meshId, agentId, taskId, state: input.state, createdAt, ...(input.state === "created" ? {} : { finishedAt: new Date().toISOString() }) }));
+    await indexTaskSubmission(root, meshId, { agentId, taskId, createdAt, completion: completion as { endpointId: string; endpointSessionFile: string; bindingId: string } });
+    if (input.state !== "created") await indexTerminalTransition(root, meshId, { agentId, taskId, queuedAt: createdAt, completion: completion as { endpointId: string; endpointSessionFile: string; bindingId: string } });
     return taskId;
 }
 
@@ -61,7 +66,7 @@ void test("one settlement pass durably batches all newly terminal endpoint tasks
     const repaired = await withMeshLock(root, mesh.meshId, () => settleCompletionDeliveriesUnlocked(root, mesh.meshId, 256));
     assert.equal(repaired.ledgersPersisted, false);
     assert.deepEqual(repaired.eventBatches.map(item => item.batch), [frozen]);
-    assert.equal((await readCompletionLedger(root, mesh.meshId, endpointId, "/root.jsonl"))!.schemaVersion, 3);
+    assert.equal((await readCompletionLedger(root, mesh.meshId, endpointId, "/root.jsonl"))!.schemaVersion, 4);
 }));
 
 // Admitted: receipt-before-settlement loss and at-most-once reception cross the durable ledger boundary and are not mechanically detectable.
@@ -94,6 +99,8 @@ void test("rollback and reconciliation remove only uncommitted provisional recei
     const result = await reconcileCompletionReceipts(root, mesh.meshId, { endpointId, endpointSessionFile: "/root.jsonl", claimantSessionFile: "/root.jsonl", persistedReceipts: new Map([[retained.receipt!.receiptId, [{ toolCallId: "retained", toolName: "mesh_get", receivedTaskIds: [], claimedTaskIds: [] }]]]) });
     assert.deepEqual(result.removedReceiptIds, [orphan.receipt!.receiptId]);
     assert.deepEqual((await readCompletionLedger(root, mesh.meshId, endpointId, "/root.jsonl"))!.receipts.map(receipt => receipt.taskIds), [[retainedTask]]);
+    const endpointKey = createHash("sha256").update(endpointId).digest("hex"); const endpoint = JSON.parse(await readFile(join(meshDirectory(root, mesh.meshId), "endpoints", `${endpointKey}.json`), "utf8")) as { bindingId: string }; const reference = (taskId: string) => orchestrationIndexPath(root, mesh.meshId, "completion-queue", { endpointId, endpointSessionFile: "/root.jsonl", bindingId: endpoint.bindingId, taskId });
+    await Promise.all([access(reference(rollbackTask)), access(reference(orphanTask))]); await assert.rejects(access(reference(retainedTask)), error => (error as NodeJS.ErrnoException).code === "ENOENT");
 }));
 
 // Admission: completion suppression is durable routing behavior; schemas cannot determine whether a stopped task was stopped by its own completion endpoint through an explicit task or agent stop.
@@ -140,11 +147,12 @@ void test("completion target, task request, and ledger reject old channel protoc
     await assert.rejects(readTask(root, mesh.meshId, oldTask), /Unsupported task request schemaVersion/u);
     await assert.rejects(withMeshLock(root, mesh.meshId, () => settleCompletionDeliveriesUnlocked(root, mesh.meshId, 256)), /Unsupported task request schemaVersion/u);
 
-    const path = completionLedgerPath(root, mesh.meshId, endpointId, "/root.jsonl");
+    const endpointKey = createHash("sha256").update(endpointId).digest("hex"); const endpoint = JSON.parse(await readFile(join(meshDirectory(root, mesh.meshId), "endpoints", `${endpointKey}.json`), "utf8")) as { bindingId: string };
+    const path = completionLedgerPath(root, mesh.meshId, endpointId, "/root.jsonl", endpoint.bindingId);
     await mkdir(dirname(path), { recursive: true });
-    await writeFile(path, JSON.stringify({ schemaVersion: 2, meshId: mesh.meshId, endpointId, endpointSessionFile: "/root.jsonl", batches: [], receipts: [], updatedAt: new Date().toISOString() }));
+    await writeFile(path, JSON.stringify({ schemaVersion: 3, meshId: mesh.meshId, endpointId, endpointSessionFile: "/root.jsonl", bindingId: endpoint.bindingId, batches: [], receipts: [], updatedAt: new Date().toISOString() }));
     await assert.rejects(readCompletionLedger(root, mesh.meshId, endpointId, "/root.jsonl"), /Unsupported completion ledger schemaVersion/u);
-    await writeFile(path, JSON.stringify({ schemaVersion: 3, meshId: mesh.meshId, endpointId, endpointSessionFile: "/root.jsonl", batches: [{ batchId: randomUUID(), disposition: "event", route: "channel", channel: "A", taskIds: [oldTask], settledAt: new Date().toISOString(), eventId: randomUUID() }], receipts: [], updatedAt: new Date().toISOString() }));
+    await writeFile(path, JSON.stringify({ schemaVersion: 4, meshId: mesh.meshId, endpointId, endpointSessionFile: "/root.jsonl", bindingId: endpoint.bindingId, batches: [{ batchId: randomUUID(), disposition: "event", route: "channel", channel: "A", taskIds: [oldTask], settledAt: new Date().toISOString(), eventId: randomUUID() }], receipts: [], updatedAt: new Date().toISOString() }));
     await assert.rejects(readCompletionLedger(root, mesh.meshId, endpointId, "/root.jsonl"), /invalid keys/u);
 }));
 

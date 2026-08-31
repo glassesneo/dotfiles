@@ -1,6 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { chmod, mkdir, rename, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
+
+export async function readOptionalJson<T = unknown>(path: string): Promise<T | undefined> {
+    try { return JSON.parse(await readFile(path, "utf8")) as T; }
+    catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined; throw error; }
+}
 
 export async function writeAtomicJson(path: string, value: unknown): Promise<void> {
     await mkdir(dirname(path), { recursive: true, mode: 0o700 });

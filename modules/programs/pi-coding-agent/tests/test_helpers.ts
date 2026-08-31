@@ -64,6 +64,12 @@ export class FakeMonotonicTimers {
     }
 }
 
+export class DirectoryReadObserver {
+    readonly paths: string[] = [];
+    readonly directoryRead = (path: string): void => { this.paths.push(path); };
+    assertNeverRead(path: string): void { assert.equal(this.paths.includes(path), false, `Unexpected directory scan: ${path}`); }
+}
+
 export async function yieldToIO(): Promise<void> {
     await new Promise<void>(resolve => setImmediate(resolve));
 }
