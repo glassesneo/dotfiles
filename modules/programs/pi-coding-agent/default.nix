@@ -20,9 +20,102 @@
   };
   # Repository-owned soft ceiling for Pi's native compaction scheduler; this does
   # not represent Sol's provider-side context capability.
-  modelOverrides = {
-    providers."openai-codex".modelOverrides."gpt-5.6-sol".contextWindow = 272000;
+  secretApiKeyCommand = secretName: "!${lib.getExe' pkgs.coreutils "cat"} ${lib.escapeShellArg homeConfig.sops.secrets.${secretName}.path}";
+  builtInProviderApiKeySecrets = {
+    openrouter = "openrouter-api-key";
+    opencode = "opencode-api-key";
   };
+  builtInProviderApiKeyConfigs =
+    lib.mapAttrs (_: secretName: {
+      apiKey = secretApiKeyCommand secretName;
+    })
+    builtInProviderApiKeySecrets;
+  zaiThinkingLevelMap = {
+    off = null;
+    minimal = null;
+    low = "low";
+    medium = null;
+    high = "high";
+    xhigh = null;
+    max = "max";
+  };
+  zaiBinaryThinkingLevelMap = {
+    off = "off";
+    minimal = null;
+    low = null;
+    medium = null;
+    high = "high";
+    xhigh = null;
+    max = null;
+  };
+  zaiCompat = {
+    supportsStore = false;
+    supportsDeveloperRole = false;
+    supportsReasoningEffort = true;
+    maxTokensField = "max_tokens";
+    thinkingFormat = "zai";
+    zaiToolStream = true;
+  };
+  modelOverrides.providers =
+    {
+      "openai-codex".modelOverrides."gpt-5.6-sol".contextWindow = 272000;
+      "zai-platform" = {
+        name = "Z.AI Platform";
+        baseUrl = "https://api.z.ai/api/paas/v4";
+        api = "openai-completions";
+        apiKey = secretApiKeyCommand "zai-api-key";
+        compat = zaiCompat;
+        models = [
+          {
+            id = "glm-4.7-flash";
+            name = "GLM-4.7-Flash";
+            reasoning = true;
+            thinkingLevelMap = zaiBinaryThinkingLevelMap;
+            input = ["text"];
+            contextWindow = 204800;
+            maxTokens = 131072;
+            cost = {
+              input = 0;
+              output = 0;
+              cacheRead = 0;
+              cacheWrite = 0;
+            };
+            compat.supportsReasoningEffort = false;
+          }
+          {
+            id = "glm-5.3";
+            name = "GLM-5.3";
+            reasoning = true;
+            thinkingLevelMap = zaiThinkingLevelMap;
+            input = ["text"];
+            contextWindow = 1000000;
+            maxTokens = 131072;
+            cost = {
+              input = 1.4;
+              output = 4.4;
+              cacheRead = 0.26;
+              cacheWrite = 0;
+            };
+          }
+          {
+            id = "glm-5.3-flash";
+            name = "GLM-5.3-Flash";
+            reasoning = true;
+            thinkingLevelMap = zaiThinkingLevelMap;
+            input = ["text" "image"];
+            contextWindow = 1000000;
+            maxTokens = 131072;
+            cost = {
+              input = 0.075;
+              output = 0.25;
+              cacheRead = 0.015;
+              cacheWrite = 0;
+            };
+          }
+        ];
+      };
+    }
+    // builtInProviderApiKeyConfigs;
   codexCompactionConfig = {
     autoCompact = true;
     thresholdRatio = 0.9;

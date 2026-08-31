@@ -89,7 +89,7 @@ const sendParametersFor = (targets: Readonly<Record<string, AgentDefinition>>, p
         return Type.Object({ agent: Type.Literal(name, { description: definition.description }), ...(authorized.length > 1 ? { profile: StringEnum(authorized, { description: `Authorized execution profile for ${name}` }) } : {}), message }, { additionalProperties: false });
     });
     variants.push(Type.Object({ agentId: Type.String(), message }, { additionalProperties: false }) as never);
-    return Type.Union(variants);
+    return { ...Type.Union(variants), type: "object" as const };
 };
 const outputMode = () => Type.Optional(StringEnum(["compact", "full"] as const, { default: "compact", description: "Terminal result projection; compact may advertise fullOutputAvailable." }));
 const getParameters = Type.Object({ taskId: Type.String(), outputMode: outputMode() }, { additionalProperties: false });
