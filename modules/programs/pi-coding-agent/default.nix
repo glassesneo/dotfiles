@@ -18,8 +18,7 @@
     defaultModel = "gpt-5.6-sol";
     defaultThinkingLevel = "medium";
   };
-  # Repository-owned soft ceiling for Pi's native compaction scheduler; this does
-  # not represent Sol's provider-side context capability.
+  hasSecret = secretName: builtins.hasAttr secretName homeConfig.sops.secrets;
   secretApiKeyCommand = secretName: "!${lib.getExe' pkgs.coreutils "cat"} ${lib.escapeShellArg homeConfig.sops.secrets.${secretName}.path}";
   builtInProviderApiKeySecrets = {
     openrouter = "openrouter-api-key";
@@ -31,7 +30,7 @@
     lib.mapAttrs (_: secretName: {
       apiKey = secretApiKeyCommand secretName;
     })
-    builtInProviderApiKeySecrets;
+    (lib.filterAttrs (_: hasSecret) builtInProviderApiKeySecrets);
   zaiThinkingLevelMap = {
     off = null;
     minimal = null;
@@ -60,7 +59,11 @@
   };
   modelOverrides.providers =
     {
+      # Repository-owned soft ceiling for Pi's native compaction scheduler; this
+      # does not represent Sol's provider-side context capability.
       "openai-codex".modelOverrides."gpt-5.6-sol".contextWindow = 272000;
+    }
+    // lib.optionalAttrs (hasSecret "zai-api-key") {
       "zai-platform" = {
         name = "Z.AI Platform";
         baseUrl = "https://api.z.ai/api/paas/v4";
@@ -111,6 +114,50 @@
               input = 0.075;
               output = 0.25;
               cacheRead = 0.015;
+              cacheWrite = 0;
+            };
+          }
+        ];
+      };
+    }
+    // lib.optionalAttrs (hasSecret "cohere-api-key") {
+      cohere = {
+        name = "Cohere";
+        baseUrl = "https://api.cohere.ai/compatibility/v1";
+        api = "openai-completions";
+        apiKey = secretApiKeyCommand "cohere-api-key";
+        compat = {
+          supportsStore = false;
+          supportsDeveloperRole = true;
+          supportsReasoningEffort = true;
+          supportsUsageInStreaming = false;
+          maxTokensField = "max_tokens";
+          requiresToolResultName = true;
+          supportsStrictMode = true;
+        };
+        models = [
+          {
+            id = "command-a-plus-05-2026";
+            name = "Command A+";
+            reasoning = true;
+            # Cohere accepts reasoning_effort = "none", but Command A+ tool calls
+            # fail under Pi when reasoning is disabled.
+            thinkingLevelMap = {
+              off = null;
+              minimal = null;
+              low = null;
+              medium = null;
+              high = "high";
+              xhigh = null;
+              max = null;
+            };
+            input = ["text" "image"];
+            contextWindow = 128000;
+            maxTokens = 64000;
+            cost = {
+              input = 0;
+              output = 0;
+              cacheRead = 0;
               cacheWrite = 0;
             };
           }
