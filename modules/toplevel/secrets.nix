@@ -10,6 +10,7 @@
   sharedSecretNames = [
     "gemini-api-key"
     "ai-mop-api-key"
+    "vercel-ai-gateway-api-key"
     "brave-api-key"
     "brave-free-api-key"
     "parallel-api-key"

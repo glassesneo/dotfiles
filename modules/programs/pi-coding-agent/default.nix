@@ -25,6 +25,7 @@
     openrouter = "openrouter-api-key";
     opencode = "opencode-api-key";
     mistral = "mistral-api-key";
+    vercel-ai-gateway = "vercel-ai-gateway-api-key";
   };
   builtInProviderApiKeyConfigs =
     lib.mapAttrs (_: secretName: {
