@@ -24,6 +24,7 @@
   builtInProviderApiKeySecrets = {
     openrouter = "openrouter-api-key";
     opencode = "opencode-api-key";
+    mistral = "mistral-api-key";
   };
   builtInProviderApiKeyConfigs =
     lib.mapAttrs (_: secretName: {
@@ -239,6 +240,10 @@ in
           };
           north-mini-free = {
             model = "openrouter/cohere/north-mini-code:free";
+            thinkingLevel = "high";
+          };
+          mistral-small = {
+            model = "mistral/mistral-small-2603";
             thinkingLevel = "high";
           };
           codex-search = {

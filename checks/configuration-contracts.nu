@@ -161,6 +161,7 @@ def main [] {
         "luna-high": { model: "openai-codex/gpt-5.6-luna", thinkingLevel: "high", harness: "pi" },
         "luna-xhigh": { model: "openai-codex/gpt-5.6-luna", thinkingLevel: "xhigh", harness: "pi" },
         "north-mini-free": { model: "openrouter/cohere/north-mini-code:free", thinkingLevel: "high", harness: "pi" },
+        "mistral-small": { model: "mistral/mistral-small-2603", thinkingLevel: "high", harness: "pi" },
         "pi-deliberate": { model: "openrouter/z-ai/glm-5.2:free", thinkingLevel: "high", harness: "pi" },
         "sol-high": { model: "openai-codex/gpt-5.6-sol", thinkingLevel: "high", harness: "pi" },
         "sol-medium": { model: "openai-codex/gpt-5.6-sol", thinkingLevel: "medium", harness: "pi" },
@@ -172,12 +173,12 @@ def main [] {
     assert.deepEqual({ tools: roleCatalog.roles.general.tools, contextPolicy: roleCatalog.roles.general.contextPolicy, childExtensionContributions: roleCatalog.roles.general.childExtensionContributions }, { tools: ["read", "grep", "find", "ls", "bash", "write", "edit", "mesh_report"], contextPolicy: "project", childExtensionContributions: [] });
     assert.deepEqual(orchestrationConfig.callPolicy, {
       modes: {
-        ops: { targets: { explorer: { profiles: ["luna-high"] }, general: { profiles: ["cursor-standard", "cursor-fast", "pi-deliberate"] }, gyaru: { profiles: ["luna-high"] }, researcher: { profiles: ["terra-high"] }, "review-lens": { profiles: ["luna-high"] }, reviewer: { profiles: ["luna-xhigh", "terra-high", "sol-medium"] }, searcher: { profiles: ["codex-search"] }, validator: { profiles: ["north-mini-free"] }, worker: { profiles: ["luna-xhigh", "terra-high", "sol-medium"] } } },
+        ops: { targets: { explorer: { profiles: ["luna-high"] }, general: { profiles: ["cursor-standard", "cursor-fast", "pi-deliberate"] }, gyaru: { profiles: ["luna-high"] }, researcher: { profiles: ["terra-high"] }, "review-lens": { profiles: ["north-mini-free"] }, reviewer: { profiles: ["luna-xhigh", "terra-high", "sol-medium"] }, searcher: { profiles: ["codex-search"] }, validator: { profiles: ["mistral-small"] }, worker: { profiles: ["luna-xhigh", "terra-high", "sol-medium"] } } },
         recon: { targets: { explorer: { profiles: ["luna-high"] }, gyaru: { profiles: ["luna-high"] }, researcher: { profiles: ["terra-high"] }, reviewer: { profiles: ["luna-xhigh", "terra-high", "sol-medium"] }, searcher: { profiles: ["codex-search"] } } },
       },
       roles: {
         researcher: { targets: { searcher: { profiles: ["codex-search"] } } },
-        reviewer: { targets: { "review-lens": { profiles: ["luna-high"] }, validator: { profiles: ["north-mini-free"] } } },
+        reviewer: { targets: { "review-lens": { profiles: ["north-mini-free"] }, validator: { profiles: ["mistral-small"] } } },
       },
     });
     const enabledModeConfig = validateModeConfig(enabledModes);

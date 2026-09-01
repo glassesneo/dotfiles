@@ -16,6 +16,7 @@
     "exa-api-key"
     "opencode-api-key"
     "openrouter-api-key"
+    "mistral-api-key"
     "cerebras-api-key"
     "cohere-api-key"
     "google-cloud-api-key"

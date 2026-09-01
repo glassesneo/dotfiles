@@ -128,9 +128,9 @@
       ops.targets = {
         explorer.profiles = ["luna-high"];
         worker.profiles = ["luna-xhigh" "terra-high" "sol-medium"];
-        validator.profiles = ["north-mini-free"];
+        validator.profiles = ["mistral-small"];
         reviewer.profiles = ["luna-xhigh" "terra-high" "sol-medium"];
-        review-lens.profiles = ["luna-high"];
+        review-lens.profiles = ["north-mini-free"];
         researcher.profiles = ["terra-high"];
         searcher.profiles = ["codex-search"];
         gyaru.profiles = ["luna-high"];
@@ -139,8 +139,8 @@
     };
     roles = {
       reviewer.targets = {
-        review-lens.profiles = ["luna-high"];
-        validator.profiles = ["north-mini-free"];
+        review-lens.profiles = ["north-mini-free"];
+        validator.profiles = ["mistral-small"];
       };
       researcher.targets.searcher.profiles = ["codex-search"];
     };
