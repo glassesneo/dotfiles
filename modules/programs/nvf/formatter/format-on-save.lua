@@ -30,7 +30,7 @@ return function (bufnr)
   end
 
   ---@type table<string, true | nil>
-  local lsp_only = { lua = true, zig = true, moonbit = true }
+  local lsp_only = { lua = true, zig = true, moonbit = true, nim = true }
   if ft == "javascript" or ft == "javascriptreact" or ft == "typescript" or ft == "typescriptreact" then
     local route = web_route()
     if route == "biome" then
