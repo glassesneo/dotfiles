@@ -12,7 +12,7 @@ import { bindAgentRuntime } from "../extensions_src/utilities/orchestration_runt
 
 const budgets = { maxLiveAgents: 2, maxConcurrentTasks: 2, maxTasksPerMesh: 8 };
 function status(meshId: string, agentId: string, state: AgentStatus["state"] = "idle"): AgentStatus {
-    return { schemaVersion: 1, meshId, agentId, state, bridgeReady: true, meshToolsEnabled: false, agentUsage: emptyUsage(), accountedTaskIds: [], updatedAt: "2026-08-09T12:00:00.000Z" };
+    return { schemaVersion: 2, meshId, agentId, state, bridgeReady: true, meshToolsEnabled: false, agentUsage: emptyUsage(), accountedTaskIds: [], updatedAt: "2026-08-09T12:00:00.000Z" };
 }
 async function fixture() {
     const root = await mkdtemp(join(tmpdir(), "mesh-activity-")); const mesh = await initializeMesh(root, { rootSessionId: "root", recoverable: false, budgets }); const agentId = randomUUID(); const directory = join(meshPaths(root, mesh.meshId).agents, agentId); await mkdir(directory); await writeFile(join(directory, "status.json"), JSON.stringify(status(mesh.meshId, agentId))); return { root, meshId: mesh.meshId, agentId, directory };

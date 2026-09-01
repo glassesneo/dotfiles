@@ -36,12 +36,12 @@ import { emptyUsage } from "../extensions_src/utilities/orchestration_types.ts";
 import { settleWithinEventLoopTurns, withTemporaryRoot as withRoot, yieldToIO } from "./test_helpers.ts";
 
 const syntheticRole = (name = "worker") => ({ description: `Synthetic ${name}`, tools: [], instructions: "Return the bounded result.", contextPolicy: "project" as const, childExtensionContributions: [] });
-const syntheticProfile = { model: "provider/model", thinkingLevel: "medium" as const, harness: "pi" as const };
+const syntheticProfile = { models: ["provider/model"], thinkingLevel: "medium" as const, harness: "pi" as const };
 const syntheticCatalog = (roles: Record<string, ReturnType<typeof syntheticRole>>) => ({ schemaVersion: 4 as const, roles });
 const syntheticEpochInput = (mode: string, roles: Record<string, ReturnType<typeof syntheticRole>>) => ({
     mode,
     catalog: syntheticCatalog(roles),
-    profiles: { schemaVersion: 1 as const, profiles: { "pi-medium": syntheticProfile } },
+    profiles: { schemaVersion: 2 as const, profiles: { "pi-medium": syntheticProfile } },
     callPolicy: { modes: { [mode]: { targets: Object.fromEntries(Object.keys(roles).map(name => [name, { profiles: ["pi-medium"] }])) } }, roles: {} },
 });
 
@@ -174,7 +174,7 @@ void test("an ephemeral root remains nonrecoverable while supporting the persist
 void test("holistic orchestration references reject unknown and incompatible target-profile edges", () => {
     const role = (name: string, contextPolicy: "project" | "prompt-only" = "project") => ({ ...syntheticRole(name), contextPolicy });
     const catalog = { schemaVersion: 4 as const, roles: { worker: role("worker"), external: role("external"), isolated: role("isolated", "prompt-only") } };
-    const profiles = { schemaVersion: 1 as const, profiles: { "pi-medium": syntheticProfile, external: { model: "cursor/model", harness: "cursor-agent" as const, harnessOptions: { mode: "agent", permissionPolicy: "allow-always", sandbox: "disabled", trustWorkspace: true, worktree: false } } } };
+    const profiles = { schemaVersion: 2 as const, profiles: { "pi-medium": syntheticProfile, external: { models: ["cursor/model"], harness: "cursor-agent" as const, harnessOptions: { mode: "agent", permissionPolicy: "allow-always", sandbox: "disabled", trustWorkspace: true, worktree: false } } } };
     const raw = {
         schemaVersion: 4, stateRoot: "/state", tmux: "/tmux", returnParentCommand: "/return", parentNavigationHint: "parent", historyViewerExtension: "/history", popupExtension: "/popup", orchestrationExtension: "/orchestration", childBridgeExtension: "/bridge",
         harnesses: { pi: { adapter: "pi-native", command: "/pi" } }, natureHandleWords: ["May"],
@@ -205,32 +205,32 @@ void test("role protocol v4 captures profile-aware closure and rejects the v3 ro
     assert.deepEqual(validateRoleCatalog(catalog), catalog);
     assert.throws(() => validateRoleCatalog({ ...catalog, schemaVersion: 3 }), /Unsupported/u);
     assert.throws(() => validateRoleCatalog({ ...catalog, roles: { ...catalog.roles, reviewer: { ...catalog.roles.reviewer, defaultProfile: "review" } } }), /unknown keys/u);
-    const profiles = { schemaVersion: 1 as const, profiles: { review: { model: "provider/review", thinkingLevel: "high" as const, harness: "pi" as const }, lens: { model: "provider/lens", thinkingLevel: "medium" as const, harness: "pi" as const }, leaf: { model: "provider/leaf", thinkingLevel: "low" as const, harness: "pi" as const } } };
+    const profiles = { schemaVersion: 2 as const, profiles: { review: { models: ["provider/review"], thinkingLevel: "high" as const, harness: "pi" as const }, lens: { models: ["provider/lens"], thinkingLevel: "medium" as const, harness: "pi" as const }, leaf: { models: ["provider/leaf"], thinkingLevel: "low" as const, harness: "pi" as const } } };
     const callPolicy = { modes: { ops: { targets: { reviewer: { profiles: ["review"] }, sibling: { profiles: ["leaf"] } } } }, roles: { reviewer: { targets: { lens: { profiles: ["lens"] } } }, lens: { targets: { leaf: { profiles: ["leaf"] } } } } };
     const epoch = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", catalog, profiles, callPolicy });
-    assert.equal(epoch.schemaVersion, 4);
+    assert.equal(epoch.schemaVersion, 5);
     assert.deepEqual(Object.keys(epoch.directTargets), ["reviewer", "sibling"]);
     assert.deepEqual(Object.keys(epoch.roles).sort(), ["leaf", "lens", "reviewer", "sibling"]);
     assert.deepEqual(Object.keys(epoch.profiles).sort(), ["leaf", "lens", "review"]);
     assert.equal(epoch.policyDigest, policyDigest({ mode: epoch.mode, directTargets: epoch.directTargets, roles: epoch.roles, profiles: epoch.profiles, policies: epoch.policies }));
     const envelope = buildLaunchEnvelope({ meshId: mesh.meshId, agentId: randomUUID(), epochId: epoch.epochId, role: "reviewer", selectedProfile: "review", snapshot: epoch, childExtensions: Object.fromEntries(Object.keys(epoch.roles).map(name => [name, [`/${name}`]])) });
-    assert.deepEqual({ schemaVersion: envelope.schemaVersion, marker: envelope.marker }, { schemaVersion: 4, marker: "pi-mesh-role-launch-v4" });
+    assert.deepEqual({ schemaVersion: envelope.schemaVersion, marker: envelope.marker }, { schemaVersion: 5, marker: "pi-mesh-role-launch-v5" });
     assert.deepEqual(Object.keys(envelope.roles).sort(), ["leaf", "lens", "reviewer"]);
     assert.equal(envelope.roles.sibling, undefined);
     assert.deepEqual(envelope.policies.reviewer?.targets, { lens: { profiles: ["lens"] } });
     const forgedExternalCaller = structuredClone(envelope);
-    forgedExternalCaller.profiles.external = { model: "cursor/model", harness: "cursor-agent", harnessOptions: { mode: "ask", permissionPolicy: "reject", sandbox: "disabled", trustWorkspace: true, worktree: false } };
+    forgedExternalCaller.profiles.external = { models: ["cursor/model"], harness: "cursor-agent", harnessOptions: { mode: "ask", permissionPolicy: "reject", sandbox: "disabled", trustWorkspace: true, worktree: false } };
     forgedExternalCaller.policies.reviewer!.targets.lens = { profiles: ["external"] };
     assert.throws(() => validateLaunchEnvelope(forgedExternalCaller), /external profile caller lens/u);
     const empty = buildPolicySnapshot({ mode: "missing", catalog, profiles, callPolicy });
     assert.deepEqual(empty, { mode: "missing", directTargets: {}, roles: {}, profiles: {}, policies: {} });
     assert.throws(() => buildLaunchEnvelope({ meshId: mesh.meshId, agentId: randomUUID(), epochId: epoch.epochId, role: "reviewer", selectedProfile: "lens", snapshot: epoch, childExtensions: Object.fromEntries(Object.keys(epoch.roles).map(name => [name, [`/${name}`]])) }), /not authorized/u);
-    assert.throws(() => validateLaunchEnvelope({ ...envelope, schemaVersion: 3, marker: "pi-mesh-role-launch-v3" }), /Unsupported/u);
+    assert.throws(() => validateLaunchEnvelope({ ...envelope, schemaVersion: 4, marker: "pi-mesh-role-launch-v4" }), /Unsupported/u);
     const persisted = JSON.parse(await readFile(epochPath(root, mesh.meshId, epoch.epochId), "utf8")) as Record<string, any>;
     const malformedEdge = structuredClone(persisted); malformedEdge.directTargets.reviewer.profiles = [];
     await writeFile(epochPath(root, mesh.meshId, epoch.epochId), JSON.stringify(malformedEdge));
     await assert.rejects(readPolicyEpoch(root, mesh.meshId, epoch.epochId), /must not be empty/u);
-    await writeFile(epochPath(root, mesh.meshId, epoch.epochId), JSON.stringify({ ...persisted, schemaVersion: 3 }));
+    await writeFile(epochPath(root, mesh.meshId, epoch.epochId), JSON.stringify({ ...persisted, schemaVersion: 4 }));
     await assert.rejects(readPolicyEpoch(root, mesh.meshId, epoch.epochId), /Unsupported/u);
 }));
 
@@ -240,7 +240,7 @@ void test("persisted agents reject a forged sibling policy edge even when the ep
     const lens = syntheticRole("lens");
     const sibling = syntheticRole("sibling");
     const catalog = syntheticCatalog({ reviewer, lens, sibling });
-    const profiles = { schemaVersion: 1 as const, profiles: { "pi-medium": syntheticProfile } };
+    const profiles = { schemaVersion: 2 as const, profiles: { "pi-medium": syntheticProfile } };
     const callPolicy = { modes: { ops: { targets: { reviewer: { profiles: ["pi-medium"] }, sibling: { profiles: ["pi-medium"] } } } }, roles: { reviewer: { targets: { lens: { profiles: ["pi-medium"] } } } } };
     const epoch = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", catalog, profiles, callPolicy });
     const reservation = await reserveMeshCapacity(root, mesh.meshId, "new-agent-task");
@@ -324,9 +324,9 @@ void test("root reconciliation removes uncommitted task directories and settles 
     const prepared = await reconcileMeshState(root, mesh.meshId); assert.equal(prepared.removedTaskDirectories, 1); assert.equal((await readAgentSnapshot(root, mesh.meshId, agent.agentId, taskId)).status.activeTaskId, taskId); await reconcileMeshReservations(root, mesh.meshId, async () => "absent"); const repairedReservation = JSON.parse(await readFile(reservationPath(root, mesh.meshId, agent.reservation.reservationId), "utf8")) as { taskId?: string }; assert.equal(repairedReservation.taskId, taskId);
     const task = await readAgentSnapshot(root, mesh.meshId, agent.agentId, taskId); const usage = emptyUsage(); usage.input = 7; usage.totalTokens = 7; usage.cost.input = 0.07; usage.cost.total = 0.07;
     await writeFile(paths.result, JSON.stringify({ schemaVersion: 1, meshId: mesh.meshId, agentId: agent.agentId, taskId, outcome: "succeeded", output: "done", usage, turns: 1, interventions: [], startedAt: task.task!.status.createdAt, finishedAt: new Date().toISOString() }));
-    await reconcileMeshState(root, mesh.meshId); const settled = await readAgentSnapshot(root, mesh.meshId, agent.agentId, taskId); assert.equal(settled.agent.schemaVersion, 4); assert.equal(settled.task?.status.state, "succeeded"); assert.equal(settled.status.state, "idle"); assert.equal(settled.status.agentUsage.input, 7); assert.deepEqual(settled.status.accountedTaskIds, [taskId]);
+    await reconcileMeshState(root, mesh.meshId); const settled = await readAgentSnapshot(root, mesh.meshId, agent.agentId, taskId); assert.equal(settled.agent.schemaVersion, 5); assert.equal(settled.task?.status.state, "succeeded"); assert.equal(settled.status.state, "idle"); assert.equal(settled.status.agentUsage.input, 7); assert.deepEqual(settled.status.accountedTaskIds, [taskId]);
     await reconcileMeshState(root, mesh.meshId); assert.equal((await readAgentSnapshot(root, mesh.meshId, agent.agentId, taskId)).status.agentUsage.input, 7);
-    const agentPath = join(meshPaths(root, mesh.meshId).agents, agent.agentId, "agent.json"); const agentRecord = JSON.parse(await readFile(agentPath, "utf8")) as Record<string, unknown>; await writeFile(agentPath, JSON.stringify({ ...agentRecord, schemaVersion: 3 }));
+    const agentPath = join(meshPaths(root, mesh.meshId).agents, agent.agentId, "agent.json"); const agentRecord = JSON.parse(await readFile(agentPath, "utf8")) as Record<string, unknown>; await writeFile(agentPath, JSON.stringify({ ...agentRecord, schemaVersion: 4 }));
     await assert.rejects(readAgentSnapshot(root, mesh.meshId, agent.agentId), /Unsupported agent record/u);
 }));
 

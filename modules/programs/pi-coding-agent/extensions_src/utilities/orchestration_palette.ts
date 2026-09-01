@@ -150,8 +150,9 @@ export function detailPaneModel(snapshot: AgentSnapshot | undefined, words?: rea
     const identityLines = [
         `Handle ${identity.handle} · ID ${identity.agentId}`,
         `role:${identity.role ?? "unresolved"} · ${identity.roleDescription ?? "unavailable"}`,
-        `profile:${identity.profile ?? "unresolved"} · model ${identity.model ?? "unavailable"}`,
+        `profile:${identity.profile ?? "unresolved"} · model ${identity.model ?? "unavailable"} · fallback ${identity.fallbackCount ?? 0}`,
         `thinking ${identity.thinkingLevel ?? "unavailable"} · harness ${identity.harness ?? "unavailable"}`,
+        ...(identity.attempts ?? []).map(attempt => `attempt #${attempt.index} ${attempt.model} ${attempt.category}${attempt.message ? `: ${attempt.message}` : ""}`),
     ];
     const task = snapshot.task;
     if (!task) {
@@ -734,7 +735,9 @@ export class MeshAgentsPaletteComponent implements Component, Focusable {
         if (columns.detailWidth === undefined) {
             const selected = this.selected();
             const identity = selected ? detailPaneModel(selected, this.#deps.natureHandleWords).identityLines : [];
-            const narrowIdentity = selected && identity.length === 4 ? [`ID ${selected.agent.agentId}`, identity[1]!, identity[2]!, identity[3]!] : identity;
+            const narrowIdentity = selected && identity[0]?.startsWith("Handle ")
+                ? [`ID ${selected.agent.agentId}`, ...identity.slice(1)]
+                : identity;
             const detail = narrowIdentity.slice(0, Math.min(4, Math.max(0, rows - 1))).map(line => padToWidth(this.#theme.fg("muted", line), width));
             const list = this.#listViewport(allRows, width, Math.max(1, rows - detail.length));
             return [...list, ...detail].map(line => truncateToWidth(line, width, ""));

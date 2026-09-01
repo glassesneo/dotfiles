@@ -1,3 +1,4 @@
+import type { ModelRouteAttempt } from "./orchestration_profile_fallback.ts";
 import type { AgentSnapshot } from "./orchestration_types.ts";
 
 /** Nature-word dictionary for deterministic display handles. Avoid role-like or hostile words. */
@@ -24,6 +25,8 @@ export interface AgentDisplayIdentity {
     profile?: string;
     roleDescription?: string;
     model?: string;
+    fallbackCount?: number;
+    attempts?: ModelRouteAttempt[];
     thinkingLevel?: string;
     harness?: string;
 }
@@ -63,23 +66,29 @@ export function displayIdentityForAgentId(
     return { agentId, handle: handleForAgentId(agentId, words) };
 }
 
-/** Project immutable role/profile facts from a stored agent snapshot. */
+/** Active model and fallback count come from status.modelRoute; profileSnapshot is the immutable fallback. */
 export function displayIdentityForSnapshot(
     snapshot: AgentSnapshot,
     words: readonly string[] = NATURE_HANDLE_WORDS,
 ): AgentDisplayIdentity {
+    const route = snapshot.status.modelRoute;
     return {
         agentId: snapshot.agent.agentId,
         handle: handleForAgentId(snapshot.agent.agentId, words),
         role: snapshot.agent.role,
         profile: snapshot.agent.selectedProfile,
         roleDescription: snapshot.agent.roleSnapshot.description,
-        model: snapshot.agent.profileSnapshot.model,
+        model: route?.activeModel ?? snapshot.agent.profileSnapshot.models[0],
+        fallbackCount: route?.attempts.length ?? 0,
+        ...(route?.attempts.length ? { attempts: route.attempts } : {}),
         ...(snapshot.agent.profileSnapshot.thinkingLevel ? { thinkingLevel: snapshot.agent.profileSnapshot.thinkingLevel } : {}),
         harness: snapshot.agent.profileSnapshot.harness,
     };
 }
 
 export function formatCompactAgentIdentity(identity: AgentDisplayIdentity): string {
-    return `${identity.handle} · role:${identity.role ?? "unresolved"} · profile:${identity.profile ?? "unresolved"}`;
+    let text = `${identity.handle} · role:${identity.role ?? "unresolved"} · profile:${identity.profile ?? "unresolved"}`;
+    if (identity.model !== undefined) text += ` · model:${identity.model}`;
+    if (identity.fallbackCount !== undefined) text += ` · fallback:${identity.fallbackCount}`;
+    return text;
 }

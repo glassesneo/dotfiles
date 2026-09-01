@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { isApprovedCursorHarnessOptions, type ExecutionProfile, type ExecutionProfileConfig, type ThinkingLevel } from "./mode_types.ts";
+import { validateExecutionProfile as validateProfile, validateExecutionProfileConfig as validateProfileConfig, type ExecutionProfile, type ExecutionProfileConfig } from "./mode_types.ts";
 
 export type AgentHarness = "pi" | "cursor-agent" | "codex";
 export type ContextPolicy = "project" | "prompt-only";
@@ -28,14 +28,17 @@ export interface PolicySnapshot {
     profiles: Record<string, ExecutionProfile>;
     policies: Record<string, CallerPolicy>;
 }
+export const LAUNCH_ENVELOPE_SCHEMA_VERSION = 5 as const;
+export const LAUNCH_ENVELOPE_MARKER = "pi-mesh-role-launch-v5";
 export interface AgentLaunchEnvelope {
-    schemaVersion: 4;
-    marker: "pi-mesh-role-launch-v4";
+    schemaVersion: 5;
+    marker: "pi-mesh-role-launch-v5";
     meshId: string;
     agentId: string;
     epochId: string;
     role: string;
     selectedProfile: string;
+    initialCandidateIndex: number;
     selfRole: RoleDefinition;
     executionProfile: ExecutionProfile;
     directTargets: Record<string, TargetPolicy>;
@@ -62,29 +65,11 @@ function strings(value: unknown, label: string): string[] { if (!Array.isArray(v
 function positive(value: unknown, label: string): number { if (!Number.isInteger(value) || Number(value) <= 0) throw new Error(`${label} must be a positive integer`); return Number(value); }
 function nonnegative(value: unknown, label: string): number { if (!Number.isInteger(value) || Number(value) < 0) throw new Error(`${label} must be a non-negative integer`); return Number(value); }
 function uuid(value: unknown, label: string): string { const result = text(value, label); if (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(result)) throw new Error(`${label} must be a UUID`); return result; }
-function model(value: unknown, label: string): string { const result = text(value, label); if (!/^[^/\s]+\/\S+$/u.test(result)) throw new Error(`${label} must use provider/model format`); return result; }
-function exactOptions(value: Record<string, unknown> | undefined, expected: Record<string, unknown>, label: string): void { if (!value || canonicalJson(value) !== canonicalJson(expected)) throw new Error(`${label} requires exact harnessOptions`); }
-const thinkingLevels = new Set(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);
-
 export function validateExecutionProfile(name: string, value: unknown, label = `profiles.${name}`): ExecutionProfile {
-    const raw = object(value, label); exact(raw, ["model", "harness"], ["thinkingLevel", "harnessOptions"], label);
-    if (raw.harness !== "pi" && raw.harness !== "cursor-agent" && raw.harness !== "codex") throw new Error(`${label}.harness is invalid`);
-    if (raw.thinkingLevel !== undefined && (typeof raw.thinkingLevel !== "string" || !thinkingLevels.has(raw.thinkingLevel))) throw new Error(`${label}.thinkingLevel is invalid`);
-    const profile: ExecutionProfile = { model: model(raw.model, `${label}.model`), harness: raw.harness, ...(raw.thinkingLevel === undefined ? {} : { thinkingLevel: raw.thinkingLevel as ThinkingLevel }), ...(raw.harnessOptions === undefined ? {} : { harnessOptions: object(raw.harnessOptions, `${label}.harnessOptions`) }) };
-    if (profile.harness === "pi" && (!profile.thinkingLevel || profile.harnessOptions)) throw new Error(`${label} Pi profile requires thinkingLevel and no harnessOptions`);
-    if (profile.harness === "cursor-agent") {
-        if (!profile.model.startsWith("cursor/") || profile.thinkingLevel || !profile.harnessOptions) throw new Error(`${label} Cursor profile is incompatible`);
-        if (!isApprovedCursorHarnessOptions(profile.harnessOptions)) throw new Error(`${label} Cursor profile requires an approved read or write harnessOptions combination`);
-    }
-    if (profile.harness === "codex") {
-        if (!profile.model.startsWith("codex/") || !profile.thinkingLevel) throw new Error(`${label} Codex profile is incompatible`);
-        exactOptions(profile.harnessOptions, { mode: "read-only", permissionPolicy: "reject", webSearch: "cached" }, label);
-    }
-    return profile;
+    return validateProfile(name, value, label);
 }
 export function validateExecutionProfileConfig(value: unknown): ExecutionProfileConfig {
-    const root = object(value, "execution profiles"); exact(root, ["schemaVersion", "profiles"], [], "execution profiles"); if (root.schemaVersion !== 1) throw new Error("Unsupported execution profiles schemaVersion");
-    return { schemaVersion: 1, profiles: Object.fromEntries(Object.entries(object(root.profiles, "profiles")).map(([name, profile]) => [text(name, "profile name"), validateExecutionProfile(name, profile)])) };
+    return validateProfileConfig(value);
 }
 export const validateExecutionProfiles = validateExecutionProfileConfig;
 
@@ -141,7 +126,7 @@ export function projectPolicyClosure(role: string, snapshot: PolicySnapshot, aut
     const catalog: RoleCatalog = { schemaVersion: 4, roles: snapshot.roles }; const callPolicy: CallPolicy = { modes: {}, roles: snapshot.policies }; const names = closureFrom([role], catalog, callPolicy); const roles = Object.fromEntries(names.map(name => [name, structuredClone(snapshot.roles[name]!) ])); const policies = Object.fromEntries(names.map(name => [name, structuredClone(snapshot.policies[name] ?? { targets: {} })])); const profiles = [...(authorizedProfiles ?? snapshot.directTargets[role]?.profiles ?? [])]; if (!profiles.length) throw new Error(`Role ${role} has no authorized execution profiles`); const directTargets = { [role]: { profiles } }; const profileNames = profilesFor(names, directTargets, policies); return { mode: snapshot.mode, directTargets, roles, profiles: Object.fromEntries(profileNames.map(name => { const profile = snapshot.profiles[name]; if (!profile) throw new Error(`Profile ${name} is outside policy snapshot`); return [name, structuredClone(profile)]; })), policies };
 }
 export function validateLaunchEnvelope(value: unknown): AgentLaunchEnvelope {
-    const root = object(value, "agent launch envelope"); exact(root, ["schemaVersion", "marker", "meshId", "agentId", "epochId", "role", "selectedProfile", "selfRole", "executionProfile", "directTargets", "roles", "profiles", "policies", "policyDigest", "childExtensions"], [], "agent launch envelope"); if (root.schemaVersion !== 4 || root.marker !== "pi-mesh-role-launch-v4") throw new Error("Unsupported agent launch envelope schema or marker");
+    const root = object(value, "agent launch envelope"); exact(root, ["schemaVersion", "marker", "meshId", "agentId", "epochId", "role", "selectedProfile", "initialCandidateIndex", "selfRole", "executionProfile", "directTargets", "roles", "profiles", "policies", "policyDigest", "childExtensions"], [], "agent launch envelope"); if (root.schemaVersion !== LAUNCH_ENVELOPE_SCHEMA_VERSION || root.marker !== LAUNCH_ENVELOPE_MARKER) throw new Error("Unsupported agent launch envelope schema or marker");
     const role = text(root.role, "role"); const roles = Object.fromEntries(Object.entries(object(root.roles, "roles")).map(([name, definition]) => [name, validateRoleDefinition(name, definition)])); if (!roles[role]) throw new Error("launch closure must contain role");
     const profiles = Object.fromEntries(Object.entries(object(root.profiles, "profiles")).map(([name, profile]) => [name, validateExecutionProfile(name, profile)])); const selectedProfile = text(root.selectedProfile, "selectedProfile"); const executionProfile = validateExecutionProfile(selectedProfile, root.executionProfile, "executionProfile"); if (canonicalJson(profiles[selectedProfile]) !== canonicalJson(executionProfile)) throw new Error("executionProfile does not match selectedProfile");
     const selfRole = validateRoleDefinition(role, root.selfRole, "selfRole"); if (canonicalJson(roles[role]) !== canonicalJson(selfRole)) throw new Error("selfRole does not match closure role");
@@ -156,9 +141,10 @@ export function validateLaunchEnvelope(value: unknown): AgentLaunchEnvelope {
         if (definition.contextPolicy === "prompt-only" && incomingProfiles.some(profile => profiles[profile]?.harness !== "pi")) throw new Error(`prompt-only role ${name} may use only Pi profiles`);
     }
     const childExtensions = Object.fromEntries(Object.entries(object(root.childExtensions, "childExtensions")).map(([name, paths]) => [name, strings(paths, `childExtensions.${name}`)])); if (canonicalJson(Object.keys(childExtensions).sort()) !== canonicalJson(Object.keys(roles).sort())) throw new Error("childExtensions must exactly cover closure roles"); const digest = text(root.policyDigest, "policyDigest"); if (!/^[0-9a-f]{64}$/u.test(digest)) throw new Error("policyDigest must be SHA-256");
-    const envelope = { schemaVersion: 4, marker: "pi-mesh-role-launch-v4", meshId: uuid(root.meshId, "meshId"), agentId: uuid(root.agentId, "agentId"), epochId: uuid(root.epochId, "epochId"), role, selectedProfile, selfRole, executionProfile, directTargets, roles, profiles, policies, policyDigest: digest, childExtensions } as AgentLaunchEnvelope; Object.defineProperties(envelope, { identity: { enumerable: false, value: `agent:${role}` }, self: { enumerable: false, value: selfRole }, catalog: { enumerable: false, value: roles }, roleSet: { enumerable: false, value: Object.keys(roles) } }); return envelope;
+    if (!Number.isInteger(root.initialCandidateIndex) || Number(root.initialCandidateIndex) < 0 || Number(root.initialCandidateIndex) >= executionProfile.models.length) throw new Error("initialCandidateIndex is outside the selected profile models");
+    const envelope = { schemaVersion: LAUNCH_ENVELOPE_SCHEMA_VERSION, marker: LAUNCH_ENVELOPE_MARKER, meshId: uuid(root.meshId, "meshId"), agentId: uuid(root.agentId, "agentId"), epochId: uuid(root.epochId, "epochId"), role, selectedProfile, initialCandidateIndex: Number(root.initialCandidateIndex), selfRole, executionProfile, directTargets, roles, profiles, policies, policyDigest: digest, childExtensions } as AgentLaunchEnvelope; Object.defineProperties(envelope, { identity: { enumerable: false, value: `agent:${role}` }, self: { enumerable: false, value: selfRole }, catalog: { enumerable: false, value: roles }, roleSet: { enumerable: false, value: Object.keys(roles) } }); return envelope;
 }
 export function launchEnvelopeDigest(envelope: AgentLaunchEnvelope): string { return createHash("sha256").update(canonicalJson(validateLaunchEnvelope(envelope))).digest("hex"); }
 export function assertLaunchEnvelopeProjection(envelopeValue: unknown, epoch: PolicySnapshot, expectedAuthorizedProfiles: readonly string[]): AgentLaunchEnvelope { const envelope = validateLaunchEnvelope(envelopeValue); const authorized = envelope.directTargets[envelope.role]!.profiles; const expected = projectPolicyClosure(envelope.role, epoch, expectedAuthorizedProfiles); if (canonicalJson(authorized) !== canonicalJson(expectedAuthorizedProfiles) || envelope.policyDigest !== policyDigest(epoch) || canonicalJson(envelope.roles) !== canonicalJson(expected.roles) || canonicalJson(envelope.profiles) !== canonicalJson(expected.profiles) || canonicalJson(envelope.policies) !== canonicalJson(expected.policies)) throw new Error("launch envelope is not the exact child projection of its actual inbound policy edge"); return envelope; }
-export function buildLaunchEnvelope(input: { meshId: string; agentId: string; epochId: string; role: string; selectedProfile?: string; snapshot: PolicySnapshot; childExtensions: Record<string, string[]>; authorizedProfiles?: readonly string[] }): AgentLaunchEnvelope { const closure = projectPolicyClosure(input.role, input.snapshot, input.authorizedProfiles); const allowed = closure.directTargets[input.role]!.profiles; const selectedProfile = input.selectedProfile ?? (allowed.length === 1 ? allowed[0] : undefined); if (!selectedProfile || !allowed.includes(selectedProfile) || !closure.profiles[selectedProfile]) throw new Error(`Selected profile ${String(selectedProfile)} is not authorized for role ${input.role}`); const extensions = Object.fromEntries(Object.keys(closure.roles).map(name => { const paths = input.childExtensions[name]; if (!paths) throw new Error(`Missing child extension manifest for ${name}`); return [name, paths]; })); return validateLaunchEnvelope({ schemaVersion: 4, marker: "pi-mesh-role-launch-v4", meshId: input.meshId, agentId: input.agentId, epochId: input.epochId, role: input.role, selectedProfile, selfRole: closure.roles[input.role], executionProfile: closure.profiles[selectedProfile], directTargets: closure.directTargets, roles: closure.roles, profiles: closure.profiles, policies: closure.policies, policyDigest: policyDigest(input.snapshot), childExtensions: extensions }); }
-export function projectLaunchEnvelope(role: string, agentId: string, parent: AgentLaunchEnvelope, selectedProfile: string): AgentLaunchEnvelope { const source = validateLaunchEnvelope(parent); const edge = source.policies[source.role]?.targets[role]; if (!edge || !edge.profiles.includes(selectedProfile)) throw new Error(`Role/profile ${role}/${selectedProfile} is outside caller direct policy`); const snapshot: PolicySnapshot = { mode: "child", directTargets: source.directTargets, roles: source.roles, profiles: source.profiles, policies: source.policies }; const projected = buildLaunchEnvelope({ meshId: source.meshId, agentId, epochId: source.epochId, role, selectedProfile, authorizedProfiles: edge.profiles, snapshot, childExtensions: source.childExtensions }); return validateLaunchEnvelope({ ...projected, policyDigest: source.policyDigest }); }
+export function buildLaunchEnvelope(input: { meshId: string; agentId: string; epochId: string; role: string; selectedProfile?: string; snapshot: PolicySnapshot; childExtensions: Record<string, string[]>; authorizedProfiles?: readonly string[]; initialCandidateIndex?: number }): AgentLaunchEnvelope { const closure = projectPolicyClosure(input.role, input.snapshot, input.authorizedProfiles); const allowed = closure.directTargets[input.role]!.profiles; const selectedProfile = input.selectedProfile ?? (allowed.length === 1 ? allowed[0] : undefined); if (!selectedProfile || !allowed.includes(selectedProfile) || !closure.profiles[selectedProfile]) throw new Error(`Selected profile ${String(selectedProfile)} is not authorized for role ${input.role}`); const extensions = Object.fromEntries(Object.keys(closure.roles).map(name => { const paths = input.childExtensions[name]; if (!paths) throw new Error(`Missing child extension manifest for ${name}`); return [name, paths]; })); return validateLaunchEnvelope({ schemaVersion: LAUNCH_ENVELOPE_SCHEMA_VERSION, marker: LAUNCH_ENVELOPE_MARKER, meshId: input.meshId, agentId: input.agentId, epochId: input.epochId, role: input.role, selectedProfile, initialCandidateIndex: input.initialCandidateIndex ?? 0, selfRole: closure.roles[input.role], executionProfile: closure.profiles[selectedProfile], directTargets: closure.directTargets, roles: closure.roles, profiles: closure.profiles, policies: closure.policies, policyDigest: policyDigest(input.snapshot), childExtensions: extensions }); }
+export function projectLaunchEnvelope(role: string, agentId: string, parent: AgentLaunchEnvelope, selectedProfile: string, initialCandidateIndex?: number): AgentLaunchEnvelope { const source = validateLaunchEnvelope(parent); const edge = source.policies[source.role]?.targets[role]; if (!edge || !edge.profiles.includes(selectedProfile)) throw new Error(`Role/profile ${role}/${selectedProfile} is outside caller direct policy`); const snapshot: PolicySnapshot = { mode: "child", directTargets: source.directTargets, roles: source.roles, profiles: source.profiles, policies: source.policies }; const projected = buildLaunchEnvelope({ meshId: source.meshId, agentId, epochId: source.epochId, role, selectedProfile, authorizedProfiles: edge.profiles, snapshot, childExtensions: source.childExtensions, initialCandidateIndex }); return validateLaunchEnvelope({ ...projected, policyDigest: source.policyDigest }); }

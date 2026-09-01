@@ -11,13 +11,13 @@ const agentId = "11111111-1111-4111-8111-111111111111";
 const taskId = "22222222-2222-4222-8222-222222222222";
 const theme = { fg: (_role: string, text: string) => text, bold: (text: string) => text };
 
-function snapshot(): AgentSnapshot {
+function snapshot(route?: AgentSnapshot["status"]["modelRoute"]): AgentSnapshot {
     const definition: RoleDefinition = { description: "Synthetic worker", tools: ["read", "write"], instructions: "Complete the bounded task.", contextPolicy: "project", childExtensionContributions: [] };
     const usage = emptyUsage();
     const meshId = "55555555-5555-4555-8555-555555555555";
     return {
-        agent: { schemaVersion: 4, meshId, agentId, epochId: "66666666-6666-4666-8666-666666666666", role: "worker", selectedProfile: "pi-medium", harness: "pi", cwd: "/private/worktree", createdAt: "2026-01-01T00:00:00Z", roleSnapshot: definition, profileSnapshot: { model: "synthetic/pi", thinkingLevel: "medium", harness: "pi" }, launchEnvelope: "/private/envelope.json", launchEnvelopeDigest: "digest", tmux: { socket: "/tmp/tmux", serverPid: "1", sessionId: "$1", sessionName: "mesh", windowId: "@1", paneId: "%1", windowName: "worker" }, capabilities: { nativeScreen: true, taskDelivery: true, taskCompletion: true, taskCancellation: true, usage: true, interactiveInterventions: true, terminalHistory: true }, creatorSessionId: "creator", agent: "worker", agentSnapshot: definition },
-        status: { schemaVersion: 1, meshId, agentId, state: "idle", bridgeReady: true, meshToolsEnabled: true, agentUsage: usage, accountedTaskIds: [], updatedAt: "2026-01-01T00:02:00Z", childSessionFile: "/private/session.jsonl" },
+        agent: { schemaVersion: 5, meshId, agentId, epochId: "66666666-6666-4666-8666-666666666666", role: "worker", selectedProfile: "pi-medium", harness: "pi", cwd: "/private/worktree", createdAt: "2026-01-01T00:00:00Z", roleSnapshot: definition, profileSnapshot: { models: ["synthetic/pi", "synthetic/fallback"], thinkingLevel: "medium", harness: "pi" }, launchEnvelope: "/private/envelope.json", launchEnvelopeDigest: "digest", tmux: { socket: "/tmp/tmux", serverPid: "1", sessionId: "$1", sessionName: "mesh", windowId: "@1", paneId: "%1", windowName: "worker" }, capabilities: { nativeScreen: true, taskDelivery: true, taskCompletion: true, taskCancellation: true, usage: true, interactiveInterventions: true, terminalHistory: true }, creatorSessionId: "creator", agent: "worker", agentSnapshot: definition },
+        status: { schemaVersion: 2, meshId, agentId, state: "idle", bridgeReady: true, meshToolsEnabled: true, agentUsage: usage, accountedTaskIds: [], updatedAt: "2026-01-01T00:02:00Z", childSessionFile: "/private/session.jsonl", ...(route ? { modelRoute: route } : {}) },
         activity: unknownAgentActivityProjection(),
         stop: null,
         task: { request: { schemaVersion: 3, meshId, agentId, taskId, prompt: "public summary\nprivate prompt continuation", requesterEndpointId: "root:test", createdAt: "2026-01-01T00:00:00Z" }, status: { schemaVersion: 1, meshId, agentId, taskId, state: "succeeded", createdAt: "2026-01-01T00:00:00Z", startedAt: "2026-01-01T00:00:10Z", finishedAt: "2026-01-01T00:01:00Z" }, result: { schemaVersion: 1, meshId, agentId, taskId, outcome: "succeeded", output: "private completed output", usage, turns: 2, interventions: [], startedAt: "2026-01-01T00:00:10Z", finishedAt: "2026-01-01T00:01:00Z" }, interventions: [], claimed: false, directory: "/private/task" },
@@ -45,6 +45,7 @@ void test("mesh result details are private until expanded", () => {
     assert.match(expanded, new RegExp(taskId, "u"));
     assert.match(expanded, /Synthetic worker/u);
     assert.match(expanded, /synthetic\/pi/u);
+    assert.match(expanded, /fallback: 0/u);
     assert.match(expanded, /thinking: medium/u);
     assert.match(expanded, /harness: pi/u);
     assert.match(expanded, /private prompt continuation/u);
@@ -67,7 +68,6 @@ void test("malformed mesh results remain private and preserve renderer mechanics
     const expanded = render(expandedComponent);
     assert.match(expanded, /raw-secret|\/private\/raw/u);
     assert.ok(expanded.length < 10_000);
-
 });
 
 // Admission: renderer cards are the stable user-visible boundary; type checks cannot detect duplicated identity, falsely labeled delivery stages, identifier leakage, or narrow-terminal overflow.
@@ -134,9 +134,10 @@ void test("mesh_report cards expose summary and queued state", () => {
 
     const reportId = "77777777-7777-4777-8777-777777777777";
     const queued = render(renderReportResult({ content: [], details: { reportId, taskId, state: "queued", displayIdentity: displayIdentityForSnapshot(snapshot()) } } as never, { expanded: false } as never, theme as never, { args: { summary: "handoff complete" }, lastComponent: undefined } as never), 24);
-    assert.match(queued, /role:worker/u);
-    assert.match(queued, /profile:pi-medium/u);
-    assert.match(queued, /report queued/u);
+    const queuedSemantic = queued.replace(/\s+/gu, " ");
+    assert.match(queuedSemantic, /role:worker/u);
+    assert.match(queuedSemantic, /profile:pi-medium/u);
+    assert.match(queuedSemantic, /report queued/u);
     const expandedResult = render(renderReportResult({ content: [], details: { reportId, taskId, state: "queued" } } as never, { expanded: true } as never, theme as never, { args: { summary: "handoff complete" }, lastComponent: undefined } as never), 24).replace(/\s+/gu, "");
     assert.match(expandedResult, new RegExp(taskId, "u"));
     assert.match(expandedResult, new RegExp(reportId, "u"));
@@ -196,4 +197,30 @@ void test("agent display handles are stable across collections", () => {
     assert.notEqual(handleForAgentId(otherAgentId), "agent");
     const sharedPrefixId = "11111111-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
     assert.notEqual(handleForAgentId(sharedPrefixId, ["Only"]), handleForAgentId(agentId, ["Only"]));
+});
+
+// Admission: operator cards own the visibility split for successful fallback; schemas cannot detect collapsed route summaries or expanded attempt history.
+// Given status.modelRoute with sticky active model and ordered attempts, collapsed cards expose active model and attempts.length while expansion reveals category and sanitized message.
+void test("operator cards expose active model and fallback attempts without freezing decoration", () => {
+    const route = {
+        activeIndex: 1,
+        activeModel: "synthetic/fallback",
+        attempts: [{ index: 0, model: "synthetic/pi", category: "invocation" as const, at: "2026-01-01T00:00:30Z", message: "primary refused" }],
+    };
+    const details = snapshot(route);
+    const identity = displayIdentityForSnapshot(details);
+    assert.equal(identity.model, "synthetic/fallback");
+    assert.equal(identity.fallbackCount, 1);
+
+    const collapsed = render(renderAgentToolResult({ content: [], details } as never, { expanded: false } as never, theme as never, { args: { agentId }, lastComponent: undefined } as never));
+    assert.match(collapsed, /model:synthetic\/fallback/u);
+    assert.match(collapsed, /fallback:1/u);
+    assert.doesNotMatch(collapsed, /primary refused|attempt#0|invocation/u);
+
+    const expanded = render(renderAgentToolResult({ content: [], details } as never, { expanded: true } as never, theme as never, { args: { agentId }, lastComponent: undefined } as never));
+    assert.match(expanded, /model: synthetic\/fallback/u);
+    assert.match(expanded, /fallback: 1/u);
+    assert.match(expanded, /attempt#0/u);
+    assert.match(expanded, /invocation/u);
+    assert.match(expanded, /primary refused/u);
 });

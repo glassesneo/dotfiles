@@ -151,34 +151,34 @@ def main [] {
     const roleCatalog = validateRoleCatalog(catalog);
     const executionProfiles = validateExecutionProfileConfig(profiles);
     const orchestrationConfig = validateOrchestrationConfig(orchestration);
-    assert.match(orchestrationConfig.stateRoot, /\/pi\/orchestration-v6$/u);
+    assert.match(orchestrationConfig.stateRoot, /\/pi\/orchestration-v7$/u);
     assert.deepEqual(executionProfiles, {
-      schemaVersion: 1,
+      schemaVersion: 2,
       profiles: {
-        "codex-search": { model: "codex/gpt-5.6-luna", thinkingLevel: "high", harness: "codex", harnessOptions: { mode: "read-only", permissionPolicy: "reject", webSearch: "cached" } },
-        "cursor-fast": { model: "cursor/cursor-grok-4.5-high-fast", harness: "cursor-agent", harnessOptions: { mode: "agent", permissionPolicy: "allow-always", sandbox: "disabled", trustWorkspace: true, worktree: false } },
-        "cursor-standard": { model: "cursor/cursor-grok-4.6-high-fast", harness: "cursor-agent", harnessOptions: { mode: "agent", permissionPolicy: "allow-always", sandbox: "disabled", trustWorkspace: true, worktree: false } },
-        "luna-high": { model: "openai-codex/gpt-5.6-luna", thinkingLevel: "high", harness: "pi" },
-        "luna-xhigh": { model: "openai-codex/gpt-5.6-luna", thinkingLevel: "xhigh", harness: "pi" },
-        "north-mini-free": { model: "openrouter/cohere/north-mini-code:free", thinkingLevel: "high", harness: "pi" },
-        "mistral-small": { model: "mistral/mistral-small-2603", thinkingLevel: "high", harness: "pi" },
-        "pi-deliberate": { model: "openrouter/z-ai/glm-5.2:free", thinkingLevel: "high", harness: "pi" },
-        "sol-high": { model: "openai-codex/gpt-5.6-sol", thinkingLevel: "high", harness: "pi" },
-        "sol-medium": { model: "openai-codex/gpt-5.6-sol", thinkingLevel: "medium", harness: "pi" },
-        "terra-high": { model: "openai-codex/gpt-5.6-terra", thinkingLevel: "high", harness: "pi" },
+        "codex-search": { models: ["codex/gpt-5.6-luna"], thinkingLevel: "high", harness: "codex", harnessOptions: { mode: "read-only", permissionPolicy: "reject", webSearch: "cached" } },
+        "cursor-fast": { models: ["cursor/cursor-grok-4.5-high-fast"], harness: "cursor-agent", harnessOptions: { mode: "agent", permissionPolicy: "allow-always", sandbox: "disabled", trustWorkspace: true, worktree: false } },
+        "cursor-standard": { models: ["cursor/cursor-grok-4.6-high-fast"], harness: "cursor-agent", harnessOptions: { mode: "agent", permissionPolicy: "allow-always", sandbox: "disabled", trustWorkspace: true, worktree: false } },
+        deliberate: { models: ["openrouter/z-ai/glm-5.2:free", "cohere/command-a-plus-05-2026", "mistral/mistral-medium-3.5"], thinkingLevel: "high", harness: "pi" },
+        "fast-analysis": { models: ["openrouter/cohere/north-mini-code:free", "openai-codex/gpt-5.6-luna"], thinkingLevel: "high", harness: "pi" },
+        "luna-xhigh": { models: ["openai-codex/gpt-5.6-luna"], thinkingLevel: "xhigh", harness: "pi" },
+        "sol-high": { models: ["openai-codex/gpt-5.6-sol"], thinkingLevel: "high", harness: "pi" },
+        "sol-medium": { models: ["openai-codex/gpt-5.6-sol"], thinkingLevel: "medium", harness: "pi" },
+        "terra-high": { models: ["openai-codex/gpt-5.6-terra"], thinkingLevel: "high", harness: "pi" },
+        validation: { models: ["mistral/mistral-small-2603", "openai-codex/gpt-5.6-luna"], thinkingLevel: "high", harness: "pi" },
       },
     });
-    assert.deepEqual(Object.keys(roleCatalog.roles).sort(), ["explorer", "general", "gyaru", "researcher", "review-lens", "reviewer", "searcher", "validator", "worker"]);
+    assert.deepEqual(Object.keys(roleCatalog.roles).sort(), ["adviser", "explorer", "general", "researcher", "review-lens", "reviewer", "searcher", "validator", "worker"]);
     for (const definition of Object.values(roleCatalog.roles)) assert.deepEqual(Object.keys(definition).sort(), ["childExtensionContributions", "contextPolicy", "description", "instructions", "tools"]);
     assert.deepEqual({ tools: roleCatalog.roles.general.tools, contextPolicy: roleCatalog.roles.general.contextPolicy, childExtensionContributions: roleCatalog.roles.general.childExtensionContributions }, { tools: ["read", "grep", "find", "ls", "bash", "write", "edit", "mesh_report"], contextPolicy: "project", childExtensionContributions: [] });
+    assert.deepEqual({ tools: roleCatalog.roles.adviser.tools, contextPolicy: roleCatalog.roles.adviser.contextPolicy, childExtensionContributions: roleCatalog.roles.adviser.childExtensionContributions }, { tools: [], contextPolicy: "prompt-only", childExtensionContributions: [] });
     assert.deepEqual(orchestrationConfig.callPolicy, {
       modes: {
-        ops: { targets: { explorer: { profiles: ["luna-high"] }, general: { profiles: ["cursor-standard", "cursor-fast", "pi-deliberate"] }, gyaru: { profiles: ["luna-high"] }, researcher: { profiles: ["terra-high"] }, "review-lens": { profiles: ["north-mini-free"] }, reviewer: { profiles: ["luna-xhigh", "terra-high", "sol-medium"] }, searcher: { profiles: ["codex-search"] }, validator: { profiles: ["mistral-small"] }, worker: { profiles: ["luna-xhigh", "terra-high", "sol-medium"] } } },
-        recon: { targets: { explorer: { profiles: ["luna-high"] }, gyaru: { profiles: ["luna-high"] }, researcher: { profiles: ["terra-high"] }, reviewer: { profiles: ["luna-xhigh", "terra-high", "sol-medium"] }, searcher: { profiles: ["codex-search"] } } },
+        ops: { targets: { explorer: { profiles: ["fast-analysis"] }, general: { profiles: ["cursor-standard", "cursor-fast", "deliberate"] }, researcher: { profiles: ["terra-high"] }, "review-lens": { profiles: ["fast-analysis"] }, reviewer: { profiles: ["luna-xhigh", "terra-high", "sol-medium"] }, searcher: { profiles: ["codex-search"] }, validator: { profiles: ["validation"] }, worker: { profiles: ["luna-xhigh", "terra-high", "sol-medium"] } } },
+        recon: { targets: { adviser: { profiles: ["deliberate"] }, explorer: { profiles: ["fast-analysis"] }, researcher: { profiles: ["terra-high"] }, reviewer: { profiles: ["luna-xhigh", "terra-high", "sol-medium"] }, searcher: { profiles: ["codex-search"] } } },
       },
       roles: {
         researcher: { targets: { searcher: { profiles: ["codex-search"] } } },
-        reviewer: { targets: { "review-lens": { profiles: ["north-mini-free"] }, validator: { profiles: ["mistral-small"] } } },
+        reviewer: { targets: { "review-lens": { profiles: ["fast-analysis"] }, validator: { profiles: ["validation"] } } },
       },
     });
     const enabledModeConfig = validateModeConfig(enabledModes);

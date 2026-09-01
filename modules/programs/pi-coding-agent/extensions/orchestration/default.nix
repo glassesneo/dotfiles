@@ -101,10 +101,10 @@
       contextPolicy = "project";
       childExtensionContributions = [];
     };
-    gyaru = {
-      description = "Give a sharp outside perspective on a potentially overworked judgment loop.";
+    adviser = {
+      description = "Reframe an unresolved design problem from an isolated outside perspective.";
       tools = [];
-      instructions = "Be a 本質的で鋭いギャル. Respond only to the caller's explanation. Briefly and candidly point out what seems obviously off, overdone, missing, or detached from the actual goal. Ask one piercing question when that is more useful than advice. If nothing seems off, say so. Do not turn the exchange into a formal review or process.";
+      instructions = "Receive only the caller's dossier; you have no repository context, tools, skills, prompt templates, or child roles. Reframe beyond its supplied options: identify hidden assumptions, alternate decompositions, and more natural abstractions or directions. Distinguish verified constraints from caller assumptions; never invent repository facts or take final design ownership. In the caller's language, return a concise strongest reframing, material hidden assumptions, two to four alternate directions when supported, and one discriminating question when missing information matters. If a needed dossier element is absent, identify it rather than fabricate it.";
       contextPolicy = "prompt-only";
       childExtensionContributions = [];
     };
@@ -119,28 +119,27 @@
   settledCallPolicy = {
     modes = {
       recon.targets = {
-        explorer.profiles = ["luna-high"];
+        explorer.profiles = ["fast-analysis"];
+        adviser.profiles = ["deliberate"];
         reviewer.profiles = ["luna-xhigh" "terra-high" "sol-medium"];
         researcher.profiles = ["terra-high"];
         searcher.profiles = ["codex-search"];
-        gyaru.profiles = ["luna-high"];
       };
       ops.targets = {
-        explorer.profiles = ["luna-high"];
+        explorer.profiles = ["fast-analysis"];
         worker.profiles = ["luna-xhigh" "terra-high" "sol-medium"];
-        validator.profiles = ["mistral-small"];
+        validator.profiles = ["validation"];
         reviewer.profiles = ["luna-xhigh" "terra-high" "sol-medium"];
-        review-lens.profiles = ["north-mini-free"];
+        review-lens.profiles = ["fast-analysis"];
         researcher.profiles = ["terra-high"];
         searcher.profiles = ["codex-search"];
-        gyaru.profiles = ["luna-high"];
-        general.profiles = ["cursor-standard" "cursor-fast" "pi-deliberate"];
+        general.profiles = ["cursor-standard" "cursor-fast" "deliberate"];
       };
     };
     roles = {
       reviewer.targets = {
-        review-lens.profiles = ["north-mini-free"];
-        validator.profiles = ["mistral-small"];
+        review-lens.profiles = ["fast-analysis"];
+        validator.profiles = ["validation"];
       };
       researcher.targets.searcher.profiles = ["codex-search"];
     };
@@ -225,7 +224,7 @@ in
               retain = 2;
               pressureFloor = 0;
             };
-            gyaru = {
+            adviser = {
               collectAt = 2;
               retain = 1;
               pressureFloor = 0;
@@ -455,7 +454,7 @@ in
         };
         "${myconfig.programs.pi-coding-agent.configDir}/orchestration.json".text = builtins.toJSON {
           schemaVersion = 4;
-          stateRoot = "${homeConfig.xdg.stateHome}/pi/orchestration-v6";
+          stateRoot = "${homeConfig.xdg.stateHome}/pi/orchestration-v7";
           tmux = lib.getExe pkgs.tmux;
           returnParentCommand = lib.getExe returnParentCommand;
           inherit parentNavigationHint historyViewerExtension popupExtension orchestrationExtension childBridgeExtension;

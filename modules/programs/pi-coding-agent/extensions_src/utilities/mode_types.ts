@@ -1,15 +1,15 @@
 export const MODE_SCHEMA_VERSION = 2 as const;
-export const EXECUTION_PROFILE_SCHEMA_VERSION = 1 as const;
+export const EXECUTION_PROFILE_SCHEMA_VERSION = 2 as const;
 export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
 export type ExecutionHarness = "pi" | "cursor-agent" | "codex";
 
 export interface ExecutionProfile {
-    model: string;
+    models: string[];
     thinkingLevel?: ThinkingLevel;
     harness: ExecutionHarness;
     harnessOptions?: Record<string, unknown>;
 }
-export interface ExecutionProfileConfig { schemaVersion: 1; profiles: Record<string, ExecutionProfile> }
+export interface ExecutionProfileConfig { schemaVersion: 2; profiles: Record<string, ExecutionProfile> }
 export interface AgentMode {
     description: string;
     defaultProfile: string;
@@ -44,9 +44,10 @@ function strings(value: unknown, label: string): string[] {
     if (new Set(result).size !== result.length) throw new Error(`${label} must not contain duplicates`);
     return result;
 }
-function model(value: unknown, label: string): string {
-    const result = text(value, label);
-    if (!/^[^/\s]+\/\S+$/u.test(result)) throw new Error(`${label} must use provider/model format`);
+function models(value: unknown, label: string): string[] {
+    const result = strings(value, label);
+    if (!result.length) throw new Error(`${label} must not be empty`);
+    for (const [index, candidate] of result.entries()) if (!/^[^/\s]+\/\S+$/u.test(candidate)) throw new Error(`${label}[${index}] must use provider/model format`);
     return result;
 }
 function thinkingLevel(value: unknown, label: string): ThinkingLevel {
@@ -54,31 +55,36 @@ function thinkingLevel(value: unknown, label: string): ThinkingLevel {
     return value as ThinkingLevel;
 }
 
+const CODEX_HARNESS_OPTIONS = { mode: "read-only", permissionPolicy: "reject", webSearch: "cached" } as const;
+
+export function validateExecutionProfile(name: string, value: unknown, label = `profiles.${name}`): ExecutionProfile {
+    const profile = object(value, label);
+    exact(profile, ["models", "thinkingLevel", "harness", "harnessOptions"], label);
+    const harness = profile.harness;
+    if (harness !== "pi" && harness !== "cursor-agent" && harness !== "codex") throw new Error(`${label}.harness is invalid`);
+    const resolvedModels = models(profile.models, `${label}.models`);
+    const resolvedThinking = profile.thinkingLevel === undefined ? undefined : thinkingLevel(profile.thinkingLevel, `${label}.thinkingLevel`);
+    const harnessOptions = profile.harnessOptions === undefined ? undefined : object(profile.harnessOptions, `${label}.harnessOptions`);
+    if (harness === "pi" && (resolvedThinking === undefined || harnessOptions !== undefined)) throw new Error(`${label} pi profile requires thinkingLevel and no harnessOptions`);
+    if (harness === "cursor-agent") {
+        if (resolvedModels.length !== 1 || !resolvedModels[0]!.startsWith("cursor/") || resolvedThinking !== undefined || harnessOptions === undefined) throw new Error(`${label} cursor-agent profile requires exactly one cursor model, no thinkingLevel, and harnessOptions`);
+        if (!isApprovedCursorHarnessOptions(harnessOptions)) throw new Error(`${label} cursor-agent profile requires an approved read or write harnessOptions combination`);
+    }
+    if (harness === "codex") {
+        if (resolvedModels.length !== 1 || !resolvedModels[0]!.startsWith("codex/") || resolvedThinking === undefined || harnessOptions === undefined) throw new Error(`${label} codex profile requires exactly one codex model, thinkingLevel, and harnessOptions`);
+        if (!matchesExactOptions(harnessOptions, CODEX_HARNESS_OPTIONS)) throw new Error(`${label} codex profile requires exact read-only cached harnessOptions`);
+    }
+    return { models: resolvedModels, ...(resolvedThinking === undefined ? {} : { thinkingLevel: resolvedThinking }), harness, ...(harnessOptions === undefined ? {} : { harnessOptions }) };
+}
+
 export function validateExecutionProfileConfig(value: unknown): ExecutionProfileConfig {
     const root = object(value, "execution profile config");
     exact(root, ["schemaVersion", "profiles"], "execution profile config");
     if (root.schemaVersion !== EXECUTION_PROFILE_SCHEMA_VERSION) throw new Error("Unsupported execution profile config schemaVersion");
     const rawProfiles = object(root.profiles, "profiles");
-    const profiles: Record<string, ExecutionProfile> = {};
-    for (const [name, raw] of Object.entries(rawProfiles)) {
-        text(name, "profile name");
-        const profile = object(raw, `profiles.${name}`);
-        exact(profile, ["model", "thinkingLevel", "harness", "harnessOptions"], `profiles.${name}`);
-        const harness = profile.harness;
-        if (harness !== "pi" && harness !== "cursor-agent" && harness !== "codex") throw new Error(`profiles.${name}.harness is invalid`);
-        const resolvedModel = model(profile.model, `profiles.${name}.model`);
-        const resolvedThinking = profile.thinkingLevel === undefined ? undefined : thinkingLevel(profile.thinkingLevel, `profiles.${name}.thinkingLevel`);
-        const harnessOptions = profile.harnessOptions === undefined ? undefined : object(profile.harnessOptions, `profiles.${name}.harnessOptions`);
-        if (harness === "pi" && (resolvedThinking === undefined || harnessOptions !== undefined)) throw new Error(`profiles.${name} pi profile requires thinkingLevel and no harnessOptions`);
-        if (harness === "cursor-agent") {
-            if (!resolvedModel.startsWith("cursor/") || resolvedThinking !== undefined || harnessOptions === undefined) throw new Error(`profiles.${name} cursor-agent profile requires cursor model, no thinkingLevel, and harnessOptions`);
-            if (!isApprovedCursorHarnessOptions(harnessOptions)) throw new Error(`profiles.${name} cursor-agent profile requires an approved read or write harnessOptions combination`);
-        }
-        if (harness === "codex" && (!resolvedModel.startsWith("codex/") || resolvedThinking === undefined || harnessOptions === undefined)) throw new Error(`profiles.${name} codex profile requires codex model, thinkingLevel, and harnessOptions`);
-        profiles[name] = { model: resolvedModel, ...(resolvedThinking === undefined ? {} : { thinkingLevel: resolvedThinking }), harness, ...(harnessOptions === undefined ? {} : { harnessOptions }) };
-    }
+    const profiles = Object.fromEntries(Object.entries(rawProfiles).map(([name, profile]) => [text(name, "profile name"), validateExecutionProfile(name, profile)]));
     if (!Object.keys(profiles).length) throw new Error("profiles must not be empty");
-    return { schemaVersion: 1, profiles };
+    return { schemaVersion: 2, profiles };
 }
 
 export function validateModeConfig(value: unknown): AgentModeConfig {

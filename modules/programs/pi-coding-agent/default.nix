@@ -187,7 +187,7 @@
   };
   profileType = delib.submodule {
     options = with delib; {
-      model = noDefault (strOption null);
+      models = noDefault (listOfOption str []);
       thinkingLevel = allowNull (enumOption ["off" "minimal" "low" "medium" "high" "xhigh" "max"] null);
       harness = enumOption ["pi" "cursor-agent" "codex"] "pi";
       harnessOptions = attrsOfOption lib.types.anything {};
@@ -239,27 +239,23 @@ in
         };
         profiles = lib.mapAttrs (_: profile: lib.mapAttrs (_: lib.mkDefault) profile) {
           sol-high = {
-            model = "openai-codex/gpt-5.6-sol";
+            models = ["openai-codex/gpt-5.6-sol"];
             thinkingLevel = "high";
           };
           sol-medium = {
-            model = "openai-codex/gpt-5.6-sol";
+            models = ["openai-codex/gpt-5.6-sol"];
             thinkingLevel = "medium";
           };
-          luna-high = {
-            model = "openai-codex/gpt-5.6-luna";
-            thinkingLevel = "high";
-          };
           luna-xhigh = {
-            model = "openai-codex/gpt-5.6-luna";
+            models = ["openai-codex/gpt-5.6-luna"];
             thinkingLevel = "xhigh";
           };
           terra-high = {
-            model = "openai-codex/gpt-5.6-terra";
+            models = ["openai-codex/gpt-5.6-terra"];
             thinkingLevel = "high";
           };
           cursor-standard = {
-            model = "cursor/cursor-grok-4.6-high-fast";
+            models = ["cursor/cursor-grok-4.6-high-fast"];
             thinkingLevel = null;
             harness = "cursor-agent";
             harnessOptions = {
@@ -271,7 +267,7 @@ in
             };
           };
           cursor-fast = {
-            model = "cursor/cursor-grok-4.5-high-fast";
+            models = ["cursor/cursor-grok-4.5-high-fast"];
             thinkingLevel = null;
             harness = "cursor-agent";
             harnessOptions = {
@@ -282,20 +278,30 @@ in
               worktree = false;
             };
           };
-          pi-deliberate = {
-            model = "openrouter/z-ai/glm-5.2:free";
+          fast-analysis = {
+            models = [
+              "openrouter/cohere/north-mini-code:free"
+              "openai-codex/gpt-5.6-luna"
+            ];
             thinkingLevel = "high";
           };
-          north-mini-free = {
-            model = "openrouter/cohere/north-mini-code:free";
+          validation = {
+            models = [
+              "mistral/mistral-small-2603"
+              "openai-codex/gpt-5.6-luna"
+            ];
             thinkingLevel = "high";
           };
-          mistral-small = {
-            model = "mistral/mistral-small-2603";
+          deliberate = {
+            models = [
+              "openrouter/z-ai/glm-5.2:free"
+              "cohere/command-a-plus-05-2026"
+              "mistral/mistral-medium-3.5"
+            ];
             thinkingLevel = "high";
           };
           codex-search = {
-            model = "codex/gpt-5.6-luna";
+            models = ["codex/gpt-5.6-luna"];
             thinkingLevel = "high";
             harness = "codex";
             harnessOptions = {
@@ -314,6 +320,7 @@ in
       ...
     }: let
       packageContributionNames = builtins.attrNames cfg.packageContributions;
+      profileNames = builtins.attrNames cfg.profiles;
       enabledPackageContributionNames = builtins.filter (name: cfg.packageContributions.${name}.enabled) packageContributionNames;
       packageSources = map (name: let
         contribution = cfg.packageContributions.${name};
@@ -340,6 +347,53 @@ in
         lib.hasPrefix "npm:" source
         && builtins.match concreteNpmSourcePattern source == null)
       packageContributionNames;
+      invalidProfileModelLists = builtins.filter (name: let
+        models = cfg.profiles.${name}.models;
+      in
+        models == [] || duplicateValues models != [])
+      profileNames;
+      invalidProfileModelIdentifiers =
+        lib.concatMap (
+          name:
+            builtins.filter (model: builtins.match "^[^/[:space:]]+/[^[:space:]]+$" model == null) cfg.profiles.${name}.models
+        )
+        profileNames;
+      cursorReadHarnessOptions = {
+        mode = "ask";
+        permissionPolicy = "reject";
+        sandbox = "disabled";
+        trustWorkspace = true;
+        worktree = false;
+      };
+      cursorWriteHarnessOptions = {
+        mode = "agent";
+        permissionPolicy = "allow-always";
+        sandbox = "disabled";
+        trustWorkspace = true;
+        worktree = false;
+      };
+      codexHarnessOptions = {
+        mode = "read-only";
+        permissionPolicy = "reject";
+        webSearch = "cached";
+      };
+      invalidProfileHarnesses =
+        builtins.filter (
+          name: let
+            profile = cfg.profiles.${name};
+            hasSingletonModel = builtins.length profile.models == 1;
+            model =
+              if hasSingletonModel
+              then builtins.head profile.models
+              else "";
+          in
+            if profile.harness == "pi"
+            then profile.thinkingLevel == null || profile.harnessOptions != {}
+            else if profile.harness == "cursor-agent"
+            then !hasSingletonModel || !(lib.hasPrefix "cursor/" model) || profile.thinkingLevel != null || !(profile.harnessOptions == cursorReadHarnessOptions || profile.harnessOptions == cursorWriteHarnessOptions)
+            else !hasSingletonModel || !(lib.hasPrefix "codex/" model) || profile.thinkingLevel == null || profile.harnessOptions != codexHarnessOptions
+        )
+        profileNames;
       resolveModule = name: let
         path = ["programs" "pi-coding-agent"] ++ lib.splitString "." name;
       in
@@ -413,6 +467,18 @@ in
           message = "Pi npm package contributions must use concrete semver versions: ${lib.concatStringsSep ", " invalidNpmPackageContributionNames}.";
         }
         {
+          assertion = invalidProfileModelLists == [];
+          message = "Pi execution profiles must have non-empty unique model lists: ${lib.concatStringsSep ", " invalidProfileModelLists}.";
+        }
+        {
+          assertion = invalidProfileModelIdentifiers == [];
+          message = "Pi execution profile models must use provider/model format: ${lib.concatStringsSep ", " invalidProfileModelIdentifiers}.";
+        }
+        {
+          assertion = invalidProfileHarnesses == [];
+          message = "Pi execution profiles must satisfy their exact harness contract: ${lib.concatStringsSep ", " invalidProfileHarnesses}.";
+        }
+        {
           assertion = builtins.all (item: item.module != null) selected;
           message = "Pi defaultExtensions must reference existing modules below programs.pi-coding-agent; missing: ${names missingNames}.";
         }
@@ -452,7 +518,7 @@ in
           "${cfg.configDir}/models.json".text = builtins.toJSON modelOverrides;
           "${cfg.configDir}/pi-codex-compaction.json".text = builtins.toJSON codexCompactionConfig;
           "${cfg.configDir}/execution-profiles.json".text = builtins.toJSON {
-            schemaVersion = 1;
+            schemaVersion = 2;
             profiles = lib.mapAttrs (_: profile: lib.filterAttrs (_name: value: value != null && value != {}) profile) cfg.profiles;
           };
         }

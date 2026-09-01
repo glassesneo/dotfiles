@@ -87,13 +87,24 @@ function isSubmitDetails(value: unknown): value is SubmitDetails { return isRend
 function isDisplayIdentity(value: unknown): value is AgentDisplayIdentity {
     if (!value || typeof value !== "object" || Array.isArray(value)) return false;
     const record = value as Record<string, unknown>;
-    return typeof record.agentId === "string" && typeof record.handle === "string"
-        && (record.role === undefined || typeof record.role === "string")
-        && (record.profile === undefined || typeof record.profile === "string")
-        && (record.roleDescription === undefined || typeof record.roleDescription === "string")
-        && (record.model === undefined || typeof record.model === "string")
-        && (record.thinkingLevel === undefined || typeof record.thinkingLevel === "string")
-        && (record.harness === undefined || typeof record.harness === "string");
+    if (typeof record.agentId !== "string" || typeof record.handle !== "string") return false;
+    if (record.role !== undefined && typeof record.role !== "string") return false;
+    if (record.profile !== undefined && typeof record.profile !== "string") return false;
+    if (record.roleDescription !== undefined && typeof record.roleDescription !== "string") return false;
+    if (record.model !== undefined && typeof record.model !== "string") return false;
+    if (record.fallbackCount !== undefined && (!Number.isInteger(record.fallbackCount) || Number(record.fallbackCount) < 0)) return false;
+    if (record.thinkingLevel !== undefined && typeof record.thinkingLevel !== "string") return false;
+    if (record.harness !== undefined && typeof record.harness !== "string") return false;
+    if (record.attempts !== undefined) {
+        if (!Array.isArray(record.attempts)) return false;
+        for (const attempt of record.attempts) {
+            if (!attempt || typeof attempt !== "object" || Array.isArray(attempt)) return false;
+            const item = attempt as Record<string, unknown>;
+            if (!Number.isInteger(item.index) || typeof item.model !== "string" || typeof item.category !== "string" || typeof item.at !== "string") return false;
+            if (item.message !== undefined && typeof item.message !== "string") return false;
+        }
+    }
+    return true;
 }
 function identityFor(agentId: string, value?: unknown, words?: readonly string[]): AgentDisplayIdentity {
     return isDisplayIdentity(value) && value.agentId === agentId ? value : displayIdentityForAgentId(agentId, words);
@@ -110,6 +121,14 @@ function compactAgentLine(theme: Theme, snapshot: AgentSnapshot, words?: readonl
     ]);
 }
 
+function attemptLines(theme: Theme, attempts: NonNullable<AgentDisplayIdentity["attempts"]>): string[] {
+    return attempts.map(attempt => labeled(
+        theme,
+        `attempt#${attempt.index}`,
+        `${attempt.model} · ${attempt.category}${attempt.message ? `: ${previewText(attempt.message, 2, 240)}` : ""}`,
+    ));
+}
+
 function expandedAgentCard(theme: Theme, snapshot: AgentSnapshot, argsPrompt?: string, words?: readonly string[]): string {
     const task = snapshot.task;
     const identity = displayIdentityForSnapshot(snapshot, words);
@@ -120,6 +139,7 @@ function expandedAgentCard(theme: Theme, snapshot: AgentSnapshot, argsPrompt?: s
         labeled(theme, "roleDescription", identity.roleDescription ?? "unavailable"),
         labeled(theme, "profile", identity.profile ?? "unresolved"),
         labeled(theme, "model", identity.model ?? "unavailable"),
+        labeled(theme, "fallback", String(identity.fallbackCount ?? 0)),
         labeled(theme, "thinking", identity.thinkingLevel ?? "unavailable"),
         labeled(theme, "harness", identity.harness ?? "unavailable"),
         labeled(theme, "agentState", agentStateText(theme, snapshot.status.state)),
@@ -128,6 +148,7 @@ function expandedAgentCard(theme: Theme, snapshot: AgentSnapshot, argsPrompt?: s
         labeled(theme, "pendingMessages", snapshot.activity.pendingMessages === null ? "unknown" : String(snapshot.activity.pendingMessages)),
         labeled(theme, "contextHealth", snapshot.activity.context.health),
     ];
+    if (identity.attempts?.length) lines.push(...attemptLines(theme, identity.attempts));
     if (snapshot.stop) {
         lines.push(labeled(theme, "stopState", snapshot.stop.state), labeled(theme, "stopSource", snapshot.stop.source), labeled(theme, "stopReason", previewText(snapshot.stop.reason, 4, 512)));
     }

@@ -19,8 +19,8 @@ import type { CommandExecutor } from "../extensions_src/utilities/orchestration_
 import { withTemporaryRoot } from "./test_helpers.ts";
 
 const capabilities = { nativeScreen: true, taskDelivery: true, taskCompletion: true, taskCancellation: true, usage: true, interactiveInterventions: true, terminalHistory: true };
-const profile = { model: "synthetic/pi", thinkingLevel: "medium", harness: "pi" } as const;
-const profiles: ExecutionProfileConfig = { schemaVersion: 1, profiles: { "pi-medium": profile } };
+const profile = { models: ["synthetic/pi"], thinkingLevel: "medium" as const, harness: "pi" as const };
+const profiles: ExecutionProfileConfig = { schemaVersion: 2, profiles: { "pi-medium": profile } };
 function roleDefinition(name: "worker" | "reviewer"): RoleDefinition { return { description: `Synthetic ${name}`, tools: ["read"], instructions: `Act as ${name}.`, contextPolicy: "project", childExtensionContributions: [] }; }
 const catalog: RoleCatalog = { schemaVersion: 4, roles: { worker: roleDefinition("worker"), reviewer: roleDefinition("reviewer") } };
 const callPolicy: CallPolicy = { modes: { ops: { targets: { worker: { profiles: ["pi-medium"] }, reviewer: { profiles: ["pi-medium"] } } } }, roles: {} };

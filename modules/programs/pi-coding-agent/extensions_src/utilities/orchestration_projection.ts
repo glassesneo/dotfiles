@@ -127,7 +127,7 @@ export function projectMinimalSubmitResult(
     };
 }
 
-type DebugAgentStatus = Omit<AgentStatus, "accountedTaskIds" | "agentUsage"> & { agentUsage: Usage | "unavailable" };
+type DebugAgentStatus = Omit<AgentStatus, "accountedTaskIds" | "agentUsage" | "modelRoute"> & { agentUsage: Usage | "unavailable" };
 
 function modelVisibleTask(snapshot: AgentSnapshot): ModelVisibleTask | undefined {
     const task = snapshot.task;
@@ -135,14 +135,15 @@ function modelVisibleTask(snapshot: AgentSnapshot): ModelVisibleTask | undefined
     return { ...task, result: { ...task.result, usage: "unavailable", turns: "unavailable" } };
 }
 
-function statusWithoutAccountingIds(status: AgentStatus, usageAvailable: boolean): DebugAgentStatus {
-    const { accountedTaskIds: _ignored, agentUsage, ...rest } = status;
+function statusWithoutRouteOrAccounting(status: AgentStatus, usageAvailable: boolean): DebugAgentStatus {
+    const { accountedTaskIds: _ignored, agentUsage, modelRoute: _route, ...rest } = status;
     return { ...rest, agentUsage: usageAvailable ? agentUsage : "unavailable" };
 }
 
 /**
  * Full sanitized agent/status/task snapshot for abnormal-state diagnosis.
- * Omits accounting bookkeeping IDs from model-visible debug content.
+ * Omits accounting bookkeeping IDs and modelRoute from model-visible debug content;
+ * successful fallback remains operator-only via tool details, cards, and palette.
  */
 export function projectDebugSnapshot(rawSnapshot: AgentSnapshot): {
     agent: AgentSnapshot["agent"];
@@ -154,7 +155,7 @@ export function projectDebugSnapshot(rawSnapshot: AgentSnapshot): {
     const snapshot = sanitizeSnapshot(rawSnapshot);
     return {
         agent: snapshot.agent,
-        status: statusWithoutAccountingIds(snapshot.status, snapshot.agent.capabilities.usage),
+        status: statusWithoutRouteOrAccounting(snapshot.status, snapshot.agent.capabilities.usage),
         activity: snapshot.activity,
         stop: projectModelVisibleStop(snapshot.stop),
         task: modelVisibleTask(snapshot),

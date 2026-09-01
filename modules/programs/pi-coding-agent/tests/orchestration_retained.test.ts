@@ -15,7 +15,7 @@ import { inspectMeshAgentWindow, launchAgentSession, meshHubName, stopAgentSessi
 import { emptyUsage, type AgentSnapshot, type AgentState, type TaskState } from "../extensions_src/utilities/orchestration_types.ts";
 
 const syntheticRole = (name = "worker") => ({ description: `Synthetic ${name}`, tools: [], instructions: "Return the bounded result.", contextPolicy: "project" as const, childExtensionContributions: [] });
-const syntheticProfile = { model: "provider/model", thinkingLevel: "medium" as const, harness: "pi" as const };
+const syntheticProfile = { models: ["provider/model"], thinkingLevel: "medium" as const, harness: "pi" as const };
 const definition = syntheticRole("worker");
 const meshId = "11111111-1111-4111-8111-111111111111";
 const epochId = "22222222-2222-4222-8222-222222222222";
@@ -25,8 +25,8 @@ const tmux = { socket: "/tmp/tmux", serverPid: "10", sessionId: "$hub", sessionN
 function snapshot(id: string, state: AgentState, options: { parentAgentId?: string; taskState?: TaskState; createdAt?: string; sessionFile?: string; sessionId?: string } = {}): AgentSnapshot {
     const taskId = id.replace(/^./u, "b"); const prompt = "Implement retained behavior\nfull detail"; const taskState = options.taskState ?? (state === "failed" ? "failed" : "succeeded"); const terminal = taskState === "succeeded" || taskState === "failed" || taskState === "stopped";
     return {
-        agent: { schemaVersion: 4, meshId, agentId: id, epochId, role: "worker", selectedProfile: "pi-medium", harness: "pi", cwd: "/work", createdAt: options.createdAt ?? id, roleSnapshot: definition, profileSnapshot: syntheticProfile, agent: "worker", agentSnapshot: definition, launchEnvelope: "/envelope", launchEnvelopeDigest: "digest", tmux, capabilities, creatorSessionId: "creator", ...(options.parentAgentId ? { parentAgentId: options.parentAgentId } : {}) },
-        status: { schemaVersion: 1, meshId, agentId: id, state, bridgeReady: true, meshToolsEnabled: true, agentUsage: emptyUsage(), accountedTaskIds: [], updatedAt: options.createdAt ?? id, ...(options.sessionFile ? { childSessionFile: options.sessionFile } : {}), ...(options.sessionId ? { childSessionId: options.sessionId } : {}) },
+        agent: { schemaVersion: 5, meshId, agentId: id, epochId, role: "worker", selectedProfile: "pi-medium", harness: "pi", cwd: "/work", createdAt: options.createdAt ?? id, roleSnapshot: definition, profileSnapshot: syntheticProfile, agent: "worker", agentSnapshot: definition, launchEnvelope: "/envelope", launchEnvelopeDigest: "digest", tmux, capabilities, creatorSessionId: "creator", ...(options.parentAgentId ? { parentAgentId: options.parentAgentId } : {}) },
+        status: { schemaVersion: 2, meshId, agentId: id, state, bridgeReady: true, meshToolsEnabled: true, agentUsage: emptyUsage(), accountedTaskIds: [], updatedAt: options.createdAt ?? id, ...(options.sessionFile ? { childSessionFile: options.sessionFile } : {}), ...(options.sessionId ? { childSessionId: options.sessionId } : {}) },
         activity: unknownAgentActivityProjection(),
         stop: null,
         task: { request: { schemaVersion: 3, meshId, agentId: id, taskId, prompt, requesterEndpointId: "root:test", createdAt: options.createdAt ?? id }, status: { schemaVersion: 1, meshId, agentId: id, taskId, state: taskState, createdAt: options.createdAt ?? id, ...(terminal ? { finishedAt: options.createdAt ?? id } : {}) }, result: terminal ? { schemaVersion: 1, meshId, agentId: id, taskId, outcome: taskState, output: "done", usage: emptyUsage(), turns: 1, interventions: [], startedAt: options.createdAt ?? id, finishedAt: options.createdAt ?? id } : null, interventions: [], claimed: false, directory: "/task" },
@@ -99,13 +99,22 @@ void test("palette toggles terminal history while retaining deterministic select
 // Given a resolved snapshot, when it renders at wide and narrow palette widths, the user observes immutable role/profile facts without any line exceeding the terminal width.
 void test("palette exposes immutable role and profile details at wide and narrow widths", () => {
     const live = snapshot("dededede-dede-4ede-8ede-dededededede", "busy", { taskState: "running" });
+    live.status.modelRoute = {
+        activeIndex: 1,
+        activeModel: "provider/fallback",
+        attempts: [{ index: 0, model: "provider/model", category: "unavailable", at: "2026-01-01T00:00:00Z", message: "auth missing" }],
+    };
     const createComponent = (rows: number) => new MeshAgentsPaletteComponent({ tui: { terminal: { rows }, requestRender() {} } as never, theme: { fg: (_role: string, text: string) => text, bg: (_role: string, text: string) => text, bold: (text: string) => text } as never, ui: { input: async () => undefined, confirm: async () => false }, keymap: resolvePaletteKeymap({ toggleTerminal: ["t"] }), deps: { meshId, exec: async () => ({ stdout: "", stderr: "", code: 0 }), tmux: "/tmux", historyViewerExtension: "/viewer", piCommand: "/pi", natureHandleWords: ["May"], discover: async () => ({ agents: [live], malformedCount: 0 }), stopAgent: async () => live }, done() {} });
     for (const [rows, width] of [[24, 80], [24, 120], [10, 60]] as const) {
         const component = createComponent(rows); component.replaceAgents([live]);
         const rendered = component.render(width);
         assert.ok(rendered.every(line => visibleWidth(line) <= width));
         const text = rendered.join("\n");
-        assert.match(text, new RegExp(live.agent.agentId, "u")); assert.match(text, /role:worker/u); assert.match(text, /profile:pi-medium/u); assert.match(text, /Synthetic worker/u); assert.match(text, /provider\/model/u); assert.match(text, /thinking medium · harness pi/u);
+        assert.match(text, new RegExp(live.agent.agentId, "u")); assert.match(text, /role:worker/u); assert.match(text, /profile:pi-medium/u); assert.match(text, /Synthetic worker/u); assert.match(text, /provider\/fallback/u); assert.match(text, /fallback 1/u); assert.match(text, /thinking medium · harness pi/u);
+        if (width >= 100) {
+            assert.match(text, /attempt #0 provider\/model unavailable/u);
+            assert.match(text, /auth missing/u);
+        }
         component.dispose();
     }
 });
@@ -115,6 +124,24 @@ void test("model-visible projection truncates content while preserving machine f
     const text = serializeModelVisibleJson({ outcome: "completed", tasks }); const projected = JSON.parse(text) as { outcome: string; tasks: Array<{ agentId: string; taskId: string; agentState: string; taskState: string; outputTruncated?: boolean }> };
     assert.ok(Buffer.byteLength(text, "utf8") <= MAX_MODEL_VISIBLE_BYTES); assert.ok(text.split(/\r\n|\r|\n/u).length <= MAX_MODEL_VISIBLE_LINES);
     assert.equal(projected.outcome, "completed"); assert.equal(projected.tasks.length, tasks.length); assert.deepEqual(projected.tasks.map(task => task.agentId), tasks.map(task => task.agentId)); assert.ok(projected.tasks.every(task => task.agentState === "idle" && task.taskState === "succeeded")); assert.ok(projected.tasks.some(task => task.outputTruncated));
+});
+
+// Admission: model-visible content must hide successful fallback route state; details and operator surfaces remain the owner of route diagnostics.
+void test("model-visible projections omit modelRoute while keeping operator details available", () => {
+    const value = snapshot("acacacac-acac-4cac-8cac-acacacacacac", "idle");
+    value.status.modelRoute = {
+        activeIndex: 1,
+        activeModel: "provider/fallback",
+        attempts: [{ index: 0, model: "provider/model", category: "invocation", at: "2026-01-01T00:00:00Z", message: "temporary failure" }],
+    };
+    const minimal = projectMinimalAgentTask(value);
+    const debug = projectDebugSnapshot(value);
+    assert.equal("modelRoute" in minimal, false);
+    assert.equal("activeModel" in minimal, false);
+    assert.equal("modelRoute" in debug.status, false);
+    assert.equal(value.status.modelRoute?.activeModel, "provider/fallback");
+    assert.doesNotMatch(JSON.stringify(minimal), /provider\/fallback|modelRoute|temporary failure/u);
+    assert.doesNotMatch(JSON.stringify(debug), /provider\/fallback|modelRoute|temporary failure/u);
 });
 
 void test("debug projection marks unsupported external telemetry unavailable", () => {

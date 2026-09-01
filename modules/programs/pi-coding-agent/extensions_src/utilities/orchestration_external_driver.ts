@@ -55,15 +55,15 @@ function exactHarnessOptions(actual: Record<string, unknown> | undefined, expect
 
 export function resolveExternalDriver(config: ExternalWorkerConfig, profile: ExecutionProfile): ExternalDriverRoute {
     if (config.adapter === "cursor-acp") {
-        if (profile.harness !== "cursor-agent" || !profile.model.startsWith("cursor/") || profile.thinkingLevel !== undefined) throw new Error("cursor-acp requires a Cursor selected execution profile");
+        if (profile.harness !== "cursor-agent" || profile.models.length !== 1 || !profile.models[0]!.startsWith("cursor/") || profile.thinkingLevel !== undefined) throw new Error("cursor-acp requires a Cursor selected execution profile");
         const expected = config.mode === "ask" ? CURSOR_READ_HARNESS_OPTIONS : CURSOR_WRITE_HARNESS_OPTIONS;
         if (!exactHarnessOptions(profile.harnessOptions, expected)) throw new Error("cursor-acp selected execution profile has invalid harnessOptions");
         return {
             display: "cursor-agent",
-            create: event => new CursorAcpDriver({ command: config.command, cwd: config.cwd, model: profile.model.slice(7), mode: config.mode, permissionPolicy: config.permissionPolicy, event }),
+            create: event => new CursorAcpDriver({ command: config.command, cwd: config.cwd, model: profile.models[0]!.slice(7), mode: config.mode, permissionPolicy: config.permissionPolicy, event }),
         };
     }
-    if (profile.harness !== "codex" || !profile.model.startsWith("codex/") || !profile.thinkingLevel || !exactHarnessOptions(profile.harnessOptions, { mode: "read-only", permissionPolicy: "reject", webSearch: "cached" })) throw new Error("codex-acp requires a Codex selected execution profile");
-    const options = { command: config.command, cwd: config.cwd, model: profile.model.slice("codex/".length), reasoning: profile.thinkingLevel, mode: config.mode, permissionPolicy: config.permissionPolicy, webSearch: config.webSearch } as const;
+    if (profile.harness !== "codex" || profile.models.length !== 1 || !profile.models[0]!.startsWith("codex/") || !profile.thinkingLevel || !exactHarnessOptions(profile.harnessOptions, { mode: "read-only", permissionPolicy: "reject", webSearch: "cached" })) throw new Error("codex-acp requires a Codex selected execution profile");
+    const options = { command: config.command, cwd: config.cwd, model: profile.models[0]!.slice("codex/".length), reasoning: profile.thinkingLevel, mode: config.mode, permissionPolicy: config.permissionPolicy, webSearch: config.webSearch } as const;
     return { display: "codex", create: event => new CodexAcpDriver({ ...options, event }) };
 }

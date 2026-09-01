@@ -17,11 +17,11 @@ function piOptions(profile: ExecutionProfile, harnessId: string): void {
     if (harnessId !== "pi" || profile.harness !== "pi" || profile.harnessOptions !== undefined) throw new Error("Pi execution profiles must use pi without harnessOptions");
 }
 function cursorOptions(profile: ExecutionProfile, harnessId: string): void {
-    if (harnessId !== "cursor-agent" || profile.harness !== "cursor-agent" || !profile.model.startsWith("cursor/") || profile.thinkingLevel !== undefined) throw new Error("Cursor execution profiles require cursor-agent, cursor/<model>, and no thinkingLevel");
+    if (harnessId !== "cursor-agent" || profile.harness !== "cursor-agent" || profile.models.length !== 1 || !profile.models[0]!.startsWith("cursor/") || profile.thinkingLevel !== undefined) throw new Error("Cursor execution profiles require cursor-agent, cursor/<model>, and no thinkingLevel");
     if (!isApprovedCursorHarnessOptions(profile.harnessOptions)) throw new Error("Cursor execution profile requires exact approved harnessOptions");
 }
 function codexOptions(profile: ExecutionProfile, harnessId: string): void {
-    if (harnessId !== "codex" || profile.harness !== "codex" || !profile.model.startsWith("codex/") || !profile.thinkingLevel) throw new Error("Codex execution profiles require codex, codex/<model>, and thinkingLevel");
+    if (harnessId !== "codex" || profile.harness !== "codex" || profile.models.length !== 1 || !profile.models[0]!.startsWith("codex/") || !profile.thinkingLevel) throw new Error("Codex execution profiles require codex, codex/<model>, and thinkingLevel");
     exactOptions(profile.harnessOptions, expectedCodex, "Codex execution profile");
 }
 function selected(input: HarnessLaunchInput): AgentLaunchEnvelope {

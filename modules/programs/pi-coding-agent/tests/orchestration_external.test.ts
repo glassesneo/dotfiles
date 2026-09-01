@@ -23,13 +23,14 @@ function role(overrides: Partial<RoleDefinition> = {}): RoleDefinition {
 }
 function envelope(input: { role: string; selfRole: RoleDefinition; selectedProfile: string; executionProfile: ExecutionProfile; policy?: CallerPolicy; extensions?: string[] }): AgentLaunchEnvelope {
     return {
-        schemaVersion: 4,
-        marker: "pi-mesh-role-launch-v4",
+        schemaVersion: 5,
+        marker: "pi-mesh-role-launch-v5",
         meshId,
         agentId,
         epochId,
         role: input.role,
         selectedProfile: input.selectedProfile,
+        initialCandidateIndex: 0,
         selfRole: input.selfRole,
         executionProfile: input.executionProfile,
         directTargets: { [input.role]: { profiles: [input.selectedProfile] } },
@@ -57,12 +58,12 @@ async function waitUntil(check: () => boolean | Promise<boolean>, timeoutMs = 30
 const externalCapabilities = { nativeScreen: true, taskDelivery: true, taskCompletion: true, taskCancellation: true, usage: false, interactiveInterventions: false, terminalHistory: false };
 const externalTmux = { socket: "/tmp/tmux", serverPid: "1", sessionId: "$1", sessionName: "main", windowId: "@1", paneId: "%1", windowName: "worker" };
 const externalBudgets = { maxLiveAgents: 4, maxConcurrentTasks: 4, maxTasksPerMesh: 20 };
-const cursorProfile: ExecutionProfile = { model: "cursor/cursor-grok-4.5-high-fast", harness: "cursor-agent", harnessOptions: { mode: "agent", permissionPolicy: "allow-always", sandbox: "disabled", trustWorkspace: true, worktree: false } };
+const cursorProfile: ExecutionProfile = { models: ["cursor/cursor-grok-4.5-high-fast"], harness: "cursor-agent", harnessOptions: { mode: "agent", permissionPolicy: "allow-always", sandbox: "disabled", trustWorkspace: true, worktree: false } };
 const externalConfig: ExternalWorkerConfig = { adapter: "cursor-acp", command: "/cursor", cwd: "/work", mode: "agent", permissionPolicy: "allow-always" };
 
 async function externalFixture(root: string) {
     const generalRole = role({ instructions: "Independently own one problem through exploration, implementation, and validation.", tools: [] });
-    const profileConfig: ExecutionProfileConfig = { schemaVersion: 1, profiles: { "cursor-standard": cursorProfile } };
+    const profileConfig: ExecutionProfileConfig = { schemaVersion: 2, profiles: { "cursor-standard": cursorProfile } };
     const mesh = await initializeMesh(root, { rootSessionId: "root", recoverable: false, budgets: externalBudgets });
     const epoch = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", catalog: { schemaVersion: 4, roles: { general: generalRole } }, profiles: profileConfig, callPolicy: { modes: { ops: { targets: { general: { profiles: ["cursor-standard"] } } } }, roles: {} } });
     const reservation = await reserveMeshCapacity(root, mesh.meshId, "new-agent-task");
@@ -79,20 +80,20 @@ async function externalFixture(root: string) {
 // Admission: launch isolation is repository-owned, a leaked context/tool/resource flag materially violates the role boundary, and neither types nor schema validation observes the final Pi argv.
 // Given project, outbound, and prompt-only role envelopes, when they cross the native launch-descriptor boundary, the Pi process observes only the selected profile and tools authorized for that context.
 void test("Pi launch descriptors isolate prompt-only roles and expose outbound or report-only mesh tools", () => {
-    const piProfile: ExecutionProfile = { model: "openai-codex/gpt-5.6-terra", thinkingLevel: "high", harness: "pi" };
-    const promptOnly = envelope({ role: "gyaru", selfRole: role({ contextPolicy: "prompt-only", tools: [] }), selectedProfile: "terra-high", executionProfile: piProfile });
-    const isolated = piLaunchDescriptor(runtime, launchInput("gyaru", promptOnly));
-    assert.equal(option(isolated.args, "--model"), piProfile.model);
+    const piProfile: ExecutionProfile = { models: ["openai-codex/gpt-5.6-terra"], thinkingLevel: "high", harness: "pi" };
+    const promptOnly = envelope({ role: "prompt-only", selfRole: role({ contextPolicy: "prompt-only", tools: [] }), selectedProfile: "terra-high", executionProfile: piProfile });
+    const isolated = piLaunchDescriptor(runtime, launchInput("prompt-only", promptOnly));
+    assert.equal(option(isolated.args, "--model"), piProfile.models[0]);
     assert.equal(option(isolated.args, "--thinking"), piProfile.thinkingLevel);
     assert.deepEqual(extensions(isolated.args), ["/orchestration.ts", "/orchestration_child_bridge.ts"]);
     for (const flag of ["--no-context-files", "--no-skills", "--no-prompt-templates", "--no-tools"]) assert.equal(isolated.args.includes(flag), true, flag);
     assert.equal(isolated.args.includes("--tools"), false);
 
-    const caller = envelope({ role: "reviewer", selfRole: role({ tools: ["read", "save_agent_artifact"] }), selectedProfile: "sol-high", executionProfile: { model: "openai-codex/gpt-5.6-sol", thinkingLevel: "high", harness: "pi" }, policy: { targets: { "review-lens": { profiles: ["terra-high"] } } } });
+    const caller = envelope({ role: "reviewer", selfRole: role({ tools: ["read", "save_agent_artifact"] }), selectedProfile: "sol-high", executionProfile: { models: ["openai-codex/gpt-5.6-sol"], thinkingLevel: "high", harness: "pi" }, policy: { targets: { "review-lens": { profiles: ["terra-high"] } } } });
     const callerTools = option(piLaunchDescriptor(runtime, launchInput("reviewer", caller)).args, "--tools")!.split(",");
     assert.deepEqual(callerTools, ["read", "save_agent_artifact", "mesh_send", "mesh_get", "mesh_wait", "mesh_stop", "mesh_report"]);
 
-    const leaf = envelope({ role: "validator", selfRole: role({ tools: ["read", "bash"] }), selectedProfile: "luna-high", executionProfile: { model: "openai-codex/gpt-5.6-luna", thinkingLevel: "high", harness: "pi" } });
+    const leaf = envelope({ role: "validator", selfRole: role({ tools: ["read", "bash"] }), selectedProfile: "luna-xhigh", executionProfile: { models: ["openai-codex/gpt-5.6-luna"], thinkingLevel: "xhigh", harness: "pi" } });
     assert.deepEqual(option(piLaunchDescriptor(runtime, launchInput("validator", leaf)).args, "--tools")!.split(","), ["read", "bash", "mesh_report"]);
 });
 
@@ -109,7 +110,7 @@ void test("external routing consumes selected profiles without turning profiles 
     assert.equal(externalTaskPrompt(generalEnvelope.selfRole.instructions, "Repair file A."), "Independently own one problem through exploration, implementation, and validation.\n\nDelegated task:\nRepair file A.");
 
     const searcherRole = role({ instructions: "Answer one bounded external question." });
-    const codexProfile: ExecutionProfile = { model: "codex/gpt-5.6-luna", thinkingLevel: "high", harness: "codex", harnessOptions: { mode: "read-only", permissionPolicy: "reject", webSearch: "cached" } };
+    const codexProfile: ExecutionProfile = { models: ["codex/gpt-5.6-luna"], thinkingLevel: "high", harness: "codex", harnessOptions: { mode: "read-only", permissionPolicy: "reject", webSearch: "cached" } };
     const searcherEnvelope = envelope({ role: "searcher", selfRole: searcherRole, selectedProfile: "codex-search", executionProfile: codexProfile });
     const codex = resolveHarnessAdapter(runtime, codexProfile.harness, codexProfile);
     const codexLaunch = codex.adapter.launch(runtime, codex.harness, launchInput("searcher", searcherEnvelope));
