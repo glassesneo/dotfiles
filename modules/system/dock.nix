@@ -14,7 +14,10 @@ delib.module {
       autohide-delay = 1000.0;
       mouse-over-hilite-stack = true;
       orientation = "bottom";
+      persistent-apps = [];
+      persistent-others = [];
       show-recents = false;
+      static-only = true;
     };
   };
 }
