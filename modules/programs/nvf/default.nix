@@ -2,6 +2,7 @@
   delib,
   host,
   inputs,
+  pkgs,
   ...
 }:
 delib.module {
@@ -19,6 +20,7 @@ delib.module {
       enableManpages = true;
       settings = {
         vim = {
+          package = inputs.neovim-nightly-overlay.packages.${pkgs.stdenv.hostPlatform.system}.default;
           viAlias = false;
           vimAlias = false;
         };
