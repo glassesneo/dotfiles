@@ -58,8 +58,10 @@ and formatter selection.
 6. Exercise `<Space><Space>`, `<Space>g`, `<Space>f`, `<Space><CR>`, and
    `<Space>z`; shared Git ignore names such as `.agents` must not appear.
 7. In a temporary Git repository, edit added/changed/deleted lines and inspect
-   Gitsigns. Exercise `f`/`t` repetition and `*`, `#`, `g*`, `g#` in normal,
-   visual, and operator-pending modes.
+   Gitsigns. Confirm eyeliner hints stay on without taking `f`/`F`/`t`/`T`.
+   Repeat `f`/`t` with the same key to advance. `*` must set the search
+   pattern without moving; the following `n`/`N` animate through Cinnamon.
+   `#`/`g*`/`g#` stay native plus Cinnamon.
 8. With Copilot authenticated, confirm attach for a normal file in a non-Git
    directory. Confirm no attach for `~/orgfiles`, a symlink into it, sensitive
    basenames containing `env`, `conf`, `local`, or `private`, and unnamed or

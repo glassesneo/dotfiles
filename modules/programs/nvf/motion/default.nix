@@ -7,46 +7,41 @@ delib.module {
   name = "programs.nvf.motion";
   options = delib.singleCascadeEnableOption;
 
-  home.ifEnabled.programs.nvf.settings.vim.lazy.plugins = {
-    "clever-f.vim" = {
-      package = pkgs.vimPlugins.clever-f-vim;
-      before = ''
-        vim.g.clever_f_smart_case = 1
-        vim.g.clever_f_timeout_ms = 2000
+  home.ifEnabled.programs.nvf.settings.vim = {
+    additionalRuntimePaths = [./runtime];
+
+    mini.jump = {
+      enable = true;
+      setupOpts = {
+        delay = {
+          # eyeliner owns always-on hints; disable mini.jump's post-jump marks
+          highlight = 10000000;
+          # former clever-f timeout
+          idle_stop = 2000;
+        };
+      };
+    };
+
+    lazy.plugins."eyeliner.nvim" = {
+      package = pkgs.vimPlugins.eyeliner-nvim;
+      event = ["BufEnter" "CursorMoved"];
+      after = ''
+        require("eyeliner").setup({
+          highlight_on_key = false,
+          default_keymaps = false,
+          dim = false,
+        })
       '';
-      keys = map (key: {
-        inherit key;
-        mode = ["n" "x" "o"];
-      }) ["f" "F" "t" "T" ";" ","];
     };
-    vim-asterisk = {
-      package = pkgs.vimPlugins.vim-asterisk;
-      keys = [
-        {
-          key = "*";
-          mode = ["n" "x" "o"];
-          action = "<Plug>(asterisk-z*)";
-          noremap = false;
-        }
-        {
-          key = "#";
-          mode = ["n" "x" "o"];
-          action = "<Plug>(asterisk-z#)";
-          noremap = false;
-        }
-        {
-          key = "g*";
-          mode = ["n" "x" "o"];
-          action = "<Plug>(asterisk-gz*)";
-          noremap = false;
-        }
-        {
-          key = "g#";
-          mode = ["n" "x" "o"];
-          action = "<Plug>(asterisk-gz#)";
-          noremap = false;
-        }
-      ];
-    };
+
+    keymaps = [
+      {
+        key = "*";
+        mode = ["n"];
+        lua = true;
+        silent = true;
+        action = "require('nvf.motion')";
+      }
+    ];
   };
 }
