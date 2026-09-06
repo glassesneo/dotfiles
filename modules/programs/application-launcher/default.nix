@@ -45,11 +45,9 @@ delib.module {
     home.activation.applicationLauncherStopInactiveRaycast = lib.mkIf (cfg.backend == "vicinae") (
       homeConfig.lib.dag.entryBefore ["setupLaunchAgents"] (builtins.readFile ./quit-raycast.sh)
     );
-  };
 
-  darwin.ifEnabled = {
     # Both providers use ⌘Space, so this owner releases the shared system hotkey.
-    system.defaults.CustomUserPreferences."com.apple.symbolichotkeys".AppleSymbolicHotKeys."64" = {
+    targets.darwin.defaults."com.apple.symbolichotkeys".AppleSymbolicHotKeys."64" = {
       enabled = false;
       value = {
         type = "standard";

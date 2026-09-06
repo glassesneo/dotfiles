@@ -4,16 +4,15 @@
   ...
 }:
 delib.module {
-  name = "system.privacy";
+  name = "user.privacy";
 
   options = delib.singleEnableOption pkgs.stdenv.isDarwin;
 
-  darwin.ifEnabled = {
-    system.defaults.CustomUserPreferences = {
+  home.ifEnabled = {
+    targets.darwin.defaults = {
       "com.apple.AdLib" = {
         allowApplePersonalizedAdvertising = false;
       };
-      # Prevent Photos from opening automatically when devices are plugged in
       "com.apple.ImageCapture".disableHotPlug = true;
     };
   };

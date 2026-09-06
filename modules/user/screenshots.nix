@@ -4,12 +4,12 @@
   ...
 }:
 delib.module {
-  name = "system.screenshots";
+  name = "user.screenshots";
 
   options = delib.singleEnableOption pkgs.stdenv.isDarwin;
 
-  darwin.ifEnabled = {
-    system.defaults.CustomUserPreferences."com.apple.screencapture" = {
+  home.ifEnabled = {
+    targets.darwin.defaults."com.apple.screencapture" = {
       location = "~/Desktop";
       type = "jpg";
     };

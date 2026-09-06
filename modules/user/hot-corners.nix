@@ -4,12 +4,12 @@
   ...
 }:
 delib.module {
-  name = "system.hot-corners";
+  name = "user.hot-corners";
 
   options = delib.singleEnableOption pkgs.stdenv.isDarwin;
 
-  darwin.ifEnabled = {
-    system.defaults.dock = {
+  home.ifEnabled = {
+    targets.darwin.defaults."com.apple.dock" = {
       # 1 = Disabled
       wvous-tl-corner = 1;
       wvous-tr-corner = 1;

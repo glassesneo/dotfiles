@@ -9,46 +9,9 @@ delib.module {
   options = delib.singleEnableOption pkgs.stdenv.isDarwin;
 
   darwin.ifEnabled = {
-    system = {
-      keyboard = {
-        enableKeyMapping = true;
-        remapCapsLockToControl = false;
-      };
-      defaults = {
-        NSGlobalDomain = {
-          # Keyboard
-          AppleKeyboardUIMode = 3; # Mode 3 enables full keyboard control.
-          ApplePressAndHoldEnabled = false; # Enable accent menu when holding down keys, default is true
-          InitialKeyRepeat = 12; # Normal minimum is 15 (225 ms), maximum is 120 (1800 ms)
-          KeyRepeat = 1; # Normal minimum is 2 (30 ms), maximum is 120 (1800 ms)
-          NSAutomaticCapitalizationEnabled = false;
-          NSAutomaticDashSubstitutionEnabled = false;
-          NSAutomaticPeriodSubstitutionEnabled = false;
-          NSAutomaticQuoteSubstitutionEnabled = false;
-          NSAutomaticSpellingCorrectionEnabled = false;
-          "com.apple.keyboard.fnState" = false;
-
-          # Mouse & Trackpad
-          AppleEnableMouseSwipeNavigateWithScrolls = true;
-          AppleEnableSwipeNavigateWithScrolls = true;
-          "com.apple.swipescrolldirection" = true; # Enable natural scrolling(default to true)
-          "com.apple.trackpad.scaling" = 3.0;
-        };
-        CustomUserPreferences = {
-          "com.apple.symbolichotkeys".AppleSymbolicHotKeys = {
-            "32".enabled = false; # Mission Control: Ctrl + Up
-            "34".enabled = false; # Slow Mission Control
-          };
-        };
-        trackpad = {
-          ActuationStrength = 1;
-          Clicking = false;
-          Dragging = false;
-          TrackpadRightClick = false;
-          TrackpadThreeFingerDrag = false;
-          TrackpadThreeFingerTapGesture = 0;
-        };
-      };
+    system.keyboard = {
+      enableKeyMapping = true;
+      remapCapsLockToControl = false;
     };
   };
 }

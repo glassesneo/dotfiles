@@ -20,7 +20,7 @@ delib.module {
     system = {
       defaults = {
         smb.NetBIOSName = myconfig.constants.username;
-        loginwindow.SHOWFULLNAME = true; # show full name in login window
+        loginwindow.SHOWFULLNAME = true;
       };
       startup.chime = false;
     };

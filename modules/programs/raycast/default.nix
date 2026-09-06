@@ -29,7 +29,6 @@ delib.module {
       })
     );
 
-    # Start at login
     launchd.agents."raycast" = {
       enable = true;
       config = {
@@ -43,18 +42,14 @@ delib.module {
         RunAtLoad = true;
       };
     };
-  };
 
-  darwin.ifEnabled = {
-    system.defaults.CustomUserPreferences = {
-      "com.raycast.macos" = {
-        raycastGlobalHotkey = "Command-49"; # ⌘Space
-        raycastShouldFollowSystemAppearance = true;
-        onboardingCompleted = true;
-        useHyperKeyIcon = true;
-        raycastPreferredWindowMode = "compact";
-        "raycastUI_preferredTextSize" = "medium";
-      };
+    targets.darwin.defaults."com.raycast.macos" = {
+      raycastGlobalHotkey = "Command-49"; # ⌘Space
+      raycastShouldFollowSystemAppearance = true;
+      onboardingCompleted = true;
+      useHyperKeyIcon = true;
+      raycastPreferredWindowMode = "compact";
+      "raycastUI_preferredTextSize" = "medium";
     };
   };
 }

@@ -23,14 +23,18 @@ delib.host {
       };
     };
     system = {
+      input.enable = false;
+      spaces.enable = false;
+      accessibility.zoom.enable = false;
+      user.uid = 502;
+    };
+    user = {
       appearance.enable = false;
       dock.enable = false;
       feedback.enable = false;
       input.enable = false;
       language.enable = false;
       spaces.enable = false;
-      accessibility.zoom.enable = false;
-      user.uid = 502;
     };
     programs = {
       orbstack.enable = false;
@@ -47,23 +51,19 @@ delib.host {
 
   home = {
     programs.nvf.settings.vim.globals.clipboard = "osc52";
+    targets.darwin.defaults.NSGlobalDomain = {
+      AppleLanguages = [
+        "en-US"
+        "ja-JP"
+      ];
+
+      AppleLocale = "en_US";
+    };
   };
 
   darwin = {
     environment.systemPackages = [pkgs.kitty.terminfo];
 
-    system.defaults = {
-      CustomUserPreferences = {
-        NSGlobalDomain = {
-          AppleLanguages = [
-            "en-US"
-            "ja-JP"
-          ];
-
-          AppleLocale = "en_US";
-        };
-      };
-    };
     nix = {
       distributedBuilds = true;
 

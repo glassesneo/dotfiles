@@ -101,4 +101,15 @@ cross-cutting final integration in `modules/toplevel/`. A child module is useful
 only when disabling the child represents a meaningful choice and leaves its
 parent valid.
 
+On Darwin, each macOS preference key has one final writer. nix-darwin
+`system.defaults` and darwin activation own machine-wide or privileged
+settings (`/Library/Preferences`, loginwindow, smb, keyboard remapping, root
+activation, and host-wide aggregations such as HIToolbox). Home Manager
+`targets.darwin.defaults` owns login-user and application settings; standalone
+Home Manager applies the same `home` output. Home Manager
+`targets.darwin.currentHostDefaults` owns keys that macOS reads from ByHost or
+`defaults -currentHost`. Host-to-host value differences remain `hosts/`
+assignments to typed options and do not select that writer. Whether Home
+Manager exposes a typed option for the key is not a placement test.
+
 Related policy: `docs/documentation-policy.md`.

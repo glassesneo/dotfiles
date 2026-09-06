@@ -14,13 +14,9 @@ delib.module {
     home.packages = [
       brewCasks.skim
     ];
-  };
 
-  darwin.ifEnabled = {
-    system.defaults.CustomUserPreferences = {
-      "net.sourceforge.skim-app.skim" = {
-        SKAutoReloadFileUpdate = true;
-      };
+    targets.darwin.defaults."net.sourceforge.skim-app.skim" = {
+      SKAutoReloadFileUpdate = true;
     };
   };
 }

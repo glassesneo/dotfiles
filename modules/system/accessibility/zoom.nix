@@ -21,8 +21,8 @@ delib.module {
     system = {
       defaults = {
         universalaccess = {
-          closeViewScrollWheelToggle = true; # Enable scroll gesture with modifier keys to zoom
-          closeViewZoomFollowsFocus = true; # Enable zoom to follow keyboard focus changes
+          closeViewScrollWheelToggle = true;
+          closeViewZoomFollowsFocus = true;
         };
         CustomUserPreferences = {
           "com.apple.universalaccess" = {

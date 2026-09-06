@@ -4,13 +4,13 @@
   ...
 }:
 delib.module {
-  name = "system.appearance";
+  name = "user.appearance";
 
   options = delib.singleEnableOption pkgs.stdenv.isDarwin;
 
-  darwin.ifEnabled = {
-    system.defaults = {
-      menuExtraClock = {
+  home.ifEnabled = {
+    targets.darwin.defaults = {
+      "com.apple.menuextra.clock" = {
         IsAnalog = false;
         Show24Hour = true;
         ShowDate = 1;
@@ -19,7 +19,7 @@ delib.module {
         ShowSeconds = false;
       };
       NSGlobalDomain = {
-        AppleInterfaceStyle = "Dark"; # dark mode
+        AppleInterfaceStyle = "Dark";
         _HIHideMenuBar = true;
       };
     };
