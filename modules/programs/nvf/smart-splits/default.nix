@@ -26,6 +26,21 @@ delib.module {
     programs.nvf.settings.vim = {
       utility.smart-splits = {
         enable = true;
+        keymaps = {
+          move_cursor_left = "<C-h>";
+          move_cursor_down = "<C-j>";
+          move_cursor_up = "<C-k>";
+          move_cursor_right = "<C-l>";
+          move_cursor_previous = null;
+          resize_left = null;
+          resize_down = null;
+          resize_up = null;
+          resize_right = null;
+          swap_buf_left = null;
+          swap_buf_down = null;
+          swap_buf_up = null;
+          swap_buf_right = null;
+        };
       };
     };
     programs.tmux = {

@@ -14,6 +14,17 @@ delib.module {
       tabline = {
         nvimBufferline = {
           enable = true;
+          mappings = {
+            closeCurrent = null;
+            cycleNext = null;
+            cyclePrevious = null;
+            pick = null;
+            sortByExtension = null;
+            sortByDirectory = null;
+            sortById = null;
+            moveNext = null;
+            movePrevious = null;
+          };
           setupOpts = {
             options = {
               themable = true;

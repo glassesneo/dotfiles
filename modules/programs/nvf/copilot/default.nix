@@ -32,6 +32,23 @@ delib.module {
     assistant.copilot = {
       enable = true;
       cmp.enable = false;
+      mappings = {
+        panel = {
+          jumpPrev = null;
+          jumpNext = null;
+          accept = null;
+          refresh = null;
+          open = null;
+        };
+        suggestion = {
+          accept = null;
+          acceptWord = null;
+          acceptLine = null;
+          prev = null;
+          next = null;
+          dismiss = null;
+        };
+      };
       setupOpts = {
         panel.enabled = true;
         suggestion.enabled = false;

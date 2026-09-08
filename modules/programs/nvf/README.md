@@ -57,6 +57,8 @@ and formatter selection.
    still succeed.
 6. Exercise `<Space><Space>`, `<Space>g`, `<Space>f`, `<Space><CR>`, and
    `<Space>z`; shared Git ignore names such as `.agents` must not appear.
+   `<Space>l` must go to end-of-line without waiting on a longer `<Space>l*`
+   sequence. `C-h`/`C-j`/`C-k`/`C-l` still move splits; `K` still hovers.
 7. In a temporary Git repository, edit added/changed/deleted lines and inspect
    Gitsigns. Confirm eyeliner hints stay on without taking `f`/`F`/`t`/`T`.
    Repeat `f`/`t` with the same key to advance. `*` must set the search
