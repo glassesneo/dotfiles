@@ -30,11 +30,11 @@ void test("performance schema v2 separates quota metadata and reads v1 entries",
     let clock = 0; const collector = new PerformanceCollector(() => clock, () => new Date(clock)); collector.startRun();
     collector.recordMessage({ role: "assistant", content: "private prompt", usage: { input: 10, output: 2, cacheRead: 4, cacheWrite: 1, totalTokens: 17, cost: { input: 1, output: 2, cacheRead: 3, cacheWrite: 4, total: 10 } } });
     collector.recordMessage({ role: "toolResult", toolCallId: "private-task-id", toolName: "mesh_get", content: "https://private.example/path", usage: { input: 20, output: 3, cacheRead: 5, cacheWrite: 0, totalTokens: 28, cost: { input: 2, output: 3, cacheRead: 4, cacheWrite: 0, total: 9 } } });
-    collector.observeContext({ tokens: 100_000, contextWindow: 192_000 }); collector.recordProviderRequest(); collector.recordProviderResponse(429);
+    collector.observeContext({ tokens: 100_000, contextWindow: 192_000, reserveTokens: 8_000 }); collector.recordProviderRequest(); collector.recordProviderResponse(429);
     collector.recordCompaction({ reason: "threshold", willRetry: false, tokensBefore: 176_000, usage: { input: 30, output: 4, cacheRead: 6, cacheWrite: 0, totalTokens: 40, cost: { input: 3, output: 4, cacheRead: 5, cacheWrite: 0, total: 12 } } });
     clock = 100; const current = collector.settle(); assert.ok(current); assert.equal(current.schemaVersion, PERFORMANCE_SCHEMA_VERSION);
     assert.deepEqual(current.assistantUsage, { availability: "available", value: { input: 10, output: 2, cacheRead: 4, cacheWrite: 1, totalTokens: 17, cost: { input: 1, output: 2, cacheRead: 3, cacheWrite: 4, total: 10 } } });
-    assert.equal(current.nestedToolUsage.availability, "available"); assert.equal(current.compactionUsage[0]?.tokensBefore, 176_000); assert.deepEqual(current.context, { peakTokens: 100_000, contextWindow: 192_000, compactionThreshold: 175_616 }); assert.equal(current.providerRequests.statusCategories?.rateLimited, 1);
+    assert.equal(current.nestedToolUsage.availability, "available"); assert.equal(current.compactionUsage[0]?.tokensBefore, 176_000); assert.deepEqual(current.context, { peakTokens: 100_000, contextWindow: 192_000, compactionThreshold: 184_000 }); assert.equal(current.providerRequests.statusCategories?.rateLimited, 1);
     const summary = summarizeRuns([{ type: "custom", customType: PERFORMANCE_ENTRY, data: legacy }, { type: "custom", customType: PERFORMANCE_ENTRY, data: { ...current, prompt: "discard me", sessionId: "discard me" } }, { type: "custom", customType: PERFORMANCE_ENTRY, data: { ...legacy, schemaVersion: 0 } }]);
     assert.deepEqual(summary.runs.map(run => run.schemaVersion), [1, 2]); assert.equal(summary.unread, 1);
     const serialized = JSON.stringify(summary.runs[1]);
@@ -42,11 +42,46 @@ void test("performance schema v2 separates quota metadata and reads v1 entries",
     const partial = { ...current, assistantUsage: { availability: "unavailable" } as const, nestedToolUsage: { availability: "unavailable" } as const, compactionUsage: [{ reason: "manual" as const, willRetry: false, tokensBefore: 120_000, usage: { availability: "unavailable" as const } }], providerRequests: { beforeCount: 1, afterCount: 0, statusAvailability: "unavailable" as const } };
     const formatted = formatCurrentPerformance([...summary.runs, partial], { tasks: [], unread: 0 }, { cpuCount: 1, loadAverage: [0, 0, 0], memoryTotalBytes: 1, memoryFreeBytes: 1, swap: "unavailable", diskFreeBytes: "unavailable" });
     assert.match(formatted, /Assistant usage:.*cache ratio 28\.6%.*\(1 unavailable\)/u); assert.match(formatted, /Nested tool usage:.*\(1 unavailable\)/u); assert.match(formatted, /Compactions:.*\(1 unavailable\)/u); assert.match(formatted, /statuses .*429 1/u);
+    assert.match(formatted, /settings-derived threshold 184000/u);
+});
+
+// Admission: fixed reserve copies and stale thresholds are not caught by schema types; the collector is the consumer-visible formula boundary.
+// Given a synthetic window/reserve or an unobtainable reserve, when observeContext runs, the consumer sees the computed threshold or null with the known window and peak retained.
+void test("performance collector derives settings threshold and drops unknown observations", () => {
+    const collector = new PerformanceCollector(() => 0, () => new Date(0)); collector.startRun();
+    collector.observeContext({ tokens: 12_000, contextWindow: 40_000, reserveTokens: 5_000 });
+    collector.observeContext({ tokens: 18_000, contextWindow: 40_000, reserveTokens: null });
+    const unknown = collector.settle(); assert.ok(unknown);
+    assert.deepEqual(unknown.context, { peakTokens: 18_000, contextWindow: 40_000, compactionThreshold: null });
+    collector.startRun();
+    collector.observeContext({ tokens: 7_000, contextWindow: 40_000, reserveTokens: 5_000 });
+    const known = collector.settle(); assert.ok(known);
+    assert.deepEqual(known.context, { peakTokens: 7_000, contextWindow: 40_000, compactionThreshold: 35_000 });
+    const formatted = formatCurrentPerformance([unknown], { tasks: [], unread: 0 }, { cpuCount: 1, loadAverage: [0, 0, 0], memoryTotalBytes: 1, memoryFreeBytes: 1, swap: "unavailable", diskFreeBytes: "unavailable" });
+    assert.match(formatted, /settings-derived threshold unavailable/u);
 });
 
 void test("v2 parser preserves unavailable provider and usage observations instead of zero", () => {
     const collector = new PerformanceCollector(() => 0, () => new Date(0)); collector.startRun(); collector.recordProviderRequest(); const run = collector.settle(); assert.ok(run);
     const parsed = parsePerformanceRun(run); assert.ok(parsed && parsed.schemaVersion === 2); assert.deepEqual(parsed.assistantUsage, { availability: "unavailable" }); assert.deepEqual(parsed.nestedToolUsage, { availability: "unavailable" }); assert.equal(parsed.providerRequests.beforeCount, 1); assert.equal(parsed.providerRequests.afterCount, 0); assert.equal(parsed.providerRequests.statusAvailability, "unavailable");
+});
+
+// Admission: extension wiring of the settings getter is not visible from collector unit calls; injectable resolver success and failure are distinct consumer outcomes.
+// Given an injected reserve resolver, when turn observations cross the extension boundary, the persisted run shows the computed threshold or null with known window and peak.
+void test("performance extension passes resolver results into collector observations", () => {
+    const handlers = new Map<string, (event: any, ctx?: any) => unknown>(); const appended: Array<{ customType: string; data: unknown }> = [];
+    const pi = { on(name: string, handler: (event: any, ctx?: any) => unknown) { handlers.set(name, handler); }, appendEntry(customType: string, data: unknown) { appended.push({ customType, data }); }, registerCommand() {}, events: { on() { return () => {}; }, emit() {} } } as unknown as ExtensionAPI;
+    const usage = { tokens: 10_000, contextWindow: 32_000, percent: 31.25 };
+    const ctx = { getContextUsage: () => usage };
+    performanceExtension(pi, { clock: () => 10, wallClock: () => new Date(10), resolveCompactionReserveTokens: () => 4_096 });
+    handlers.get("agent_start")!({}); handlers.get("turn_start")!({ turnIndex: 0 }, ctx); handlers.get("turn_end")!({ turnIndex: 0 }, ctx); handlers.get("agent_settled")!({});
+    const resolved = parsePerformanceRun(appended[0]?.data); assert.ok(resolved && resolved.schemaVersion === 2);
+    assert.deepEqual(resolved.context, { peakTokens: 10_000, contextWindow: 32_000, compactionThreshold: 27_904 });
+    appended.length = 0;
+    performanceExtension(pi, { clock: () => 10, wallClock: () => new Date(10), resolveCompactionReserveTokens: () => { throw new Error("settings unavailable"); } });
+    handlers.get("agent_start")!({}); handlers.get("turn_start")!({ turnIndex: 0 }, ctx); handlers.get("turn_end")!({ turnIndex: 0 }, ctx); handlers.get("agent_settled")!({});
+    const failed = parsePerformanceRun(appended[0]?.data); assert.ok(failed && failed.schemaVersion === 2);
+    assert.deepEqual(failed.context, { peakTokens: 10_000, contextWindow: 32_000, compactionThreshold: null });
 });
 
 void test("out-of-run compaction is persisted as its own session aggregate", () => {
@@ -69,7 +104,7 @@ const taskOther = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
 async function addMeshTask(stateRoot: string, input: { meshId: string; agentId: string; agent: string; taskId: string; start: string; finish?: string; usageCapability?: boolean }): Promise<void> {
     const mesh = join(stateRoot, "meshes", input.meshId); const task = join(mesh, "tasks", input.taskId); const agent = join(mesh, "agents", input.agentId);
     await mkdir(task, { recursive: true }); await mkdir(agent, { recursive: true });
-    await writeFile(join(agent, "agent.json"), JSON.stringify({ schemaVersion: 5, meshId: input.meshId, agentId: input.agentId, role: input.agent, capabilities: { usage: input.usageCapability ?? true } }));
+    await writeFile(join(agent, "agent.json"), JSON.stringify({ schemaVersion: 6, meshId: input.meshId, agentId: input.agentId, role: input.agent, capabilities: { usage: input.usageCapability ?? true } }));
     await writeFile(join(agent, "events.jsonl"), "");
     await writeFile(join(task, "request.json"), JSON.stringify({ schemaVersion: 3, meshId: input.meshId, agentId: input.agentId, taskId: input.taskId, prompt: "measure this task", requesterEndpointId: `root:${input.meshId}`, createdAt: input.start }));
     await writeFile(join(task, "status.json"), JSON.stringify({ schemaVersion: 1, meshId: input.meshId, agentId: input.agentId, taskId: input.taskId, state: input.finish ? "succeeded" : "running", createdAt: input.start, startedAt: input.start, ...(input.finish ? { finishedAt: input.finish } : {}) }));

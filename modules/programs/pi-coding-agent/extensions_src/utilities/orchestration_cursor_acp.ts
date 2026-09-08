@@ -6,13 +6,6 @@ function record(value: unknown): JsonObject | undefined { return value && typeof
 function scalar(value: unknown): string { return typeof value === "string" || typeof value === "number" || typeof value === "boolean" ? String(value) : ""; }
 function textFrom(value: unknown): string { if (typeof value === "string") return value; if (Array.isArray(value)) return value.map(textFrom).filter(Boolean).join(""); const item = record(value); if (!item) return ""; for (const key of ["text", "content", "message", "title", "name", "detail"]) { const text = textFrom(item[key]); if (text) return text; } return ""; }
 function supportsMode(session: JsonObject, mode: string): boolean { const modes = record(session.modes)?.availableModes; return Array.isArray(modes) && modes.some(candidate => candidate === mode || record(candidate)?.id === mode); }
-const cursorAcpModelIds: Readonly<Record<string, string>> = {
-    "cursor-grok-4.5-high-fast": "grok-4.5[effort=high,fast=true]",
-    "cursor-grok-4.6-high-fast": "grok-4.6[effort=high,fast=true]",
-};
-/** Exact ACP identifier emitted for one configured Cursor CLI alias. */
-export function cursorAcpModelId(model: string): string | undefined { return cursorAcpModelIds[model]; }
-function expectedAcpModelId(model: string): string { const modelId = cursorAcpModelId(model); if (!modelId) throw new Error(`Cursor ACP model mapping is unavailable for ${model}`); return modelId; }
 function matchesModelCandidate(candidate: unknown, model: string): boolean { const value = record(candidate); return candidate === model || [value?.modelId, value?.value, value?.id, value?.name].includes(model); }
 function supportsModel(session: JsonObject, model: string): boolean {
     const configOptions = session.configOptions;
@@ -30,6 +23,7 @@ export interface CursorAcpDriverOptions {
     command: string;
     cwd: string;
     model: string;
+    expectedAcpModelId: string;
     mode: "ask" | "agent";
     permissionPolicy: "reject" | "allow-always";
     event: (event: ExternalWorkerEvent) => void;
@@ -78,7 +72,7 @@ export class CursorAcpDriver implements ExternalDriver {
     }
 
     async start(): Promise<void> {
-        const { command, cwd, model, mode, permissionPolicy } = this.#options;
+        const { command, cwd, model, expectedAcpModelId, mode, permissionPolicy } = this.#options;
         if (mode === "ask" ? permissionPolicy !== "reject" : mode !== "agent" || permissionPolicy !== "allow-always") throw new Error("Cursor ACP mode and permission policy combination is invalid");
         this.#options.event({ type: "state", text: `starting cursor-agent ${model}` });
         this.#transport = new AcpTransport(command, ["--model", model, "--force", "--sandbox", "disabled", "--trust", "acp"], { cwd, handler: message => this.#message(message) });
@@ -91,7 +85,7 @@ export class CursorAcpDriver implements ExternalDriver {
         const sessionId = session.sessionId;
         if (typeof sessionId !== "string" || !sessionId.trim()) throw new Error("Cursor ACP session/new returned no sessionId");
         if (!supportsMode(session, mode)) throw new Error(`Cursor ACP does not advertise required mode ${mode}`);
-        if (!supportsModel(session, expectedAcpModelId(model))) throw new Error(`Cursor ACP does not advertise required model ${model}`);
+        if (!supportsModel(session, expectedAcpModelId)) throw new Error(`Cursor ACP does not advertise required model ${model}`);
         this.#sessionId = sessionId;
         await this.#transport.request("session/set_mode", { sessionId, modeId: mode });
         this.#options.event({ type: "state", text: `session ${sessionId}` });

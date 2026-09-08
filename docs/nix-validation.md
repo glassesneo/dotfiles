@@ -14,6 +14,8 @@ Escalate only until the failure is reliably observable. Multiple layers are just
 
 Exact defaults, complete inventories, retired-name absence, disablement, and generated text are not automatically compatibility contracts. Retain them only when an active documented consumer commitment exists and no lower semantic validation expresses it. Prefer a real consumer parser or checker over a text snapshot.
 
+Confirming a chosen value once when changing configuration, by reviewing the source diff or a one-off evaluation, is distinct from admitting that value as a durable test expectation. Numeric acceptance criteria in a past design are historical decisions; they do not authorize a perpetual snapshot of current defaults. Test admission remains a `behavioral-test-design` Skill decision. See `docs/compatibility-policy.md`.
+
 A flake evaluation does not force every Home Manager, nix-darwin, or NixOS configuration, and realizing a derivation does not prove live runtime behavior. Record an unavailable platform check as unavailable rather than passed.
 
 ## Daily entrypoints

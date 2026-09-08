@@ -175,9 +175,9 @@ in
           );
       };
       pi = {
+        decisionUiContributionSource = base.config.myconfig.programs.pi-coding-agent.packageContributions.decision-ui.source;
         enabledQuestion = {
           packageSources = questionEnabled.config.programs.pi-coding-agent.settings.packages;
-          extensionPaths = questionEnabled.config.programs.pi-coding-agent.settings.extensions;
           modes = builtins.fromJSON (builtins.unsafeDiscardStringContext questionEnabled.config.home.file."${questionEnabled.config.home.homeDirectory}/.pi/agent/agent-modes.json".text);
         };
         disabledQuestion = {
@@ -195,8 +195,6 @@ in
         catalog = builtins.fromJSON (builtins.unsafeDiscardStringContext base.config.home.file."${base.config.home.homeDirectory}/.pi/agent/role-catalog.json".text);
         profiles = builtins.fromJSON (builtins.unsafeDiscardStringContext base.config.home.file."${base.config.home.homeDirectory}/.pi/agent/execution-profiles.json".text);
         orchestration = builtins.fromJSON (builtins.unsafeDiscardStringContext base.config.home.file."${base.config.home.homeDirectory}/.pi/agent/orchestration.json".text);
-        settings = base.config.programs.pi-coding-agent.settings;
-        models = builtins.fromJSON (builtins.unsafeDiscardStringContext base.config.home.file."${base.config.home.homeDirectory}/.pi/agent/models.json".text);
         extensionKeybindings = builtins.fromJSON (builtins.unsafeDiscardStringContext aliasOverride.config.home.file."${aliasOverride.config.home.homeDirectory}/.pi/agent/extension-keybindings.json".text);
         decisionUi = builtins.fromJSON (builtins.unsafeDiscardStringContext questionKeybindingOverride.config.home.file."${questionKeybindingOverride.config.home.homeDirectory}/.pi/agent/pi-decision-ui.json".text);
         navigationTmux = navigation.config.programs.tmux.extraConfig;

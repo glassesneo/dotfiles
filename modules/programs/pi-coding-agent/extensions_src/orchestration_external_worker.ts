@@ -66,6 +66,10 @@ export async function runExternalWorker(env: NodeJS.ProcessEnv = process.env, de
     const route = resolveExternalDriver(config, launch.executionProfile);
     const wait = dependencies.sleep ?? sleep;
     await waitForAgent(stateRoot, meshId, agentId, wait);
+    if (config.adapter === "cursor-acp") {
+        const persisted = await (dependencies.readAgentSnapshot ?? readAgentSnapshot)(stateRoot, meshId, agentId);
+        if (persisted.agent.cursorAcpModelId !== config.expectedAcpModelId) throw new Error("Cursor worker ACP model ID does not match the persisted agent record");
+    }
     const view = new TerminalView(agentId, agent, route.display);
     const event = (workerEvent: ExternalWorkerEvent) => view.event(workerEvent);
     const driver = dependencies.createDriver?.(config, event) ?? route.create(event);

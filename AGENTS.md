@@ -6,6 +6,7 @@
 - Flakes only read git-tracked files; stage new files before running builds or checks.
 - Use `config.sops.secrets.<key>.path` for secrets. Do not hardcode plaintext credentials.
 - Use Nix-native workflows for repository changes; avoid ad hoc package-management state outside the flake unless a local module explicitly requires it.
+- Use `docs/compatibility-policy.md` for repository-owned compatibility decisions.
 
 ## Reading Path
 

@@ -1,6 +1,5 @@
 import type { Usage } from "@earendil-works/pi-ai";
 import { canonicalJson } from "./agent_types.ts";
-import { cursorAcpModelId } from "./orchestration_cursor_acp.ts";
 import {
     isTerminalTask,
     promptSummary,
@@ -32,7 +31,7 @@ export type MinimalAgentTask = {
     agentId: string;
     taskId?: string;
     agent: string;
-    access?: "read" | "write";
+    access: "read" | "write";
     summary: string;
     agentState: AgentState;
     activity: AgentSnapshot["activity"];
@@ -48,7 +47,7 @@ export type MinimalSubmitResult = {
     agentId: string;
     taskId: string;
     agent: string;
-    access?: "read" | "write";
+    access: "read" | "write";
     agentState: AgentState;
     taskState: TaskState;
 };
@@ -94,24 +93,27 @@ export function projectModelVisibleStop(stop: AgentSnapshot["stop"], internalNam
     };
 }
 
-export function publicCapabilityFields(snapshot: AgentSnapshot): { agent: string; access?: "read" | "write" } {
+export function publicCapabilityFields(snapshot: AgentSnapshot): { agent: string; access: "read" | "write" } {
     const selector = snapshot.agent.roleSnapshot.selector;
-    return { agent: selector.agent, ...(selector.access ? { access: selector.access } : {}) };
+    return { agent: selector.agent, access: selector.access };
 }
 
 /** Exact configured model spellings emitted by Cursor and Codex adapters. */
-export function configuredModelDiagnosticNames(models: readonly string[]): string[] {
+export function configuredModelDiagnosticNames(models: readonly string[], cursorAcpModelId?: string): string[] {
     const names = new Set<string>();
     for (const model of models) {
         names.add(model);
         if (model.startsWith("cursor/")) {
             const alias = model.slice("cursor/".length);
             names.add(alias);
-            const acpModelId = cursorAcpModelId(alias);
-            if (acpModelId) names.add(acpModelId);
+            if (cursorAcpModelId) names.add(cursorAcpModelId);
         } else if (model.startsWith("codex/")) names.add(model.slice("codex/".length));
     }
     return [...names];
+}
+
+function internalDiagnosticNames(snapshot: AgentSnapshot): string[] {
+    return [snapshot.agent.role, snapshot.agent.selectedProfile, ...configuredModelDiagnosticNames(snapshot.agent.profileSnapshot.models, snapshot.agent.cursorAcpModelId)];
 }
 
 export function sanitizeModelVisibleError(value: unknown, internalNames: readonly string[] = []): string {
@@ -128,8 +130,7 @@ function modelVisibleError(snapshot: AgentSnapshot, candidate = snapshot.task?.r
     if (candidate === "route_exhausted" || candidate === "route_unavailable") return candidate;
     // Provider diagnostics and persisted exit reasons are operator details. Do not
     // let a provider/model or immutable internal name cross the model boundary.
-    const internalNames = [snapshot.agent.role, snapshot.agent.selectedProfile, ...configuredModelDiagnosticNames(snapshot.agent.profileSnapshot.models)];
-    return sanitizeModelVisibleError(candidate, internalNames);
+    return sanitizeModelVisibleError(candidate, internalDiagnosticNames(snapshot));
 }
 
 export function projectMinimalAgentTask(rawSnapshot: AgentSnapshot): MinimalAgentTask {
@@ -141,7 +142,7 @@ export function projectMinimalAgentTask(rawSnapshot: AgentSnapshot): MinimalAgen
         summary: task ? promptSummary(task.request.prompt) : "No task",
         agentState: snapshot.status.state,
         activity: snapshot.activity,
-        stop: projectModelVisibleStop(snapshot.stop, [snapshot.agent.role, snapshot.agent.selectedProfile, ...configuredModelDiagnosticNames(snapshot.agent.profileSnapshot.models)]),
+        stop: projectModelVisibleStop(snapshot.stop, internalDiagnosticNames(snapshot)),
     };
     if (task) {
         projected.taskId = task.request.taskId;
@@ -165,7 +166,7 @@ export function projectMinimalSubmitResult(
         agentId: projected.agentId,
         taskId: projected.taskId,
         agent: projected.agent,
-        ...(projected.access ? { access: projected.access } : {}),
+        access: projected.access,
         agentState: projected.agentState,
         taskState: projected.taskState,
     };
@@ -207,7 +208,7 @@ function statusWithoutRouteOrAccounting(status: AgentStatus, usageAvailable: boo
  * successful fallback remains operator-only via tool details, cards, and palette.
  */
 export function projectDebugSnapshot(rawSnapshot: AgentSnapshot): {
-    agent: { agentId: string; agent: string; access?: "read" | "write" };
+    agent: { agentId: string; agent: string; access: "read" | "write" };
     status: DebugAgentStatus;
     activity: AgentSnapshot["activity"];
     stop: ModelVisibleStop | null;
@@ -221,7 +222,7 @@ export function projectDebugSnapshot(rawSnapshot: AgentSnapshot): {
         },
         status: statusWithoutRouteOrAccounting(snapshot.status, snapshot.agent.capabilities.usage, modelVisibleError(snapshot)),
         activity: snapshot.activity,
-        stop: projectModelVisibleStop(snapshot.stop, [snapshot.agent.role, snapshot.agent.selectedProfile, ...configuredModelDiagnosticNames(snapshot.agent.profileSnapshot.models)]),
+        stop: projectModelVisibleStop(snapshot.stop, internalDiagnosticNames(snapshot)),
         task: modelVisibleTask(snapshot),
     };
 }

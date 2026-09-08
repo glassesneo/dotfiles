@@ -20,6 +20,7 @@ import {
 } from "../extensions_src/utilities/search_router.ts";
 import {
     parseWebSearchInput,
+    WEB_SEARCH_DEFAULT_MAX_RESULTS,
     type NormalizedSearchRequest,
     type SearchAdapter,
     type WebRetrievalRuntimeConfig,
@@ -56,7 +57,7 @@ function config(apiKeyFile: string | null = "/key"): WebRetrievalRuntimeConfig {
 }
 
 function request(overrides: Partial<NormalizedSearchRequest> = {}): NormalizedSearchRequest {
-    return { query: "web retrieval", intent: "auto", maxResults: 10, ...overrides };
+    return { query: "web retrieval", intent: "auto", maxResults: WEB_SEARCH_DEFAULT_MAX_RESULTS, ...overrides };
 }
 
 function adapter(id: SearchAdapter["id"], family: SearchAdapter["family"]): SearchAdapter {
@@ -97,7 +98,7 @@ void test("AC1: public input normalizes defaults and rejects material invalid sh
         objective: "compare sources",
         intent: "auto",
         includeDomains: ["example.com"],
-        maxResults: 10,
+        maxResults: WEB_SEARCH_DEFAULT_MAX_RESULTS,
     });
     assert.throws(() => parseWebSearchInput({ query: "ok", provider: "exa" }), /unknown keys/);
     assert.throws(() => parseWebSearchInput({ query: "ok", includeDomains: ["https://example.com"] }), /bare hostname/);
@@ -452,7 +453,7 @@ void test("AC5-AC7: adapters map native requests and retain safe URL results wit
     }
 });
 
-// Given omitted result count and an oversized formatted response, the tool caller observes one 10-result provider request, bounded model text with a private full-output path, and complete structured details.
+// Given omitted result count and an oversized formatted response, the tool caller observes one default-sized provider request, bounded model text with a private full-output path, and complete structured details.
 void test("search tool preserves one default-sized request and bounds only model-visible output", async () => {
     const tools: string[] = [];
     registerWebSearch({ registerTool(tool: { name: string }) { tools.push(tool.name); } } as unknown as ExtensionAPI, {
@@ -484,7 +485,7 @@ void test("search tool preserves one default-sized request and bounds only model
         });
         const result = await tool.execute("call", { query: "evidence" }, undefined, undefined, { cwd: "/work" } as never);
         assert.equal(searchCalls, 1);
-        assert.equal(providerRequest?.maxResults, 10);
+        assert.equal(providerRequest?.maxResults, WEB_SEARCH_DEFAULT_MAX_RESULTS);
         assert.deepEqual(result.details.response, response);
         assert.equal(result.details.truncation?.truncated, true);
         const visibleText = result.content[0]?.type === "text" ? result.content[0].text : "";

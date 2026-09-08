@@ -29,7 +29,7 @@ const capabilities = { nativeScreen: true, taskDelivery: true, taskCompletion: t
 const tmux = { socket: "/tmp/tmux", serverPid: "10", sessionId: "$1", sessionName: "mesh", windowId: "@1", paneId: "%1", windowName: "worker" };
 const profiles: ExecutionProfileConfig = { schemaVersion: 2, profiles: { "pi-default": { models: ["openai/test"], thinkingLevel: "medium", harness: "pi" }, "cursor-write": { models: ["cursor/test"], harness: "cursor-agent", harnessOptions: { mode: "agent", permissionPolicy: "allow-always", sandbox: "disabled", trustWorkspace: true, worktree: false } } } };
 const role = (name: string): RoleDefinition => ({ selector: { agent: name, access: "read" as const }, description: `Synthetic ${name}`, tools: ["read"], instructions: `Perform ${name}.`, contextPolicy: name === "prompt-only" ? "prompt-only" : "project", childExtensionContributions: name === "reviewer" ? [AGENT_ARTIFACT_EXTENSION] : [] });
-const catalog: RoleCatalog = { schemaVersion: 5, roles: Object.fromEntries(["explorer", "worker", "validator", "reviewer", "review-lens", "researcher", "searcher", "prompt-only"].map(name => [name, role(name)])) };
+const catalog: RoleCatalog = { schemaVersion: 6, roles: Object.fromEntries(["explorer", "worker", "validator", "reviewer", "review-lens", "researcher", "searcher", "prompt-only"].map(name => [name, role(name)])) };
 const callPolicy: CallPolicy = {
     modes: {
         ops: { targets: { worker: { profiles: ["pi-default"] }, reviewer: { profiles: ["pi-default"] }, researcher: { profiles: ["pi-default"] } } },
@@ -43,15 +43,15 @@ const callPolicy: CallPolicy = {
 function settledAgentCatalog(): RoleCatalog { return structuredClone(catalog); }
 function settledAgentDefinition(name: string): RoleDefinition { return structuredClone(catalog.roles[name] ?? role(name)); }
 function settledMeshGcConfig() { return { contextHeadroomTokens: 32768, periodicIntervalMs: 5000, activityHeartbeatMs: 2000, activityStaleMs: 10000, roles: Object.fromEntries(Object.keys(catalog.roles).map(name => [name, { collectAt: 2, retain: 1, pressureFloor: 0 }])) }; }
-async function ensurePolicyEpoch(stateRoot: string, meshId: string, input: { mode: string; roleSet: string[]; roles: Record<string, RoleDefinition> }) { const localCatalog = { schemaVersion: 5 as const, roles: input.roles }; const localPolicy: CallPolicy = { modes: { [input.mode]: { targets: Object.fromEntries(input.roleSet.map(name => [name, { profiles: ["pi-default"] }])) } }, roles: Object.fromEntries(Object.keys(input.roles).map(name => [name, callPolicy.roles[name] ?? { targets: {} }])) }; return ensurePolicyEpochStore(stateRoot, meshId, { mode: input.mode, catalog: localCatalog, profiles, callPolicy: localPolicy }); }
+async function ensurePolicyEpoch(stateRoot: string, meshId: string, input: { mode: string; roleSet: string[]; roles: Record<string, RoleDefinition> }) { const localCatalog = { schemaVersion: 6 as const, roles: input.roles }; const localPolicy: CallPolicy = { modes: { [input.mode]: { targets: Object.fromEntries(input.roleSet.map(name => [name, { profiles: ["pi-default"] }])) } }, roles: Object.fromEntries(Object.keys(input.roles).map(name => [name, callPolicy.roles[name] ?? { targets: {} }])) }; return ensurePolicyEpochStore(stateRoot, meshId, { mode: input.mode, catalog: localCatalog, profiles, callPolicy: localPolicy }); }
 function createTask(stateRoot: string, meshId: string, agentId: string, message: string) { return createTaskStore(stateRoot, meshId, agentId, message, `root:${meshId}`); }
 function buildLaunchEnvelope(input: { meshId: string; agentId: string; epochId: string; agent: string; mode: string; roleSet: string[]; catalog: RoleCatalog; childExtensions: Record<string, string[]> }): AgentLaunchEnvelope { const policy: CallPolicy = { modes: { [input.mode]: { targets: Object.fromEntries(input.roleSet.map(name => [name, { profiles: ["pi-default"] }])) } }, roles: Object.fromEntries(input.roleSet.map(name => [name, callPolicy.roles[name] ?? { targets: {} }])) }; const snapshot = buildPolicySnapshot({ mode: input.mode, catalog: input.catalog, profiles, callPolicy: policy }); const childExtensions = Object.fromEntries(Object.keys(snapshot.roles).map(name => [name, input.childExtensions[name] ?? []])); return buildLaunchEnvelopeV4({ meshId: input.meshId, agentId: input.agentId, epochId: input.epochId, role: input.agent, selectedProfile: "pi-default", snapshot, childExtensions }); }
 
 function runtimeConfig(stateRoot: string): OrchestrationConfig {
-    return { schemaVersion: 4, stateRoot, tmux: "/tmux", returnParentCommand: "/parent", parentNavigationHint: "parent", historyViewerExtension: "/history.ts", popupExtension: "/popup.ts", orchestrationExtension: "/orchestration.ts", childBridgeExtension: "/bridge.ts", harnesses: { pi: { adapter: "pi-native", command: "/pi" }, "cursor-agent": { adapter: "cursor-acp", command: "/cursor", workerCommand: "/node", workerEntrypoint: "/worker.ts" } }, natureHandleWords: ["May"], callPolicy, budgets, gc: settledMeshGcConfig() };
+    return { schemaVersion: 5, stateRoot, tmux: "/tmux", returnParentCommand: "/parent", parentNavigationHint: "parent", historyViewerExtension: "/history.ts", popupExtension: "/popup.ts", orchestrationExtension: "/orchestration.ts", childBridgeExtension: "/bridge.ts", harnesses: { pi: { adapter: "pi-native", command: "/pi" }, "cursor-agent": { adapter: "cursor-acp", command: "/cursor", workerCommand: "/node", workerEntrypoint: "/worker.ts", modelIds: { test: "synthetic-acp-model" } } }, natureHandleWords: ["May"], callPolicy, budgets, gc: settledMeshGcConfig() };
 }
 
-void test("schema-v4 orchestration policy accepts coherent role hysteresis and rejects unsafe thresholds", () => {
+void test("schema-v5 orchestration policy accepts coherent role hysteresis and rejects unsafe thresholds", () => {
     const config = runtimeConfig("/state");
     assert.deepEqual(validateOrchestrationConfig(config).gc, config.gc);
     const unsafe = structuredClone(config);
@@ -285,7 +285,7 @@ void test("nested waiters share completion passes and abort without stopping des
 // Admission: schemas cannot observe native Pi prompt composition; a stale role Skill injection would reintroduce optional ownership while a missing addition would drop mandatory instructions.
 // Given a prompt-only Pi child and a discovered disabled Skill, session startup appends only the synthetic role instructions, creates no route endpoint or management surface, and root routing cannot deliver a message.
 void test("prompt-only child receives only role instructions and remains isolated from routed management", async () => withRoot("mesh-prompt-only-runtime-", async root => {
-    const mesh = await initializeMesh(root, { rootSessionId: "root", recoverable: true, budgets }); const promptOnlyCatalog: RoleCatalog = { schemaVersion: 5, roles: { "prompt-only": settledAgentDefinition("prompt-only") } }; const promptOnlyPolicy: CallPolicy = { modes: { ops: { targets: { "prompt-only": { profiles: ["pi-default"] } } } }, roles: { "prompt-only": { targets: {} } } }; const epoch = await ensurePolicyEpochStore(root, mesh.meshId, { mode: "ops", catalog: promptOnlyCatalog, profiles, callPolicy: promptOnlyPolicy }); const promptOnly = await publishWorker(root, mesh.meshId, epoch.epochId, { role: "prompt-only" }); const files = await writeRuntimeFiles(root); const sessionFile = join(root, "prompt-only.jsonl"); await writeFile(sessionFile, ""); const env = { PI_MESH_ID: mesh.meshId, PI_MESH_AGENT_ID: promptOnly.agentId, PI_AGENT_RESOLVED_AGENT: promptOnly.envelopePath }; let tick!: () => Promise<void>; const pi = new PiMock(); const ctx = { sessionManager: { getSessionId: () => "prompt-only", getSessionFile: () => sessionFile, getBranch: () => [] }, ui: { setStatus() {}, notify() {} }, isIdle: () => true } as never; await registerOrchestration(pi as never, { ...files, env, setInterval(callback) { tick = async () => { await callback(); }; return "timer"; }, clearInterval() {} }); await pi.handlers.get("session_start")![0]!({}, ctx);
+    const mesh = await initializeMesh(root, { rootSessionId: "root", recoverable: true, budgets }); const promptOnlyCatalog: RoleCatalog = { schemaVersion: 6, roles: { "prompt-only": settledAgentDefinition("prompt-only") } }; const promptOnlyPolicy: CallPolicy = { modes: { ops: { targets: { "prompt-only": { profiles: ["pi-default"] } } } }, roles: { "prompt-only": { targets: {} } } }; const epoch = await ensurePolicyEpochStore(root, mesh.meshId, { mode: "ops", catalog: promptOnlyCatalog, profiles, callPolicy: promptOnlyPolicy }); const promptOnly = await publishWorker(root, mesh.meshId, epoch.epochId, { role: "prompt-only" }); const files = await writeRuntimeFiles(root); const sessionFile = join(root, "prompt-only.jsonl"); await writeFile(sessionFile, ""); const env = { PI_MESH_ID: mesh.meshId, PI_MESH_AGENT_ID: promptOnly.agentId, PI_AGENT_RESOLVED_AGENT: promptOnly.envelopePath }; let tick!: () => Promise<void>; const pi = new PiMock(); const ctx = { sessionManager: { getSessionId: () => "prompt-only", getSessionFile: () => sessionFile, getBranch: () => [] }, ui: { setStatus() {}, notify() {} }, isIdle: () => true } as never; await registerOrchestration(pi as never, { ...files, env, setInterval(callback) { tick = async () => { await callback(); }; return "timer"; }, clearInterval() {} }); await pi.handlers.get("session_start")![0]!({}, ctx);
     const prompt = await pi.handlers.get("before_agent_start")![0]!({ systemPrompt: "base", systemPromptOptions: { skills: [{ name: "retired-role-method", description: "legacy", filePath: "/legacy/SKILL.md", disableModelInvocation: true }] } }, ctx);
     assert.deepEqual(prompt, { systemPrompt: "base\n\nPerform prompt-only." });
     assert.deepEqual(pi.active, []); assert.equal(pi.tools.has("mesh_enable"), false); assert.equal(pi.handlers.has("context"), false); assert.equal(pi.eventHandlers.get("command-palette:contribution")?.length ?? 0, 0);
@@ -295,23 +295,23 @@ void test("prompt-only child receives only role instructions and remains isolate
 // Admission: OpenAI-compatible providers consume this schema directly, and some reject a root union without an explicit object type before any tool call can run; TypeBox validation alone cannot detect that wire incompatibility.
 // Given authorized role selectors, mesh_send exposes a top-level object schema to the provider while retaining its dependent selector validation.
 void test("mesh_send exposes a provider-compatible object schema with authorized capability selectors", async () => withRoot("mesh-profile-schema-", async root => {
-    const meshId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"; const agentId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"; const epochId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"; const snapshot = buildPolicySnapshot({ mode: "ops", catalog, profiles, callPolicy }); const envelope = buildLaunchEnvelopeV4({ meshId, agentId, epochId, role: "worker", selectedProfile: "pi-default", snapshot, childExtensions: Object.fromEntries(Object.keys(snapshot.roles).map(name => [name, []])) }); const epoch = { schemaVersion: 5, meshId, epochId, ...snapshot, policyDigest: envelope.policyDigest, createdAt: new Date().toISOString(), roleSet: Object.keys(snapshot.directTargets) } as const; const configPath = join(root, "orchestration.json"); await writeFile(configPath, JSON.stringify(runtimeConfig(root))); const deps = { configPath, env: {}, exec: absentTmux, activeCaller: () => caller(meshId, epoch as never, { identity: "agent:worker", agentId, envelope, endpointId: `agent:${agentId}` }) };
+    const meshId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"; const agentId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"; const epochId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"; const snapshot = buildPolicySnapshot({ mode: "ops", catalog, profiles, callPolicy }); const envelope = buildLaunchEnvelopeV4({ meshId, agentId, epochId, role: "worker", selectedProfile: "pi-default", snapshot, childExtensions: Object.fromEntries(Object.keys(snapshot.roles).map(name => [name, []])) }); const epoch = { schemaVersion: 6, meshId, epochId, ...snapshot, policyDigest: envelope.policyDigest, createdAt: new Date().toISOString(), roleSet: Object.keys(snapshot.directTargets) } as const; const configPath = join(root, "orchestration.json"); await writeFile(configPath, JSON.stringify(runtimeConfig(root))); const deps = { configPath, env: {}, exec: absentTmux, activeCaller: () => caller(meshId, epoch as never, { identity: "agent:worker", agentId, envelope, endpointId: `agent:${agentId}` }) };
     const tool = createMeshSendTool(deps, { worker: settledAgentDefinition("worker") }, { worker: ["pi-default"] }); assert.equal((tool.parameters as { type?: string }).type, "object"); assert.equal(Value.Check(tool.parameters, { agent: "worker", access: "read", message: "selected" }), true); assert.equal(Value.Check(tool.parameters, { agent: "worker", message: "omitted" }), false); assert.equal(Value.Check(tool.parameters, { agent: "worker", access: "write", message: "forged" }), false); assert.equal(Value.Check(tool.parameters, { agent: "worker", access: "read", profile: "pi-default", message: "internal" }), false);
 }));
 
 // Given malformed dependent selectors passed directly to execute, authorization rejects before endpoint lookup or any lifecycle persistence.
 void test("mesh_send rejects omitted, forged, and extra profiles before mutation", async () => withRoot("mesh-profile-premutation-", async root => {
     const mesh = await initializeMesh(root, { rootSessionId: "root", recoverable: true, budgets });
-    const localCatalog: RoleCatalog = { schemaVersion: 5, roles: { worker: settledAgentDefinition("worker"), explorer: settledAgentDefinition("explorer") } };
+    const localCatalog: RoleCatalog = { schemaVersion: 6, roles: { worker: settledAgentDefinition("worker"), explorer: settledAgentDefinition("explorer") } };
     const localPolicy: CallPolicy = { modes: { ops: { targets: { worker: { profiles: ["pi-default"] }, explorer: { profiles: ["pi-default"] } } } }, roles: {} };
     const epoch = await ensurePolicyEpochStore(root, mesh.meshId, { mode: "ops", catalog: localCatalog, profiles, callPolicy: localPolicy });
     const files = await writeRuntimeFiles(root); const deps = { ...files, env: {}, exec: absentTmux, activeCaller: () => caller(mesh.meshId, epoch, { identity: "mode:ops", sessionFile: join(root, "missing.jsonl") }) };
     const tool = createMeshSendTool(deps, localCatalog.roles, { worker: ["pi-default"], explorer: ["pi-default"] });
     for (const [params, pattern] of [
-        [{ agent: "worker", message: "omitted access" }, /not allowed/u],
+        [{ agent: "worker", message: "omitted access" }, /requires access/u],
         [{ agent: "worker", access: "write", message: "forged access" }, /not allowed/u],
         [{ agent: "explorer", access: "read", profile: "pi-default", message: "internal profile" }, /does not accept internal profiles/u],
-        [{ agent: "search", message: "root search" }, /not allowed/u],
+        [{ agent: "search", access: "read", message: "root search" }, /not allowed/u],
         [{ agent: "small-read", access: "read", message: "internal role" }, /not allowed/u],
     ] as const) await assert.rejects(tool.execute("invalid-selector", params, undefined, undefined, { cwd: root } as never), pattern);
     const paths = meshPaths(root, mesh.meshId); assert.deepEqual(await readdir(paths.reservations), []); assert.deepEqual(await readdir(paths.agents), []); assert.deepEqual(await readdir(paths.tasks), []);
@@ -321,7 +321,7 @@ void test("mesh_send rejects omitted, forged, and extra profiles before mutation
 void test("mesh_send reuse requires the current role and selected-profile edge", async () => withRoot("mesh-reuse-profile-edge-", async root => {
     const sessionFile = join(root, "root.jsonl"); await writeFile(sessionFile, ""); const mesh = await initializeMesh(root, { rootSessionId: "root", rootSessionFile: sessionFile, recoverable: true, budgets });
     const initial = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", roleSet: ["worker"], roles: { worker: settledAgentDefinition("worker") } }); const worker = await publishWorker(root, mesh.meshId, initial.epochId);
-    const narrowedPolicy: CallPolicy = { modes: { narrowed: { targets: { worker: { profiles: ["cursor-write"] } } } }, roles: {} }; const narrowed = await ensurePolicyEpochStore(root, mesh.meshId, { mode: "narrowed", catalog: { schemaVersion: 5, roles: { worker: settledAgentDefinition("worker") } }, profiles, callPolicy: narrowedPolicy });
+    const narrowedPolicy: CallPolicy = { modes: { narrowed: { targets: { worker: { profiles: ["cursor-write"] } } } }, roles: {} }; const narrowed = await ensurePolicyEpochStore(root, mesh.meshId, { mode: "narrowed", catalog: { schemaVersion: 6, roles: { worker: settledAgentDefinition("worker") } }, profiles, callPolicy: narrowedPolicy });
     await bindMeshEndpoint(root, mesh.meshId, { endpointId: `root:${mesh.meshId}`, kind: "root", harness: "pi", sessionId: "root", sessionFile }); const files = await writeRuntimeFiles(root); const deps = { ...files, env: {}, exec: absentTmux, activeCaller: () => caller(mesh.meshId, narrowed, { identity: "mode:narrowed", sessionFile }) }; const reservationsBefore = await readdir(meshPaths(root, mesh.meshId).reservations);
     await assert.rejects(createMeshSendTool(deps, { worker: settledAgentDefinition("worker") }, { worker: ["cursor-write"] }).execute("reuse-stale-profile", { agentId: worker.agentId, message: "must not reuse" }, undefined, undefined, { cwd: root } as never), /current immutable capability route/u);
     assert.deepEqual(await readdir(meshPaths(root, mesh.meshId).reservations), reservationsBefore); assert.deepEqual(await readdir(meshPaths(root, mesh.meshId).tasks), []);
@@ -396,7 +396,7 @@ void test("a fresh root session silently ignores retained v1 state without modif
 // Admission: partial activation would expose an inconsistent management surface before dispatch, and no schema or type guarantee observes Pi's runtime active set.
 // Given a fresh authorized child, when staged activation crosses Pi's active-tool and persistence boundary, all five peers become active atomically and either failure restores the exact prior set.
 void test("staged send activation is additive, complete, and rolls back activation or persistence failure", async () => {
-    const meshId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"; const epochId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"; const agentId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"; const snapshot = buildPolicySnapshot({ mode: "ops", catalog, profiles, callPolicy }); const envelope = buildLaunchEnvelopeV4({ meshId, agentId, epochId, role: "reviewer", selectedProfile: "pi-default", snapshot, childExtensions: Object.fromEntries(Object.keys(snapshot.roles).map(name => [name, []])) }); const epoch = { schemaVersion: 5, meshId, epochId, ...snapshot, policyDigest: envelope.policyDigest, createdAt: "2026-01-01T00:00:00.000Z", roleSet: Object.keys(snapshot.directTargets) } as const; const activeCaller = caller(meshId, epoch as never, { identity: "agent:reviewer", agentId, envelope, endpointId: `agent:${agentId}` });
+    const meshId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"; const epochId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"; const agentId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"; const snapshot = buildPolicySnapshot({ mode: "ops", catalog, profiles, callPolicy }); const envelope = buildLaunchEnvelopeV4({ meshId, agentId, epochId, role: "reviewer", selectedProfile: "pi-default", snapshot, childExtensions: Object.fromEntries(Object.keys(snapshot.roles).map(name => [name, []])) }); const epoch = { schemaVersion: 6, meshId, epochId, ...snapshot, policyDigest: envelope.policyDigest, createdAt: "2026-01-01T00:00:00.000Z", roleSet: Object.keys(snapshot.directTargets) } as const; const activeCaller = caller(meshId, epoch as never, { identity: "agent:reviewer", agentId, envelope, endpointId: `agent:${agentId}` });
     const pi = new PiMock(); for (const name of MESH_TOOLS) pi.registerTool({ name }); pi.active = ["read", "mesh_send", "mesh_report"]; let persisted = 0;
     await activateMeshPeerToolsForSend(pi as never, activeCaller, async () => { persisted += 1; });
     assert.deepEqual(MESH_TOOLS.filter(name => !pi.active.includes(name)), []); assert.equal(new Set(pi.active).size, pi.active.length); assert.equal(persisted, 1);
@@ -668,6 +668,21 @@ void test("native launch selects only the target role's extension contributions"
     assert.deepEqual(launchExtensions("worker"), childExtensions.worker);
 });
 
+// Admission: configuration validation proves mapping coverage at startup, but not that dispatch resolves the selected mapping before consuming capacity.
+// Given a selected Cursor profile whose mapping is absent, mesh_send rejects before persisting any reservation, agent, or task.
+void test("Cursor mapping resolution rejects before capacity reservation", async () => withRoot("mesh-cursor-mapping-", async root => {
+    const mesh = await initializeMesh(root, { rootSessionId: "root", recoverable: true, budgets });
+    const localCatalog: RoleCatalog = { schemaVersion: 6, roles: { worker: settledAgentDefinition("worker") } };
+    const localPolicy: CallPolicy = { modes: { ops: { targets: { worker: { profiles: ["cursor-write"] } } } }, roles: {} };
+    const epoch = await ensurePolicyEpochStore(root, mesh.meshId, { mode: "ops", catalog: localCatalog, profiles, callPolicy: localPolicy });
+    const files = await writeRuntimeFiles(root); const rawConfig = JSON.parse(await readFile(files.configPath, "utf8")) as OrchestrationConfig; rawConfig.harnesses["cursor-agent"]!.modelIds = {}; await writeFile(files.configPath, JSON.stringify(rawConfig));
+    const sessionFile = join(root, "root.jsonl"); await writeFile(sessionFile, ""); await bindMeshEndpoint(root, mesh.meshId, { endpointId: `root:${mesh.meshId}`, kind: "root", harness: "pi", sessionId: "root", sessionFile });
+    const deps = { ...files, env: {}, exec: absentTmux, activeCaller: () => caller(mesh.meshId, epoch, { identity: "mode:ops", sessionFile }) };
+    const ctx = { cwd: root, sessionManager: { getSessionId: () => "root", getSessionFile: () => sessionFile } } as never;
+    await assert.rejects(createMeshSendTool(deps, localCatalog.roles, { worker: ["cursor-write"] }).execute("missing-model-id", { agent: "worker", access: "read", message: "work" }, undefined, undefined, ctx), /mapping is unavailable/u);
+    const paths = meshPaths(root, mesh.meshId); assert.deepEqual(await readdir(paths.reservations), []); assert.deepEqual(await readdir(paths.agents), []); assert.deepEqual(await readdir(paths.tasks), []);
+}));
+
 // Admitted contract: given complete Pi candidate preflight exhaustion, mesh_send fails before creating durable agent or task state and releases the reservation.
 void test("Pi launch preflight exhaustion fails mesh_send without durable agent or task state", async () => withRoot("mesh-preflight-exhaustion-", async root => {
     const mesh = await initializeMesh(root, { rootSessionId: "root", recoverable: true, budgets });
@@ -687,8 +702,8 @@ void test("Pi launch preflight exhaustion fails mesh_send without durable agent 
     assert.equal(reservation.state, "released");
 }));
 
-function capabilityRole(agent: string, access?: "read" | "write", extras: Partial<RoleDefinition> = {}): RoleDefinition {
-    return { selector: { agent, ...(access ? { access } : {}) }, description: `Synthetic ${agent}`, tools: extras.tools ?? ["read"], instructions: extras.instructions ?? `Perform ${agent}.`, contextPolicy: extras.contextPolicy ?? (agent === "perspective" ? "prompt-only" : "project"), childExtensionContributions: extras.childExtensionContributions ?? [] };
+function capabilityRole(agent: string, access: "read" | "write" = "read", extras: Partial<RoleDefinition> = {}): RoleDefinition {
+    return { selector: { agent, access }, description: `Synthetic ${agent}`, tools: extras.tools ?? ["read"], instructions: extras.instructions ?? `Perform ${agent}.`, contextPolicy: extras.contextPolicy ?? (agent === "perspective" ? "prompt-only" : "project"), childExtensionContributions: extras.childExtensionContributions ?? [] };
 }
 
 // Admission: schema and execute must share one selector resolver; accepting an internal role name, unauthorized write, or root search would launch the wrong immutable edge.
@@ -700,8 +715,8 @@ void test("mesh_send publishes public selectors and rejects unauthorized write, 
         "standard-read": capabilityRole("standard", "read"),
         "advanced-read": capabilityRole("advanced", "read"),
         research: capabilityRole("research"),
-        perspective: capabilityRole("perspective", undefined, { tools: [], contextPolicy: "prompt-only" }),
-        search: capabilityRole("search", undefined, { tools: [] }),
+        perspective: capabilityRole("perspective", "read", { tools: [], contextPolicy: "prompt-only" }),
+        search: capabilityRole("search", "read", { tools: [] }),
     };
     const inactive = () => undefined;
     const deps = { configPath: "/missing", env: {}, exec: absentTmux, activeCaller: inactive } as OrchestrationDependencies;
@@ -713,15 +728,15 @@ void test("mesh_send publishes public selectors and rejects unauthorized write, 
         perspective: roles.perspective!,
     }, { "small-read": ["pi-default"], "standard-read": ["pi-default"], "advanced-read": ["pi-default"], research: ["pi-default"], perspective: ["pi-default"] });
     assert.equal(Value.Check(recon.parameters, { agent: "small", access: "read", message: "inspect" }), true);
-    assert.equal(Value.Check(recon.parameters, { agent: "research", message: "sources" }), true);
-    assert.equal(Value.Check(recon.parameters, { agent: "perspective", message: "reframe" }), true);
+    assert.equal(Value.Check(recon.parameters, { agent: "research", access: "read", message: "sources" }), true);
+    assert.equal(Value.Check(recon.parameters, { agent: "perspective", access: "read", message: "reframe" }), true);
     assert.equal(Value.Check(recon.parameters, { agent: "small-read", access: "read", message: "internal role" }), false);
     assert.equal(Value.Check(recon.parameters, { agent: "small", access: "write", message: "upgrade" }), false);
-    assert.equal(Value.Check(recon.parameters, { agent: "search", message: "web" }), false);
+    assert.equal(Value.Check(recon.parameters, { agent: "search", access: "read", message: "web" }), false);
     assert.equal(Value.Check(recon.parameters, { agent: "small", message: "missing access" }), false);
     const advanced = createMeshSendTool(deps, { "small-read": roles["small-read"]!, "standard-read": roles["standard-read"]!, research: roles.research!, perspective: roles.perspective! }, { "small-read": ["pi-default"], "standard-read": ["pi-default"], research: ["pi-default"], perspective: ["pi-default"] });
     assert.equal(Value.Check(advanced.parameters, { agent: "small", access: "write", message: "child write" }), false);
     const research = createMeshSendTool(deps, { search: roles.search! }, { search: ["pi-default"] });
-    assert.equal(Value.Check(research.parameters, { agent: "search", message: "web" }), true);
-    assert.equal(Value.Check(research.parameters, { agent: "search", access: "read", message: "web" }), false);
+    assert.equal(Value.Check(research.parameters, { agent: "search", access: "read", message: "web" }), true);
+    assert.equal(Value.Check(research.parameters, { agent: "search", message: "web" }), false);
 });

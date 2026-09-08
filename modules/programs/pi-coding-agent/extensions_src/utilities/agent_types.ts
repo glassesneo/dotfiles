@@ -4,7 +4,7 @@ import { validateExecutionProfile as validateProfile, validateExecutionProfileCo
 export type AgentHarness = "pi" | "cursor-agent" | "codex";
 export type ContextPolicy = "project" | "prompt-only";
 export type CapabilityAccess = "read" | "write";
-export interface RoleSelector { agent: string; access?: CapabilityAccess }
+export interface RoleSelector { agent: string; access: CapabilityAccess }
 export interface RoleDefinition {
     selector: RoleSelector;
     description: string;
@@ -14,7 +14,7 @@ export interface RoleDefinition {
     childExtensionContributions: string[];
 }
 export type AgentDefinition = RoleDefinition;
-export interface RoleCatalog { schemaVersion: 5; roles: Record<string, RoleDefinition> }
+export interface RoleCatalog { schemaVersion: 6; roles: Record<string, RoleDefinition> }
 export type AgentCatalog = RoleCatalog;
 export interface TargetPolicy { profiles: string[] }
 export interface CallerPolicy { targets: Record<string, TargetPolicy> }
@@ -22,8 +22,8 @@ export interface CallPolicy { modes: Record<string, CallerPolicy>; roles: Record
 export interface MeshBudgets { maxLiveAgents: number; maxConcurrentTasks: number; maxTasksPerMesh: number }
 export interface RoleGcPolicy { collectAt: number; retain: number; pressureFloor: number }
 export interface MeshGcConfig { contextHeadroomTokens: number; periodicIntervalMs: number; activityHeartbeatMs: number; activityStaleMs: number; roles: Record<string, RoleGcPolicy> }
-export interface HarnessRuntimeConfig { adapter: "pi-native" | "cursor-acp" | "codex-acp"; command: string; workerCommand?: string; workerEntrypoint?: string; bridgeReadyTimeoutMs?: number }
-export interface OrchestrationConfig { schemaVersion: 4; stateRoot: string; tmux: string; returnParentCommand: string; parentNavigationHint: string; historyViewerExtension: string; popupExtension: string; orchestrationExtension: string; childBridgeExtension: string; harnesses: Record<string, HarnessRuntimeConfig>; natureHandleWords: string[]; callPolicy: CallPolicy; budgets: MeshBudgets; gc: MeshGcConfig }
+export interface HarnessRuntimeConfig { adapter: "pi-native" | "cursor-acp" | "codex-acp"; command: string; workerCommand?: string; workerEntrypoint?: string; bridgeReadyTimeoutMs?: number; modelIds?: Record<string, string> }
+export interface OrchestrationConfig { schemaVersion: 5; stateRoot: string; tmux: string; returnParentCommand: string; parentNavigationHint: string; historyViewerExtension: string; popupExtension: string; orchestrationExtension: string; childBridgeExtension: string; harnesses: Record<string, HarnessRuntimeConfig>; natureHandleWords: string[]; callPolicy: CallPolicy; budgets: MeshBudgets; gc: MeshGcConfig }
 export interface PolicySnapshot {
     mode: string;
     directTargets: Record<string, TargetPolicy>;
@@ -31,11 +31,11 @@ export interface PolicySnapshot {
     profiles: Record<string, ExecutionProfile>;
     policies: Record<string, CallerPolicy>;
 }
-export const LAUNCH_ENVELOPE_SCHEMA_VERSION = 6 as const;
-export const LAUNCH_ENVELOPE_MARKER = "pi-mesh-role-launch-v6";
+export const LAUNCH_ENVELOPE_SCHEMA_VERSION = 7 as const;
+export const LAUNCH_ENVELOPE_MARKER = "pi-mesh-role-launch-v7";
 export interface AgentLaunchEnvelope {
-    schemaVersion: 6;
-    marker: "pi-mesh-role-launch-v6";
+    schemaVersion: 7;
+    marker: "pi-mesh-role-launch-v7";
     meshId: string;
     agentId: string;
     epochId: string;
@@ -78,22 +78,17 @@ export const validateExecutionProfiles = validateExecutionProfileConfig;
 
 export function validateRoleDefinition(name: string, value: unknown, label = `roles.${name}`): RoleDefinition {
     const raw = object(value, label); exact(raw, ["selector", "description", "tools", "instructions", "contextPolicy", "childExtensionContributions"], [], label);
-    const selectorRaw = object(raw.selector, `${label}.selector`); exact(selectorRaw, ["agent"], ["access"], `${label}.selector`);
-    if (selectorRaw.access !== undefined && selectorRaw.access !== "read" && selectorRaw.access !== "write") throw new Error(`${label}.selector.access is invalid`);
-    const selectorAgent = text(selectorRaw.agent, `${label}.selector.agent`);
-    const requiresAccess = ["small", "standard", "advanced"].includes(selectorAgent);
-    const forbidsAccess = ["research", "perspective", "search"].includes(selectorAgent);
-    if (requiresAccess && selectorRaw.access === undefined) throw new Error(`${label}.selector.access is required for ${selectorAgent}`);
-    if (forbidsAccess && selectorRaw.access !== undefined) throw new Error(`${label}.selector.access must be omitted for ${selectorAgent}`);
-    const selector: RoleSelector = { agent: selectorAgent, ...(selectorRaw.access === undefined ? {} : { access: selectorRaw.access }) };
+    const selectorRaw = object(raw.selector, `${label}.selector`); exact(selectorRaw, ["agent", "access"], [], `${label}.selector`);
+    if (selectorRaw.access !== "read" && selectorRaw.access !== "write") throw new Error(`${label}.selector.access is invalid`);
+    const selector: RoleSelector = { agent: text(selectorRaw.agent, `${label}.selector.agent`), access: selectorRaw.access };
     if (raw.contextPolicy !== "project" && raw.contextPolicy !== "prompt-only") throw new Error(`${label}.contextPolicy is invalid`);
     return { selector, description: text(raw.description, `${label}.description`), tools: strings(raw.tools, `${label}.tools`), instructions: text(raw.instructions, `${label}.instructions`), contextPolicy: raw.contextPolicy, childExtensionContributions: strings(raw.childExtensionContributions, `${label}.childExtensionContributions`) };
 }
 export const validateAgentDefinition = validateRoleDefinition;
 export const validateAgentDefinitionSnapshot = validateRoleDefinition;
 export function validateRoleCatalog(value: unknown): RoleCatalog {
-    const root = object(value, "role catalog"); exact(root, ["schemaVersion", "roles"], [], "role catalog"); if (root.schemaVersion !== 5) throw new Error("Unsupported role catalog schemaVersion");
-    return { schemaVersion: 5, roles: Object.fromEntries(Object.entries(object(root.roles, "roles")).map(([name, role]) => [text(name, "role name"), validateRoleDefinition(name, role)])) };
+    const root = object(value, "role catalog"); exact(root, ["schemaVersion", "roles"], [], "role catalog"); if (root.schemaVersion !== 6) throw new Error("Unsupported role catalog schemaVersion");
+    return { schemaVersion: 6, roles: Object.fromEntries(Object.entries(object(root.roles, "roles")).map(([name, role]) => [text(name, "role name"), validateRoleDefinition(name, role)])) };
 }
 export const validateAgentCatalog = validateRoleCatalog;
 
@@ -101,18 +96,18 @@ export function validateTargetPolicy(value: unknown, label: string): TargetPolic
 export function validateCallerPolicy(value: unknown, label: string): CallerPolicy { const raw = object(value, label); exact(raw, ["targets"], [], label); return { targets: Object.fromEntries(Object.entries(object(raw.targets, `${label}.targets`)).map(([name, target]) => [text(name, `${label} target name`), validateTargetPolicy(target, `${label}.targets.${name}`)])) }; }
 function validateCallPolicy(value: unknown): CallPolicy { const raw = object(value, "callPolicy"); exact(raw, ["modes", "roles"], [], "callPolicy"); return { modes: Object.fromEntries(Object.entries(object(raw.modes, "callPolicy.modes")).map(([name, policy]) => [name, validateCallerPolicy(policy, `callPolicy.modes.${name}`)])), roles: Object.fromEntries(Object.entries(object(raw.roles, "callPolicy.roles")).map(([name, policy]) => [name, validateCallerPolicy(policy, `callPolicy.roles.${name}`)])) }; }
 export function validateOrchestrationConfig(value: unknown): OrchestrationConfig {
-    const root = object(value, "orchestration config"); exact(root, ["schemaVersion", "stateRoot", "tmux", "returnParentCommand", "parentNavigationHint", "historyViewerExtension", "popupExtension", "orchestrationExtension", "childBridgeExtension", "harnesses", "natureHandleWords", "callPolicy", "budgets", "gc"], [], "orchestration config"); if (root.schemaVersion !== 4) throw new Error("Unsupported orchestration config schemaVersion");
+    const root = object(value, "orchestration config"); exact(root, ["schemaVersion", "stateRoot", "tmux", "returnParentCommand", "parentNavigationHint", "historyViewerExtension", "popupExtension", "orchestrationExtension", "childBridgeExtension", "harnesses", "natureHandleWords", "callPolicy", "budgets", "gc"], [], "orchestration config"); if (root.schemaVersion !== 5) throw new Error("Unsupported orchestration config schemaVersion");
     const harnesses: Record<string, HarnessRuntimeConfig> = {};
-    for (const [name, itemValue] of Object.entries(object(root.harnesses, "harnesses"))) { const item = object(itemValue, `harnesses.${name}`); exact(item, ["adapter", "command"], ["workerCommand", "workerEntrypoint", "bridgeReadyTimeoutMs"], `harnesses.${name}`); if (item.adapter !== "pi-native" && item.adapter !== "cursor-acp" && item.adapter !== "codex-acp") throw new Error(`harnesses.${name}.adapter is invalid`); harnesses[name] = { adapter: item.adapter, command: text(item.command, `harnesses.${name}.command`), ...(item.workerCommand === undefined ? {} : { workerCommand: text(item.workerCommand, `harnesses.${name}.workerCommand`) }), ...(item.workerEntrypoint === undefined ? {} : { workerEntrypoint: text(item.workerEntrypoint, `harnesses.${name}.workerEntrypoint`) }), ...(item.bridgeReadyTimeoutMs === undefined ? {} : { bridgeReadyTimeoutMs: positive(item.bridgeReadyTimeoutMs, `harnesses.${name}.bridgeReadyTimeoutMs`) }) }; }
+    for (const [name, itemValue] of Object.entries(object(root.harnesses, "harnesses"))) { const item = object(itemValue, `harnesses.${name}`); const cursor = item.adapter === "cursor-acp"; exact(item, ["adapter", "command", ...(cursor ? ["modelIds"] : [])], ["workerCommand", "workerEntrypoint", "bridgeReadyTimeoutMs"], `harnesses.${name}`); if (item.adapter !== "pi-native" && item.adapter !== "cursor-acp" && item.adapter !== "codex-acp") throw new Error(`harnesses.${name}.adapter is invalid`); const modelIds = cursor ? Object.fromEntries(Object.entries(object(item.modelIds, `harnesses.${name}.modelIds`)).map(([alias, modelId]) => [text(alias, `harnesses.${name}.modelIds alias`), text(modelId, `harnesses.${name}.modelIds.${alias}`)])) : undefined; harnesses[name] = { adapter: item.adapter, command: text(item.command, `harnesses.${name}.command`), ...(item.workerCommand === undefined ? {} : { workerCommand: text(item.workerCommand, `harnesses.${name}.workerCommand`) }), ...(item.workerEntrypoint === undefined ? {} : { workerEntrypoint: text(item.workerEntrypoint, `harnesses.${name}.workerEntrypoint`) }), ...(item.bridgeReadyTimeoutMs === undefined ? {} : { bridgeReadyTimeoutMs: positive(item.bridgeReadyTimeoutMs, `harnesses.${name}.bridgeReadyTimeoutMs`) }), ...(modelIds ? { modelIds } : {}) }; }
     const budgetRaw = object(root.budgets, "budgets"); exact(budgetRaw, ["maxLiveAgents", "maxConcurrentTasks", "maxTasksPerMesh"], [], "budgets"); const budgets = { maxLiveAgents: positive(budgetRaw.maxLiveAgents, "budgets.maxLiveAgents"), maxConcurrentTasks: positive(budgetRaw.maxConcurrentTasks, "budgets.maxConcurrentTasks"), maxTasksPerMesh: positive(budgetRaw.maxTasksPerMesh, "budgets.maxTasksPerMesh") }; if (budgets.maxConcurrentTasks > budgets.maxTasksPerMesh) throw new Error("maxConcurrentTasks must not exceed maxTasksPerMesh");
     const gcRaw = object(root.gc, "gc"); exact(gcRaw, ["contextHeadroomTokens", "periodicIntervalMs", "activityHeartbeatMs", "activityStaleMs", "roles"], [], "gc"); const roles = Object.fromEntries(Object.entries(object(gcRaw.roles, "gc.roles")).map(([name, itemValue]) => { const item = object(itemValue, `gc.roles.${name}`); exact(item, ["collectAt", "retain", "pressureFloor"], [], `gc.roles.${name}`); const policy = { collectAt: positive(item.collectAt, `gc.roles.${name}.collectAt`), retain: nonnegative(item.retain, `gc.roles.${name}.retain`), pressureFloor: nonnegative(item.pressureFloor, `gc.roles.${name}.pressureFloor`) }; if (policy.collectAt < policy.retain || policy.retain < policy.pressureFloor) throw new Error(`gc.roles.${name} hysteresis is invalid`); return [name, policy]; }));
     const gc = { contextHeadroomTokens: positive(gcRaw.contextHeadroomTokens, "gc.contextHeadroomTokens"), periodicIntervalMs: positive(gcRaw.periodicIntervalMs, "gc.periodicIntervalMs"), activityHeartbeatMs: positive(gcRaw.activityHeartbeatMs, "gc.activityHeartbeatMs"), activityStaleMs: positive(gcRaw.activityStaleMs, "gc.activityStaleMs"), roles }; if (gc.activityStaleMs <= gc.activityHeartbeatMs) throw new Error("activityStaleMs must exceed activityHeartbeatMs");
-    return { schemaVersion: 4, stateRoot: text(root.stateRoot, "stateRoot"), tmux: text(root.tmux, "tmux"), returnParentCommand: text(root.returnParentCommand, "returnParentCommand"), parentNavigationHint: text(root.parentNavigationHint, "parentNavigationHint"), historyViewerExtension: text(root.historyViewerExtension, "historyViewerExtension"), popupExtension: text(root.popupExtension, "popupExtension"), orchestrationExtension: text(root.orchestrationExtension, "orchestrationExtension"), childBridgeExtension: text(root.childBridgeExtension, "childBridgeExtension"), harnesses, natureHandleWords: strings(root.natureHandleWords, "natureHandleWords"), callPolicy: validateCallPolicy(root.callPolicy), budgets, gc };
+    return { schemaVersion: 5, stateRoot: text(root.stateRoot, "stateRoot"), tmux: text(root.tmux, "tmux"), returnParentCommand: text(root.returnParentCommand, "returnParentCommand"), parentNavigationHint: text(root.parentNavigationHint, "parentNavigationHint"), historyViewerExtension: text(root.historyViewerExtension, "historyViewerExtension"), popupExtension: text(root.popupExtension, "popupExtension"), orchestrationExtension: text(root.orchestrationExtension, "orchestrationExtension"), childBridgeExtension: text(root.childBridgeExtension, "childBridgeExtension"), harnesses, natureHandleWords: strings(root.natureHandleWords, "natureHandleWords"), callPolicy: validateCallPolicy(root.callPolicy), budgets, gc };
 }
 export const validateDelegationConfig = validateOrchestrationConfig;
 
 export type AuthorizedSelector = { role: string; selector: RoleSelector; definition: RoleDefinition; profile: string };
-function selectorKey(selector: RoleSelector): string { return `${selector.agent}\u0000${selector.access ?? ""}`; }
+function selectorKey(selector: RoleSelector): string { return `${selector.agent}\u0000${selector.access}`; }
 export function resolveAuthorizedSelectors(policy: CallerPolicy, roles: Readonly<Record<string, RoleDefinition>>): AuthorizedSelector[] {
     const seen = new Map<string, string>();
     return Object.entries(policy.targets).map(([role, edge]) => {
@@ -127,7 +122,7 @@ export function resolveAuthorizedSelectors(policy: CallerPolicy, roles: Readonly
 }
 
 export function publicCapability(selector: RoleSelector): string {
-    return selector.access ? `${selector.agent}/${selector.access}` : selector.agent;
+    return `${selector.agent}/${selector.access}`;
 }
 
 function policyEdges(callPolicy: CallPolicy): Array<{ caller?: string; target: string; profiles: string[] }> { return [...Object.values(callPolicy.modes).flatMap(policy => Object.entries(policy.targets).map(([target, edge]) => ({ target, profiles: edge.profiles }))), ...Object.entries(callPolicy.roles).flatMap(([caller, policy]) => Object.entries(policy.targets).map(([target, edge]) => ({ caller, target, profiles: edge.profiles })))]; }
@@ -138,6 +133,7 @@ export function validateOrchestrationReferences(config: OrchestrationConfig, cat
     const edges = policyEdges(config.callPolicy);
     for (const policy of [...Object.values(config.callPolicy.modes), ...Object.values(config.callPolicy.roles)]) resolveAuthorizedSelectors(policy, catalog.roles);
     for (const edge of edges) { if (!knownRoles.has(edge.target)) throw new Error(`callPolicy references unknown role target: ${edge.target}`); const unknown = edge.profiles.filter(profile => !knownProfiles.has(profile)); if (unknown.length) throw new Error(`callPolicy edge to ${edge.target} references unknown profiles: ${unknown.join(", ")}`); }
+    for (const [name, profile] of Object.entries(profiles.profiles)) if (profile.harness === "cursor-agent") { const alias = profile.models[0]!.slice("cursor/".length); if (!config.harnesses[profile.harness]?.modelIds?.[alias]) throw new Error(`Cursor profile ${name} has no configured ACP model ID for ${alias}`); }
     for (const [mode, policy] of Object.entries(config.callPolicy.modes)) if (Object.keys(policy.targets).some(target => catalog.roles[target]?.selector.agent === "search")) throw new Error(`search capability cannot be a root target in mode ${mode}`);
     for (const [caller, policy] of Object.entries(config.callPolicy.roles)) if (caller !== "research" && Object.keys(policy.targets).some(target => catalog.roles[target]?.selector.agent === "search")) throw new Error(`search capability may only be targeted by research, not ${caller}`);
     const incoming = (role: string) => [...new Set(edges.filter(edge => edge.target === role).flatMap(edge => edge.profiles))];
@@ -181,7 +177,7 @@ export function validatePolicySnapshotReferences(snapshot: PolicySnapshot, scope
 }
 export function projectPolicyClosure(role: string, snapshot: PolicySnapshot, authorizedProfiles?: readonly string[]): PolicySnapshot {
     validatePolicySnapshotReferences(snapshot, "child");
-    const catalog: RoleCatalog = { schemaVersion: 5, roles: snapshot.roles }; const callPolicy: CallPolicy = { modes: {}, roles: snapshot.policies }; const names = closureFrom([role], catalog, callPolicy); const roles = Object.fromEntries(names.map(name => [name, structuredClone(snapshot.roles[name]!) ])); const policies = Object.fromEntries(names.map(name => [name, structuredClone(snapshot.policies[name] ?? { targets: {} })])); const profiles = [...(authorizedProfiles ?? snapshot.directTargets[role]?.profiles ?? [])]; if (!profiles.length) throw new Error(`Role ${role} has no authorized execution profiles`); const directTargets = { [role]: { profiles } }; const profileNames = profilesFor(names, directTargets, policies); const projected = { mode: snapshot.mode, directTargets, roles, profiles: Object.fromEntries(profileNames.map(name => { const profile = snapshot.profiles[name]; if (!profile) throw new Error(`Profile ${name} is outside policy snapshot`); return [name, structuredClone(profile)]; })), policies }; validatePolicySnapshotReferences(projected, "child"); return projected;
+    const catalog: RoleCatalog = { schemaVersion: 6, roles: snapshot.roles }; const callPolicy: CallPolicy = { modes: {}, roles: snapshot.policies }; const names = closureFrom([role], catalog, callPolicy); const roles = Object.fromEntries(names.map(name => [name, structuredClone(snapshot.roles[name]!) ])); const policies = Object.fromEntries(names.map(name => [name, structuredClone(snapshot.policies[name] ?? { targets: {} })])); const profiles = [...(authorizedProfiles ?? snapshot.directTargets[role]?.profiles ?? [])]; if (!profiles.length) throw new Error(`Role ${role} has no authorized execution profiles`); const directTargets = { [role]: { profiles } }; const profileNames = profilesFor(names, directTargets, policies); const projected = { mode: snapshot.mode, directTargets, roles, profiles: Object.fromEntries(profileNames.map(name => { const profile = snapshot.profiles[name]; if (!profile) throw new Error(`Profile ${name} is outside policy snapshot`); return [name, structuredClone(profile)]; })), policies }; validatePolicySnapshotReferences(projected, "child"); return projected;
 }
 export function validateLaunchEnvelope(value: unknown): AgentLaunchEnvelope {
     const root = object(value, "agent launch envelope"); exact(root, ["schemaVersion", "marker", "meshId", "agentId", "epochId", "role", "selectedProfile", "initialCandidateIndex", "selfRole", "executionProfile", "directTargets", "roles", "profiles", "policies", "policyDigest", "childExtensions"], [], "agent launch envelope"); if (root.schemaVersion !== LAUNCH_ENVELOPE_SCHEMA_VERSION || root.marker !== LAUNCH_ENVELOPE_MARKER) throw new Error("Unsupported agent launch envelope schema or marker");

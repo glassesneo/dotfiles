@@ -4,7 +4,7 @@ import { piLaunchDescriptor } from "./orchestration_pi.ts";
 import type { HarnessRuntimeConfig, NativeCapabilities, SubagentRuntimeConfig } from "./orchestration_types.ts";
 
 export interface NativeLaunchDescriptor { command: string; args: string[]; env: Record<string, string> }
-export interface HarnessLaunchInput { meshId: string; agentId: string; agentDirectory: string; role: string; taskPath: string; launchEnvelope: string; epochSnapshot: AgentLaunchEnvelope; cwd: string }
+export interface HarnessLaunchInput { meshId: string; agentId: string; agentDirectory: string; role: string; taskPath: string; launchEnvelope: string; epochSnapshot: AgentLaunchEnvelope; cwd: string; resolvedCursorAcpModelId?: string }
 export interface HarnessAdapter { kind: HarnessRuntimeConfig["adapter"]; capabilities: NativeCapabilities; validate(profile: ExecutionProfile, harnessId: string): void; launch(config: SubagentRuntimeConfig, harness: HarnessRuntimeConfig, input: HarnessLaunchInput): NativeLaunchDescriptor }
 
 const expectedCodex = { mode: "read-only", permissionPolicy: "reject", webSearch: "cached" } as const;
@@ -39,8 +39,16 @@ function externalLaunch(harness: HarnessRuntimeConfig, input: HarnessLaunchInput
 }
 
 const pi: HarnessAdapter = { kind: "pi-native", capabilities: { nativeScreen: true, taskDelivery: true, taskCompletion: true, taskCancellation: true, usage: true, interactiveInterventions: true, terminalHistory: true }, validate: piOptions, launch: (config, _harness, input) => piLaunchDescriptor(config, input) };
-const cursor: HarnessAdapter = { kind: "cursor-acp", capabilities: externalCapabilities, validate: cursorOptions, launch(_config, harness, input) { const envelope = selected(input); cursorOptions(envelope.executionProfile, envelope.executionProfile.harness); const options = envelope.executionProfile.harnessOptions!; return externalLaunch(harness, input, { adapter: "cursor-acp", command: harness.command, cwd: input.cwd, mode: String(options.mode), permissionPolicy: String(options.permissionPolicy) }); } };
+const cursor: HarnessAdapter = { kind: "cursor-acp", capabilities: externalCapabilities, validate: cursorOptions, launch(_config, harness, input) { const envelope = selected(input); cursorOptions(envelope.executionProfile, envelope.executionProfile.harness); const options = envelope.executionProfile.harnessOptions!; if (!input.resolvedCursorAcpModelId) throw new Error("Cursor launch requires a resolved ACP model ID"); return externalLaunch(harness, input, { adapter: "cursor-acp", command: harness.command, cwd: input.cwd, expectedAcpModelId: input.resolvedCursorAcpModelId, mode: String(options.mode), permissionPolicy: String(options.permissionPolicy) }); } };
 const codex: HarnessAdapter = { kind: "codex-acp", capabilities: externalCapabilities, validate: codexOptions, launch(_config, harness, input) { const envelope = selected(input); codexOptions(envelope.executionProfile, envelope.executionProfile.harness); return externalLaunch(harness, input, { adapter: "codex-acp", command: harness.command, cwd: input.cwd, mode: expectedCodex.mode, permissionPolicy: expectedCodex.permissionPolicy, webSearch: expectedCodex.webSearch }); } };
+export function resolveCursorAcpModelId(config: SubagentRuntimeConfig, profile: ExecutionProfile): string | undefined {
+    if (profile.harness !== "cursor-agent") return undefined;
+    cursorOptions(profile, profile.harness);
+    const alias = profile.models[0]!.slice("cursor/".length);
+    const modelId = config.harnesses[profile.harness]?.modelIds?.[alias];
+    if (!modelId) throw new Error(`Cursor ACP model mapping is unavailable for ${alias}`);
+    return modelId;
+}
 export const harnessAdapters = Object.freeze({ "pi-native": pi, "cursor-acp": cursor, "codex-acp": codex });
 export function resolveHarnessAdapter(config: SubagentRuntimeConfig, id: string, profile?: ExecutionProfile): { adapter: HarnessAdapter; harness: HarnessRuntimeConfig } {
     const harness = config.harnesses[id];

@@ -38,40 +38,25 @@ def main [] {
   pass "colorscheme-owner-projection"
 
   let pi = $result.generated.pi
-  let decision_ui_package = "npm:@glassesneo/pi-decision-ui@0.1.1"
-  let question_extension_names = [
-    ...($pi.enabledQuestion.extensionPaths | each {|path| $path | path basename })
-    ...($pi.disabledQuestion.extensionPaths | each {|path| $path | path basename })
-  ]
+  let decision_ui_source = $pi.decisionUiContributionSource
   let package_filter = {|packages|
     $packages
     | where {|package| ($package | describe | str starts-with "record") }
-    | where {|package| $package.source == $decision_ui_package }
+    | where {|package| $package.source == $decision_ui_source }
     | first
   }
   let disabled_question_decision_ui = (do $package_filter $pi.disabledQuestion.packageSources)
   let artifact_disabled_decision_ui = (do $package_filter $pi.artifactDisabled.packageSources)
-  assert-contract (($pi.enabledQuestion.packageSources | any {|source| $source == $decision_ui_package })) "decision-ui-package-present-for-question"
+  assert-contract (($pi.enabledQuestion.packageSources | any {|source| $source == $decision_ui_source })) "decision-ui-package-present-for-question"
   assert-contract (($pi.disabledQuestion.extensionPaths | any {|path| ($path | str ends-with "/extensions-runtime/extensions_src/agent_artifact.ts") })) "local-artifact-extension-uses-managed-runtime"
-  assert-contract (($pi.catalog.roles.advanced-read.childExtensionContributions | any {|path| ($path | str ends-with "/extensions-runtime/extensions_src/agent_artifact.ts") })) "advanced-artifact-extension-uses-managed-runtime"
-  assert-contract ($pi.artifactDisabled.runtimeLinks.extensionsSource and $pi.artifactDisabled.runtimeLinks.nodeModules) "advanced-artifact-runtime-links-present"
-  assert-contract (($disabled_question_decision_ui | get source) == $decision_ui_package and ($disabled_question_decision_ui | get extensions) == []) "decision-ui-question-extension-filtered-for-local-artifact"
-  assert-contract (($artifact_disabled_decision_ui | get source) == $decision_ui_package and ($artifact_disabled_decision_ui | get extensions) == []) "decision-ui-question-extension-filtered-for-advanced"
-  assert-contract ($question_extension_names | all {|name| $name != "question.ts" }) "question-local-extension-absent"
+  assert-contract ($pi.artifactDisabled.runtimeLinks.extensionsSource and $pi.artifactDisabled.runtimeLinks.nodeModules) "orchestration-shared-runtime-links-present"
+  assert-contract (($disabled_question_decision_ui | get source) == $decision_ui_source and ($disabled_question_decision_ui | get extensions) == []) "decision-ui-question-extension-filtered-for-local-artifact"
+  assert-contract (($artifact_disabled_decision_ui | get source) == $decision_ui_source and ($artifact_disabled_decision_ui | get extensions) == []) "decision-ui-question-extension-filtered-for-advanced"
   assert-contract (($pi.enabledQuestion.modes.modes | values | any {|mode| $mode.tools | any {|tool| $tool == "question" } })) "question-tool-enabled"
   assert-contract (not ($pi.disabledQuestion.modes.modes | values | any {|mode| $mode.tools | any {|tool| $tool == "question" } })) "question-tool-disabled"
   assert-contract (($pi.extensionKeybindings.features | get historyViewer | get exit | first) == "f12") "native-key-alias"
-  assert-contract ($pi.settings.packages | any {|source| $source == "npm:@ogulcancelik/pi-codex-compaction@0.1.3" }) "codex-compaction-package-contribution"
   assert-contract ($pi.decisionUi.schemaVersion == 1) "decision-ui-config-schema"
   assert-contract (($pi.decisionUi.keybindings | get 'choice.select-and-note' | first) == "f12") "decision-ui-config-question-override"
-  assert-contract (($pi.models.providers | get openai-codex | get modelOverrides | get 'gpt-5.6-sol' | get contextWindow) == 272000) "sol-soft-context-ceiling"
-  assert-contract (($pi.models.providers | get openai-codex | get modelOverrides | get 'gpt-6-astra' | get contextWindow) == 272000) "astra-soft-context-ceiling"
-  assert-contract ($pi.settings.compaction.enabled and $pi.settings.compaction.reserveTokens == 16384 and $pi.settings.compaction.keepRecentTokens == 20000) "native-compaction-settings"
-  assert-contract ($pi.settings.retry.enabled and $pi.settings.retry.maxRetries == 3 and $pi.settings.retry.baseDelayMs == 2000) "agent-retry-settings"
-  assert-contract ($pi.settings.retry.provider.maxRetries == 0 and $pi.settings.retry.provider.maxRetryDelayMs == 60000) "provider-retry-disabled"
-  assert-contract ($pi.orchestration.budgets.maxLiveAgents == 12 and $pi.orchestration.budgets.maxConcurrentTasks == 12 and $pi.orchestration.budgets.maxTasksPerMesh == 64) "mesh-budgets"
-  let default_extension_names = ($pi.settings.extensions | each {|path| $path | path basename })
-  assert-contract ($default_extension_names | any {|name| $name == "performance.ts" }) "performance-default-extension"
   let parent_identity_invocation = 'pi-mesh-return-parent\s+--binding\s+#\{q:client_name\}\s+#\{q:session_id\}\s+#\{q:window_id\}'
   assert-contract ($pi.navigationTmux =~ $parent_identity_invocation) "tmux-parent-identity-arguments"
   assert-contract ($pi.darwinTmux =~ $parent_identity_invocation) "darwin-tmux-parent-identity-arguments"
@@ -152,48 +137,6 @@ def main [] {
     const roleCatalog = validateRoleCatalog(catalog);
     const executionProfiles = validateExecutionProfileConfig(profiles);
     const orchestrationConfig = validateOrchestrationConfig(orchestration);
-    assert.match(orchestrationConfig.stateRoot, /\/pi\/orchestration-v8$/u);
-    assert.deepEqual(executionProfiles, {
-      schemaVersion: 2,
-      profiles: {
-        advanced: { models: ["openai-codex/gpt-5.6-sol"], thinkingLevel: "medium", harness: "pi" },
-        perspective: { models: ["openrouter/z-ai/glm-5.2:free", "cohere/command-a-plus-05-2026", "mistral/mistral-medium-3.5"], thinkingLevel: "high", harness: "pi" },
-        research: { models: ["openai-codex/gpt-5.6-terra"], thinkingLevel: "high", harness: "pi" },
-        search: { models: ["codex/gpt-5.6-luna"], thinkingLevel: "high", harness: "codex", harnessOptions: { mode: "read-only", permissionPolicy: "reject", webSearch: "cached" } },
-        "small-read": { models: ["openrouter/cohere/north-mini-code:free", "mistral/mistral-small-2603", "openai-codex/gpt-5.6-luna"], thinkingLevel: "high", harness: "pi" },
-        "small-write": { models: ["openai-codex/gpt-5.6-luna"], thinkingLevel: "xhigh", harness: "pi" },
-        "ops-default": { models: ["openai-codex/gpt-6-astra"], thinkingLevel: "low", harness: "pi" },
-        "recon-default": { models: ["openai-codex/gpt-6-astra"], thinkingLevel: "medium", harness: "pi" },
-        "standard-read": { models: ["cursor/cursor-grok-4.6-high-fast"], harness: "cursor-agent", harnessOptions: { mode: "ask", permissionPolicy: "reject", sandbox: "disabled", trustWorkspace: true, worktree: false } },
-        "standard-write": { models: ["cursor/cursor-grok-4.6-high-fast"], harness: "cursor-agent", harnessOptions: { mode: "agent", permissionPolicy: "allow-always", sandbox: "disabled", trustWorkspace: true, worktree: false } },
-      },
-    });
-    assert.equal(roleCatalog.schemaVersion, 5);
-    for (const definition of Object.values(roleCatalog.roles)) assert.deepEqual(Object.keys(definition).sort(), ["childExtensionContributions", "contextPolicy", "description", "instructions", "selector", "tools"]);
-    assert.deepEqual(Object.fromEntries(Object.entries(roleCatalog.roles).map(([role, definition]) => [role, definition.selector])), {
-      "advanced-read": { agent: "advanced", access: "read" }, "advanced-write": { agent: "advanced", access: "write" },
-      perspective: { agent: "perspective" }, research: { agent: "research" }, search: { agent: "search" },
-      "small-read": { agent: "small", access: "read" }, "small-write": { agent: "small", access: "write" },
-      "standard-read": { agent: "standard", access: "read" }, "standard-write": { agent: "standard", access: "write" },
-    });
-    assert.deepEqual({ tools: roleCatalog.roles["standard-read"].tools, contextPolicy: roleCatalog.roles["standard-read"].contextPolicy }, { tools: [], contextPolicy: "project" });
-    assert.deepEqual({ tools: roleCatalog.roles["standard-write"].tools, contextPolicy: roleCatalog.roles["standard-write"].contextPolicy }, { tools: [], contextPolicy: "project" });
-    assert.equal(roleCatalog.roles["small-read"].tools.includes("write"), false);
-    assert.equal(roleCatalog.roles["small-write"].tools.includes("write"), true);
-    assert.equal(roleCatalog.roles["advanced-read"].tools.includes("save_agent_artifact"), true);
-    assert.equal(roleCatalog.roles["advanced-write"].tools.includes("save_agent_artifact"), true);
-    assert.deepEqual({ tools: roleCatalog.roles.perspective.tools, contextPolicy: roleCatalog.roles.perspective.contextPolicy, childExtensionContributions: roleCatalog.roles.perspective.childExtensionContributions }, { tools: [], contextPolicy: "prompt-only", childExtensionContributions: [] });
-    assert.deepEqual(orchestrationConfig.callPolicy, {
-      modes: {
-        ops: { targets: { "advanced-read": { profiles: ["advanced"] }, "advanced-write": { profiles: ["advanced"] }, perspective: { profiles: ["perspective"] }, research: { profiles: ["research"] }, "small-read": { profiles: ["small-read"] }, "small-write": { profiles: ["small-write"] }, "standard-read": { profiles: ["standard-read"] }, "standard-write": { profiles: ["standard-write"] } } },
-        recon: { targets: { "advanced-read": { profiles: ["advanced"] }, perspective: { profiles: ["perspective"] }, research: { profiles: ["research"] }, "small-read": { profiles: ["small-read"] }, "standard-read": { profiles: ["standard-read"] } } },
-      },
-      roles: {
-        "advanced-read": { targets: { perspective: { profiles: ["perspective"] }, research: { profiles: ["research"] }, "small-read": { profiles: ["small-read"] }, "standard-read": { profiles: ["standard-read"] } } },
-        "advanced-write": { targets: { perspective: { profiles: ["perspective"] }, research: { profiles: ["research"] }, "small-read": { profiles: ["small-read"] }, "small-write": { profiles: ["small-write"] }, "standard-read": { profiles: ["standard-read"] }, "standard-write": { profiles: ["standard-write"] } } },
-        research: { targets: { search: { profiles: ["search"] } } },
-      },
-    });
     const enabledModeConfig = validateModeConfig(enabledModes);
     validateOrchestrationReferences(orchestrationConfig, roleCatalog, executionProfiles, Object.keys(enabledModeConfig.modes));
     validateModeConfig(disabledModes);

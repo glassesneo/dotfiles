@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import type { Usage } from "@earendil-works/pi-ai";
 import { mapConcurrent } from "./concurrency.ts";
 import { readTask } from "./orchestration_store.ts";
+import { AGENT_RECORD_SCHEMA_VERSION } from "./orchestration_types.ts";
 
 const METRICS_READ_CONCURRENCY = 8;
 
@@ -97,7 +98,7 @@ async function readAgentCapabilities(meshRoot: string, meshId: string, agentIds:
     const entries = await mapConcurrent([...new Set(agentIds)], METRICS_READ_CONCURRENCY, async agentId => {
         const rawAgent = object(await json(join(meshRoot, "agents", agentId, "agent.json")).catch(() => undefined));
         const capabilities = object(rawAgent?.capabilities);
-        const value = rawAgent?.schemaVersion === 5 && rawAgent.meshId === meshId && rawAgent.agentId === agentId && typeof rawAgent.role === "string" && typeof capabilities?.usage === "boolean"
+        const value = rawAgent?.schemaVersion === AGENT_RECORD_SCHEMA_VERSION && rawAgent.meshId === meshId && rawAgent.agentId === agentId && typeof rawAgent.role === "string" && typeof capabilities?.usage === "boolean"
             ? { agentType: rawAgent.role, usage: capabilities.usage }
             : undefined;
         return [agentId, value] as const;

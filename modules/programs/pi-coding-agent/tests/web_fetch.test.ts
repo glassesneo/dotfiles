@@ -14,6 +14,7 @@ import {
 import { routeWebFetch } from "../extensions_src/utilities/web_fetch_router.ts";
 import {
     parseWebFetchInput,
+    WEB_FETCH_DEFAULT_MAX_CHARS_TOTAL,
     type WebRetrievalRuntimeConfig,
 } from "../extensions_src/utilities/web_retrieval_types.ts";
 import {
@@ -48,7 +49,7 @@ void test("web_fetch input boundary applies defaults while preserving URL occurr
     assert.deepEqual(parseWebFetchInput({ urls: [duplicate, duplicate] }), {
         urls: [duplicate, duplicate],
         mode: "relevant",
-        maxCharsTotal: 24_000,
+        maxCharsTotal: WEB_FETCH_DEFAULT_MAX_CHARS_TOTAL,
     });
     assert.deepEqual(parseWebFetchInput({
         urls: ["http://example.com/a"],
@@ -153,7 +154,7 @@ void test("provider mappings use one mode-specific batch and project mixed resul
     assert.deepEqual(buildParallelExtractBody(relevant), {
         urls: [a, b, a],
         objective: "find evidence",
-        max_chars_total: 24_000,
+        max_chars_total: WEB_FETCH_DEFAULT_MAX_CHARS_TOTAL,
     });
     const parallel = normalizeParallelExtractResponse({
         extract_id: "extract-1",

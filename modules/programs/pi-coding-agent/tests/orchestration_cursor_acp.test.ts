@@ -15,10 +15,10 @@ input.on("line",line=>{const message=JSON.parse(line); record(message);
  if(message.method==="initialize") send({jsonrpc:"2.0",id:message.id,result:{protocolVersion:scenario==="protocol"?2:1}});
  else if(message.method==="session/new"){
   const modes=scenario==="mode"?[{id:"plan"}]:[{id:"ask"},{id:"agent"}];
-  const advertised=scenario==="model"?"grok-other":"grok-4.6[effort=high,fast=true]";
+  const advertised=scenario==="model"?"other-acp-model":"synthetic-acp-model";
   const current=scenario==="model-current"?"default[]":""+advertised;
   const configCurrent=scenario==="model-conflict"?"default[]":current;
-  send({jsonrpc:"2.0",id:message.id,result:{sessionId:"session-1",modes:{availableModes:modes},models:{currentModelId:current,availableModels:[{modelId:advertised,name:"grok-4.6"}]},configOptions:[{id:"model",currentValue:configCurrent,options:[{value:advertised}]}]}});
+  send({jsonrpc:"2.0",id:message.id,result:{sessionId:"session-1",modes:{availableModes:modes},models:{currentModelId:current,availableModels:[{modelId:advertised,name:"Synthetic"}]},configOptions:[{id:"model",currentValue:configCurrent,options:[{value:advertised}]}]}});
  } else if(message.method==="session/set_mode") send({jsonrpc:"2.0",id:message.id,result:{}});
  else if(message.method==="session/prompt"){
   promptId=message.id;
@@ -49,7 +49,7 @@ async function fixture(scenario: string) {
 }
 
 function options(f: Awaited<ReturnType<typeof fixture>>, mode: "ask" | "agent", event: (event: Event) => void) {
-    return { command: f.command, cwd: f.directory, model: "cursor-grok-4.6-high-fast", mode, permissionPolicy: mode === "ask" ? "reject" as const : "allow-always" as const, event };
+    return { command: f.command, cwd: f.directory, model: "synthetic-cli-alias", expectedAcpModelId: "synthetic-acp-model", mode, permissionPolicy: mode === "ask" ? "reject" as const : "allow-always" as const, event };
 }
 
 async function requests(path: string): Promise<Record<string, unknown>[]> {

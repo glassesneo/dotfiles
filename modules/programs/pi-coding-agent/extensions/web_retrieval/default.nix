@@ -1,12 +1,15 @@
 {
   delib,
   homeConfig,
+  lib,
   ...
 }: let
   moduleName = "programs.pi-coding-agent.web_retrieval";
   extensionSource = ./../../extensions_src;
   webSearchExtension = "${extensionSource}/web_search.ts";
   webFetchExtension = "${extensionSource}/web_fetch.ts";
+  positiveIntOption = default: (delib.intOption default) // {type = lib.types.ints.positive;};
+  intBetweenOption = min: max: default: (delib.intOption default) // {type = lib.types.ints.between min max;};
 in
   delib.module {
     name = moduleName;
@@ -18,9 +21,40 @@ in
           webSearchExtension
           webFetchExtension
         ]);
+        routing = submoduleOption {
+          options = {
+            generalFamilies = submoduleOption {
+              options = {
+                parallel = positiveIntOption 5;
+                brave = positiveIntOption 1;
+              };
+            } {};
+            braveProviders = submoduleOption {
+              options = {
+                "brave-llm-context" = positiveIntOption 2;
+                "brave-web-search" = positiveIntOption 1;
+              };
+            } {};
+          };
+        } {};
+        deadlinesMs = submoduleOption {
+          options = {
+            search = intBetweenOption 1000 120000 30000;
+            fetch = intBetweenOption 1000 300000 60000;
+          };
+        } {};
+        retry = submoduleOption {
+          options = {
+            defaultWaitMs = intBetweenOption 0 30000 1000;
+          };
+        } {};
       });
 
-    home.ifEnabled = {myconfig, ...}: let
+    home.ifEnabled = {
+      cfg,
+      myconfig,
+      ...
+    }: let
       secretPath = name:
         if builtins.hasAttr name homeConfig.sops.secrets
         then homeConfig.sops.secrets.${name}.path
@@ -66,23 +100,10 @@ in
             apiKeyFile = secretPath "exa-api-key";
           }
         ];
-        routing = {
-          generalFamilies = {
-            parallel = 5;
-            brave = 1;
-          };
-          braveProviders = {
-            brave-llm-context = 2;
-            brave-web-search = 1;
-          };
-        };
-        deadlinesMs = {
-          search = 30000;
-          fetch = 60000;
-        };
+        inherit (cfg) routing deadlinesMs;
         retry = {
           maxRetries = 1;
-          defaultWaitMs = 1000;
+          inherit (cfg.retry) defaultWaitMs;
         };
       };
     };

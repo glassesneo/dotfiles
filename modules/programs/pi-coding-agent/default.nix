@@ -215,6 +215,7 @@ in
           options.enable = boolOption true;
         } {};
         profiles = attrsOfOption profileType {};
+        cursorAcpModelIds = attrsOfOption str {};
         packageContributions = attrsOfOption packageContributionType {};
         defaultExtensions = readOnly (listOfOption str [
           "popup"
@@ -229,6 +230,10 @@ in
     myconfig.always = {...}: {
       args.shared.piArtifactRuntime.extensionPath = artifactExtensionPath;
       programs.pi-coding-agent = {
+        cursorAcpModelIds = lib.mapAttrs (_: lib.mkDefault) {
+          "cursor-grok-4.5-high-fast" = "grok-4.5[effort=high,fast=true]";
+          "cursor-grok-4.6-high-fast" = "grok-4.6[effort=high,fast=true]";
+        };
         packageContributions = {
           codex-compaction.source = "npm:@ogulcancelik/pi-codex-compaction@0.1.3";
           decision-ui = {
@@ -378,6 +383,23 @@ in
         permissionPolicy = "reject";
         webSearch = "cached";
       };
+      invalidCursorAcpModelAliases = builtins.filter (alias:
+        alias
+        == ""
+        || builtins.match ".*[[:space:]/].*" alias != null
+        || builtins.match ".*[^[:space:]].*" cfg.cursorAcpModelIds.${alias} == null)
+      (builtins.attrNames cfg.cursorAcpModelIds);
+      unmappedCursorProfiles = builtins.filter (name: let
+        profile = cfg.profiles.${name};
+        alias =
+          if profile.models == []
+          then ""
+          else lib.removePrefix "cursor/" (builtins.head profile.models);
+      in
+        profile.harness
+        == "cursor-agent"
+        && (profile.models == [] || !(builtins.hasAttr alias cfg.cursorAcpModelIds)))
+      profileNames;
       invalidProfileHarnesses =
         builtins.filter (
           name: let
@@ -478,6 +500,14 @@ in
         {
           assertion = invalidProfileHarnesses == [];
           message = "Pi execution profiles must satisfy their exact harness contract: ${lib.concatStringsSep ", " invalidProfileHarnesses}.";
+        }
+        {
+          assertion = invalidCursorAcpModelAliases == [];
+          message = "Pi Cursor ACP model aliases must be non-empty and contain neither whitespace nor '/': ${lib.concatStringsSep ", " invalidCursorAcpModelAliases}.";
+        }
+        {
+          assertion = unmappedCursorProfiles == [];
+          message = "Pi Cursor execution profiles require a cursorAcpModelIds entry: ${lib.concatStringsSep ", " unmappedCursorProfiles}.";
         }
         {
           assertion = builtins.all (item: item.module != null) selected;

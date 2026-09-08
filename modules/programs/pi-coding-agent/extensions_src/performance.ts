@@ -3,7 +3,7 @@ import { readFile, statfs } from "node:fs/promises";
 import { cpus, freemem, loadavg, platform, totalmem } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { getAgentDir, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { getAgentDir, SettingsManager, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { Usage } from "@earendil-works/pi-ai";
 import { provideCommandPaletteContribution } from "./utilities/command_palette_contributions.ts";
 import { readOrchestrationMetrics, type OrchestrationTaskMetric } from "./utilities/orchestration_metrics.ts";
@@ -11,7 +11,6 @@ import { readOrchestrationMetrics, type OrchestrationTaskMetric } from "./utilit
 export const PERFORMANCE_ENTRY = "pi-performance-run";
 export const PERFORMANCE_SCHEMA_VERSION = 2;
 export const LONG_RUNNING_MS = 10 * 60 * 1000;
-const COMPACTION_RESERVE_TOKENS = 16_384;
 
 interface Interval { startMs: number; endMs: number }
 export interface ToolAggregate { count: number; durationMs: number }
@@ -47,6 +46,16 @@ export interface MeshTaskMetric extends OrchestrationTaskMetric { longRunning: b
 export interface MeshMetrics { tasks: MeshTaskMetric[]; unread: number; unavailable?: string }
 
 function finite(value: unknown): value is number { return typeof value === "number" && Number.isFinite(value) && value >= 0; }
+function resolveFileBackedCompactionReserveTokens(ctx: ExtensionContext): number | null {
+    try {
+        const manager = SettingsManager.create(ctx.cwd, getAgentDir(), { projectTrusted: ctx.isProjectTrusted() });
+        if (manager.drainErrors().length > 0) return null;
+        const reserveTokens = manager.getCompactionReserveTokens();
+        return finite(reserveTokens) ? reserveTokens : null;
+    } catch {
+        return null;
+    }
+}
 function object(value: unknown): Record<string, unknown> | undefined { return value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : undefined; }
 function shortId(id: string): string { return id.slice(0, 8); }
 function duration(value: number): string { if (value < 1000) return `${Math.round(value)}ms`; const seconds = value / 1000; if (seconds < 60) return `${seconds.toFixed(1)}s`; const minutes = seconds / 60; return minutes < 60 ? `${minutes.toFixed(1)}m` : `${(minutes / 60).toFixed(1)}h`; }
@@ -90,7 +99,7 @@ export class PerformanceCollector {
     startTool(id: string, name: string): void { this.#toolStarts.set(id, { name, startMs: this.#clock() }); }
     endTool(id: string): void { const start = this.#toolStarts.get(id); if (!start) return; const endMs = this.#clock(); const elapsed = Math.max(0, endMs - start.startMs); const aggregate = this.#tools.get(start.name) ?? { count: 0, durationMs: 0 }; aggregate.count += 1; aggregate.durationMs += elapsed; this.#tools.set(start.name, aggregate); this.#toolIntervals.push({ startMs: start.startMs, endMs }); this.#toolStarts.delete(id); }
     recordMessage(message: unknown): void { const raw = object(message); const metric = usageMetric(raw?.usage); if (!metric) return; if (raw?.role === "assistant") { this.#assistantUsage ??= emptyUsage(); addUsage(this.#assistantUsage, metric); } else if (raw?.role === "toolResult") { this.#nestedToolUsage ??= emptyUsage(); addUsage(this.#nestedToolUsage, metric); } }
-    observeContext(value: { tokens: number | null; contextWindow: number } | undefined): void { if (!value || !finite(value.contextWindow) || value.contextWindow === 0) return; this.#context.contextWindow = value.contextWindow; this.#context.compactionThreshold = Math.max(0, value.contextWindow - COMPACTION_RESERVE_TOKENS); if (value.tokens !== null && finite(value.tokens)) this.#context.peakTokens = Math.max(this.#context.peakTokens ?? 0, value.tokens); }
+    observeContext(value: { tokens: number | null; contextWindow: number; reserveTokens: number | null } | undefined): void { if (!value || !finite(value.contextWindow) || value.contextWindow === 0) return; this.#context.contextWindow = value.contextWindow; this.#context.compactionThreshold = finite(value.reserveTokens) ? Math.max(0, value.contextWindow - value.reserveTokens) : null; if (value.tokens !== null && finite(value.tokens)) this.#context.peakTokens = Math.max(this.#context.peakTokens ?? 0, value.tokens); }
     recordProviderRequest(): void { this.#providerBefore += 1; }
     recordProviderResponse(status: number): void { if (Number.isInteger(status) && status >= 100 && status <= 999) this.#providerStatuses.push(status); }
     recordCompaction(value: { reason: "manual" | "threshold" | "overflow"; willRetry: boolean; tokensBefore: number; usage?: Usage }): void { const metric = usageMetric(value.usage); this.#compactions.push({ reason: value.reason, willRetry: value.willRetry, tokensBefore: finite(value.tokensBefore) ? value.tokensBefore : 0, usage: metric ? { availability: "available", value: metric } : { availability: "unavailable" } }); }
@@ -139,18 +148,26 @@ export function formatCurrentPerformance(runs: readonly ParsedPerformanceRun[], 
     const compactions = v2.flatMap(run => run.compactionUsage); const compaction = emptyUsage(); let compactionAvailable = false; let compactionUnavailable = 0; for (const item of compactions) if (item.usage.availability === "available") { addUsage(compaction, item.usage.value); compactionAvailable = true; } else compactionUnavailable += 1;
     const peak = Math.max(...v2.map(run => run.context.peakTokens ?? 0), 0); const latestContext = v2.findLast(run => run.context.contextWindow !== null)?.context; const providerBefore = v2.reduce((sum, run) => sum + run.providerRequests.beforeCount, 0); const providerAfter = v2.reduce((sum, run) => sum + run.providerRequests.afterCount, 0); const statusesAvailable = v2.some(run => run.providerRequests.statusAvailability === "available"); const statuses = { success: 0, redirect: 0, clientError: 0, rateLimited: 0, serverError: 0, other: 0 }; for (const run of v2) if (run.providerRequests.statusCategories) for (const key of Object.keys(statuses) as Array<keyof typeof statuses>) statuses[key] += run.providerRequests.statusCategories[key];
     const statusText = statusesAvailable ? `2xx ${statuses.success}, 3xx ${statuses.redirect}, 4xx ${statuses.clientError}, 429 ${statuses.rateLimited}, 5xx ${statuses.serverError}, other ${statuses.other}` : "unavailable";
-    const lines = ["Performance — current session", `Settled runs: ${runs.length}; total ${duration(total)}; turns ${turns} / ${duration(turnMs)}`, `Assistant usage: ${formatUsage(assistantAvailable ? { availability: "available", value: assistant } : undefined, assistantUnavailable)}`, `Nested tool usage: ${formatUsage(nestedAvailable ? { availability: "available", value: nested } : undefined, nestedUnavailable)}`, `Compactions: ${compactions.length}; usage ${formatUsage(compactionAvailable ? { availability: "available", value: compaction } : undefined, compactionUnavailable)}`, `Context peak: ${peak || "unavailable"}; window ${latestContext?.contextWindow ?? "unavailable"}; threshold ${latestContext?.compactionThreshold ?? "unavailable"}`, `Provider hooks: before ${providerBefore}; after ${providerAfter}; statuses ${statusText}`,  `Tool wall: ${duration(toolWall)}; non-tool: ${duration(nonTool)}`, "Tools:", ...([...tools].toSorted(([a], [b]) => a.localeCompare(b)).map(([name, value]) => `  ${name}: ${value.count}, ${duration(value.durationMs)}`)), `Mesh tasks: ${mesh.tasks.length}; unread: ${mesh.unread}${mesh.unavailable ? `; unavailable: ${mesh.unavailable}` : ""}`, ...mesh.tasks.map(task => `  ${task.agentType} ${task.outcome} ${duration(task.durationMs)} ${shortId(task.taskId)}${task.longRunning ? " long-running" : ""}${task.open ? " open" : ""}; usage ${task.usage.availability === "available" ? `${task.usage.value.totalTokens} tokens` : "unavailable"}`), `Resources: ${resources.cpuCount} CPU; load ${resources.loadAverage.map(value => value.toFixed(2)).join(" ")}; memory ${bytes(resources.memoryFreeBytes)} free / ${bytes(resources.memoryTotalBytes)}`, `Swap: ${resources.swap}; disk free: ${resources.diskFreeBytes === "unavailable" ? "unavailable" : bytes(resources.diskFreeBytes)}`];
+    const lines = ["Performance — current session", `Settled runs: ${runs.length}; total ${duration(total)}; turns ${turns} / ${duration(turnMs)}`, `Assistant usage: ${formatUsage(assistantAvailable ? { availability: "available", value: assistant } : undefined, assistantUnavailable)}`, `Nested tool usage: ${formatUsage(nestedAvailable ? { availability: "available", value: nested } : undefined, nestedUnavailable)}`, `Compactions: ${compactions.length}; usage ${formatUsage(compactionAvailable ? { availability: "available", value: compaction } : undefined, compactionUnavailable)}`, `Context peak: ${peak || "unavailable"}; window ${latestContext?.contextWindow ?? "unavailable"}; settings-derived threshold ${latestContext?.compactionThreshold ?? "unavailable"}`, `Provider hooks: before ${providerBefore}; after ${providerAfter}; statuses ${statusText}`,  `Tool wall: ${duration(toolWall)}; non-tool: ${duration(nonTool)}`, "Tools:", ...([...tools].toSorted(([a], [b]) => a.localeCompare(b)).map(([name, value]) => `  ${name}: ${value.count}, ${duration(value.durationMs)}`)), `Mesh tasks: ${mesh.tasks.length}; unread: ${mesh.unread}${mesh.unavailable ? `; unavailable: ${mesh.unavailable}` : ""}`, ...mesh.tasks.map(task => `  ${task.agentType} ${task.outcome} ${duration(task.durationMs)} ${shortId(task.taskId)}${task.longRunning ? " long-running" : ""}${task.open ? " open" : ""}; usage ${task.usage.availability === "available" ? `${task.usage.value.totalTokens} tokens` : "unavailable"}`), `Resources: ${resources.cpuCount} CPU; load ${resources.loadAverage.map(value => value.toFixed(2)).join(" ")}; memory ${bytes(resources.memoryFreeBytes)} free / ${bytes(resources.memoryTotalBytes)}`, `Swap: ${resources.swap}; disk free: ${resources.diskFreeBytes === "unavailable" ? "unavailable" : bytes(resources.diskFreeBytes)}`];
     if (runs.some(run => run.schemaVersion === 1)) lines.push("Legacy v1 quota metrics: unavailable"); return lines.join("\n");
 }
 export function formatRecentPerformance(days: number, metrics: MeshMetrics): string { const values = metrics.tasks.map(task => task.durationMs); const total = values.reduce((sum, value) => sum + value, 0); return [`Performance — mesh tasks, last ${days} day(s)`, `Tasks: ${metrics.tasks.length}; total ${duration(total)}; median ${duration(percentile(values, 0.5))}; p90 ${duration(percentile(values, 0.9))}; unread: ${metrics.unread}${metrics.unavailable ? `; unavailable: ${metrics.unavailable}` : ""}`, "Agent types:", ...agentTypeLines(metrics.tasks), "Longest:", ...metrics.tasks.slice(0, 10).map(task => `  ${task.agentType} ${task.outcome} ${duration(task.durationMs)} ${shortId(task.taskId)}${task.longRunning ? " long-running" : ""}${task.open ? " open" : ""}`)].join("\n"); }
 export function parsePerformanceArguments(raw: string): { mode: "current" } | { mode: "recent"; days: number } { const args = raw.trim().split(/\s+/u).filter(Boolean); if (args.length === 0) return { mode: "current" }; if (args[0] !== "recent" || args.length > 2) throw new Error("Usage: /performance [recent [days]]"); const days = args[1] === undefined ? 7 : Number(args[1]); if (!Number.isInteger(days) || days < 1 || days > 90) throw new Error("Performance days must be an integer from 1 to 90"); return { mode: "recent", days }; }
 
-export default function performanceExtension(pi: ExtensionAPI, options: { configPath?: string; clock?: () => number; wallClock?: () => Date; env?: NodeJS.ProcessEnv } = {}): void {
+export default function performanceExtension(pi: ExtensionAPI, options: { configPath?: string; clock?: () => number; wallClock?: () => Date; env?: NodeJS.ProcessEnv; resolveCompactionReserveTokens?: (ctx: ExtensionContext) => number | null } = {}): void {
     const collector = new PerformanceCollector(options.clock, options.wallClock); const configPath = options.configPath ?? join(getAgentDir(), "orchestration.json"); const env = options.env ?? process.env;
+    const resolveReserve = options.resolveCompactionReserveTokens ?? resolveFileBackedCompactionReserveTokens;
+    const observe = (ctx: ExtensionContext) => {
+        const usage = ctx.getContextUsage();
+        if (!usage) return;
+        let reserveTokens: number | null = null;
+        try { const resolved = resolveReserve(ctx); if (finite(resolved)) reserveTokens = resolved; } catch { /* resolver throws stay unknown */ }
+        collector.observeContext({ tokens: usage.tokens, contextWindow: usage.contextWindow, reserveTokens });
+    };
     const ensureRun = (agentRun = false) => collector.startRun(agentRun); const appendSettled = () => { const run = collector.settle(); if (run) pi.appendEntry(PERFORMANCE_ENTRY, run); };
     pi.on("agent_start", () => collector.startRun(true));
-    pi.on("turn_start", (event, ctx) => { collector.startTurn(event.turnIndex); collector.observeContext(ctx.getContextUsage()); });
-    pi.on("turn_end", (event, ctx) => { collector.endTurn(event.turnIndex); collector.observeContext(ctx.getContextUsage()); });
+    pi.on("turn_start", (event, ctx) => { collector.startTurn(event.turnIndex); observe(ctx); });
+    pi.on("turn_end", (event, ctx) => { collector.endTurn(event.turnIndex); observe(ctx); });
     pi.on("message_end", event => collector.recordMessage(event.message));
     pi.on("tool_execution_start", event => collector.startTool(event.toolCallId, event.toolName));
     pi.on("tool_execution_end", event => collector.endTool(event.toolCallId));

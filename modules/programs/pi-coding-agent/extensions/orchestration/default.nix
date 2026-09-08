@@ -39,7 +39,7 @@
       selector = submoduleOption {
         options = with delib; {
           agent = noDefault (strOption null);
-          access = allowNull (enumOption ["read" "write"] null);
+          access = noDefault (enumOption ["read" "write"] null);
         };
       } {};
       description = noDefault (strOption null);
@@ -86,15 +86,21 @@
     advanced-read = mkRepositoryRole "advanced" "read" "Handle difficult read-only judgment across multiple repository invariants." "Investigate and evaluate the bounded problem without source changes. Delegate only when a permitted independent result materially improves the conclusion.${meshAsyncChildGuidance}" [artifactExtension] ["save_agent_artifact"];
     advanced-write = mkRepositoryRole "advanced" "write" "Handle a difficult repository change spanning multiple invariants." "Explore, implement, and verify the bounded change. Delegate only when a permitted independent result materially improves the outcome.${meshAsyncChildGuidance}" [artifactExtension] ["save_agent_artifact"];
     research = {
-      selector.agent = "research";
+      selector = {
+        agent = "research";
+        access = "read";
+      };
       description = "Collect repository and Web evidence, assess sources, and synthesize a supported conclusion.";
       tools = ["read" "grep" "find" "ls" "bash" "web_search" "web_fetch" "mesh_report"];
-      instructions = "Decompose the bounded question into claims and evidence needs while leaving source and configuration unchanged. Assess authority, relevance, independence, and freshness. Use mesh_send with agent=\"search\" only for an independent Web path that materially improves the conclusion.${meshAsyncChildGuidance}${meshReportGuidance} Return claim-linked sources, counterevidence, and uncertainty.";
+      instructions = "Decompose the bounded question into claims and evidence needs while leaving source and configuration unchanged. Assess authority, relevance, independence, and freshness. Use mesh_send with agent=\"search\" and access=\"read\" only for an independent Web path that materially improves the conclusion.${meshAsyncChildGuidance}${meshReportGuidance} Return claim-linked sources, counterevidence, and uncertainty.";
       contextPolicy = "project";
       childExtensionContributions = [webSearchExtension webFetchExtension];
     };
     perspective = {
-      selector.agent = "perspective";
+      selector = {
+        agent = "perspective";
+        access = "read";
+      };
       description = "Reframe a supplied dossier from an isolated outside perspective.";
       tools = [];
       instructions = "Receive only the caller's dossier; you have no repository context, tools, skills, prompt templates, or child roles. Identify hidden assumptions, alternate decompositions, and natural alternatives without inventing repository facts. Return the strongest reframing, material assumptions, supported alternatives, and any missing dossier element.";
@@ -102,7 +108,10 @@
       childExtensionContributions = [];
     };
     search = {
-      selector.agent = "search";
+      selector = {
+        agent = "search";
+        access = "read";
+      };
       description = "Answer one bounded external question with source-backed Web search.";
       tools = [];
       instructions = "Return a concise supported answer, source URLs mapped to claims, freshness, and material uncertainty; state missing evidence instead of widening the task.";
@@ -230,18 +239,12 @@ in
           modes = lib.mapAttrs (_: policy: {targets = lib.mkDefault policy.targets;}) settledCallPolicy.modes;
           roles = lib.mapAttrs (_: policy: {targets = lib.mkDefault policy.targets;}) settledCallPolicy.roles;
         };
-        budgets = {
+        budgets = lib.mapAttrs (_: lib.mkDefault) {
           maxLiveAgents = 12;
           maxConcurrentTasks = 12;
           maxTasksPerMesh = 64;
         };
-        gc = {
-          contextHeadroomTokens = 32768;
-          periodicIntervalMs = 5000;
-          activityHeartbeatMs = 2000;
-          activityStaleMs = 10000;
-          roles = gcBase;
-        };
+        gc.roles = lib.mapAttrs (_: role: lib.mapAttrs (_: lib.mkDefault) role) gcBase;
       };
       programs.pi-coding-agent.keybindings.contributions = {
         meshPalette = {
@@ -430,21 +433,9 @@ in
       unknownGcRoles = builtins.filter (name: !(builtins.elem name roleNames)) (builtins.attrNames cfg.gc.roles);
       missingGcRoles = builtins.filter (name: !(builtins.hasAttr name cfg.gc.roles)) roleNames;
       invalidSelectors = builtins.filter (name: let selector = cfg.roles.${name}.selector; in !(builtins.isString selector.agent) || selector.agent == "") roleNames;
-      invalidSelectorAccess = builtins.filter (name: let
-        selector = cfg.roles.${name}.selector;
-        repository = builtins.elem selector.agent ["small" "standard" "advanced"];
-        special = builtins.elem selector.agent ["research" "perspective" "search"];
-      in
-        repository && selector.access == null || special && selector.access != null)
-      roleNames;
       searchOnRoot = lib.concatMap (mode: map (target: "${mode}: ${target}") (builtins.filter (target: builtins.hasAttr target cfg.roles && cfg.roles.${target}.selector.agent == "search") (builtins.attrNames cfg.callPolicy.modes.${mode}.targets))) (builtins.attrNames cfg.callPolicy.modes);
       searchFromNonResearch = lib.concatMap (caller: map (target: "${caller}: ${target}") (builtins.filter (target: builtins.hasAttr target cfg.roles && cfg.roles.${target}.selector.agent == "search") (builtins.attrNames cfg.callPolicy.roles.${caller}.targets))) (builtins.filter (caller: caller != "research") (builtins.attrNames cfg.callPolicy.roles));
       names = values: lib.concatStringsSep ", " values;
-      serialize = _: role:
-        (lib.filterAttrs (_: value: value != null) role)
-        // {
-          selector = lib.filterAttrs (_: value: value != null) role.selector;
-        };
     in {
       assertions = [
         {
@@ -462,10 +453,6 @@ in
         {
           assertion = invalidSelectors == [];
           message = "Pi orchestration roles must define a non-empty selector agent: ${names invalidSelectors}.";
-        }
-        {
-          assertion = invalidSelectorAccess == [];
-          message = "Pi orchestration selectors must require access for repository capabilities and omit it for special capabilities: ${names invalidSelectorAccess}.";
         }
         {
           assertion = unknownModes == [];
@@ -514,12 +501,12 @@ in
       ];
       home.file = {
         "${myconfig.programs.pi-coding-agent.configDir}/role-catalog.json".text = builtins.toJSON {
-          schemaVersion = 5;
-          roles = lib.mapAttrs serialize cfg.roles;
+          schemaVersion = 6;
+          roles = cfg.roles;
         };
         "${myconfig.programs.pi-coding-agent.configDir}/orchestration.json".text = builtins.toJSON {
-          schemaVersion = 4;
-          stateRoot = "${homeConfig.xdg.stateHome}/pi/orchestration-v8";
+          schemaVersion = 5;
+          stateRoot = "${homeConfig.xdg.stateHome}/pi/orchestration-v9";
           tmux = lib.getExe pkgs.tmux;
           returnParentCommand = lib.getExe returnParentCommand;
           inherit parentNavigationHint historyViewerExtension popupExtension orchestrationExtension childBridgeExtension;
@@ -532,6 +519,7 @@ in
             cursor-agent = {
               adapter = "cursor-acp";
               command = lib.getExe llm-agents.cursor-agent;
+              modelIds = myconfig.programs.pi-coding-agent.cursorAcpModelIds;
               workerCommand = lib.getExe pkgs.nodejs;
               workerEntrypoint = externalWorkerEntrypoint;
               bridgeReadyTimeoutMs = 15000;
