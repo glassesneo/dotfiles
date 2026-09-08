@@ -65,6 +65,7 @@ def main [] {
   assert-contract ($pi.decisionUi.schemaVersion == 1) "decision-ui-config-schema"
   assert-contract (($pi.decisionUi.keybindings | get 'choice.select-and-note' | first) == "f12") "decision-ui-config-question-override"
   assert-contract (($pi.models.providers | get openai-codex | get modelOverrides | get 'gpt-5.6-sol' | get contextWindow) == 272000) "sol-soft-context-ceiling"
+  assert-contract (($pi.models.providers | get openai-codex | get modelOverrides | get 'gpt-6-astra' | get contextWindow) == 272000) "astra-soft-context-ceiling"
   assert-contract ($pi.settings.compaction.enabled and $pi.settings.compaction.reserveTokens == 16384 and $pi.settings.compaction.keepRecentTokens == 20000) "native-compaction-settings"
   assert-contract ($pi.settings.retry.enabled and $pi.settings.retry.maxRetries == 3 and $pi.settings.retry.baseDelayMs == 2000) "agent-retry-settings"
   assert-contract ($pi.settings.retry.provider.maxRetries == 0 and $pi.settings.retry.provider.maxRetryDelayMs == 60000) "provider-retry-disabled"
@@ -161,7 +162,8 @@ def main [] {
         search: { models: ["codex/gpt-5.6-luna"], thinkingLevel: "high", harness: "codex", harnessOptions: { mode: "read-only", permissionPolicy: "reject", webSearch: "cached" } },
         "small-read": { models: ["openrouter/cohere/north-mini-code:free", "mistral/mistral-small-2603", "openai-codex/gpt-5.6-luna"], thinkingLevel: "high", harness: "pi" },
         "small-write": { models: ["openai-codex/gpt-5.6-luna"], thinkingLevel: "xhigh", harness: "pi" },
-        "sol-high": { models: ["openai-codex/gpt-5.6-sol"], thinkingLevel: "high", harness: "pi" },
+        "ops-default": { models: ["openai-codex/gpt-6-astra"], thinkingLevel: "low", harness: "pi" },
+        "recon-default": { models: ["openai-codex/gpt-6-astra"], thinkingLevel: "medium", harness: "pi" },
         "standard-read": { models: ["cursor/cursor-grok-4.6-high-fast"], harness: "cursor-agent", harnessOptions: { mode: "ask", permissionPolicy: "reject", sandbox: "disabled", trustWorkspace: true, worktree: false } },
         "standard-write": { models: ["cursor/cursor-grok-4.6-high-fast"], harness: "cursor-agent", harnessOptions: { mode: "agent", permissionPolicy: "allow-always", sandbox: "disabled", trustWorkspace: true, worktree: false } },
       },

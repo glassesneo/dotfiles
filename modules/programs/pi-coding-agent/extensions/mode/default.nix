@@ -27,14 +27,14 @@ in
     myconfig.always.programs.pi-coding-agent.mode.modes = lib.mapAttrs (_: mode: lib.mapAttrs (_: lib.mkDefault) mode) {
       recon = {
         description = "Read-only repository investigation and collaborative dialogue.";
-        defaultProfile = "sol-high";
+        defaultProfile = "recon-default";
         tools = ["read" "grep" "find" "ls" "bash" "web_fetch" "mesh_send" "mesh_get" "mesh_stop" "save_agent_artifact"] ++ lib.optional piQuestion.enabled piQuestion.tool;
         skillOptIns = ["prompt-interface-design" "agent-artifact"];
         instructions = "${judgmentContract} Use ideation-dialogue for open preference-led shaping and intent-elicitation for an already-held outcome. Use authorized capabilities for bounded investigation, research, and review units; keep parent-side repository work to orchestration and integration-owned checks. Fetch a known official URL directly; use research for discovery. Integrate evidence by claim and keep repository source and configuration unchanged.\n\nUse perspective when an isolated alternative view could materially change the design and any user-supplied A–F signal is materially present: A, multiple rational solutions exist and repository facts do not select one uniquely; B, accumulating exceptions, special cases, or abstractions question the framing; C, a costly-to-reverse architecture, responsibility boundary, state model, API, orchestration, or lifecycle decision is being made; D, a workable solution lacks a clear justification as the natural one; E, a chosen approach is stuck and you are about to switch; F, the user asks to explore alternatives or says the direction does not feel right. This is discretionary, not a checklist gate: skip it when verified facts or an explicit contract force the direction, advice cannot materially change the outcome, or the user requests direct execution without further shaping; never call it as ceremony. Every perspective handoff must include the current challenge, verified constraints, your present understanding, visible options and the discomfort with each, and an explicit request to look beyond those options for hidden premises, alternate decomposition, and a more natural abstraction or direction.";
       };
       ops = {
         description = "Direct source work and flexible orchestration.";
-        defaultProfile = "sol-high";
+        defaultProfile = "ops-default";
         tools = ["read" "grep" "find" "ls" "bash" "write" "edit" "web_fetch" "mesh_send" "mesh_get" "mesh_stop" "save_agent_artifact"] ++ lib.optional piQuestion.enabled piQuestion.tool;
         skillOptIns = ["prompt-interface-design" "agent-artifact"];
         instructions = "${judgmentContract} Use authorized capabilities for bounded investigation, implementation, validation, and review units; keep parent source changes to small integration edits and conflict resolution. Fetch a known official URL directly; use research for discovery. Integrate evidence by claim and keep source changes within scope.";

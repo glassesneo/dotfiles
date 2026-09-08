@@ -15,7 +15,7 @@
   emergencyConfigDir = "${homeConfig.home.homeDirectory}/.pi/emergency-agent";
   modelDefaults = {
     defaultProvider = "openai-codex";
-    defaultModel = "gpt-5.6-sol";
+    defaultModel = "gpt-6-astra";
     defaultThinkingLevel = "medium";
   };
   hasSecret = secretName: builtins.hasAttr secretName homeConfig.sops.secrets;
@@ -60,8 +60,11 @@
   modelOverrides.providers =
     {
       # Repository-owned soft ceiling for Pi's native compaction scheduler; this
-      # does not represent Sol's provider-side context capability.
-      "openai-codex".modelOverrides."gpt-5.6-sol".contextWindow = 272000;
+      # does not represent provider-side context capability.
+      "openai-codex".modelOverrides = {
+        "gpt-5.6-sol".contextWindow = 272000;
+        "gpt-6-astra".contextWindow = 272000;
+      };
     }
     // lib.optionalAttrs (hasSecret "zai-api-key") {
       "zai-platform" = {
@@ -238,9 +241,13 @@ in
           };
         };
         profiles = lib.mapAttrs (_: profile: lib.mapAttrs (_: lib.mkDefault) profile) {
-          sol-high = {
-            models = ["openai-codex/gpt-5.6-sol"];
-            thinkingLevel = "high";
+          recon-default = {
+            models = ["openai-codex/gpt-6-astra"];
+            thinkingLevel = "medium";
+          };
+          ops-default = {
+            models = ["openai-codex/gpt-6-astra"];
+            thinkingLevel = "low";
           };
           small-read = {
             models = [
