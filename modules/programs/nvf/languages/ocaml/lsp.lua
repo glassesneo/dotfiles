@@ -7,7 +7,7 @@ local function ocaml_root(path)
   end
 
   local dir = vim.fs.dirname(path)
-  local opam = vim.fs.find(function(name)
+  local opam = vim.fs.find(function (name)
     return name:match("%.opam$") ~= nil
   end, { path = dir, upward = true, type = "file", limit = 1 })[1]
   if opam then
@@ -29,7 +29,7 @@ local language_id_of = {
 lsp.setup("ocamllsp", "ocamllsp", ocaml_root, {
   cmd = { "ocamllsp" },
   filetypes = { "ocaml", "menhir", "ocamlinterface", "ocamllex", "reason", "dune" },
-  get_language_id = function(_, ftype)
+  get_language_id = function (_, ftype)
     return language_id_of[ftype]
   end,
 })

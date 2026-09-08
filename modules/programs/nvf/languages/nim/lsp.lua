@@ -2,7 +2,7 @@ local lsp = require("nvf.lsp")
 
 local function nim_root(path)
   local dir = vim.fs.dirname(path)
-  local nimble = vim.fs.find(function(name)
+  local nimble = vim.fs.find(function (name)
     return name:match("%.nimble$") ~= nil
   end, { path = dir, upward = true, type = "file", limit = 1 })[1]
   if nimble then
