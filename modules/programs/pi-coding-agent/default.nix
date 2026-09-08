@@ -242,19 +242,31 @@ in
             models = ["openai-codex/gpt-5.6-sol"];
             thinkingLevel = "high";
           };
-          sol-medium = {
-            models = ["openai-codex/gpt-5.6-sol"];
-            thinkingLevel = "medium";
+          small-read = {
+            models = [
+              "openrouter/cohere/north-mini-code:free"
+              "mistral/mistral-small-2603"
+              "openai-codex/gpt-5.6-luna"
+            ];
+            thinkingLevel = "high";
           };
-          luna-xhigh = {
+          small-write = {
             models = ["openai-codex/gpt-5.6-luna"];
             thinkingLevel = "xhigh";
           };
-          terra-high = {
-            models = ["openai-codex/gpt-5.6-terra"];
-            thinkingLevel = "high";
+          standard-read = {
+            models = ["cursor/cursor-grok-4.6-high-fast"];
+            thinkingLevel = null;
+            harness = "cursor-agent";
+            harnessOptions = {
+              mode = "ask";
+              permissionPolicy = "reject";
+              sandbox = "disabled";
+              trustWorkspace = true;
+              worktree = false;
+            };
           };
-          cursor-standard = {
+          standard-write = {
             models = ["cursor/cursor-grok-4.6-high-fast"];
             thinkingLevel = null;
             harness = "cursor-agent";
@@ -266,33 +278,15 @@ in
               worktree = false;
             };
           };
-          cursor-fast = {
-            models = ["cursor/cursor-grok-4.5-high-fast"];
-            thinkingLevel = null;
-            harness = "cursor-agent";
-            harnessOptions = {
-              mode = "agent";
-              permissionPolicy = "allow-always";
-              sandbox = "disabled";
-              trustWorkspace = true;
-              worktree = false;
-            };
+          advanced = {
+            models = ["openai-codex/gpt-5.6-sol"];
+            thinkingLevel = "medium";
           };
-          fast-analysis = {
-            models = [
-              "openrouter/cohere/north-mini-code:free"
-              "openai-codex/gpt-5.6-luna"
-            ];
+          research = {
+            models = ["openai-codex/gpt-5.6-terra"];
             thinkingLevel = "high";
           };
-          validation = {
-            models = [
-              "mistral/mistral-small-2603"
-              "openai-codex/gpt-5.6-luna"
-            ];
-            thinkingLevel = "high";
-          };
-          deliberate = {
+          perspective = {
             models = [
               "openrouter/z-ai/glm-5.2:free"
               "cohere/command-a-plus-05-2026"
@@ -300,7 +294,7 @@ in
             ];
             thinkingLevel = "high";
           };
-          codex-search = {
+          search = {
             models = ["codex/gpt-5.6-luna"];
             thinkingLevel = "high";
             harness = "codex";

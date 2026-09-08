@@ -21,8 +21,8 @@ import { withTemporaryRoot } from "./test_helpers.ts";
 const capabilities = { nativeScreen: true, taskDelivery: true, taskCompletion: true, taskCancellation: true, usage: true, interactiveInterventions: true, terminalHistory: true };
 const profile = { models: ["synthetic/pi"], thinkingLevel: "medium" as const, harness: "pi" as const };
 const profiles: ExecutionProfileConfig = { schemaVersion: 2, profiles: { "pi-medium": profile } };
-function roleDefinition(name: "worker" | "reviewer"): RoleDefinition { return { description: `Synthetic ${name}`, tools: ["read"], instructions: `Act as ${name}.`, contextPolicy: "project", childExtensionContributions: [] }; }
-const catalog: RoleCatalog = { schemaVersion: 4, roles: { worker: roleDefinition("worker"), reviewer: roleDefinition("reviewer") } };
+function roleDefinition(name: "worker" | "reviewer"): RoleDefinition { return { selector: { agent: name, access: "read" }, description: `Synthetic ${name}`, tools: ["read"], instructions: `Act as ${name}.`, contextPolicy: "project", childExtensionContributions: [] }; }
+const catalog: RoleCatalog = { schemaVersion: 5, roles: { worker: roleDefinition("worker"), reviewer: roleDefinition("reviewer") } };
 const callPolicy: CallPolicy = { modes: { ops: { targets: { worker: { profiles: ["pi-medium"] }, reviewer: { profiles: ["pi-medium"] } } } }, roles: {} };
 function syntheticGcConfig(): MeshGcConfig { return { contextHeadroomTokens: 32768, periodicIntervalMs: 5000, activityHeartbeatMs: 2000, activityStaleMs: 10000, roles: { worker: { collectAt: 6, retain: 3, pressureFloor: 1 }, reviewer: { collectAt: 3, retain: 1, pressureFloor: 1 } } }; }
 const withRoot = (run: (root: string) => Promise<void>) => withTemporaryRoot("mesh-gc-", run);

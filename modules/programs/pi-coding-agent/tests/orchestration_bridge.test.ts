@@ -10,13 +10,13 @@ import { buildLaunchEnvelope } from "../extensions_src/utilities/agent_types.ts"
 import { FALLBACK_CONTINUE_CONTENT, FALLBACK_CONTINUE_CUSTOM_TYPE } from "../extensions_src/utilities/orchestration_profile_fallback.ts";
 import { FakeMonotonicTimers, yieldToIO } from "./test_helpers.ts";
 import { readAgentActivity } from "../extensions_src/utilities/orchestration_activity.ts";
-import { claimPendingTask, createTask, ensurePolicyEpoch, initializeMesh, markAgentStopping, patchAgentStatus, prepareAgent, publishAgent, readAgentSnapshot, requestTaskCancellation, reserveMeshCapacity } from "../extensions_src/utilities/orchestration_store.ts";
+import { claimPendingTask, createTask, ensurePolicyEpoch, failAgent as persistAgentFailure, finishTask as persistTaskCompletion, initializeMesh, markAgentStopping, patchAgentStatus, prepareAgent, publishAgent, readAgentSnapshot, requestTaskCancellation, reserveMeshCapacity } from "../extensions_src/utilities/orchestration_store.ts";
 
 const capabilities = { nativeScreen: true, taskDelivery: true, taskCompletion: true, taskCancellation: true, usage: true, interactiveInterventions: true, terminalHistory: true };
 const tmux = { socket: "/tmp/tmux", serverPid: "1", sessionId: "$1", sessionName: "main", windowId: "@1", paneId: "%1", windowName: "worker" };
-const syntheticRole = (name = "worker", contextPolicy: "project" | "prompt-only" = "project") => ({ description: `Synthetic ${name}`, tools: [], instructions: "Return the bounded result.", contextPolicy, childExtensionContributions: [] });
+const syntheticRole = (name = "worker", contextPolicy: "project" | "prompt-only" = "project") => ({ selector: { agent: name, access: "read" as const }, description: `Synthetic ${name}`, tools: [], instructions: "Return the bounded result.", contextPolicy, childExtensionContributions: [] });
 const syntheticProfile = { models: ["provider/model"], thinkingLevel: "medium" as const, harness: "pi" as const };
-const syntheticCatalog = (roles: Record<string, ReturnType<typeof syntheticRole>>) => ({ schemaVersion: 4 as const, roles });
+const syntheticCatalog = (roles: Record<string, ReturnType<typeof syntheticRole>>) => ({ schemaVersion: 5 as const, roles });
 const budgets = { maxLiveAgents: 4, maxConcurrentTasks: 4, maxTasksPerMesh: 20 };
 
 function reverseKeyInsertionOrder(value: unknown): unknown {
@@ -441,6 +441,177 @@ void test("cancellation and shutdown fence in-progress child promotions", async 
     }
 });
 
+// Admission: route persistence after a successful setModel is a repository-owned child lifecycle; types cannot observe an escaped settlement that leaves the task busy.
+// Given a successful promotion setModel, when subsequent route status persistence rejects, the mesh caller observes a failed task with preserved output/usage, no continuation, and an agent that cannot accept another task.
+void test("route persistence rejection fails the active task without continuation or reuse", async () => {
+    const profile = { models: ["provider/primary", "provider/fallback"], thinkingLevel: "medium" as const, harness: "pi" as const };
+    const fixture = await bridgeFixture({
+        profile,
+        registry: registryWindows({ "provider/primary": 200, "provider/fallback": 200 }),
+        dependencies: {
+            patchAgentStatus: async (...args) => {
+                if ((args[3].modelRoute as { activeIndex?: number } | undefined)?.activeIndex === 1) throw new Error("route persist rejected");
+                return patchAgentStatus(...args);
+            },
+        },
+    });
+    fixture.activate(); await fixture.start();
+    const task = await claimAndStart(fixture, "persist reject");
+    await fixture.emit("message_end", { message: { role: "assistant", content: [{ type: "text", text: "partial" }], stopReason: "error", errorMessage: "primary failed", usage: { input: 1, output: 1, totalTokens: 2 } } });
+    await fixture.emit("agent_settled");
+    const failed = await readAgentSnapshot(fixture.root, fixture.meshId, fixture.agentId, task.request.taskId);
+    assert.equal(fixture.sent.length, 0);
+    assert.equal(failed.task?.result?.outcome, "failed");
+    assert.match(failed.task?.result?.error ?? "", /route_persistence_failed/u);
+    assert.equal(failed.task?.result?.output, "partial");
+    assert.equal(failed.task?.result?.usage.totalTokens, 2);
+    assert.equal(failed.status.state, "failed");
+    assert.equal(failed.status.activeTaskId, undefined);
+    await assert.rejects(createTask(fixture.root, fixture.meshId, fixture.agentId, "must not accept", `root:${fixture.meshId}`), /not accepting|failed|idle/iu);
+});
+
+// Admission: cancellation lookup failure after route persistence rejection is a repository-owned exception boundary; types cannot observe an escaped settlement that leaves durable work busy.
+// Given rejected route persistence followed by unavailable cancellation state, the bridge queues failed completion and retirement so the caller observes terminal task and agent state without continuation.
+void test("route persistence rejection terminalizes when cancellation lookup also rejects", async () => {
+    const profile = { models: ["provider/primary", "provider/fallback"], thinkingLevel: "medium" as const, harness: "pi" as const };
+    const fixture = await bridgeFixture({
+        profile,
+        registry: registryWindows({ "provider/primary": 200, "provider/fallback": 200 }),
+        dependencies: {
+            patchAgentStatus: async (...args) => {
+                if ((args[3].modelRoute as { activeIndex?: number } | undefined)?.activeIndex === 1) throw new Error("route persist rejected");
+                return patchAgentStatus(...args);
+            },
+            readTaskCancellation: async () => { throw new Error("cancellation state unavailable"); },
+        },
+    });
+    fixture.activate(); await fixture.start();
+    const task = await claimAndStart(fixture, "persist and cancellation lookup reject");
+    await fixture.emit("message_end", { message: { role: "assistant", content: [{ type: "text", text: "partial" }], stopReason: "error", errorMessage: "primary failed" } });
+    await fixture.emit("agent_settled");
+    const failed = await readAgentSnapshot(fixture.root, fixture.meshId, fixture.agentId, task.request.taskId);
+    assert.equal(fixture.sent.length, 0);
+    assert.equal(failed.task?.result?.outcome, "failed");
+    assert.match(failed.task?.result?.error ?? "", /route_persistence_failed/u);
+    assert.equal(failed.status.state, "failed");
+    assert.equal(failed.status.activeTaskId, undefined);
+});
+
+// Admission: cancellation versus route-persist rejection is a distinct consumer result from failed retirement; the existing blocked-success race does not observe a throwing persist.
+// Given cancellation requested while promoted-route persistence rejects, the mesh caller observes a stopped task and stopped agent, no fallback continuation, and no further task acceptance.
+void test("cancellation takes precedence over route persistence rejection", async () => {
+    const profile = { models: ["provider/primary", "provider/fallback"], thinkingLevel: "medium" as const, harness: "pi" as const };
+    let release!: () => void;
+    let entered!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const blocked = new Promise<void>(resolve => { entered = resolve; });
+    const fixture = await bridgeFixture({
+        profile,
+        registry: registryWindows({ "provider/primary": 200, "provider/fallback": 200 }),
+        dependencies: {
+            patchAgentStatus: async (...args) => {
+                if ((args[3].modelRoute as { activeIndex?: number } | undefined)?.activeIndex === 1) { entered(); await gate; throw new Error("route persist rejected"); }
+                return patchAgentStatus(...args);
+            },
+        },
+    });
+    fixture.activate(); await fixture.start();
+    const task = await claimAndStart(fixture, "cancel persist reject");
+    await fixture.emit("message_end", { message: { role: "assistant", content: [{ type: "text", text: "partial" }], stopReason: "error", errorMessage: "primary failed", usage: { input: 1, output: 1, totalTokens: 2 } } });
+    const settling = fixture.emit("agent_settled");
+    await blocked;
+    await requestTaskCancellation(fixture.root, fixture.meshId, task.request.taskId, "cancel during persist reject");
+    release();
+    await settling;
+    const stopped = await readAgentSnapshot(fixture.root, fixture.meshId, fixture.agentId, task.request.taskId);
+    assert.equal(stopped.task?.result?.outcome, "stopped");
+    assert.equal(stopped.task?.result?.output, "partial");
+    assert.equal(stopped.task?.result?.usage.totalTokens, 2);
+    assert.equal(fixture.sent.length, 0);
+    assert.equal(stopped.status.state, "stopped");
+    assert.equal(stopped.status.activeTaskId, undefined);
+    await assert.rejects(createTask(fixture.root, fixture.meshId, fixture.agentId, "must not reuse stopped agent", `root:${fixture.meshId}`), /not accepting|stopped|idle/iu);
+});
+
+// Admission: cancellation can become durable after retirement is queued; a captured pre-finish disposition cannot safely determine the terminal agent state.
+// Given cancellation requested after failed retirement is queued but before finishTask resolves, the durable stopped result makes the bridge retire the agent as stopped rather than failed.
+void test("durable completion outcome determines queued promotion retirement", async () => {
+    const profile = { models: ["provider/primary", "provider/fallback"], thinkingLevel: "medium" as const, harness: "pi" as const };
+    let release!: () => void;
+    let entered!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const blocked = new Promise<void>(resolve => { entered = resolve; });
+    const fixture = await bridgeFixture({
+        profile,
+        registry: registryWindows({ "provider/primary": 200, "provider/fallback": 200 }),
+        dependencies: {
+            patchAgentStatus: async (...args) => {
+                if ((args[3].modelRoute as { activeIndex?: number } | undefined)?.activeIndex === 1) throw new Error("route persist rejected");
+                return patchAgentStatus(...args);
+            },
+            finishTask: async (...args) => { entered(); await gate; return persistTaskCompletion(...args); },
+        },
+    });
+    fixture.activate(); await fixture.start();
+    const task = await claimAndStart(fixture, "late cancellation");
+    await fixture.emit("message_end", { message: { role: "assistant", content: [{ type: "text", text: "partial" }], stopReason: "error", errorMessage: "primary failed" } });
+    const settling = fixture.emit("agent_settled");
+    await blocked;
+    await requestTaskCancellation(fixture.root, fixture.meshId, task.request.taskId, "cancel after retirement queued");
+    release();
+    await settling;
+    const stopped = await readAgentSnapshot(fixture.root, fixture.meshId, fixture.agentId, task.request.taskId);
+    assert.equal(stopped.task?.result?.outcome, "stopped");
+    assert.equal(stopped.status.state, "stopped");
+    assert.equal(stopped.status.activeTaskId, undefined);
+    assert.equal(fixture.sent.length, 0);
+    await assert.rejects(createTask(fixture.root, fixture.meshId, fixture.agentId, "must not reuse late-stopped agent", `root:${fixture.meshId}`), /not accepting|stopped|idle/iu);
+});
+
+// Admission: finishTask-to-failAgent is a repository-owned child lifecycle; types cannot observe swallowed retirement that republishes idle and pumps new work.
+// Given route-persistence failure whose task completion writes and whose failAgent then rejects, when settlement crosses the child bridge, the mesh caller observes shutdown without a continuation or a further pumped task, and cannot submit another task.
+void test("failAgent rejection after route-persistence completion shuts down without pumping", async () => {
+    const profile = { models: ["provider/primary", "provider/fallback"], thinkingLevel: "medium" as const, harness: "pi" as const };
+    let now = Date.now();
+    const fixture = await bridgeFixture({
+        profile,
+        registry: registryWindows({ "provider/primary": 200, "provider/fallback": 200 }),
+        dependencies: {
+            completionPersistenceTimeoutMs: 2,
+            now: () => now,
+            setTimeout() { return 1; },
+            clearTimeout() {},
+            patchAgentStatus: async (...args) => {
+                if ((args[3].modelRoute as { activeIndex?: number } | undefined)?.activeIndex === 1) throw new Error("route persist rejected");
+                return patchAgentStatus(...args);
+            },
+            failAgent: async () => { now += 2; throw new Error("retirement rejected"); },
+        },
+    });
+    fixture.activate(); await fixture.start();
+    const task = await claimAndStart(fixture, "retire reject");
+    await fixture.emit("message_end", { message: { role: "assistant", content: [{ type: "text", text: "partial" }], stopReason: "error", errorMessage: "primary failed", usage: { input: 1, output: 1, totalTokens: 2 } } });
+    await fixture.emit("agent_settled");
+    const snapshot = await readAgentSnapshot(fixture.root, fixture.meshId, fixture.agentId, task.request.taskId);
+    assert.equal(fixture.sent.length, 0);
+    assert.equal(fixture.shutdowns, 1);
+    assert.deepEqual(fixture.delivered, ["retire reject"]);
+    assert.equal(snapshot.task?.result?.outcome, "failed");
+    assert.match(snapshot.task?.result?.error ?? "", /route_persistence_failed/u);
+    assert.equal(snapshot.task?.result?.output, "partial");
+    assert.equal(snapshot.task?.result?.usage.totalTokens, 2);
+    assert.equal(snapshot.activity.acceptingTask, false);
+    assert.notEqual(snapshot.status.state, "busy");
+    await assert.rejects(createTask(fixture.root, fixture.meshId, fixture.agentId, "must not pump", `root:${fixture.meshId}`), /not accepting|failed|runtime|idle/iu);
+    await fixture.tick();
+    assert.deepEqual(fixture.delivered, ["retire reject"]);
+    assert.equal(fixture.sent.length, 0);
+    await fixture.emit("session_shutdown", { reason: "quit" });
+    await assert.rejects(createTask(fixture.root, fixture.meshId, fixture.agentId, "must not reuse", `root:${fixture.meshId}`), /not accepting|failed|runtime|idle/iu);
+    await fixture.tick();
+    assert.deepEqual(fixture.delivered, ["retire reject"]);
+});
+
 // Admitted contract: given current tokens plus native compaction reserve, an undersized middle candidate is skipped and the next fitting candidate continues.
 void test("capacity checks skip an undersized middle candidate in configured order", async () => {
     const profile = { models: ["provider/primary", "provider/small", "provider/wide"], thinkingLevel: "medium" as const, harness: "pi" as const };
@@ -482,6 +653,72 @@ void test("non-error settlement and cancellation do not promote profile candidat
     assert.equal(fixture.sent.length, 0);
     const cancelled = await readAgentSnapshot(fixture.root, fixture.meshId, fixture.agentId, task.request.taskId);
     assert.equal(cancelled.task?.result?.outcome, "stopped");
+});
+
+// Admission: exhaustion retirement shares the repository-owned bounded completion lifecycle; type and store validation cannot detect a rejected retirement being discarded after task completion.
+// Given exhausted fallback whose initial retirement writes reject transiently, the bridge retains the retirement, does not accept or pump new work, and a later retry terminalizes the agent.
+void test("runtime exhaustion retains retirement through transient persistence failure", async () => {
+    const profile = { models: ["provider/primary", "provider/fallback"], thinkingLevel: "medium" as const, harness: "pi" as const };
+    let retirementAttempts = 0;
+    const fixture = await bridgeFixture({
+        profile,
+        registry: registryWindows({ "provider/primary": 200, "provider/fallback": 200 }),
+        dependencies: {
+            failAgent: async (...args) => {
+                retirementAttempts += 1;
+                if (retirementAttempts <= 2) throw new Error("transient retirement rejection");
+                return persistAgentFailure(...args);
+            },
+        },
+    });
+    fixture.activate(); await fixture.start();
+    const task = await claimAndStart(fixture, "transient exhaustion retirement");
+    await fixture.emit("message_end", { message: { role: "assistant", content: [{ type: "text", text: "partial" }], stopReason: "error", errorMessage: "primary failed" } });
+    await fixture.emit("agent_settled");
+    await fixture.emit("message_end", { message: { role: "assistant", content: [{ type: "text", text: "still failing" }], stopReason: "error", errorMessage: "fallback failed" } });
+    await fixture.emit("agent_settled");
+    assert.equal(retirementAttempts, 2);
+    assert.deepEqual(fixture.delivered, ["transient exhaustion retirement"]);
+    await assert.rejects(createTask(fixture.root, fixture.meshId, fixture.agentId, "must not enter retry window", `root:${fixture.meshId}`), /not accepting|runtime|idle/iu);
+    await fixture.tick();
+    const recovered = await readAgentSnapshot(fixture.root, fixture.meshId, fixture.agentId, task.request.taskId);
+    assert.equal(retirementAttempts, 3);
+    assert.equal(recovered.task?.result?.outcome, "failed");
+    assert.equal(recovered.status.state, "failed");
+    assert.equal(recovered.status.activeTaskId, undefined);
+    assert.deepEqual(fixture.delivered, ["transient exhaustion retirement"]);
+});
+
+// Admission: a permanently rejected exhaustion retirement must reach the existing bounded shutdown path rather than exposing idle activity or pumping queued work.
+// Given exhausted fallback whose retirement write remains unavailable through its deadline, the bridge shuts down with the failed task retained and does not pump another task.
+void test("runtime exhaustion retirement rejection reaches bounded shutdown", async () => {
+    const profile = { models: ["provider/primary", "provider/fallback"], thinkingLevel: "medium" as const, harness: "pi" as const };
+    let now = Date.now();
+    const fixture = await bridgeFixture({
+        profile,
+        registry: registryWindows({ "provider/primary": 200, "provider/fallback": 200 }),
+        dependencies: {
+            completionPersistenceTimeoutMs: 2,
+            now: () => now,
+            setTimeout() { return 1; },
+            clearTimeout() {},
+            failAgent: async () => { now += 2; throw new Error("retirement unavailable"); },
+        },
+    });
+    fixture.activate(); await fixture.start();
+    const task = await claimAndStart(fixture, "permanent exhaustion retirement");
+    await fixture.emit("message_end", { message: { role: "assistant", content: [{ type: "text", text: "partial" }], stopReason: "error", errorMessage: "primary failed" } });
+    await fixture.emit("agent_settled");
+    await fixture.emit("message_end", { message: { role: "assistant", content: [{ type: "text", text: "still failing" }], stopReason: "error", errorMessage: "fallback failed" } });
+    await fixture.emit("agent_settled");
+    const failed = await readAgentSnapshot(fixture.root, fixture.meshId, fixture.agentId, task.request.taskId);
+    assert.equal(fixture.shutdowns, 1);
+    assert.equal(failed.task?.result?.outcome, "failed");
+    assert.equal(failed.activity.acceptingTask, false);
+    assert.deepEqual(fixture.delivered, ["permanent exhaustion retirement"]);
+    await assert.rejects(createTask(fixture.root, fixture.meshId, fixture.agentId, "must not enter shutdown window", `root:${fixture.meshId}`), /not accepting|runtime|idle/iu);
+    await fixture.tick();
+    assert.deepEqual(fixture.delivered, ["permanent exhaustion retirement"]);
 });
 
 // Admitted contract: when all candidates fail, the caller observes one failed task and a failed agent that cannot accept another task.

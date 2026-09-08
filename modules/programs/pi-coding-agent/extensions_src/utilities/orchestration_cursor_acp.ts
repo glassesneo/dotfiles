@@ -10,7 +10,9 @@ const cursorAcpModelIds: Readonly<Record<string, string>> = {
     "cursor-grok-4.5-high-fast": "grok-4.5[effort=high,fast=true]",
     "cursor-grok-4.6-high-fast": "grok-4.6[effort=high,fast=true]",
 };
-function expectedAcpModelId(model: string): string { const modelId = cursorAcpModelIds[model]; if (!modelId) throw new Error(`Cursor ACP model mapping is unavailable for ${model}`); return modelId; }
+/** Exact ACP identifier emitted for one configured Cursor CLI alias. */
+export function cursorAcpModelId(model: string): string | undefined { return cursorAcpModelIds[model]; }
+function expectedAcpModelId(model: string): string { const modelId = cursorAcpModelId(model); if (!modelId) throw new Error(`Cursor ACP model mapping is unavailable for ${model}`); return modelId; }
 function matchesModelCandidate(candidate: unknown, model: string): boolean { const value = record(candidate); return candidate === model || [value?.modelId, value?.value, value?.id, value?.name].includes(model); }
 function supportsModel(session: JsonObject, model: string): boolean {
     const configOptions = session.configOptions;

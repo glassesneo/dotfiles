@@ -10,11 +10,12 @@ import { resolvePaletteKeymap } from "../extensions_src/utilities/command_palett
 import { openMeshHistory } from "../extensions_src/utilities/orchestration_history.ts";
 import { MeshAgentsPaletteComponent } from "../extensions_src/utilities/orchestration_palette.ts";
 import { openLivePreview } from "../extensions_src/utilities/orchestration_preview.ts";
+import { displayIdentityForSnapshot } from "../extensions_src/utilities/orchestration_identity.ts";
 import { MAX_MODEL_VISIBLE_BYTES, MAX_MODEL_VISIBLE_LINES, projectDebugSnapshot, projectMinimalAgentTask, serializeModelVisibleJson } from "../extensions_src/utilities/orchestration_projection.ts";
 import { inspectMeshAgentWindow, launchAgentSession, meshHubName, stopAgentSession, type CommandResult } from "../extensions_src/utilities/orchestration_tmux.ts";
 import { emptyUsage, type AgentSnapshot, type AgentState, type TaskState } from "../extensions_src/utilities/orchestration_types.ts";
 
-const syntheticRole = (name = "worker") => ({ description: `Synthetic ${name}`, tools: [], instructions: "Return the bounded result.", contextPolicy: "project" as const, childExtensionContributions: [] });
+const syntheticRole = (name = "worker") => ({ selector: { agent: name, access: "read" as const }, description: `Synthetic ${name}`, tools: [], instructions: "Return the bounded result.", contextPolicy: "project" as const, childExtensionContributions: [] });
 const syntheticProfile = { models: ["provider/model"], thinkingLevel: "medium" as const, harness: "pi" as const };
 const definition = syntheticRole("worker");
 const meshId = "11111111-1111-4111-8111-111111111111";
@@ -142,6 +143,44 @@ void test("model-visible projections omit modelRoute while keeping operator deta
     assert.equal(value.status.modelRoute?.activeModel, "provider/fallback");
     assert.doesNotMatch(JSON.stringify(minimal), /provider\/fallback|modelRoute|temporary failure/u);
     assert.doesNotMatch(JSON.stringify(debug), /provider\/fallback|modelRoute|temporary failure/u);
+});
+
+// Admission: compact/full mesh projections are the model-visible identity boundary; TUI identity may keep execution details that must not be serialized into tool content.
+// Given a snapshot whose internal role and profile names differ from the public selector, model-visible projections keep agent/access while operator identity retains the execution route.
+void test("model-visible projections omit internal role, profile, and model identity", () => {
+    const value = snapshot("acacacac-acac-4cac-8cac-acacacacacac", "idle");
+    value.agent.role = "small-write";
+    value.agent.selectedProfile = "small-write";
+    value.agent.roleSnapshot = { selector: { agent: "small", access: "write" }, description: "Synthetic small write", tools: [], instructions: "Return the bounded result.", contextPolicy: "project", childExtensionContributions: [] };
+    value.agent.profileSnapshot = { models: ["openai-codex/gpt-5.6-luna"], thinkingLevel: "xhigh", harness: "pi" };
+    value.status.modelRoute = {
+        activeIndex: 0,
+        activeModel: "openai-codex/gpt-5.6-luna",
+        attempts: [{ index: 0, model: "openai-codex/gpt-5.6-luna", category: "unavailable", at: "2026-01-01T00:00:00Z", message: "quota" }],
+    };
+    value.task!.result!.error = "openai-codex/gpt-5.6-luna failed for small-write";
+    value.task!.status.error = "openai-codex/gpt-5.6-luna failed for small-write";
+    value.task!.request.requesterEndpointId = "agent:private";
+    value.task!.directory = "/private/task";
+    value.status.childSessionId = "private-session";
+    value.status.childSessionFile = "/private/session.jsonl";
+    value.stop = { schemaVersion: 1, meshId, agentId: value.agent.agentId, stopRequestId: "cdcdcdcd-cdcd-4dcd-8dcd-cdcdcdcdcdcd", state: "failed", source: "peer", reason: "openai-codex/gpt-5.6-luna failed", previousAgentState: "idle", requestedAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:01Z", failedAt: "2026-01-01T00:00:01Z", failureCategory: "provider" };
+    const minimal = projectMinimalAgentTask(value);
+    const debug = projectDebugSnapshot(value);
+    assert.deepEqual({ agent: minimal.agent, access: minimal.access }, { agent: "small", access: "write" });
+    assert.deepEqual({ agent: debug.agent.agent, access: debug.agent.access }, { agent: "small", access: "write" });
+    for (const projected of [minimal, debug]) {
+        const text = JSON.stringify(projected);
+        assert.doesNotMatch(text, /small-write|openai-codex\/gpt-5\.6-luna|selectedProfile|profileSnapshot|roleSnapshot/u);
+    }
+    assert.equal(minimal.stop?.reason, "route_unavailable");
+    assert.equal(debug.stop?.reason, "route_unavailable");
+    assert.equal("childSessionFile" in debug.status, false);
+    assert.equal("directory" in (debug.task ?? {}), false);
+    assert.equal("claimed" in (debug.task ?? {}), false);
+    assert.equal(debug.task?.status.error, "route_exhausted");
+    const identity = displayIdentityForSnapshot(value);
+    assert.deepEqual({ role: identity.role, profile: identity.profile, model: identity.model }, { role: "small-write", profile: "small-write", model: "openai-codex/gpt-5.6-luna" });
 });
 
 void test("debug projection marks unsupported external telemetry unavailable", () => {

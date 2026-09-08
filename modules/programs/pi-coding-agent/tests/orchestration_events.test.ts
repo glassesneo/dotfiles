@@ -12,7 +12,7 @@ import { bindAgentRuntime } from "../extensions_src/utilities/orchestration_runt
 import { attachRootMesh, claimPendingTask, createTask, ensurePolicyEpoch, finishTask, initializeMesh, meshPaths, patchAgentStatus, prepareAgent, publishAgent, readPolicyEpoch, reserveMeshCapacity } from "../extensions_src/utilities/orchestration_store.ts";
 import { DirectoryReadObserver, withTemporaryRoot as withRoot } from "./test_helpers.ts";
 
-const syntheticRole = (name = "worker") => ({ description: `Synthetic ${name}`, tools: [], instructions: "Return the bounded result.", contextPolicy: "project" as const, childExtensionContributions: [] });
+const syntheticRole = (name = "worker") => ({ selector: { agent: name, access: "read" as const }, description: `Synthetic ${name}`, tools: [], instructions: "Return the bounded result.", contextPolicy: "project" as const, childExtensionContributions: [] });
 const syntheticProfile = { models: ["provider/model"], thinkingLevel: "medium" as const, harness: "pi" as const };
 const budgets = { maxLiveAgents: 4, maxConcurrentTasks: 8, maxTasksPerMesh: 8 };
 const capabilities = { nativeScreen: true, taskDelivery: true, taskCompletion: true, taskCancellation: true, usage: true, interactiveInterventions: true, terminalHistory: true };
@@ -36,7 +36,7 @@ async function publishEventAgent(root: string, meshId: string, epoch: Awaited<Re
 async function eventFixture(root: string) {
     const mesh = await initializeMesh(root, { rootSessionId: "root", rootSessionFile: "/root.jsonl", recoverable: true, budgets });
     const roles = { worker: syntheticRole("worker") };
-    const epoch = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", catalog: { schemaVersion: 4, roles }, profiles: { schemaVersion: 2, profiles: { "pi-medium": syntheticProfile } }, callPolicy: { modes: { ops: { targets: { worker: { profiles: ["pi-medium"] } } } }, roles: {} } });
+    const epoch = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", catalog: { schemaVersion: 5, roles }, profiles: { schemaVersion: 2, profiles: { "pi-medium": syntheticProfile } }, callPolicy: { modes: { ops: { targets: { worker: { profiles: ["pi-medium"] } } } }, roles: {} } });
     const [agentId, secondAgentId] = await Promise.all([publishEventAgent(root, mesh.meshId, epoch, roles.worker), publishEventAgent(root, mesh.meshId, epoch, roles.worker)]);
     const endpoint = await bindMeshEndpoint(root, mesh.meshId, { endpointId: `root:${mesh.meshId}`, kind: "root", harness: "pi", sessionId: "root", sessionFile: "/root.jsonl" });
     const lease = await attachRootMesh(root, mesh.meshId, { rootSessionId: "root", rootSessionFile: "/root.jsonl", budgets });

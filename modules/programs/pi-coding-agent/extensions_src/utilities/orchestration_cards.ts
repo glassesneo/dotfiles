@@ -24,7 +24,7 @@ export type CardRenderContext = {
     isError?: boolean;
 };
 
-export type SendCardArgs = { agent?: string; agentId?: string; profile?: string; message: string };
+export type SendCardArgs = { agent?: string; access?: "read" | "write"; agentId?: string; message: string };
 export type WaitCardArgs = { taskIds: string[] };
 export type ReportCardArgs = { summary: string };
 
@@ -203,8 +203,8 @@ function renderAgentResult(result: AgentToolResult<unknown>, options: ToolRender
 export function renderSendCall(args: SendCardArgs, theme: Theme, context: CardRenderContext): Component {
     const lines = [joinParts(["mesh_send", args.agentId !== undefined ? "existing agent" : "new agent"])];
     if (context.expanded) {
-        if (args.agent) lines.push(labeled(theme, "requestedRole", agentTypeText(theme, args.agent)));
-        if (args.profile) lines.push(labeled(theme, "requestedProfile", args.profile));
+        if (args.agent) lines.push(labeled(theme, "requestedAgent", agentTypeText(theme, args.agent)));
+        if (args.access) lines.push(labeled(theme, "requestedAccess", args.access));
         if (args.agentId !== undefined) lines.push(labeled(theme, "agentId", args.agentId));
         lines.push(labeled(theme, "message", previewText(args.message, EXPANDED_TEXT_LINES, EXPANDED_TEXT_CHARS)));
     }

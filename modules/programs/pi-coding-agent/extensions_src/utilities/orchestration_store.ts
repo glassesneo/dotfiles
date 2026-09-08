@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { appendFile, link, mkdir, open, readFile, readdir, rm, unlink, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import { assertLaunchEnvelopeProjection, buildPolicySnapshot, canonicalJson, launchEnvelopeDigest, policyDigest, validateCallerPolicy, validateExecutionProfile, validateRoleDefinition, validateTargetPolicy, type AgentHarness, type CallPolicy, type MeshBudgets, type RoleCatalog } from "./agent_types.ts";
+import { assertLaunchEnvelopeProjection, buildPolicySnapshot, canonicalJson, launchEnvelopeDigest, policyDigest, validateCallerPolicy, validateExecutionProfile, validatePolicySnapshotReferences, validateRoleDefinition, validateTargetPolicy, type AgentHarness, type CallPolicy, type MeshBudgets, type RoleCatalog } from "./agent_types.ts";
 import type { ExecutionProfileConfig } from "./mode_types.ts";
 import { mapConcurrent } from "./concurrency.ts";
 import { bindCompletionTargetUnlocked, validateCompletionTarget } from "./orchestration_completion.ts";
@@ -58,7 +58,7 @@ function validateEpoch(value: unknown, meshId: string, epochId: string): PolicyE
     const profiles = Object.fromEntries(Object.entries(object(raw.profiles, "policy epoch profiles")).map(([name, profile]) => [name, validateExecutionProfile(name, profile, `policy epoch profiles.${name}`)]));
     const policies = Object.fromEntries(Object.entries(object(raw.policies, "policy epoch policies")).map(([name, policy]) => [name, validateCallerPolicy(policy, `policy epoch policies.${name}`)]));
     if (canonicalJson(Object.keys(policies).sort()) !== canonicalJson(Object.keys(roles).sort())) throw new Error("policy epoch policies must exactly cover roles");
-    const snapshot = { mode, directTargets, roles, profiles, policies }; const digest = nonempty(raw.policyDigest, "policy epoch policyDigest"); if (!SHA256.test(digest) || digest !== policyDigest(snapshot)) throw new Error("policy epoch digest does not match immutable policy snapshot"); timestamp(raw.createdAt, "policy epoch createdAt");
+    const snapshot = { mode, directTargets, roles, profiles, policies }; validatePolicySnapshotReferences(snapshot, "root"); const digest = nonempty(raw.policyDigest, "policy epoch policyDigest"); if (!SHA256.test(digest) || digest !== policyDigest(snapshot)) throw new Error("policy epoch digest does not match immutable policy snapshot"); timestamp(raw.createdAt, "policy epoch createdAt");
     const epoch = { schemaVersion: POLICY_EPOCH_SCHEMA_VERSION, meshId, epochId, ...snapshot, policyDigest: digest, createdAt: raw.createdAt as string } as PolicyEpoch;
     Object.defineProperty(epoch, "roleSet", { enumerable: false, value: Object.keys(directTargets) });
     return epoch;

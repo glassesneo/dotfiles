@@ -12,7 +12,7 @@ const taskId = "22222222-2222-4222-8222-222222222222";
 const theme = { fg: (_role: string, text: string) => text, bold: (text: string) => text };
 
 function snapshot(route?: AgentSnapshot["status"]["modelRoute"]): AgentSnapshot {
-    const definition: RoleDefinition = { description: "Synthetic worker", tools: ["read", "write"], instructions: "Complete the bounded task.", contextPolicy: "project", childExtensionContributions: [] };
+    const definition: RoleDefinition = { selector: { agent: "small", access: "write" }, description: "Synthetic worker", tools: ["read", "write"], instructions: "Complete the bounded task.", contextPolicy: "project", childExtensionContributions: [] };
     const usage = emptyUsage();
     const meshId = "55555555-5555-4555-8555-555555555555";
     return {
@@ -73,9 +73,9 @@ void test("malformed mesh results remain private and preserve renderer mechanics
 // Admission: renderer cards are the stable user-visible boundary; type checks cannot detect duplicated identity, falsely labeled delivery stages, identifier leakage, or narrow-terminal overflow.
 // Given a call row and its snapshot-backed result, when Pi renders both parts of one mesh_send card, users observe target identity once and changing state without a redundant disposition summary.
 void test("mesh_send cards keep operation and resolved identity in separate nonduplicating rows", () => {
-    const newArgs = { agent: "worker", profile: "pi-medium", message: "bounded" };
+    const newArgs = { agent: "small", access: "write" as const, message: "bounded" };
     const expandedNewCall = render(renderSendCall(newArgs, theme as never, { expanded: true, lastComponent: undefined }), 34).replace(/\s+/gu, " ");
-    assert.match(expandedNewCall, /new agent/u); assert.match(expandedNewCall, /requestedRole: worker/u); assert.match(expandedNewCall, /requestedProfile: pi-medium/u); assert.match(expandedNewCall, /message: bounded/u);
+    assert.match(expandedNewCall, /new agent/u); assert.match(expandedNewCall, /requestedAgent: small/u); assert.match(expandedNewCall, /requestedAccess: write/u); assert.match(expandedNewCall, /message: bounded/u);
     const existingArgs = { agentId, message: "bounded" };
     const expandedExistingCall = render(renderSendCall(existingArgs, theme as never, { expanded: true, lastComponent: undefined }), 34).replace(/\s+/gu, " ");
     assert.match(expandedExistingCall, /existing agent/u); assert.match(expandedExistingCall.replace(/\s+/gu, ""), new RegExp(agentId, "u"));

@@ -1,5 +1,6 @@
 import type { Usage } from "@earendil-works/pi-ai";
 import { canonicalJson } from "./agent_types.ts";
+import { cursorAcpModelId } from "./orchestration_cursor_acp.ts";
 import {
     isTerminalTask,
     promptSummary,
@@ -31,6 +32,7 @@ export type MinimalAgentTask = {
     agentId: string;
     taskId?: string;
     agent: string;
+    access?: "read" | "write";
     summary: string;
     agentState: AgentState;
     activity: AgentSnapshot["activity"];
@@ -46,7 +48,7 @@ export type MinimalSubmitResult = {
     agentId: string;
     taskId: string;
     agent: string;
-    profile: string;
+    access?: "read" | "write";
     agentState: AgentState;
     taskState: TaskState;
 };
@@ -63,8 +65,11 @@ export type AgentToolDetails = AgentSnapshot & {
 };
 
 export type SubmitDetails = AgentToolDetails;
-type ModelVisibleTaskResult = Omit<NonNullable<NonNullable<AgentSnapshot["task"]>["result"]>, "usage" | "turns"> & { usage: Usage | "unavailable"; turns: number | "unavailable" };
-type ModelVisibleTask = Omit<NonNullable<AgentSnapshot["task"]>, "result"> & { result: ModelVisibleTaskResult | null };
+type AgentTask = NonNullable<AgentSnapshot["task"]>;
+type ModelVisibleTaskResult = Omit<NonNullable<AgentTask["result"]>, "usage" | "turns"> & { usage: Usage | "unavailable"; turns: number | "unavailable" };
+type ModelVisibleTaskRequest = Omit<AgentTask["request"], "requesterEndpointId" | "requesterAgentId" | "completion">;
+type ModelVisibleTaskStatus = Omit<AgentTask["status"], "error"> & { error?: string };
+type ModelVisibleTask = Omit<AgentTask, "request" | "status" | "result" | "directory" | "claimed"> & { request: ModelVisibleTaskRequest; status: ModelVisibleTaskStatus; result: ModelVisibleTaskResult | null };
 /** Hide provisional task results until the task status is terminal. */
 export function sanitizeSnapshot(snapshot: AgentSnapshot): AgentSnapshot {
     const task = snapshot.task && !isTerminalTask(snapshot.task.status.state) && snapshot.task.result
@@ -73,13 +78,13 @@ export function sanitizeSnapshot(snapshot: AgentSnapshot): AgentSnapshot {
     return { ...snapshot, task };
 }
 
-export function projectModelVisibleStop(stop: AgentSnapshot["stop"]): ModelVisibleStop | null {
+export function projectModelVisibleStop(stop: AgentSnapshot["stop"], internalNames: readonly string[] = []): ModelVisibleStop | null {
     if (!stop) return null;
     return {
         stopRequestId: stop.stopRequestId,
         state: stop.state,
         source: stop.source,
-        reason: stop.reason,
+        reason: sanitizeModelVisibleError(stop.reason, internalNames),
         requestedAt: stop.requestedAt,
         updatedAt: stop.updatedAt,
         terminatingAt: stop.terminatingAt ?? null,
@@ -89,23 +94,62 @@ export function projectModelVisibleStop(stop: AgentSnapshot["stop"]): ModelVisib
     };
 }
 
+export function publicCapabilityFields(snapshot: AgentSnapshot): { agent: string; access?: "read" | "write" } {
+    const selector = snapshot.agent.roleSnapshot.selector;
+    return { agent: selector.agent, ...(selector.access ? { access: selector.access } : {}) };
+}
+
+/** Exact configured model spellings emitted by Cursor and Codex adapters. */
+export function configuredModelDiagnosticNames(models: readonly string[]): string[] {
+    const names = new Set<string>();
+    for (const model of models) {
+        names.add(model);
+        if (model.startsWith("cursor/")) {
+            const alias = model.slice("cursor/".length);
+            names.add(alias);
+            const acpModelId = cursorAcpModelId(alias);
+            if (acpModelId) names.add(acpModelId);
+        } else if (model.startsWith("codex/")) names.add(model.slice("codex/".length));
+    }
+    return [...names];
+}
+
+export function sanitizeModelVisibleError(value: unknown, internalNames: readonly string[] = []): string {
+    let text: string;
+    try { text = value instanceof Error ? value.message : typeof value === "string" ? value : JSON.stringify(value) ?? "Unknown error"; } catch { text = "Unknown error"; }
+    return internalNames.some(name => name.length > 0 && text.includes(name)) ? "route_unavailable" : text;
+}
+
+function modelVisibleError(snapshot: AgentSnapshot, candidate = snapshot.task?.result?.error ?? snapshot.status.exitReason): string | undefined {
+    if (!candidate) return undefined;
+    if (candidate === "route_persistence_failed" || snapshot.status.exitReason === "route_persistence_failed") return "route_persistence_failed";
+    const route = snapshot.status.modelRoute;
+    if (route && new Set(route.attempts.map(attempt => attempt.index)).size >= snapshot.agent.profileSnapshot.models.length) return "route_exhausted";
+    if (candidate === "route_exhausted" || candidate === "route_unavailable") return candidate;
+    // Provider diagnostics and persisted exit reasons are operator details. Do not
+    // let a provider/model or immutable internal name cross the model boundary.
+    const internalNames = [snapshot.agent.role, snapshot.agent.selectedProfile, ...configuredModelDiagnosticNames(snapshot.agent.profileSnapshot.models)];
+    return sanitizeModelVisibleError(candidate, internalNames);
+}
+
 export function projectMinimalAgentTask(rawSnapshot: AgentSnapshot): MinimalAgentTask {
     const snapshot = sanitizeSnapshot(rawSnapshot);
     const task = snapshot.task;
     const projected: MinimalAgentTask = {
         agentId: snapshot.agent.agentId,
-        agent: snapshot.agent.agent,
+        ...publicCapabilityFields(snapshot),
         summary: task ? promptSummary(task.request.prompt) : "No task",
         agentState: snapshot.status.state,
         activity: snapshot.activity,
-        stop: projectModelVisibleStop(snapshot.stop),
+        stop: projectModelVisibleStop(snapshot.stop, [snapshot.agent.role, snapshot.agent.selectedProfile, ...configuredModelDiagnosticNames(snapshot.agent.profileSnapshot.models)]),
     };
     if (task) {
         projected.taskId = task.request.taskId;
         projected.taskState = task.status.state;
         if (task.result && isTerminalTask(task.status.state)) {
             if (task.result.output) projected.output = task.result.output;
-            if (task.result.error) projected.error = task.result.error;
+            const error = modelVisibleError(snapshot);
+            if (error) projected.error = error;
         }
     }
     return projected;
@@ -121,23 +165,40 @@ export function projectMinimalSubmitResult(
         agentId: projected.agentId,
         taskId: projected.taskId,
         agent: projected.agent,
-        profile: rawSnapshot.agent.selectedProfile,
+        ...(projected.access ? { access: projected.access } : {}),
         agentState: projected.agentState,
         taskState: projected.taskState,
     };
 }
 
-type DebugAgentStatus = Omit<AgentStatus, "accountedTaskIds" | "agentUsage" | "modelRoute"> & { agentUsage: Usage | "unavailable" };
+type DebugAgentStatus = Omit<AgentStatus, "accountedTaskIds" | "agentUsage" | "modelRoute" | "childSessionId" | "childSessionFile"> & { agentUsage: Usage | "unavailable" };
 
 function modelVisibleTask(snapshot: AgentSnapshot): ModelVisibleTask | undefined {
     const task = snapshot.task;
-    if (!task || snapshot.agent.capabilities.usage || !task.result) return task;
-    return { ...task, result: { ...task.result, usage: "unavailable", turns: "unavailable" } };
+    if (!task) return undefined;
+    const { requesterEndpointId: _requesterEndpointId, requesterAgentId: _requesterAgentId, completion: _completion, ...request } = task.request;
+    const { error: statusError, ...status } = task.status;
+    const safeStatusError = statusError === undefined ? undefined : modelVisibleError(snapshot, statusError);
+    const { directory: _directory, claimed: _claimed, ...publicTask } = task;
+    if (!task.result) return { ...publicTask, request, status: { ...status, ...(safeStatusError ? { error: safeStatusError } : {}) }, result: null };
+    const { error: _error, ...result } = task.result;
+    const error = modelVisibleError(snapshot, task.result.error);
+    return {
+        ...publicTask,
+        request,
+        status: { ...status, ...(safeStatusError ? { error: safeStatusError } : {}) },
+        result: {
+            ...result,
+            ...(error ? { error } : {}),
+            usage: snapshot.agent.capabilities.usage ? task.result.usage : "unavailable",
+            turns: snapshot.agent.capabilities.usage ? task.result.turns : "unavailable",
+        },
+    };
 }
 
-function statusWithoutRouteOrAccounting(status: AgentStatus, usageAvailable: boolean): DebugAgentStatus {
-    const { accountedTaskIds: _ignored, agentUsage, modelRoute: _route, ...rest } = status;
-    return { ...rest, agentUsage: usageAvailable ? agentUsage : "unavailable" };
+function statusWithoutRouteOrAccounting(status: AgentStatus, usageAvailable: boolean, safeExitReason?: string): DebugAgentStatus {
+    const { accountedTaskIds: _ignored, agentUsage, modelRoute: _route, exitReason: _exitReason, childSessionId: _childSessionId, childSessionFile: _childSessionFile, ...rest } = status;
+    return { ...rest, agentUsage: usageAvailable ? agentUsage : "unavailable", ...(safeExitReason ? { exitReason: safeExitReason } : {}) };
 }
 
 /**
@@ -146,7 +207,7 @@ function statusWithoutRouteOrAccounting(status: AgentStatus, usageAvailable: boo
  * successful fallback remains operator-only via tool details, cards, and palette.
  */
 export function projectDebugSnapshot(rawSnapshot: AgentSnapshot): {
-    agent: AgentSnapshot["agent"];
+    agent: { agentId: string; agent: string; access?: "read" | "write" };
     status: DebugAgentStatus;
     activity: AgentSnapshot["activity"];
     stop: ModelVisibleStop | null;
@@ -154,10 +215,13 @@ export function projectDebugSnapshot(rawSnapshot: AgentSnapshot): {
 } {
     const snapshot = sanitizeSnapshot(rawSnapshot);
     return {
-        agent: snapshot.agent,
-        status: statusWithoutRouteOrAccounting(snapshot.status, snapshot.agent.capabilities.usage),
+        agent: {
+            agentId: snapshot.agent.agentId,
+            ...publicCapabilityFields(snapshot),
+        },
+        status: statusWithoutRouteOrAccounting(snapshot.status, snapshot.agent.capabilities.usage, modelVisibleError(snapshot)),
         activity: snapshot.activity,
-        stop: projectModelVisibleStop(snapshot.stop),
+        stop: projectModelVisibleStop(snapshot.stop, [snapshot.agent.role, snapshot.agent.selectedProfile, ...configuredModelDiagnosticNames(snapshot.agent.profileSnapshot.models)]),
         task: modelVisibleTask(snapshot),
     };
 }
@@ -568,6 +632,16 @@ function validateFrontier(value: unknown): CompletionFrontier {
     return { observedAt: raw.observedAt, pendingTasks };
 }
 
+function projectModelVisibleMeshEvent<T>(value: T): T {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+    const message = value as unknown as Record<string, unknown>;
+    if (message.customType !== "mesh-event" || !message.details || typeof message.details !== "object" || Array.isArray(message.details)) return value;
+    const details = message.details as Record<string, unknown>;
+    if (!Object.hasOwn(details, "identities")) return value;
+    const { identities: _identities, ...modelDetails } = details;
+    return { ...message, details: modelDetails } as T;
+}
+
 export function projectMeshCompletionContext<T>(messages: readonly T[], receivedTaskIds: ReadonlySet<string>): { messages: T[]; eventIds: string[] } {
     const sourceIdentities = new Map<string, string>();
     const sources: CompletionSource[] = [];
@@ -603,14 +677,14 @@ export function projectMeshCompletionContext<T>(messages: readonly T[], received
     }
 
     const eventIds = sources.map(source => source.eventId);
-    if (!completionIndexes.size) return { messages: [...messages], eventIds };
+    if (!completionIndexes.size) return { messages: messages.map(projectModelVisibleMeshEvent), eventIds };
     const residualTasks = [...completed.values()].filter(task => !receivedTaskIds.has(task.taskId));
     const completedIds = new Set(completed.keys());
     const pendingTasks = (latestFrontier?.pendingTasks ?? []).filter(task => !completedIds.has(task.taskId) && !receivedTaskIds.has(task.taskId));
     const lastCompletionIndex = Math.max(...completionIndexes);
     const projected: T[] = [];
     for (const [index, value] of messages.entries()) {
-        if (!completionIndexes.has(index)) { projected.push(value); continue; }
+        if (!completionIndexes.has(index)) { projected.push(projectModelVisibleMeshEvent(value)); continue; }
         if (index !== lastCompletionIndex || residualTasks.length === 0 && pendingTasks.length === 0) continue;
         const original = value as unknown as Record<string, unknown>;
         const frontier = { observedAt: latestFrontier!.observedAt, pendingTasks };

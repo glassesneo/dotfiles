@@ -53,10 +53,10 @@ def main [] {
   let artifact_disabled_decision_ui = (do $package_filter $pi.artifactDisabled.packageSources)
   assert-contract (($pi.enabledQuestion.packageSources | any {|source| $source == $decision_ui_package })) "decision-ui-package-present-for-question"
   assert-contract (($pi.disabledQuestion.extensionPaths | any {|path| ($path | str ends-with "/extensions-runtime/extensions_src/agent_artifact.ts") })) "local-artifact-extension-uses-managed-runtime"
-  assert-contract (($pi.catalog.roles.reviewer.childExtensionContributions | any {|path| ($path | str ends-with "/extensions-runtime/extensions_src/agent_artifact.ts") })) "reviewer-artifact-extension-uses-managed-runtime"
-  assert-contract ($pi.artifactDisabled.runtimeLinks.extensionsSource and $pi.artifactDisabled.runtimeLinks.nodeModules) "reviewer-artifact-runtime-links-present"
+  assert-contract (($pi.catalog.roles.advanced-read.childExtensionContributions | any {|path| ($path | str ends-with "/extensions-runtime/extensions_src/agent_artifact.ts") })) "advanced-artifact-extension-uses-managed-runtime"
+  assert-contract ($pi.artifactDisabled.runtimeLinks.extensionsSource and $pi.artifactDisabled.runtimeLinks.nodeModules) "advanced-artifact-runtime-links-present"
   assert-contract (($disabled_question_decision_ui | get source) == $decision_ui_package and ($disabled_question_decision_ui | get extensions) == []) "decision-ui-question-extension-filtered-for-local-artifact"
-  assert-contract (($artifact_disabled_decision_ui | get source) == $decision_ui_package and ($artifact_disabled_decision_ui | get extensions) == []) "decision-ui-question-extension-filtered-for-reviewer"
+  assert-contract (($artifact_disabled_decision_ui | get source) == $decision_ui_package and ($artifact_disabled_decision_ui | get extensions) == []) "decision-ui-question-extension-filtered-for-advanced"
   assert-contract ($question_extension_names | all {|name| $name != "question.ts" }) "question-local-extension-absent"
   assert-contract (($pi.enabledQuestion.modes.modes | values | any {|mode| $mode.tools | any {|tool| $tool == "question" } })) "question-tool-enabled"
   assert-contract (not ($pi.disabledQuestion.modes.modes | values | any {|mode| $mode.tools | any {|tool| $tool == "question" } })) "question-tool-disabled"
@@ -151,34 +151,45 @@ def main [] {
     const roleCatalog = validateRoleCatalog(catalog);
     const executionProfiles = validateExecutionProfileConfig(profiles);
     const orchestrationConfig = validateOrchestrationConfig(orchestration);
-    assert.match(orchestrationConfig.stateRoot, /\/pi\/orchestration-v7$/u);
+    assert.match(orchestrationConfig.stateRoot, /\/pi\/orchestration-v8$/u);
     assert.deepEqual(executionProfiles, {
       schemaVersion: 2,
       profiles: {
-        "codex-search": { models: ["codex/gpt-5.6-luna"], thinkingLevel: "high", harness: "codex", harnessOptions: { mode: "read-only", permissionPolicy: "reject", webSearch: "cached" } },
-        "cursor-fast": { models: ["cursor/cursor-grok-4.5-high-fast"], harness: "cursor-agent", harnessOptions: { mode: "agent", permissionPolicy: "allow-always", sandbox: "disabled", trustWorkspace: true, worktree: false } },
-        "cursor-standard": { models: ["cursor/cursor-grok-4.6-high-fast"], harness: "cursor-agent", harnessOptions: { mode: "agent", permissionPolicy: "allow-always", sandbox: "disabled", trustWorkspace: true, worktree: false } },
-        deliberate: { models: ["openrouter/z-ai/glm-5.2:free", "cohere/command-a-plus-05-2026", "mistral/mistral-medium-3.5"], thinkingLevel: "high", harness: "pi" },
-        "fast-analysis": { models: ["openrouter/cohere/north-mini-code:free", "openai-codex/gpt-5.6-luna"], thinkingLevel: "high", harness: "pi" },
-        "luna-xhigh": { models: ["openai-codex/gpt-5.6-luna"], thinkingLevel: "xhigh", harness: "pi" },
+        advanced: { models: ["openai-codex/gpt-5.6-sol"], thinkingLevel: "medium", harness: "pi" },
+        perspective: { models: ["openrouter/z-ai/glm-5.2:free", "cohere/command-a-plus-05-2026", "mistral/mistral-medium-3.5"], thinkingLevel: "high", harness: "pi" },
+        research: { models: ["openai-codex/gpt-5.6-terra"], thinkingLevel: "high", harness: "pi" },
+        search: { models: ["codex/gpt-5.6-luna"], thinkingLevel: "high", harness: "codex", harnessOptions: { mode: "read-only", permissionPolicy: "reject", webSearch: "cached" } },
+        "small-read": { models: ["openrouter/cohere/north-mini-code:free", "mistral/mistral-small-2603", "openai-codex/gpt-5.6-luna"], thinkingLevel: "high", harness: "pi" },
+        "small-write": { models: ["openai-codex/gpt-5.6-luna"], thinkingLevel: "xhigh", harness: "pi" },
         "sol-high": { models: ["openai-codex/gpt-5.6-sol"], thinkingLevel: "high", harness: "pi" },
-        "sol-medium": { models: ["openai-codex/gpt-5.6-sol"], thinkingLevel: "medium", harness: "pi" },
-        "terra-high": { models: ["openai-codex/gpt-5.6-terra"], thinkingLevel: "high", harness: "pi" },
-        validation: { models: ["mistral/mistral-small-2603", "openai-codex/gpt-5.6-luna"], thinkingLevel: "high", harness: "pi" },
+        "standard-read": { models: ["cursor/cursor-grok-4.6-high-fast"], harness: "cursor-agent", harnessOptions: { mode: "ask", permissionPolicy: "reject", sandbox: "disabled", trustWorkspace: true, worktree: false } },
+        "standard-write": { models: ["cursor/cursor-grok-4.6-high-fast"], harness: "cursor-agent", harnessOptions: { mode: "agent", permissionPolicy: "allow-always", sandbox: "disabled", trustWorkspace: true, worktree: false } },
       },
     });
-    assert.deepEqual(Object.keys(roleCatalog.roles).sort(), ["adviser", "explorer", "general", "researcher", "review-lens", "reviewer", "searcher", "validator", "worker"]);
-    for (const definition of Object.values(roleCatalog.roles)) assert.deepEqual(Object.keys(definition).sort(), ["childExtensionContributions", "contextPolicy", "description", "instructions", "tools"]);
-    assert.deepEqual({ tools: roleCatalog.roles.general.tools, contextPolicy: roleCatalog.roles.general.contextPolicy, childExtensionContributions: roleCatalog.roles.general.childExtensionContributions }, { tools: ["read", "grep", "find", "ls", "bash", "write", "edit", "mesh_report"], contextPolicy: "project", childExtensionContributions: [] });
-    assert.deepEqual({ tools: roleCatalog.roles.adviser.tools, contextPolicy: roleCatalog.roles.adviser.contextPolicy, childExtensionContributions: roleCatalog.roles.adviser.childExtensionContributions }, { tools: [], contextPolicy: "prompt-only", childExtensionContributions: [] });
+    assert.equal(roleCatalog.schemaVersion, 5);
+    for (const definition of Object.values(roleCatalog.roles)) assert.deepEqual(Object.keys(definition).sort(), ["childExtensionContributions", "contextPolicy", "description", "instructions", "selector", "tools"]);
+    assert.deepEqual(Object.fromEntries(Object.entries(roleCatalog.roles).map(([role, definition]) => [role, definition.selector])), {
+      "advanced-read": { agent: "advanced", access: "read" }, "advanced-write": { agent: "advanced", access: "write" },
+      perspective: { agent: "perspective" }, research: { agent: "research" }, search: { agent: "search" },
+      "small-read": { agent: "small", access: "read" }, "small-write": { agent: "small", access: "write" },
+      "standard-read": { agent: "standard", access: "read" }, "standard-write": { agent: "standard", access: "write" },
+    });
+    assert.deepEqual({ tools: roleCatalog.roles["standard-read"].tools, contextPolicy: roleCatalog.roles["standard-read"].contextPolicy }, { tools: [], contextPolicy: "project" });
+    assert.deepEqual({ tools: roleCatalog.roles["standard-write"].tools, contextPolicy: roleCatalog.roles["standard-write"].contextPolicy }, { tools: [], contextPolicy: "project" });
+    assert.equal(roleCatalog.roles["small-read"].tools.includes("write"), false);
+    assert.equal(roleCatalog.roles["small-write"].tools.includes("write"), true);
+    assert.equal(roleCatalog.roles["advanced-read"].tools.includes("save_agent_artifact"), true);
+    assert.equal(roleCatalog.roles["advanced-write"].tools.includes("save_agent_artifact"), true);
+    assert.deepEqual({ tools: roleCatalog.roles.perspective.tools, contextPolicy: roleCatalog.roles.perspective.contextPolicy, childExtensionContributions: roleCatalog.roles.perspective.childExtensionContributions }, { tools: [], contextPolicy: "prompt-only", childExtensionContributions: [] });
     assert.deepEqual(orchestrationConfig.callPolicy, {
       modes: {
-        ops: { targets: { explorer: { profiles: ["fast-analysis"] }, general: { profiles: ["cursor-standard", "cursor-fast", "deliberate"] }, researcher: { profiles: ["terra-high"] }, "review-lens": { profiles: ["fast-analysis"] }, reviewer: { profiles: ["luna-xhigh", "terra-high", "sol-medium"] }, searcher: { profiles: ["codex-search"] }, validator: { profiles: ["validation"] }, worker: { profiles: ["luna-xhigh", "terra-high", "sol-medium"] } } },
-        recon: { targets: { adviser: { profiles: ["deliberate"] }, explorer: { profiles: ["fast-analysis"] }, researcher: { profiles: ["terra-high"] }, reviewer: { profiles: ["luna-xhigh", "terra-high", "sol-medium"] }, searcher: { profiles: ["codex-search"] } } },
+        ops: { targets: { "advanced-read": { profiles: ["advanced"] }, "advanced-write": { profiles: ["advanced"] }, perspective: { profiles: ["perspective"] }, research: { profiles: ["research"] }, "small-read": { profiles: ["small-read"] }, "small-write": { profiles: ["small-write"] }, "standard-read": { profiles: ["standard-read"] }, "standard-write": { profiles: ["standard-write"] } } },
+        recon: { targets: { "advanced-read": { profiles: ["advanced"] }, perspective: { profiles: ["perspective"] }, research: { profiles: ["research"] }, "small-read": { profiles: ["small-read"] }, "standard-read": { profiles: ["standard-read"] } } },
       },
       roles: {
-        researcher: { targets: { searcher: { profiles: ["codex-search"] } } },
-        reviewer: { targets: { "review-lens": { profiles: ["fast-analysis"] }, validator: { profiles: ["validation"] } } },
+        "advanced-read": { targets: { perspective: { profiles: ["perspective"] }, research: { profiles: ["research"] }, "small-read": { profiles: ["small-read"] }, "standard-read": { profiles: ["standard-read"] } } },
+        "advanced-write": { targets: { perspective: { profiles: ["perspective"] }, research: { profiles: ["research"] }, "small-read": { profiles: ["small-read"] }, "small-write": { profiles: ["small-write"] }, "standard-read": { profiles: ["standard-read"] }, "standard-write": { profiles: ["standard-write"] } } },
+        research: { targets: { search: { profiles: ["search"] } } },
       },
     });
     const enabledModeConfig = validateModeConfig(enabledModes);

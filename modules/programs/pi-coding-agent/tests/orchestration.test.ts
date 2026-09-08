@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { access, mkdir, readFile, readdir, stat, utimes, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import test from "node:test";
-import { buildLaunchEnvelope, buildPolicySnapshot, policyDigest, validateLaunchEnvelope, validateOrchestrationConfig, validateOrchestrationReferences, validateRoleCatalog } from "../extensions_src/utilities/agent_types.ts";
+import { buildLaunchEnvelope, buildPolicySnapshot, policyDigest, projectLaunchEnvelope, publicCapability, resolveAuthorizedSelectors, validateLaunchEnvelope, validateOrchestrationConfig, validateOrchestrationReferences, validateRoleCatalog } from "../extensions_src/utilities/agent_types.ts";
 import { availableContext, publishAgentActivity } from "../extensions_src/utilities/orchestration_activity.ts";
 import { bindAgentRuntime } from "../extensions_src/utilities/orchestration_runtime.ts";
 import {
@@ -35,9 +35,9 @@ import { withMeshLock } from "../extensions_src/utilities/orchestration_lock.ts"
 import { emptyUsage } from "../extensions_src/utilities/orchestration_types.ts";
 import { settleWithinEventLoopTurns, withTemporaryRoot as withRoot, yieldToIO } from "./test_helpers.ts";
 
-const syntheticRole = (name = "worker") => ({ description: `Synthetic ${name}`, tools: [], instructions: "Return the bounded result.", contextPolicy: "project" as const, childExtensionContributions: [] });
+const syntheticRole = (name = "worker") => ({ selector: { agent: name, access: "read" as const }, description: `Synthetic ${name}`, tools: [], instructions: "Return the bounded result.", contextPolicy: "project" as const, childExtensionContributions: [] });
 const syntheticProfile = { models: ["provider/model"], thinkingLevel: "medium" as const, harness: "pi" as const };
-const syntheticCatalog = (roles: Record<string, ReturnType<typeof syntheticRole>>) => ({ schemaVersion: 4 as const, roles });
+const syntheticCatalog = (roles: Record<string, ReturnType<typeof syntheticRole>>) => ({ schemaVersion: 5 as const, roles });
 const syntheticEpochInput = (mode: string, roles: Record<string, ReturnType<typeof syntheticRole>>) => ({
     mode,
     catalog: syntheticCatalog(roles),
@@ -173,7 +173,7 @@ void test("an ephemeral root remains nonrecoverable while supporting the persist
 
 void test("holistic orchestration references reject unknown and incompatible target-profile edges", () => {
     const role = (name: string, contextPolicy: "project" | "prompt-only" = "project") => ({ ...syntheticRole(name), contextPolicy });
-    const catalog = { schemaVersion: 4 as const, roles: { worker: role("worker"), external: role("external"), isolated: role("isolated", "prompt-only") } };
+    const catalog = { schemaVersion: 5 as const, roles: { worker: role("worker"), external: role("external"), isolated: role("isolated", "prompt-only") } };
     const profiles = { schemaVersion: 2 as const, profiles: { "pi-medium": syntheticProfile, external: { models: ["cursor/model"], harness: "cursor-agent" as const, harnessOptions: { mode: "agent", permissionPolicy: "allow-always", sandbox: "disabled", trustWorkspace: true, worktree: false } } } };
     const raw = {
         schemaVersion: 4, stateRoot: "/state", tmux: "/tmux", returnParentCommand: "/return", parentNavigationHint: "parent", historyViewerExtension: "/history", popupExtension: "/popup", orchestrationExtension: "/orchestration", childBridgeExtension: "/bridge",
@@ -186,24 +186,32 @@ void test("holistic orchestration references reject unknown and incompatible tar
     validateOrchestrationReferences(config, catalog, profiles, ["ops"]);
     const reject = (callPolicy: unknown, pattern: RegExp, modes: readonly string[] = ["ops"]) => assert.throws(() => validateOrchestrationReferences(validateOrchestrationConfig({ ...raw, callPolicy }), catalog, profiles, modes), pattern);
     reject({ modes: { ghostMode: { targets: { worker: { profiles: ["pi-medium"] } } } }, roles: {} }, /unknown mode caller/u);
-    reject({ modes: { ops: { targets: { ghost: { profiles: ["pi-medium"] } } } }, roles: {} }, /unknown role target/u);
+    reject({ modes: { ops: { targets: { ghost: { profiles: ["pi-medium"] } } } }, roles: {} }, /unknown role|unknown role target/u);
     reject({ modes: { ops: { targets: { worker: { profiles: ["pi-medium"] } } } }, roles: { ghost: { targets: {} } } }, /unknown role caller/u);
-    reject({ modes: { ops: { targets: { worker: { profiles: ["pi-medium"] } } } }, roles: { worker: { targets: { ghost: { profiles: ["pi-medium"] } } } } }, /unknown role target/u);
+    reject({ modes: { ops: { targets: { worker: { profiles: ["pi-medium"] } } } }, roles: { worker: { targets: { ghost: { profiles: ["pi-medium"] } } } } }, /unknown role|unknown role target/u);
     reject({ modes: { ops: { targets: { worker: { profiles: ["ghost"] } } } }, roles: {} }, /unknown profiles/u);
     reject({ modes: { ops: { targets: { external: { profiles: ["external"] } } } }, roles: { external: { targets: { worker: { profiles: ["pi-medium"] } } } } }, /external-profile caller/u);
     reject({ modes: { ops: { targets: { isolated: { profiles: ["pi-medium"] } } } }, roles: { isolated: { targets: { worker: { profiles: ["pi-medium"] } } } } }, /prompt-only caller/u);
     reject({ modes: { ops: { targets: { isolated: { profiles: ["external"] } } } }, roles: {} }, /prompt-only role isolated/u);
-    assert.throws(() => validateOrchestrationConfig({ ...raw, callPolicy: { modes: { ops: { targets: { worker: { profiles: [] } } } }, roles: {} } }), /must not be empty/u);
+    assert.throws(() => validateOrchestrationConfig({ ...raw, callPolicy: { modes: { ops: { targets: { worker: { profiles: [] } } } }, roles: {} } }), /exactly one profile/u);
+    assert.throws(() => resolveAuthorizedSelectors({ targets: { worker: { profiles: ["pi-medium"] }, alias: { profiles: ["pi-medium"] } } }, { worker: role("worker"), alias: { ...role("worker"), selector: { agent: "worker", access: "read" } } }), /ambiguous/u);
+    const searchCatalog = { ...catalog, roles: { ...catalog.roles, research: { ...role("research"), selector: { agent: "research" } }, search: { ...role("search"), selector: { agent: "search" } } } };
+    const searchPolicy = (callPolicy: unknown) => validateOrchestrationReferences(validateOrchestrationConfig({ ...raw, callPolicy }), searchCatalog, profiles, ["ops"]);
+    assert.throws(() => searchPolicy({ modes: { ops: { targets: { search: { profiles: ["pi-medium"] } } } }, roles: {} }), /root target/u);
+    assert.throws(() => searchPolicy({ modes: { ops: { targets: { worker: { profiles: ["pi-medium"] } } } }, roles: { worker: { targets: { search: { profiles: ["pi-medium"] } } } } }), /only be targeted by research/u);
+    searchPolicy({ modes: { ops: { targets: { worker: { profiles: ["pi-medium"] } } } }, roles: { research: { targets: { search: { profiles: ["pi-medium"] } } } } });
 });
 
 // Admission: persisted consumers parse the authority protocol; accepting the retired default-profile shape could restore stale execution authority.
 // Given a v4 role catalog and target-profile policy, protocol consumers retain exact closure and reject v3/defaultProfile records.
-void test("role protocol v4 captures profile-aware closure and rejects the v3 role generation", async () => withRoot("mesh-role-v4-", async root => {
+void test("role protocol v5 captures selector-aware closure and rejects retired role generations", async () => withRoot("mesh-role-v4-", async root => {
     const mesh = await initializeMesh(root, { rootSessionId: "session", recoverable: true, budgets });
-    const role = (description: string) => ({ description, tools: [], instructions: "Return evidence.", contextPolicy: "project" as const, childExtensionContributions: [] });
-    const catalog = { schemaVersion: 4 as const, roles: { reviewer: role("Review"), lens: role("Lens"), leaf: role("Leaf"), sibling: role("Sibling") } };
+    const role = (description: string) => ({ selector: { agent: description, access: "read" as const }, description, tools: [], instructions: "Return evidence.", contextPolicy: "project" as const, childExtensionContributions: [] });
+    const catalog = { schemaVersion: 5 as const, roles: { reviewer: role("Review"), lens: role("Lens"), leaf: role("Leaf"), sibling: role("Sibling") } };
     assert.deepEqual(validateRoleCatalog(catalog), catalog);
     assert.throws(() => validateRoleCatalog({ ...catalog, schemaVersion: 3 }), /Unsupported/u);
+    assert.throws(() => validateRoleCatalog({ ...catalog, roles: { ...catalog.roles, invalid: { ...role("Invalid"), selector: { agent: "small" } } } }), /access is required/u);
+    assert.throws(() => validateRoleCatalog({ ...catalog, roles: { ...catalog.roles, invalid: { ...role("Invalid"), selector: { agent: "research", access: "read" } } } }), /access must be omitted/u);
     assert.throws(() => validateRoleCatalog({ ...catalog, roles: { ...catalog.roles, reviewer: { ...catalog.roles.reviewer, defaultProfile: "review" } } }), /unknown keys/u);
     const profiles = { schemaVersion: 2 as const, profiles: { review: { models: ["provider/review"], thinkingLevel: "high" as const, harness: "pi" as const }, lens: { models: ["provider/lens"], thinkingLevel: "medium" as const, harness: "pi" as const }, leaf: { models: ["provider/leaf"], thinkingLevel: "low" as const, harness: "pi" as const } } };
     const callPolicy = { modes: { ops: { targets: { reviewer: { profiles: ["review"] }, sibling: { profiles: ["leaf"] } } } }, roles: { reviewer: { targets: { lens: { profiles: ["lens"] } } }, lens: { targets: { leaf: { profiles: ["leaf"] } } } } };
@@ -214,7 +222,7 @@ void test("role protocol v4 captures profile-aware closure and rejects the v3 ro
     assert.deepEqual(Object.keys(epoch.profiles).sort(), ["leaf", "lens", "review"]);
     assert.equal(epoch.policyDigest, policyDigest({ mode: epoch.mode, directTargets: epoch.directTargets, roles: epoch.roles, profiles: epoch.profiles, policies: epoch.policies }));
     const envelope = buildLaunchEnvelope({ meshId: mesh.meshId, agentId: randomUUID(), epochId: epoch.epochId, role: "reviewer", selectedProfile: "review", snapshot: epoch, childExtensions: Object.fromEntries(Object.keys(epoch.roles).map(name => [name, [`/${name}`]])) });
-    assert.deepEqual({ schemaVersion: envelope.schemaVersion, marker: envelope.marker }, { schemaVersion: 5, marker: "pi-mesh-role-launch-v5" });
+    assert.deepEqual({ schemaVersion: envelope.schemaVersion, marker: envelope.marker }, { schemaVersion: 6, marker: "pi-mesh-role-launch-v6" });
     assert.deepEqual(Object.keys(envelope.roles).sort(), ["leaf", "lens", "reviewer"]);
     assert.equal(envelope.roles.sibling, undefined);
     assert.deepEqual(envelope.policies.reviewer?.targets, { lens: { profiles: ["lens"] } });
@@ -225,14 +233,84 @@ void test("role protocol v4 captures profile-aware closure and rejects the v3 ro
     const empty = buildPolicySnapshot({ mode: "missing", catalog, profiles, callPolicy });
     assert.deepEqual(empty, { mode: "missing", directTargets: {}, roles: {}, profiles: {}, policies: {} });
     assert.throws(() => buildLaunchEnvelope({ meshId: mesh.meshId, agentId: randomUUID(), epochId: epoch.epochId, role: "reviewer", selectedProfile: "lens", snapshot: epoch, childExtensions: Object.fromEntries(Object.keys(epoch.roles).map(name => [name, [`/${name}`]])) }), /not authorized/u);
-    assert.throws(() => validateLaunchEnvelope({ ...envelope, schemaVersion: 4, marker: "pi-mesh-role-launch-v4" }), /Unsupported/u);
+    assert.throws(() => validateLaunchEnvelope({ ...envelope, schemaVersion: 5, marker: "pi-mesh-role-launch-v5" }), /Unsupported/u);
     const persisted = JSON.parse(await readFile(epochPath(root, mesh.meshId, epoch.epochId), "utf8")) as Record<string, any>;
     const malformedEdge = structuredClone(persisted); malformedEdge.directTargets.reviewer.profiles = [];
     await writeFile(epochPath(root, mesh.meshId, epoch.epochId), JSON.stringify(malformedEdge));
-    await assert.rejects(readPolicyEpoch(root, mesh.meshId, epoch.epochId), /must not be empty/u);
+    await assert.rejects(readPolicyEpoch(root, mesh.meshId, epoch.epochId), /exactly one profile/u);
     await writeFile(epochPath(root, mesh.meshId, epoch.epochId), JSON.stringify({ ...persisted, schemaVersion: 4 }));
     await assert.rejects(readPolicyEpoch(root, mesh.meshId, epoch.epochId), /Unsupported/u);
 }));
+
+// Admission: Nix assertions cannot observe TypeScript consumer resolution of public selectors into one internal role, write leakage into a read-only closure, or root publication of search.
+// Given capability-shaped roles, the shared resolver and launch closure expose only authorized public pairs and keep search off the root edge.
+void test("capability selectors resolve uniquely and keep write and search out of unauthorized closures", () => {
+    const capabilityRole = (agent: string, access?: "read" | "write") => ({ selector: { agent, ...(access ? { access } : {}) }, description: `${publicCapability({ agent, ...(access ? { access } : {}) })}`, tools: [], instructions: "Return evidence.", contextPolicy: agent === "perspective" ? "prompt-only" as const : "project" as const, childExtensionContributions: [] });
+    const roles = {
+        "small-read": capabilityRole("small", "read"),
+        "small-write": capabilityRole("small", "write"),
+        "standard-read": capabilityRole("standard", "read"),
+        "advanced-read": capabilityRole("advanced", "read"),
+        "advanced-write": capabilityRole("advanced", "write"),
+        research: capabilityRole("research"),
+        perspective: capabilityRole("perspective"),
+        search: capabilityRole("search"),
+    };
+    const catalog = { schemaVersion: 5 as const, roles };
+    const profiles = { schemaVersion: 2 as const, profiles: Object.fromEntries(["small-read", "small-write", "standard-read", "advanced", "research", "perspective", "search"].map(name => [name, syntheticProfile])) };
+    const callPolicy = {
+        modes: {
+            recon: { targets: { "small-read": { profiles: ["small-read"] }, "standard-read": { profiles: ["standard-read"] }, "advanced-read": { profiles: ["advanced"] }, research: { profiles: ["research"] }, perspective: { profiles: ["perspective"] } } },
+            ops: { targets: { "small-read": { profiles: ["small-read"] }, "small-write": { profiles: ["small-write"] }, "standard-read": { profiles: ["standard-read"] }, "advanced-read": { profiles: ["advanced"] }, "advanced-write": { profiles: ["advanced"] }, research: { profiles: ["research"] }, perspective: { profiles: ["perspective"] } } },
+        },
+        roles: {
+            "advanced-read": { targets: { "small-read": { profiles: ["small-read"] }, "standard-read": { profiles: ["standard-read"] }, research: { profiles: ["research"] }, perspective: { profiles: ["perspective"] } } },
+            "advanced-write": { targets: { "small-read": { profiles: ["small-read"] }, "small-write": { profiles: ["small-write"] }, "standard-read": { profiles: ["standard-read"] }, research: { profiles: ["research"] }, perspective: { profiles: ["perspective"] } } },
+            research: { targets: { search: { profiles: ["search"] } } },
+        },
+    };
+    const recon = resolveAuthorizedSelectors(callPolicy.modes.recon, roles);
+    assert.deepEqual(recon.map(route => [route.selector.agent, route.selector.access ?? "", route.role]), [["small", "read", "small-read"], ["standard", "read", "standard-read"], ["advanced", "read", "advanced-read"], ["research", "", "research"], ["perspective", "", "perspective"]]);
+    assert.equal(recon.some(route => route.selector.agent === "search"), false);
+    const advancedRead = resolveAuthorizedSelectors(callPolicy.roles["advanced-read"], roles);
+    assert.equal(advancedRead.some(route => route.selector.access === "write"), false);
+    const researchRoutes = resolveAuthorizedSelectors(callPolicy.roles.research, roles);
+    assert.deepEqual(researchRoutes.map(route => route.selector.agent), ["search"]);
+    const snapshot = buildPolicySnapshot({ mode: "recon", catalog, profiles, callPolicy });
+    assert.equal(snapshot.directTargets.search, undefined);
+    const envelope = buildLaunchEnvelope({ meshId: randomUUID(), agentId: randomUUID(), epochId: randomUUID(), role: "advanced-read", selectedProfile: "advanced", snapshot, childExtensions: Object.fromEntries(Object.keys(snapshot.roles).map(name => [name, [`/${name}`]])) });
+    assert.equal(envelope.roles["small-write"], undefined);
+    assert.equal(envelope.roles["advanced-write"], undefined);
+    assert.ok(envelope.roles.search);
+    assert.deepEqual(Object.keys(envelope.policies["advanced-read"]!.targets).sort(), ["perspective", "research", "small-read", "standard-read"]);
+    assert.equal(envelope.selfRole.contextPolicy, "project");
+    const isolated = buildLaunchEnvelope({ meshId: randomUUID(), agentId: randomUUID(), epochId: randomUUID(), role: "perspective", selectedProfile: "perspective", snapshot, childExtensions: Object.fromEntries(Object.keys(snapshot.roles).map(name => [name, [`/${name}`]])) });
+    assert.equal(isolated.selfRole.contextPolicy, "prompt-only");
+    assert.deepEqual(isolated.selfRole.tools, []);
+    assert.deepEqual(isolated.policies.perspective?.targets, {});
+});
+
+// Admission: closure inventory cannot observe the actual nested launch-envelope boundary that turns research's authorized edge into a search child.
+// Given a root policy that exposes research and a research-only search edge, projecting a child envelope permits search only through research while root construction still rejects search.
+void test("nested child envelope permits research-only search dispatch without exposing a root search target", () => {
+    const capabilityRole = (agent: string) => ({ selector: { agent }, description: `Synthetic ${agent}`, tools: [], instructions: "Return evidence.", contextPolicy: "project" as const, childExtensionContributions: [] });
+    const catalog = { schemaVersion: 5 as const, roles: { research: capabilityRole("research"), search: capabilityRole("search") } };
+    const profiles = { schemaVersion: 2 as const, profiles: { research: syntheticProfile, search: syntheticProfile } };
+    const callPolicy = { modes: { recon: { targets: { research: { profiles: ["research"] } } } }, roles: { research: { targets: { search: { profiles: ["search"] } } } } };
+    const snapshot = buildPolicySnapshot({ mode: "recon", catalog, profiles, callPolicy });
+    assert.equal(snapshot.directTargets.search, undefined);
+    const childExtensions = { research: ["/research"], search: ["/search"] };
+    const research = buildLaunchEnvelope({ meshId: randomUUID(), agentId: randomUUID(), epochId: randomUUID(), role: "research", selectedProfile: "research", snapshot, childExtensions });
+    const search = projectLaunchEnvelope("search", randomUUID(), research, "search");
+    const roundTripped = validateLaunchEnvelope(JSON.parse(JSON.stringify(search)));
+    assert.equal(roundTripped.role, "search");
+    assert.deepEqual(roundTripped.directTargets, { search: { profiles: ["search"] } });
+    assert.deepEqual(roundTripped.policies, { search: { targets: {} } });
+    assert.equal(roundTripped.roles.research, undefined);
+    const forgedRoot = structuredClone(snapshot);
+    forgedRoot.directTargets.search = { profiles: ["search"] };
+    assert.throws(() => buildLaunchEnvelope({ meshId: randomUUID(), agentId: randomUUID(), epochId: randomUUID(), role: "search", selectedProfile: "search", snapshot: forgedRoot, childExtensions }), /root target/u);
+});
 
 void test("persisted agents reject a forged sibling policy edge even when the epoch digest remains valid", async () => withRoot("mesh-forged-envelope-", async root => {
     const mesh = await initializeMesh(root, { rootSessionId: "root", recoverable: true, budgets });

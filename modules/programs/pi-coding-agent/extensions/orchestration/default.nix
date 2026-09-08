@@ -36,6 +36,12 @@
   };
   roleType = delib.submodule {
     options = with delib; {
+      selector = submoduleOption {
+        options = with delib; {
+          agent = noDefault (strOption null);
+          access = allowNull (enumOption ["read" "write"] null);
+        };
+      } {};
       description = noDefault (strOption null);
       tools = listOfOption str [];
       instructions = noDefault (strOption null);
@@ -51,97 +57,143 @@
   callerPolicyType = delib.submodule {
     options.targets = delib.attrsOfOption targetPolicyType {};
   };
+  resultContract = " Return the outcome, changed paths when any, verification evidence, missing evidence, and decisions needed from the caller.";
+  repositoryTools = access: extraTools: ["read" "grep" "find" "ls" "bash"] ++ lib.optionals (access == "write") ["write" "edit"] ++ extraTools ++ ["mesh_report"];
+  mkRepositoryRole = agent: access: description: instructions: contributions: extraTools: {
+    selector = {inherit agent access;};
+    inherit description;
+    tools = repositoryTools access extraTools;
+    instructions = "${instructions}${resultContract}${meshReportGuidance}";
+    contextPolicy = "project";
+    childExtensionContributions = contributions;
+  };
+  mkStandardRole = access: description: instructions: {
+    selector = {
+      agent = "standard";
+      inherit access;
+    };
+    inherit description;
+    tools = [];
+    instructions = "${instructions}${resultContract}";
+    contextPolicy = "project";
+    childExtensionContributions = [];
+  };
   settledRoles = {
-    explorer = {
-      description = "Independently investigate one bounded repository question.";
-      tools = ["read" "grep" "find" "ls" "bash" "mesh_report"];
-      instructions = "Treat the input as one bounded repository question with an objective, scope, and exclusions. Investigate only necessary paths with read, grep, find, ls, and bash, grounding findings in paths, symbols, tests, and command results while leaving repository source and configuration unchanged. Separate confirmed facts, inferences, and material unknowns without taking over the caller's broader decision. Stop with an evidence-backed answer, exhausted scope, or inaccessible required information. Return the question and scope, findings, constraints, unknowns, and implications for the caller.${meshReportGuidance}";
-      contextPolicy = "project";
-      childExtensionContributions = [];
-    };
-    worker = {
-      description = "Implement one bounded, already-defined source change.";
-      tools = ["read" "grep" "find" "ls" "bash" "write" "edit" "mesh_report"];
-      instructions = "Confirm the bounded objective, target, constraints, and supplied findings or diff; report materially missing scope or authority instead of expanding the task. Use read, grep, find, and ls to inspect guidance and ownership, then edit or write in dependency order. Use bash to inspect the diff and run proportionate focused diagnostics. Return outcome, changed files and diff reference, alignment and deviations, diagnostic evidence, and unverified risk.${meshReportGuidance}";
-      contextPolicy = "project";
-      childExtensionContributions = [];
-    };
-    validator = {
-      description = "Run and diagnose one bounded automated validation objective.";
-      tools = ["read" "grep" "find" "ls" "bash" "mesh_report"];
-      instructions = "Treat the input as a concrete source state, one automated objective, and requested breadth or known risk. Use read, grep, find, and ls to identify repository-defined gates, then use bash for the smallest command set that answers the objective without changing source. Return exit status and decision-relevant diagnostics rather than raw logs. Classify only when supported as regression, flaky, test defect, environment/infrastructure, or unknown; do not expand into repair or review. Return pass/fail/blocked, commands, classification, skipped coverage, and residual risk.${meshReportGuidance}";
-      contextPolicy = "project";
-      childExtensionContributions = [];
-    };
-    reviewer = {
-      description = "Independently review a defined target and return actionable evidence.";
-      tools = ["read" "grep" "find" "ls" "bash" "save_agent_artifact" "mesh_report"];
-      instructions = "Review the defined target and supplied design, diff, and validation context read-only with read, grep, find, ls, and bash. Use mesh_send with agent=\"review-lens\" or agent=\"validator\" only when that evidence could change the verdict or a material risk.${meshAsyncChildGuidance}${meshReportGuidance} Verify concrete peer evidence; remove duplicates and unsupported or preference-only claims; determine severity and verdict yourself. Do not change source, and leave fix disposition to the parent. Stop when the verdict is supported and residual uncertainty can be stated. Only when durable review is requested, read ${homeConfig.home.homeDirectory}/.agents/skills/agent-artifact/SKILL.md and its references/review-report-format.md, follow that canonical format, and use save_agent_artifact(kind=\"review-report\", ...). Return severity-ordered findings, verdict, verification gaps, skipped areas, residual risk, and only when saved the artifact path.";
-      contextPolicy = "project";
-      childExtensionContributions = [artifactExtension];
-    };
-    review-lens = {
-      description = "Examine one caller-supplied review lens read-only.";
-      tools = ["read" "grep" "find" "ls" "bash" "mesh_report"];
-      instructions = "Independently examine only the supplied lens/dossier and return concrete evidence, impact or severity when relevant, gaps, and uncertainty to the caller; do not mutate source, broaden into or consolidate the whole review, or decide the caller's disposition.${meshReportGuidance}";
-      contextPolicy = "project";
-      childExtensionContributions = [];
-    };
-    researcher = {
-      description = "Integrate codebase and external evidence into one supported conclusion.";
+    small-read = mkRepositoryRole "small" "read" "Handle a small, low-judgment read-only repository task or command-result check." "Keep the bounded source/configuration unchanged and use only the investigation needed for the requested result." [] [];
+    small-write = mkRepositoryRole "small" "write" "Handle a small, low-judgment repository change." "Confirm the bounded target, make the smallest authorized change, inspect the diff, and run proportionate focused checks." [] [];
+    standard-read = mkStandardRole "read" "Own a normal repository investigation without changing source or configuration." "Investigate the assignment with the harness-provided repository tools. Return missing operations rather than assuming Pi shell or validation access.";
+    standard-write = mkStandardRole "write" "Own a normal repository implementation, repair, and self-verification." "Explore, implement, validate, recover from mistakes, and return an integrable result within the assigned scope.";
+    advanced-read = mkRepositoryRole "advanced" "read" "Handle difficult read-only judgment across multiple repository invariants." "Investigate and evaluate the bounded problem without source changes. Delegate only when a permitted independent result materially improves the conclusion.${meshAsyncChildGuidance}" [artifactExtension] ["save_agent_artifact"];
+    advanced-write = mkRepositoryRole "advanced" "write" "Handle a difficult repository change spanning multiple invariants." "Explore, implement, and verify the bounded change. Delegate only when a permitted independent result materially improves the outcome.${meshAsyncChildGuidance}" [artifactExtension] ["save_agent_artifact"];
+    research = {
+      selector.agent = "research";
+      description = "Collect repository and Web evidence, assess sources, and synthesize a supported conclusion.";
       tools = ["read" "grep" "find" "ls" "bash" "web_search" "web_fetch" "mesh_report"];
-      instructions = "Decompose the bounded question into claims and criteria, then decide what codebase and external evidence is needed while leaving repository source and configuration unchanged. Use web_fetch for known URLs and web_search for source discovery; assess authority, independence, relevance, and freshness. Use mesh_send with agent=\"searcher\" only for an independent bounded external path that would materially improve the conclusion.${meshAsyncChildGuidance}${meshReportGuidance} Re-evaluate searcher results as evidence, synthesize sources by claim, and address material counterevidence or disagreement. Stop when major conclusions are supported and more retrieval is unlikely to change them; otherwise do not overstate. Return the best-supported conclusion, claim-linked sources, counterevidence, freshness, and uncertainty.";
+      instructions = "Decompose the bounded question into claims and evidence needs while leaving source and configuration unchanged. Assess authority, relevance, independence, and freshness. Use mesh_send with agent=\"search\" only for an independent Web path that materially improves the conclusion.${meshAsyncChildGuidance}${meshReportGuidance} Return claim-linked sources, counterevidence, and uncertainty.";
       contextPolicy = "project";
       childExtensionContributions = [webSearchExtension webFetchExtension];
     };
-    searcher = {
-      description = "Answer one bounded external question with source-backed Web search.";
+    perspective = {
+      selector.agent = "perspective";
+      description = "Reframe a supplied dossier from an isolated outside perspective.";
       tools = [];
-      instructions = "Return a concise supported answer, source URLs mapped to claims, freshness, and material uncertainty; state missing evidence instead of widening into broader research.";
-      contextPolicy = "project";
-      childExtensionContributions = [];
-    };
-    adviser = {
-      description = "Reframe an unresolved design problem from an isolated outside perspective.";
-      tools = [];
-      instructions = "Receive only the caller's dossier; you have no repository context, tools, skills, prompt templates, or child roles. Reframe beyond its supplied options: identify hidden assumptions, alternate decompositions, and more natural abstractions or directions. Distinguish verified constraints from caller assumptions; never invent repository facts or take final design ownership. In the caller's language, return a concise strongest reframing, material hidden assumptions, two to four alternate directions when supported, and one discriminating question when missing information matters. If a needed dossier element is absent, identify it rather than fabricate it.";
+      instructions = "Receive only the caller's dossier; you have no repository context, tools, skills, prompt templates, or child roles. Identify hidden assumptions, alternate decompositions, and natural alternatives without inventing repository facts. Return the strongest reframing, material assumptions, supported alternatives, and any missing dossier element.";
       contextPolicy = "prompt-only";
       childExtensionContributions = [];
     };
-    general = {
-      description = "Independently own one problem through exploration, implementation, and validation.";
-      tools = ["read" "grep" "find" "ls" "bash" "write" "edit" "mesh_report"];
-      instructions = "Take the problem as a self-contained assignment. Independently explore, plan locally, implement, validate, recover from mistakes, and report completion without requiring the parent to decompose the work. Prefer finishing with an outcome the parent can integrate; if required access or evidence is missing, return the useful partial result and state what is missing.${meshReportGuidance}";
+    search = {
+      selector.agent = "search";
+      description = "Answer one bounded external question with source-backed Web search.";
+      tools = [];
+      instructions = "Return a concise supported answer, source URLs mapped to claims, freshness, and material uncertainty; state missing evidence instead of widening the task.";
       contextPolicy = "project";
       childExtensionContributions = [];
     };
   };
+  edge = profile: {profiles = [profile];};
   settledCallPolicy = {
     modes = {
       recon.targets = {
-        explorer.profiles = ["fast-analysis"];
-        adviser.profiles = ["deliberate"];
-        reviewer.profiles = ["luna-xhigh" "terra-high" "sol-medium"];
-        researcher.profiles = ["terra-high"];
-        searcher.profiles = ["codex-search"];
+        small-read = edge "small-read";
+        standard-read = edge "standard-read";
+        advanced-read = edge "advanced";
+        research = edge "research";
+        perspective = edge "perspective";
       };
       ops.targets = {
-        explorer.profiles = ["fast-analysis"];
-        worker.profiles = ["luna-xhigh" "terra-high" "sol-medium"];
-        validator.profiles = ["validation"];
-        reviewer.profiles = ["luna-xhigh" "terra-high" "sol-medium"];
-        review-lens.profiles = ["fast-analysis"];
-        researcher.profiles = ["terra-high"];
-        searcher.profiles = ["codex-search"];
-        general.profiles = ["cursor-standard" "cursor-fast" "deliberate"];
+        small-read = edge "small-read";
+        small-write = edge "small-write";
+        standard-read = edge "standard-read";
+        standard-write = edge "standard-write";
+        advanced-read = edge "advanced";
+        advanced-write = edge "advanced";
+        research = edge "research";
+        perspective = edge "perspective";
       };
     };
     roles = {
-      reviewer.targets = {
-        review-lens.profiles = ["fast-analysis"];
-        validator.profiles = ["validation"];
+      advanced-read.targets = {
+        small-read = edge "small-read";
+        standard-read = edge "standard-read";
+        research = edge "research";
+        perspective = edge "perspective";
       };
-      researcher.targets.searcher.profiles = ["codex-search"];
+      advanced-write.targets = {
+        small-read = edge "small-read";
+        small-write = edge "small-write";
+        standard-read = edge "standard-read";
+        standard-write = edge "standard-write";
+        research = edge "research";
+        perspective = edge "perspective";
+      };
+      research.targets.search = edge "search";
+    };
+  };
+  gcBase = {
+    small-read = {
+      collectAt = 6;
+      retain = 4;
+      pressureFloor = 1;
+    };
+    small-write = {
+      collectAt = 8;
+      retain = 4;
+      pressureFloor = 1;
+    };
+    standard-read = {
+      collectAt = 8;
+      retain = 4;
+      pressureFloor = 1;
+    };
+    standard-write = {
+      collectAt = 8;
+      retain = 4;
+      pressureFloor = 1;
+    };
+    advanced-read = {
+      collectAt = 4;
+      retain = 3;
+      pressureFloor = 1;
+    };
+    advanced-write = {
+      collectAt = 4;
+      retain = 3;
+      pressureFloor = 1;
+    };
+    research = {
+      collectAt = 3;
+      retain = 2;
+      pressureFloor = 1;
+    };
+    perspective = {
+      collectAt = 2;
+      retain = 1;
+      pressureFloor = 0;
+    };
+    search = {
+      collectAt = 3;
+      retain = 2;
+      pressureFloor = 0;
     };
   };
 in
@@ -188,53 +240,7 @@ in
           periodicIntervalMs = 5000;
           activityHeartbeatMs = 2000;
           activityStaleMs = 10000;
-          roles = {
-            explorer = {
-              collectAt = 6;
-              retain = 4;
-              pressureFloor = 1;
-            };
-            worker = {
-              collectAt = 8;
-              retain = 4;
-              pressureFloor = 1;
-            };
-            validator = {
-              collectAt = 3;
-              retain = 2;
-              pressureFloor = 1;
-            };
-            reviewer = {
-              collectAt = 4;
-              retain = 3;
-              pressureFloor = 1;
-            };
-            review-lens = {
-              collectAt = 6;
-              retain = 4;
-              pressureFloor = 1;
-            };
-            researcher = {
-              collectAt = 3;
-              retain = 2;
-              pressureFloor = 1;
-            };
-            searcher = {
-              collectAt = 3;
-              retain = 2;
-              pressureFloor = 0;
-            };
-            adviser = {
-              collectAt = 2;
-              retain = 1;
-              pressureFloor = 0;
-            };
-            general = {
-              collectAt = 8;
-              retain = 4;
-              pressureFloor = 1;
-            };
-          };
+          roles = gcBase;
         };
       };
       programs.pi-coding-agent.keybindings.contributions = {
@@ -376,7 +382,27 @@ in
       roleEntries = policyEntries "role" cfg.callPolicy.roles;
       allEntries = modeEntries ++ roleEntries;
       duplicateProfiles = lib.concatMap (entry: map (profile: "${entry.label}: ${profile}") (duplicates entry.profiles)) allEntries;
-      emptyEdges = map (entry: entry.label) (builtins.filter (entry: entry.profiles == []) allEntries);
+      emptyEdges = map (entry: entry.label) (builtins.filter (entry: builtins.length entry.profiles != 1) allEntries);
+      selectorKey = target:
+        if !(builtins.hasAttr target cfg.roles)
+        then "unknown:${target}"
+        else let
+          selector = cfg.roles.${target}.selector;
+          agent =
+            if builtins.isString selector.agent
+            then selector.agent
+            else "<invalid>";
+        in "${agent}:${
+          if selector.access == null
+          then ""
+          else selector.access
+        }";
+      ambiguousSelectors = lib.concatMap (kindPolicies:
+        lib.concatMap (caller: let
+          targets = builtins.attrNames kindPolicies.${caller}.targets;
+          keys = map selectorKey targets;
+        in
+          map (key: "${caller}: ${key}") (duplicates keys)) (builtins.attrNames kindPolicies)) [cfg.callPolicy.modes cfg.callPolicy.roles];
       referencedRoles = map (entry: entry.target) allEntries;
       referencedProfiles = lib.concatMap (entry: entry.profiles) allEntries;
       unknownModes = builtins.filter (name: !(builtins.hasAttr name modes)) (builtins.attrNames cfg.callPolicy.modes);
@@ -402,8 +428,23 @@ in
         map (profile: "role ${name}: ${profile}") (builtins.filter (profile: profileHarness profile != "pi") (profilesForRole name)))
       (builtins.filter (name: cfg.roles.${name}.contextPolicy == "prompt-only") roleNames);
       unknownGcRoles = builtins.filter (name: !(builtins.elem name roleNames)) (builtins.attrNames cfg.gc.roles);
+      missingGcRoles = builtins.filter (name: !(builtins.hasAttr name cfg.gc.roles)) roleNames;
+      invalidSelectors = builtins.filter (name: let selector = cfg.roles.${name}.selector; in !(builtins.isString selector.agent) || selector.agent == "") roleNames;
+      invalidSelectorAccess = builtins.filter (name: let
+        selector = cfg.roles.${name}.selector;
+        repository = builtins.elem selector.agent ["small" "standard" "advanced"];
+        special = builtins.elem selector.agent ["research" "perspective" "search"];
+      in
+        repository && selector.access == null || special && selector.access != null)
+      roleNames;
+      searchOnRoot = lib.concatMap (mode: map (target: "${mode}: ${target}") (builtins.filter (target: builtins.hasAttr target cfg.roles && cfg.roles.${target}.selector.agent == "search") (builtins.attrNames cfg.callPolicy.modes.${mode}.targets))) (builtins.attrNames cfg.callPolicy.modes);
+      searchFromNonResearch = lib.concatMap (caller: map (target: "${caller}: ${target}") (builtins.filter (target: builtins.hasAttr target cfg.roles && cfg.roles.${target}.selector.agent == "search") (builtins.attrNames cfg.callPolicy.roles.${caller}.targets))) (builtins.filter (caller: caller != "research") (builtins.attrNames cfg.callPolicy.roles));
       names = values: lib.concatStringsSep ", " values;
-      serialize = _: role: lib.filterAttrs (_: value: value != null) role;
+      serialize = _: role:
+        (lib.filterAttrs (_: value: value != null) role)
+        // {
+          selector = lib.filterAttrs (_: value: value != null) role.selector;
+        };
     in {
       assertions = [
         {
@@ -412,7 +453,19 @@ in
         }
         {
           assertion = emptyEdges == [];
-          message = "Pi orchestration callPolicy target edges must have profiles: ${names emptyEdges}.";
+          message = "Pi orchestration callPolicy target edges must have exactly one profile: ${names emptyEdges}.";
+        }
+        {
+          assertion = ambiguousSelectors == [];
+          message = "Pi orchestration selectors must be unique for each caller: ${names ambiguousSelectors}.";
+        }
+        {
+          assertion = invalidSelectors == [];
+          message = "Pi orchestration roles must define a non-empty selector agent: ${names invalidSelectors}.";
+        }
+        {
+          assertion = invalidSelectorAccess == [];
+          message = "Pi orchestration selectors must require access for repository capabilities and omit it for special capabilities: ${names invalidSelectorAccess}.";
         }
         {
           assertion = unknownModes == [];
@@ -446,15 +499,27 @@ in
           assertion = unknownGcRoles == [];
           message = "Pi orchestration GC policy references unknown role(s): ${names unknownGcRoles}.";
         }
+        {
+          assertion = missingGcRoles == [];
+          message = "Pi orchestration GC policy must cover every role: ${names missingGcRoles}.";
+        }
+        {
+          assertion = searchOnRoot == [];
+          message = "Pi orchestration must not publish search on a root caller: ${names searchOnRoot}.";
+        }
+        {
+          assertion = searchFromNonResearch == [];
+          message = "Pi orchestration search must be reachable only from research: ${names searchFromNonResearch}.";
+        }
       ];
       home.file = {
         "${myconfig.programs.pi-coding-agent.configDir}/role-catalog.json".text = builtins.toJSON {
-          schemaVersion = 4;
+          schemaVersion = 5;
           roles = lib.mapAttrs serialize cfg.roles;
         };
         "${myconfig.programs.pi-coding-agent.configDir}/orchestration.json".text = builtins.toJSON {
           schemaVersion = 4;
-          stateRoot = "${homeConfig.xdg.stateHome}/pi/orchestration-v7";
+          stateRoot = "${homeConfig.xdg.stateHome}/pi/orchestration-v8";
           tmux = lib.getExe pkgs.tmux;
           returnParentCommand = lib.getExe returnParentCommand;
           inherit parentNavigationHint historyViewerExtension popupExtension orchestrationExtension childBridgeExtension;

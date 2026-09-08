@@ -10,6 +10,7 @@ import { readAgentActivity } from "../extensions_src/utilities/orchestration_act
 import { resolveExternalDriver, validateExternalWorkerConfig, type ExternalDriver, type ExternalWorkerConfig } from "../extensions_src/utilities/orchestration_external_driver.ts";
 import { resolveHarnessAdapter } from "../extensions_src/utilities/orchestration_harness.ts";
 import { piLaunchDescriptor } from "../extensions_src/utilities/orchestration_pi.ts";
+import { projectDebugSnapshot } from "../extensions_src/utilities/orchestration_projection.ts";
 import { claimPendingTask, createTask, ensurePolicyEpoch, initializeMesh, markAgentStopping, prepareAgent, publishAgent, readAgentSnapshot, readAgentStatus, requestTaskCancellation, reserveMeshCapacity, taskPaths } from "../extensions_src/utilities/orchestration_store.ts";
 import { withTemporaryRoot, yieldToIO } from "./test_helpers.ts";
 
@@ -19,12 +20,12 @@ const epochId = "33333333-3333-4333-8333-333333333333";
 const runtime = { stateRoot: "/state", harnesses: { pi: { adapter: "pi-native", command: "/pi" }, "cursor-agent": { adapter: "cursor-acp", command: "/cursor", workerCommand: "/node", workerEntrypoint: "/worker.ts" }, codex: { adapter: "codex-acp", command: "/codex-acp", workerCommand: "/node", workerEntrypoint: "/worker.ts" } } } as never;
 
 function role(overrides: Partial<RoleDefinition> = {}): RoleDefinition {
-    return { description: "purpose", tools: [], instructions: "Own this purpose.", contextPolicy: "project", childExtensionContributions: [], ...overrides };
+    return { selector: { agent: "standard", access: "read" }, description: "purpose", tools: [], instructions: "Own this purpose.", contextPolicy: "project", childExtensionContributions: [], ...overrides };
 }
 function envelope(input: { role: string; selfRole: RoleDefinition; selectedProfile: string; executionProfile: ExecutionProfile; policy?: CallerPolicy; extensions?: string[] }): AgentLaunchEnvelope {
     return {
-        schemaVersion: 5,
-        marker: "pi-mesh-role-launch-v5",
+        schemaVersion: 6,
+        marker: "pi-mesh-role-launch-v6",
         meshId,
         agentId,
         epochId,
@@ -58,22 +59,25 @@ async function waitUntil(check: () => boolean | Promise<boolean>, timeoutMs = 30
 const externalCapabilities = { nativeScreen: true, taskDelivery: true, taskCompletion: true, taskCancellation: true, usage: false, interactiveInterventions: false, terminalHistory: false };
 const externalTmux = { socket: "/tmp/tmux", serverPid: "1", sessionId: "$1", sessionName: "main", windowId: "@1", paneId: "%1", windowName: "worker" };
 const externalBudgets = { maxLiveAgents: 4, maxConcurrentTasks: 4, maxTasksPerMesh: 20 };
-const cursorProfile: ExecutionProfile = { models: ["cursor/cursor-grok-4.5-high-fast"], harness: "cursor-agent", harnessOptions: { mode: "agent", permissionPolicy: "allow-always", sandbox: "disabled", trustWorkspace: true, worktree: false } };
+const cursorProfile: ExecutionProfile = { models: ["cursor/cursor-grok-4.6-high-fast"], harness: "cursor-agent", harnessOptions: { mode: "agent", permissionPolicy: "allow-always", sandbox: "disabled", trustWorkspace: true, worktree: false } };
 const externalConfig: ExternalWorkerConfig = { adapter: "cursor-acp", command: "/cursor", cwd: "/work", mode: "agent", permissionPolicy: "allow-always" };
 
-async function externalFixture(root: string) {
+async function externalFixture(root: string, input: { profile?: ExecutionProfile; config?: ExternalWorkerConfig; selectedProfile?: string } = {}) {
+    const profile = input.profile ?? cursorProfile;
+    const config = input.config ?? externalConfig;
+    const selectedProfile = input.selectedProfile ?? "cursor-standard";
     const generalRole = role({ instructions: "Independently own one problem through exploration, implementation, and validation.", tools: [] });
-    const profileConfig: ExecutionProfileConfig = { schemaVersion: 2, profiles: { "cursor-standard": cursorProfile } };
+    const profileConfig: ExecutionProfileConfig = { schemaVersion: 2, profiles: { [selectedProfile]: profile } };
     const mesh = await initializeMesh(root, { rootSessionId: "root", recoverable: false, budgets: externalBudgets });
-    const epoch = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", catalog: { schemaVersion: 4, roles: { general: generalRole } }, profiles: profileConfig, callPolicy: { modes: { ops: { targets: { general: { profiles: ["cursor-standard"] } } } }, roles: {} } });
+    const epoch = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", catalog: { schemaVersion: 5, roles: { general: generalRole } }, profiles: profileConfig, callPolicy: { modes: { ops: { targets: { general: { profiles: [selectedProfile] } } } }, roles: {} } });
     const reservation = await reserveMeshCapacity(root, mesh.meshId, "new-agent-task");
-    const prepared = await prepareAgent(root, mesh.meshId, { reservationId: reservation.reservationId, role: "general", selectedProfile: "cursor-standard", harness: "cursor-agent", cwd: "/work", roleSnapshot: generalRole, profileSnapshot: cursorProfile, launchEnvelope: "pending", epochId: epoch.epochId, provenance: { creatorSessionId: "parent" }, capabilities: externalCapabilities });
-    const launchEnvelope = buildLaunchEnvelope({ meshId: mesh.meshId, agentId: prepared.agentId, epochId: epoch.epochId, role: "general", selectedProfile: "cursor-standard", snapshot: epoch, childExtensions: { general: [] } });
+    const prepared = await prepareAgent(root, mesh.meshId, { reservationId: reservation.reservationId, role: "general", selectedProfile, harness: profile.harness, cwd: "/work", roleSnapshot: generalRole, profileSnapshot: profile, launchEnvelope: "pending", epochId: epoch.epochId, provenance: { creatorSessionId: "parent" }, capabilities: externalCapabilities });
+    const launchEnvelope = buildLaunchEnvelope({ meshId: mesh.meshId, agentId: prepared.agentId, epochId: epoch.epochId, role: "general", selectedProfile, snapshot: epoch, childExtensions: { general: [] } });
     const envelopePath = join(prepared.paths.directory, "launch-envelope.json");
     await writeFile(envelopePath, JSON.stringify(launchEnvelope));
-    await publishAgent(root, mesh.meshId, prepared.paths, { agentId: prepared.agentId, epochId: epoch.epochId, role: "general", selectedProfile: "cursor-standard", harness: "cursor-agent", cwd: "/work", roleSnapshot: generalRole, profileSnapshot: cursorProfile, launchEnvelope: envelopePath, creatorSessionId: "parent", tmux: externalTmux, capabilities: externalCapabilities });
+    await publishAgent(root, mesh.meshId, prepared.paths, { agentId: prepared.agentId, epochId: epoch.epochId, role: "general", selectedProfile, harness: profile.harness, cwd: "/work", roleSnapshot: generalRole, profileSnapshot: profile, launchEnvelope: envelopePath, creatorSessionId: "parent", tmux: externalTmux, capabilities: externalCapabilities });
     const taskId = randomUUID();
-    const env = { PI_MESH_ID: mesh.meshId, PI_MESH_AGENT_ID: prepared.agentId, PI_MESH_AGENT_DIR: prepared.paths.directory, PI_MESH_EPOCH_ID: epoch.epochId, PI_MESH_TASK_PATH: taskPaths(root, mesh.meshId, taskId).directory, PI_AGENT_RESOLVED_AGENT: envelopePath, PI_MESH_EXTERNAL_CONFIG: JSON.stringify(externalConfig) };
+    const env = { PI_MESH_ID: mesh.meshId, PI_MESH_AGENT_ID: prepared.agentId, PI_MESH_AGENT_DIR: prepared.paths.directory, PI_MESH_EPOCH_ID: epoch.epochId, PI_MESH_TASK_PATH: taskPaths(root, mesh.meshId, taskId).directory, PI_AGENT_RESOLVED_AGENT: envelopePath, PI_MESH_EXTERNAL_CONFIG: JSON.stringify(config) };
     return { root, meshId: mesh.meshId, agentId: prepared.agentId, epochId: epoch.epochId, generalRole, launchEnvelope, envelopePath, env };
 }
 
@@ -118,6 +122,7 @@ void test("external routing consumes selected profiles without turning profiles 
     assert.equal(resolveExternalDriver(validateExternalWorkerConfig(JSON.parse(codexLaunch.env.PI_MESH_EXTERNAL_CONFIG!)), codexProfile).display, "codex");
     assert.equal(searcherEnvelope.role, "searcher");
     assert.throws(() => resolveExternalDriver(validateExternalWorkerConfig(JSON.parse(codexLaunch.env.PI_MESH_EXTERNAL_CONFIG!)), cursorProfile), /Codex selected execution profile/u);
+    assert.throws(() => resolveExternalDriver(externalConfig, codexProfile), /Cursor selected execution profile/u);
 });
 
 // Given launch metadata that disagrees with a valid selected-profile envelope, when the external worker parses its immutable launch identity, it rejects before starting a driver.
@@ -127,6 +132,27 @@ void test("external worker rejects mismatched immutable envelope identity before
     const driver: ExternalDriver = { async start() { starts += 1; }, async runTask() { return { output: "", stopReason: "end_turn" }; }, async cancel() {}, async shutdown() {}, waitForClose: () => new Promise(() => {}), fatalError: () => undefined };
     await assert.rejects(runExternalWorker({ ...fixture.env, PI_MESH_EPOCH_ID: randomUUID() }, { createDriver: () => driver, sleep: yieldToIO }), /immutable epoch snapshot/u);
     assert.equal(starts, 0);
+}));
+
+// Admission: external adapter startup persists raw diagnostics for the TUI, but model-facing projection is the only stable public boundary; types and ACP capability checks cannot observe both outcomes.
+// Given configured Cursor and Codex profiles whose external startup fails with their configured full, alias, or ACP model identifiers, when the worker persists the failure and it crosses debug projection, the model observes route_unavailable while the raw diagnostic remains available to operators.
+void test("external startup diagnostics preserve operator details while hiding configured Cursor and Codex identities", async () => withTemporaryRoot("orchestration-external-projection-", async root => {
+    const codexProfile: ExecutionProfile = { models: ["codex/gpt-5.6-luna"], thinkingLevel: "high", harness: "codex", harnessOptions: { mode: "read-only", permissionPolicy: "reject", webSearch: "cached" } };
+    const codexConfig: ExternalWorkerConfig = { adapter: "codex-acp", command: "/codex", cwd: "/work", mode: "read-only", permissionPolicy: "reject", webSearch: "cached" };
+    const cases = [
+        { profile: cursorProfile, config: externalConfig, diagnostic: "Cursor ACP rejected cursor/cursor-grok-4.6-high-fast alias cursor-grok-4.6-high-fast as grok-4.6[effort=high,fast=true]", names: ["cursor/cursor-grok-4.6-high-fast", "cursor-grok-4.6-high-fast", "grok-4.6[effort=high,fast=true]"] },
+        { profile: codexProfile, config: codexConfig, diagnostic: "Codex ACP does not advertise required model gpt-5.6-luna from codex/gpt-5.6-luna", names: ["codex/gpt-5.6-luna", "gpt-5.6-luna"] },
+    ] as const;
+    for (const scenario of cases) {
+        const fixture = await externalFixture(root, { profile: scenario.profile, config: scenario.config });
+        const driver: ExternalDriver = { async start() { throw new Error(scenario.diagnostic); }, async runTask() { return { output: "", stopReason: "end_turn" }; }, async cancel() {}, async shutdown() {}, waitForClose: () => new Promise(() => {}), fatalError: () => undefined };
+        await assert.rejects(runExternalWorker(fixture.env, { createDriver: () => driver, sleep: yieldToIO }), new RegExp(scenario.names[0]!.replace(/[.[\]\\]/gu, "\\$&"), "u"));
+        const persisted = await readAgentSnapshot(root, fixture.meshId, fixture.agentId);
+        assert.equal(persisted.status.exitReason, scenario.diagnostic);
+        const projected = JSON.stringify(projectDebugSnapshot(persisted));
+        assert.match(projected, /route_unavailable/u);
+        for (const name of scenario.names) assert.doesNotMatch(projected, new RegExp(name.replace(/[.[\]\\]/gu, "\\$&"), "u"));
+    }
 }));
 
 // Admission: external idle claiming is repository-owned process behavior; schemas cannot detect repeated full task scans hidden behind stop probes.

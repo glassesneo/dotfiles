@@ -22,7 +22,7 @@ export function piLaunchDescriptor(config: SubagentRuntimeConfig, input: { meshI
     if (envelope.meshId !== input.meshId || envelope.agentId !== input.agentId) throw new Error("Pi launch metadata does not match the immutable launch envelope");
     if (envelope.role !== input.role) throw new Error("Pi launch role does not match the immutable launch envelope");
     const profile = envelope.executionProfile;
-    if (profile.harness !== "pi" || profile.harnessOptions !== undefined) throw new Error(`Selected profile ${envelope.selectedProfile} is not a Pi execution profile`);
+    if (profile.harness !== "pi" || profile.harnessOptions !== undefined) throw new Error("Selected execution profile is not a Pi execution profile");
 
     const args = ["--session-dir", `${input.agentDirectory}/session`, "--no-extensions"];
     for (const extension of runtimeExtensions(envelope)) args.push("-e", extension);
