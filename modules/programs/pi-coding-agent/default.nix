@@ -227,7 +227,7 @@ in
         ]);
       };
 
-    myconfig.always = {...}: {
+    myconfig.always = {
       args.shared.piArtifactRuntime.extensionPath = artifactExtensionPath;
       programs.pi-coding-agent = {
         cursorAcpModelIds = lib.mapAttrs (_: lib.mkDefault) {
@@ -264,7 +264,7 @@ in
           };
           small-write = {
             models = ["openai-codex/gpt-5.6-luna"];
-            thinkingLevel = "xhigh";
+            thinkingLevel = "high";
           };
           standard-read = {
             models = ["cursor/cursor-grok-4.6-high-fast"];
