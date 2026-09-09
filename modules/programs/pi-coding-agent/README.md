@@ -52,8 +52,10 @@ configuration.
   instructions, with no repository context files, Skills, prompt templates,
   tools, routed mesh-management surface, or child delegation.
 
-The parent remains responsible for integrating evidence, checking the relevant
-diff and validation, and deciding whether the request is actually complete.
+The parent considers delegation first and prefers it when uncertain. It remains
+responsible for integrating evidence, checking the relevant diff and
+validation, and deciding whether the request is actually complete. Necessary
+authorized direct investigation and edits remain allowed.
 
 ## Selectors and internal IDs
 

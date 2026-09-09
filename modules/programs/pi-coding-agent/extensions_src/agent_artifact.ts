@@ -47,8 +47,7 @@ export const agentArtifactDescription =
     "Persist a canonical project-local artifact. Designs await user approval; other kinds save directly.";
 
 export const agentArtifactPromptGuidelines = [
-    "Pass completed Markdown to save_agent_artifact once and do not repeat its body in assistant text.",
-    "When save_agent_artifact returns revision_requested, revise pendingPath and resubmit with the same pendingId; unavailable remains pending, not approved.",
+    "Submit completed Markdown to save_agent_artifact and use its returned status and path. Do not repeat the artifact body in assistant text. On revision_requested, revise the pending artifact and resubmit with the same pendingId. Report a design as approved only when the tool confirms approval; unavailable, cancellation, or rejection does not grant it.",
 ];
 
 function detailsFrom(

@@ -3,7 +3,7 @@
 ## Responsibility Boundaries
 
 - `prompts/` owns thin explicit Pi entrypoints. Prompt templates never change the active mode.
-- Role definitions own mandatory role behavior and role-specific use of Pi resources. Reusable Skills own optional harness-independent methods. Extensions and tool guidance own Pi process, task, tmux, ACP, popup, event, and tool-schema mechanics.
+- Mode instructions own the parent's delegation preference, integration, and final verification. Role definitions own mandatory role behavior and role-specific use of Pi resources. Reusable Skills own optional harness-independent methods. Active mesh tool guidance owns wait, yield, retrieval, and report mechanics. Extensions own remaining Pi process, task, tmux, ACP, popup, event, and tool-schema mechanics.
 - `extensions/mode/` and `extensions_src/mode.ts` own mutable top-level `recon`/`ops` state. Child processes never load mode controls.
 - `extensions/orchestration/` owns peer-mesh mechanics: root-owned epochs, task and event state, harness adapters, and the agent popup view.
 - `extensions/popup/` owns the single overlay lifecycle and registered view stack; consumers provide views but do not open competing root overlays.

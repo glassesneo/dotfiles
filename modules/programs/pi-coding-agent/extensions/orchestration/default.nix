@@ -49,21 +49,23 @@
       childExtensionContributions = listOfOption str [];
     };
   };
-  meshAsyncChildGuidance = " Retain returned agent/task IDs and continue useful work independent of pending descendants. As a nested caller, do not end the response to wait because settling completes your active task; when descendant results are required, call mesh_wait once with all pending descendant task IDs. Treat each completion bundle as the delivery frontier and call mesh_get once only for terminal task IDs; never poll, sleep, or run time-filling commands.";
-  meshReportGuidance = " Use mesh_report({summary}) only when the parent requests progress or an intermediate result could change its decisions; do not use it for heartbeats, final results, questions, or blocker waiting.";
   targetPolicyType = delib.submodule {
     options.profiles = delib.listOfOption delib.str [];
   };
   callerPolicyType = delib.submodule {
     options.targets = delib.attrsOfOption targetPolicyType {};
   };
-  resultContract = " Return the outcome, changed paths when any, verification evidence, missing evidence, and decisions needed from the caller.";
+  resultContract = ''
+    Return the outcome, changed paths when any, verification performed and its
+    results, missing evidence, and decisions needed from the caller. Separate
+    observations from assumptions; do not present unavailable checks as passed.
+  '';
   repositoryTools = access: extraTools: ["read" "grep" "find" "ls" "bash"] ++ lib.optionals (access == "write") ["write" "edit"] ++ extraTools ++ ["mesh_report"];
   mkRepositoryRole = agent: access: description: instructions: contributions: extraTools: {
     selector = {inherit agent access;};
     inherit description;
     tools = repositoryTools access extraTools;
-    instructions = "${instructions}${resultContract}${meshReportGuidance}";
+    instructions = "${instructions}${resultContract}";
     contextPolicy = "project";
     childExtensionContributions = contributions;
   };
@@ -79,12 +81,24 @@
     childExtensionContributions = [];
   };
   settledRoles = {
-    small-read = mkRepositoryRole "small" "read" "Handle a small, low-judgment read-only repository task or command-result check." "Keep the bounded source/configuration unchanged and use only the investigation needed for the requested result." [] [];
-    small-write = mkRepositoryRole "small" "write" "Handle a small, low-judgment repository change." "Confirm the bounded target, make the smallest authorized change, inspect the diff, and run proportionate focused checks." [] [];
-    standard-read = mkStandardRole "read" "Own a normal repository investigation without changing source or configuration." "Investigate the assignment with the harness-provided repository tools. Return missing operations rather than assuming Pi shell or validation access.";
-    standard-write = mkStandardRole "write" "Own a normal repository implementation, repair, and self-verification." "Explore, implement, validate, recover from mistakes, and return an integrable result within the assigned scope.";
-    advanced-read = mkRepositoryRole "advanced" "read" "Handle difficult read-only judgment across multiple repository invariants." "Investigate and evaluate the bounded problem without source changes. Delegate only when a permitted independent result materially improves the conclusion.${meshAsyncChildGuidance}" [artifactExtension] ["save_agent_artifact"];
-    advanced-write = mkRepositoryRole "advanced" "write" "Handle a difficult repository change spanning multiple invariants." "Explore, implement, and verify the bounded change. Delegate only when a permitted independent result materially improves the outcome.${meshAsyncChildGuidance}" [artifactExtension] ["save_agent_artifact"];
+    small-read = mkRepositoryRole "small" "read" "Handle a small, low-judgment read-only repository task or command-result check." ''
+      Investigate only what the bounded assignment requires. Keep source and configuration unchanged.
+    '' [] [];
+    small-write = mkRepositoryRole "small" "write" "Handle a small, low-judgment repository change." ''
+      Confirm the bounded target from the assignment, make the smallest authorized change, inspect the diff, and run proportionate focused checks. Ask the caller only if missing information blocks the assigned result.
+    '' [] [];
+    standard-read = mkStandardRole "read" "Own a normal repository investigation without changing source or configuration." ''
+      Investigate the assignment without changing source or configuration, using the tools provided by this harness. Report missing operations to the caller rather than assuming Pi shell or validation access.
+    '';
+    standard-write = mkStandardRole "write" "Own a normal repository implementation, repair, and self-verification." ''
+      Own the assigned repository change: investigate, implement, verify, and recover from mistakes within scope. Use this harness's available tools and return an integrable result.
+    '';
+    advanced-read = mkRepositoryRole "advanced" "read" "Handle difficult read-only judgment across multiple repository invariants." ''
+      Evaluate the bounded problem across its relevant invariants without changing source or configuration. Consider permitted delegation first for independent evidence that materially improves the conclusion; integrate the evidence yourself.
+    '' [artifactExtension] ["save_agent_artifact"];
+    advanced-write = mkRepositoryRole "advanced" "write" "Handle a difficult repository change spanning multiple invariants." ''
+      Own the bounded change across its relevant invariants. Consider permitted delegation first for independent work that materially improves the outcome; integrate and verify the authorized result yourself.
+    '' [artifactExtension] ["save_agent_artifact"];
     research = {
       selector = {
         agent = "research";
@@ -92,7 +106,13 @@
       };
       description = "Collect repository and Web evidence, assess sources, and synthesize a supported conclusion.";
       tools = ["read" "grep" "find" "ls" "bash" "web_search" "web_fetch" "mesh_report"];
-      instructions = "Decompose the bounded question into claims and evidence needs while leaving source and configuration unchanged. Assess authority, relevance, independence, and freshness. Use mesh_send with agent=\"search\" and access=\"read\" only for an independent Web path that materially improves the conclusion.${meshAsyncChildGuidance}${meshReportGuidance} Return claim-linked sources, counterevidence, and uncertainty.";
+      instructions = ''
+        Resolve the bounded question as claims and evidence needs without changing
+        source or configuration. Assess source authority, relevance, independence, and
+        freshness. Use an authorized search/read child for an independent Web path when
+        it materially improves the conclusion. Return a concise synthesis with
+        claim-linked sources, counterevidence, missing evidence, and uncertainty.
+      '';
       contextPolicy = "project";
       childExtensionContributions = [webSearchExtension webFetchExtension];
     };
@@ -103,7 +123,13 @@
       };
       description = "Reframe a supplied dossier from an isolated outside perspective.";
       tools = [];
-      instructions = "Receive only the caller's dossier; you have no repository context, tools, skills, prompt templates, or child roles. Identify hidden assumptions, alternate decompositions, and natural alternatives without inventing repository facts. Return the strongest reframing, material assumptions, supported alternatives, and any missing dossier element.";
+      instructions = ''
+        Work only from the caller's dossier. You have no repository context, tools,
+        Skills, prompt templates, or child roles. Identify hidden assumptions,
+        alternate decompositions, and natural alternatives without inventing facts.
+        Return the strongest reframing, its material assumptions, supported alternatives,
+        and missing dossier information. Stop after this bounded outside view.
+      '';
       contextPolicy = "prompt-only";
       childExtensionContributions = [];
     };
@@ -114,7 +140,11 @@
       };
       description = "Answer one bounded external question with source-backed Web search.";
       tools = [];
-      instructions = "Return a concise supported answer, source URLs mapped to claims, freshness, and material uncertainty; state missing evidence instead of widening the task.";
+      instructions = ''
+        Answer the assigned external question with a concise supported conclusion,
+        source URLs mapped to claims, freshness, and material uncertainty. Report missing
+        evidence instead of widening the assignment.
+      '';
       contextPolicy = "project";
       childExtensionContributions = [];
     };
