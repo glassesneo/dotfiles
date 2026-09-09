@@ -67,6 +67,14 @@ export class CursorAcpDriver implements ExternalDriver {
         }
         if (message.method === "cursor/create_plan") { this.#options.event({ type: "tool", text: "accepted implementation plan" }); return { accepted: true }; }
         if (message.method === "cursor/ask_question") { this.#options.event({ type: "tool", text: "skipped blocking question; report blocker in result" }); return { skipped: true, reason: "non-interactive mesh agent" }; }
+        if (message.method === "cursor/update_todos") {
+            return {
+                outcome: {
+                    outcome: "rejected",
+                    reason: "cursor/update_todos is not supported by this client",
+                },
+            };
+        }
         if (message.id !== undefined) this.#failTurn(`Unsupported blocking ACP request: ${message.method}`);
         return null;
     }

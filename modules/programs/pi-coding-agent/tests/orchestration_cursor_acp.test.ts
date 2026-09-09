@@ -22,19 +22,29 @@ input.on("line",line=>{const message=JSON.parse(line); record(message);
  } else if(message.method==="session/set_mode") send({jsonrpc:"2.0",id:message.id,result:{}});
  else if(message.method==="session/prompt"){
   promptId=message.id;
-  send({jsonrpc:"2.0",method:"session/update",params:{update:{sessionUpdate:"agent_message_chunk",content:{text:"cursor answer"}}}});
-  if(scenario==="blocking") send({jsonrpc:"2.0",id:"blocking-1",method:"cursor/blocking_request",params:{}});
-  else if(scenario==="stop") send({jsonrpc:"2.0",id:message.id,result:{stopReason:"max_tokens"}});
-  else {
+  if(scenario==="update-todos-request") send({jsonrpc:"2.0",id:0,method:"cursor/update_todos",params:{todos:[{id:"1",content:"x",status:"pending"}]}});
+  else if(scenario==="update-todos-notify"){
+   send({jsonrpc:"2.0",method:"cursor/update_todos",params:{todos:[{id:"1",content:"x",status:"pending"}]}});
+   send({jsonrpc:"2.0",id:"sync-1",method:"session/update",params:{update:{sessionUpdate:"agent_message_chunk",content:{text:"continued after todos"}}}});
+  } else {
+   send({jsonrpc:"2.0",method:"session/update",params:{update:{sessionUpdate:"agent_message_chunk",content:{text:"cursor answer"}}}});
+   if(scenario==="blocking") send({jsonrpc:"2.0",id:"blocking-1",method:"cursor/blocking_request",params:{}});
+   else if(scenario==="stop") send({jsonrpc:"2.0",id:message.id,result:{stopReason:"max_tokens"}});
+   else {
    let options;
    if(scenario==="reject-always") options=[{kind:"allow_once",optionId:"allow-once"},{kind:"reject_always",optionId:"reject-always"}];
    else if(scenario==="reject-missing") options=[{kind:"allow_once",optionId:"allow-once"}];
    else if(scenario==="allow-once") options=[{kind:"reject_once",optionId:"reject-once"},{kind:"allow_once",optionId:"allow-once"}];
    else if(scenario==="reject-only") options=[{kind:"reject_once",optionId:"reject-once"}];
    else options=[{kind:"allow_once",optionId:"allow-once"},{kind:"allow_always",optionId:"allow-always"},{kind:"reject_once",optionId:"reject-once"},{kind:"reject_always",optionId:"reject-always"}];
-   send({jsonrpc:"2.0",id:"permission-1",method:"session/request_permission",params:{options}});
+    send({jsonrpc:"2.0",id:"permission-1",method:"session/request_permission",params:{options}});
+   }
   }
  } else if(message.id==="permission-1") send({jsonrpc:"2.0",id:promptId,result:{stopReason:"end_turn"}});
+ else if(message.id===0){
+  send({jsonrpc:"2.0",method:"session/update",params:{update:{sessionUpdate:"agent_message_chunk",content:{text:"continued after todos"}}}});
+  send({jsonrpc:"2.0",id:promptId,result:{stopReason:"end_turn"}});
+ } else if(message.id==="sync-1") send({jsonrpc:"2.0",id:promptId,result:{stopReason:"end_turn"}});
 });`;
 
 type Event = { type: "state" | "text" | "thought" | "tool" | "permission"; text: string };
@@ -110,4 +120,35 @@ void test("Cursor ACP fails unsupported blocking requests and non-end-turn compl
         await assert.rejects(driver.runTask("task"), scenario === "blocking" ? /Unsupported blocking ACP request/u : /stopped with max_tokens/u);
         await driver.shutdown();
     }
+});
+
+// Admission: an in-turn cursor/update_todos request can abort runTask; typecheck cannot observe the rejected JSON-RPC result or later output.
+void test("Cursor ACP rejects cursor/update_todos requests without failing the turn", { timeout: 15_000 }, async () => {
+    const f = await fixture("update-todos-request");
+    const driver = new CursorAcpDriver(options(f, "agent", () => {}));
+    try {
+        await driver.start();
+        assert.deepEqual(await driver.runTask("bounded task"), { output: "continued after todos", stopReason: "end_turn" });
+        const reply = (await requests(f.requestsPath)).find(message => message.id === 0);
+        assert.ok(reply && "result" in reply && !("error" in reply));
+        const outcome = (reply.result as { outcome?: { outcome?: unknown; reason?: unknown } }).outcome;
+        assert.equal(outcome?.outcome, "rejected");
+        const reason = outcome?.reason;
+        assert.ok(typeof reason === "string");
+        assert.match(reason, /not supported/iu);
+    } finally { await driver.shutdown(); }
+});
+
+// Admission: an ID-less cursor/update_todos notification can still fail the turn or emit a stray reply; typecheck cannot observe wire silence.
+void test("Cursor ACP does not reply to cursor/update_todos notifications and continues the turn", { timeout: 15_000 }, async () => {
+    const f = await fixture("update-todos-notify");
+    const driver = new CursorAcpDriver(options(f, "agent", () => {}));
+    try {
+        await driver.start();
+        assert.deepEqual(await driver.runTask("bounded task"), { output: "continued after todos", stopReason: "end_turn" });
+        const replies = (await requests(f.requestsPath)).filter(message => "result" in message || "error" in message);
+        assert.equal(replies.length, 1);
+        assert.equal(replies[0]?.id, "sync-1");
+        assert.ok(!("error" in (replies[0] ?? {})));
+    } finally { await driver.shutdown(); }
 });
