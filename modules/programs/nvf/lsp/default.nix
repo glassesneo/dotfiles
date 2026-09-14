@@ -1,4 +1,8 @@
-{delib, ...}:
+{
+  delib,
+  pkgs,
+  ...
+}:
 delib.module {
   name = "programs.nvf.lsp";
 
@@ -7,6 +11,38 @@ delib.module {
   home.ifEnabled.programs.nvf.settings.vim = {
     additionalRuntimePaths = [./runtime];
     luaConfigRC.nvf-lsp-defaults = "require('nvf.lsp_defaults').setup()";
+    extraPlugins = {
+      inc-rename = {
+        package = pkgs.vimPlugins.inc-rename-nvim;
+        setup = "require('inc_rename').setup({})";
+      };
+      tiny-inline-diagnostic = {
+        package = pkgs.vimPlugins.tiny-inline-diagnostic-nvim;
+        setup = ''
+          require("tiny-inline-diagnostic").setup({
+            options = {
+              multilines = {
+                enabled = true,
+                always_show = true,
+              },
+            },
+          })
+          vim.diagnostic.config({
+            virtual_text = false,
+            signs = false,
+          })
+        '';
+      };
+    };
+    diagnostics = {
+      enable = true;
+      config = {
+        virtual_text = false;
+        signs = false;
+        underline = true;
+        virtual_lines = false;
+      };
+    };
     lsp = {
       enable = true;
       inlayHints.enable = true;

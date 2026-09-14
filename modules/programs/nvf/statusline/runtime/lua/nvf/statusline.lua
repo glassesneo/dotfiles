@@ -319,6 +319,29 @@ local FileType = {
   },
 }
 
+local Navic = {
+  condition = function ()
+    local ok, navic = pcall(require, "nvim-navic")
+    return ok and navic.is_available()
+  end,
+  provider = function ()
+    return require("nvim-navic").get_location({ highlight = true })
+  end,
+  update = { "CursorMoved", "LspAttach", "LspDetach", "BufEnter" },
+}
+
+local WinBar = { Navic, { provider = "%<" } }
+
+local function disable_winbar(args)
+  if conditions.buffer_matches({
+    buftype = { "nofile", "prompt", "help", "quickfix", "terminal" },
+  }, args.buf) then
+    return true
+  end
+  local ok, navic = pcall(require, "nvim-navic")
+  return not (ok and navic.is_available(args.buf))
+end
+
 local StatusLine = {
   hl = { fg = "fg", bg = "bg" },
   ModeEnd("", ""),
@@ -352,6 +375,10 @@ function M.setup()
   require("heirline").load_colors(setup_colors())
   require("heirline").setup({
     statusline = StatusLine,
+    winbar = WinBar,
+    opts = {
+      disable_winbar_cb = disable_winbar,
+    },
   })
 
   local group = vim.api.nvim_create_augroup("NvfHeirline", { clear = true })
@@ -366,6 +393,18 @@ function M.setup()
     pattern = "GitSignsUpdate",
     callback = vim.schedule_wrap(function ()
       vim.cmd.redrawstatus()
+    end),
+  })
+  vim.api.nvim_create_autocmd({ "LspAttach", "LspDetach" }, {
+    group = group,
+    callback = vim.schedule_wrap(function (args)
+      for _, win in ipairs(vim.api.nvim_list_wins()) do
+        if vim.api.nvim_win_get_buf(win) == args.buf then
+          vim.api.nvim_win_call(win, function ()
+            vim.api.nvim_exec_autocmds("BufWinEnter", { buffer = args.buf })
+          end)
+        end
+      end
     end),
   })
 end

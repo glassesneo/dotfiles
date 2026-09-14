@@ -39,9 +39,11 @@ delib.module {
           {
             key = "<S-r>";
             mode = ["n"];
-            action = "function() vim.lsp.buf.rename() end";
+            action = ''function() return ":IncRename " .. vim.fn.expand("<cword>") end'';
             lua = true;
-            silent = true;
+            expr = true;
+            silent = false;
+            desc = "Rename symbol";
           }
           {
             key = "<C-a>";

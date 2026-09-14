@@ -10,6 +10,7 @@ delib.module {
 
   home.ifEnabled = {
     programs.nvf.settings.vim = {
+      ui.colorful-menu-nvim.enable = true;
       autocomplete.blink-cmp = {
         enable = true;
         setupOpts = let
@@ -38,9 +39,20 @@ delib.module {
               draw = {
                 columns = [
                   ["kind_icon"]
-                  ["label" "label_description" "source_name"]
+                  ["label" "source_name"]
                 ];
-                treesitter = ["lsp"];
+                components.label = {
+                  text = lib.generators.mkLuaInline ''
+                    function(ctx)
+                      return require("colorful-menu").blink_components_text(ctx)
+                    end
+                  '';
+                  highlight = lib.generators.mkLuaInline ''
+                    function(ctx)
+                      return require("colorful-menu").blink_components_highlight(ctx)
+                    end
+                  '';
+                };
               };
             };
           };

@@ -52,6 +52,10 @@ delib.module {
               enabled = true;
               view_search = "virtualtext";
             };
+            notify = {
+              enabled = true;
+              view = "notify";
+            };
             views = {
               virtualtext = {
                 backend = "virtualtext";
@@ -62,6 +66,18 @@ delib.module {
             };
           };
         };
+      };
+      extraPlugins.nvim-notify = {
+        package = pkgs.vimPlugins.nvim-notify;
+        # Do not assign vim.notify; Noice owns that and routes to this backend.
+        setup = ''
+          require("notify").setup({
+            render = "default",
+            timeout = 5000,
+            top_down = true,
+            stages = "fade_in_slide_out",
+          })
+        '';
       };
       lazy.plugins.noice-nvim.package = lib.mkForce noicePatched;
     };

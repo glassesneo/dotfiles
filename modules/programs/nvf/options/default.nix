@@ -1,8 +1,4 @@
-{
-  delib,
-  lib,
-  ...
-}:
+{delib, ...}:
 delib.module {
   name = "programs.nvf";
 
@@ -28,18 +24,6 @@ delib.module {
         # border themselves (fidget, orgmode, Noice cmdline) are unchanged.
         winborder = "rounded";
       };
-
-      autocmds = [
-        {
-          event = ["TextYankPost"];
-          desc = "Highlight yanked text";
-          callback = lib.generators.mkLuaInline ''
-            function()
-              vim.hl.on_yank({ timeout = 300 })
-            end
-          '';
-        }
-      ];
     };
   };
 }

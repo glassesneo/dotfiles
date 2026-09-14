@@ -29,13 +29,40 @@ delib.module {
           };
           indent = {
             enabled = true;
-            animate.enabled = false;
-            only_scope = true;
+            indent = {
+              enabled = true;
+              char = "│";
+              only_scope = true;
+              only_current = true;
+              hl = "SnacksIndent";
+            };
+            animate = {
+              enabled = true;
+              style = "out";
+              easing = "linear";
+              duration = {
+                step = 20;
+                total = 500;
+              };
+            };
             scope = {
               enabled = true;
+              char = "│";
+              underline = false;
               only_current = true;
+              hl = "SnacksIndentScope";
             };
-            chunk.enabled = false;
+            chunk = {
+              enabled = true;
+              only_current = true;
+              char = {
+                corner_top = "╭";
+                corner_bottom = "╰";
+                horizontal = "─";
+                vertical = "│";
+                arrow = ">";
+              };
+            };
           };
           input.enabled = false;
           notifier.enabled = false;
@@ -69,7 +96,15 @@ delib.module {
             };
           };
           quickfile.enabled = false;
-          statuscolumn.enabled = false;
+          statuscolumn = {
+            enabled = true;
+            left = ["mark" "sign"];
+            right = ["fold" "git"];
+            folds = {
+              open = false;
+              git_hl = true;
+            };
+          };
           words.enabled = false;
           zen.enabled = true;
         };
