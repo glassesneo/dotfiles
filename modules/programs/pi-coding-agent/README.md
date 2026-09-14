@@ -36,6 +36,29 @@ An existing-agent intervention remains `{ agentId, message }`. Do not combine
 that form with `agent`, `access`, or `profile`. Internal role IDs and
 execution profiles stay off the public call surface.
 
+`mesh_wait({})` arms automatic waiting for the caller's current work and returns
+immediately with `{ armed: true, behavior: "until-drained" }`. Call it once
+after delegating when results are required, continue useful independent work,
+and then finish the response. On a normal `agent_end`, orchestration waits while
+that caller still has delegated tasks or undelivered events. A queued completion,
+intervention, report, signal, or native user input resumes the same Pi
+`AgentSession` run; retrieve announced terminal results with `mesh_get`.
+Additional delegation remains covered until the work and queued messages drain.
+Root Pi sessions and Pi children with outbound edges expose this contract;
+prompt-only and leaf children do not.
+
+The arm is process-local and is cleared by drain, abort, endpoint replacement,
+or shutdown. Aborting the caller does not stop its delegates; unacknowledged
+notifications cleared from Pi's queue become eligible for normal asynchronous
+delivery after settlement. Stop delegates explicitly with `mesh_stop` if needed.
+Waiting uses the status line without replacing the editor or changing its draft,
+cursor, or focus. Enter and the configured follow-up binding (Ctrl+Enter in this
+repository) retain native steering and follow-up input.
+The arm is not restored after restart. Error and length recovery are not
+blocked by the wait hook. Keeping the Pi session run active does not keep an HTTP
+request open and does not guarantee that a provider treats later requests as one
+billing or subscription turn.
+
 `access` is a work contract and routing label, not an operating-system
 sandbox. It authorizes whether the assignment may change source and
 configuration.

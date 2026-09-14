@@ -112,15 +112,14 @@ void test("mesh_stop cards avoid unresolved and disposition repetition after res
     assert.match(expandedCall, new RegExp(agentId, "u")); assert.match(expandedCall, /reason:democomplete/u);
 });
 
-// Given an all-task wait call and its result rows, the completed card states the task count once while each task keeps its own terminal state and expanded identifiers.
-void test("mesh_wait cards avoid repeating the aggregate while preserving terminal task rows", () => {
-    const args = { taskIds: [taskId, agentId] };
-    const call = render(renderWaitCall(args, theme as never, { expanded: false, lastComponent: undefined }), 24);
-    const first = snapshot(); const second = structuredClone(first); second.agent.agentId = agentId; second.task!.request.taskId = agentId; second.task!.status.state = "failed"; second.task!.result!.outcome = "failed";
-    const collapsed = render(renderWaitResult({ content: [], details: { tasks: [first, second], accounting: { claimedTaskIds: [], receiptIds: [], receivedTaskIds: [] } } } as never, { expanded: false } as never, theme as never, { args, lastComponent: undefined } as never), 32);
-    const completedCard = `${call}\n${collapsed}`;
-    assert.equal(completedCard.match(/all 2 tasks/gu)?.length, 1); assert.match(completedCard, /SUCCEEDED/u); assert.match(completedCard, /FAILED/u);
-    const expanded = render(renderWaitResult({ content: [], details: { tasks: [first, second] } } as never, { expanded: true } as never, theme as never, { args, lastComponent: undefined } as never), 32); assert.match(expanded.replace(/\s+/gu, ""), new RegExp(taskId, "u")); assert.match(expanded.replace(/\s+/gu, ""), new RegExp(agentId, "u")); assert.equal(expanded.match(/handle:/gu)?.length, 2); assert.equal(expanded.match(/role: worker/gu)?.length, 2);
+// Admission: tool cards are the user's confirmation of an immediate arm, which schemas cannot make visible; retain the displayed state and lifetime, not decorative text.
+// Given a successful arm result, the card communicates the persistent wait behavior.
+void test("mesh_wait cards show immediate until-drained arming", () => {
+    const args = {};
+    const call = render(renderWaitCall(args, theme as never, { expanded: false, lastComponent: undefined }), 32);
+    const collapsed = render(renderWaitResult({ content: [], details: { armed: true, behavior: "until-drained" } } as never, { expanded: false } as never, theme as never, { args, lastComponent: undefined } as never), 32);
+    const expanded = render(renderWaitResult({ content: [], details: { armed: true, behavior: "until-drained" } } as never, { expanded: true } as never, theme as never, { args, lastComponent: undefined } as never), 32);
+    assert.match(call, /arm/u); assert.match(collapsed, /armed/u); assert.match(expanded, /until-drained/u);
 });
 
 void test("mesh_report cards expose summary and queued state", () => {

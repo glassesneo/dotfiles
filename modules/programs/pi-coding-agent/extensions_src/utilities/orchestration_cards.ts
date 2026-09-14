@@ -25,7 +25,7 @@ export type CardRenderContext = {
 };
 
 export type SendCardArgs = { agent?: string; access?: "read" | "write"; agentId?: string; message: string };
-export type WaitCardArgs = { taskIds: string[] };
+export type WaitCardArgs = object;
 export type ReportCardArgs = { summary: string };
 
 const COLLAPSED_ERROR_CHARS = 240;
@@ -215,10 +215,8 @@ export function renderGetCall(args: { taskId: string }, theme: Theme, context: C
     if (context.expanded) lines.push(labeled(theme, "taskId", args.taskId));
     return textFromComponent(context.lastComponent, lines.join("\n"));
 }
-export function renderWaitCall(args: WaitCardArgs, theme: Theme, context: CardRenderContext): Component {
-    const lines = [joinParts(["mesh_wait", `all ${args.taskIds.length} tasks`])];
-    if (context.expanded) lines.push(labeled(theme, "taskIds", args.taskIds.join(", ")));
-    return textFromComponent(context.lastComponent, lines.join("\n"));
+export function renderWaitCall(_args: WaitCardArgs, _theme: Theme, context: CardRenderContext): Component {
+    return textFromComponent(context.lastComponent, joinParts(["mesh_wait", "arm until drained"]));
 }
 export function renderStopCall(args: { agentId?: string; taskId?: string; reason?: string }, theme: Theme, context: CardRenderContext): Component {
     const lines = [joinParts(["mesh_stop", args.taskId ? "task" : "agent"])];
@@ -248,14 +246,11 @@ export function renderSendResult(result: AgentToolResult<unknown>, options: Tool
     if (!isSubmitDetails(result.details) || !result.details.task) return textFromComponent(context.lastComponent, resultProblem(result, options, theme, context));
     return renderAgentResult(result, options, theme, context, words);
 }
-export function renderWaitResult(result: AgentToolResult<unknown>, options: ToolRenderResultOptions, theme: Theme, context: CardRenderContext, words?: readonly string[]): Component {
-    const details = result.details as { tasks?: unknown } | undefined;
-    if (!Array.isArray(details?.tasks) || !details.tasks.every(isRenderableAgentSnapshot)) return textFromComponent(context.lastComponent, resultProblem(result, options, theme, context));
-    const snapshots = details.tasks as AgentSnapshot[];
-    const lines = options.expanded
-        ? snapshots.flatMap((snapshot, index) => [...(index > 0 ? [""] : []), expandedAgentCard(theme, snapshot, undefined, words)])
-        : snapshots.map(snapshot => compactAgentLine(theme, snapshot, words));
-    return textFromComponent(context.lastComponent, lines.join("\n"));
+export function renderWaitResult(result: AgentToolResult<unknown>, options: ToolRenderResultOptions, theme: Theme, context: CardRenderContext): Component {
+    const details = result.details as { armed?: unknown; behavior?: unknown } | undefined;
+    if (details?.armed !== true || details.behavior !== "until-drained") return textFromComponent(context.lastComponent, resultProblem(result, options, theme, context));
+    const title = joinParts(["mesh_wait", "armed"]);
+    return textFromComponent(context.lastComponent, options.expanded ? `${title}\nbehavior: until-drained` : title);
 }
 export function renderStopResult(result: AgentToolResult<unknown>, options: ToolRenderResultOptions, theme: Theme, context: CardRenderContext, words?: readonly string[]): Component {
     return renderAgentResult(result, options, theme, context, words);

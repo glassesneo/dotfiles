@@ -60,7 +60,7 @@ in
       recon = {
         description = "Read-only repository investigation and collaborative dialogue.";
         defaultProfile = "recon-default";
-        tools = ["read" "grep" "find" "ls" "bash" "web_fetch" "mesh_send" "mesh_get" "mesh_stop" "save_agent_artifact"] ++ lib.optional piQuestion.enabled piQuestion.tool;
+        tools = ["read" "grep" "find" "ls" "bash" "web_fetch" "mesh_send" "mesh_get" "mesh_wait" "mesh_stop" "save_agent_artifact"] ++ lib.optional piQuestion.enabled piQuestion.tool;
         skillOptIns = ["prompt-interface-design" "agent-artifact"];
         instructions = ''
           ${judgmentContract}
@@ -89,7 +89,7 @@ in
       ops = {
         description = "Direct source work and flexible orchestration.";
         defaultProfile = "ops-default";
-        tools = ["read" "grep" "find" "ls" "bash" "write" "edit" "web_fetch" "mesh_send" "mesh_get" "mesh_stop" "save_agent_artifact"] ++ lib.optional piQuestion.enabled piQuestion.tool;
+        tools = ["read" "grep" "find" "ls" "bash" "write" "edit" "web_fetch" "mesh_send" "mesh_get" "mesh_wait" "mesh_stop" "save_agent_artifact"] ++ lib.optional piQuestion.enabled piQuestion.tool;
         skillOptIns = ["prompt-interface-design" "agent-artifact"];
         instructions = ''
           ${judgmentContract}
