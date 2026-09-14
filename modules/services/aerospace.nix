@@ -1,7 +1,6 @@
 {
   delib,
   host,
-  lib,
   pkgs,
   windowManager,
   ...
@@ -31,145 +30,153 @@ delib.module {
       reservedSize = description (intOption 42) "Size of the reserved-edge outer gap in pixels. Should match the SketchyBar bar height.";
     };
 
-  darwin.ifEnabled = {cfg, ...}: {
-    services.aerospace = {
-      enable = true;
-      settings = let
-        aerospaceExe = lib.getExe pkgs.aerospace;
+  darwin.ifEnabled = {cfg, ...}: let
+    aerospaceExe = windowManager.aerospace.executable;
+    quotedAerospaceExe = ''"${aerospaceExe}"'';
+    format = pkgs.formats.toml {};
+    settings = {
+      on-window-detected = let
+        enableTiling = app-id: {
+          "if".app-id = app-id;
+          run = ["layout tiling"];
+        };
+      in
+        [
+          {
+            check-further-callbacks = true;
+            run = ["layout floating"];
+          }
+        ]
+        ++ (map enableTiling cfg.tilingApps);
+
+      enable-normalization-flatten-containers = true;
+      enable-normalization-opposite-orientation-for-nested-containers = true;
+
+      accordion-padding = 30;
+
+      default-root-container-layout = "tiles";
+
+      default-root-container-orientation = "auto";
+
+      key-mapping.preset = "qwerty";
+
+      on-focused-monitor-changed = [];
+
+      gaps = let
+        outerDefault = 4;
       in {
-        on-window-detected = let
-          enableTiling = app-id: {
-            "if".app-id = app-id;
-            run = ["layout tiling"];
-          };
-        in
-          [
-            {
-              check-further-callbacks = true;
-              run = ["layout floating"];
-            }
+        inner.horizontal = 5;
+        inner.vertical = 5;
+        outer.left = outerDefault;
+        outer.right = outerDefault;
+        outer.top =
+          if cfg.reservedEdge == "top"
+          then [
+            {monitor."built-in" = outerDefault;}
+            cfg.reservedSize
           ]
-          ++ (map enableTiling cfg.tilingApps);
+          else outerDefault;
+        outer.bottom =
+          if cfg.reservedEdge == "bottom"
+          then cfg.reservedSize
+          else outerDefault;
+      };
 
-        enable-normalization-flatten-containers = true;
-        enable-normalization-opposite-orientation-for-nested-containers = true;
+      workspace-to-monitor-force-assignment = {
+        "1" = "main";
+        "2" = "main";
+        "3" = "main";
+        "4" = "main";
+        "5" = "main";
+        A = ["secondary" "main"];
+        B = ["secondary" "main"];
+        C = ["secondary" "main"];
+        D = ["secondary" "main"];
+        E = ["secondary" "main"];
+      };
 
-        accordion-padding = 30;
+      mode.main.binding = {
+        alt-slash = "layout tiles horizontal vertical";
+        alt-comma = "layout accordion horizontal vertical";
 
-        default-root-container-layout = "tiles";
+        alt-h = "focus left";
+        alt-j = "focus down";
+        alt-k = "focus up";
+        alt-l = "focus right";
+        ctrl-alt-cmd-shift-h = "exec-and-forget ${quotedAerospaceExe} focus-monitor left || ${quotedAerospaceExe} focus left";
+        ctrl-alt-cmd-shift-j = "exec-and-forget ${quotedAerospaceExe} focus-monitor down || ${quotedAerospaceExe} focus down";
+        ctrl-alt-cmd-shift-k = "exec-and-forget ${quotedAerospaceExe} focus-monitor up || ${quotedAerospaceExe} focus up";
+        ctrl-alt-cmd-shift-l = "exec-and-forget ${quotedAerospaceExe} focus-monitor right || ${quotedAerospaceExe} focus right";
 
-        default-root-container-orientation = "auto";
+        alt-f = "layout tiling floating";
+        alt-q = "close";
 
-        key-mapping.preset = "qwerty";
+        alt-shift-h = "move left";
+        alt-shift-j = "move down";
+        alt-shift-k = "move up";
+        alt-shift-l = "move right";
 
-        on-focused-monitor-changed = [];
+        alt-shift-minus = "resize smart -50";
+        alt-shift-equal = "resize smart +50";
 
-        gaps = let
-          outerDefault = 4;
-        in {
-          inner.horizontal = 5;
-          inner.vertical = 5;
-          outer.left = outerDefault;
-          outer.right = outerDefault;
-          outer.top =
-            if cfg.reservedEdge == "top"
-            then [
-              {monitor."built-in" = outerDefault;}
-              cfg.reservedSize
-            ]
-            else outerDefault;
-          outer.bottom =
-            if cfg.reservedEdge == "bottom"
-            then cfg.reservedSize
-            else outerDefault;
-        };
+        alt-1 = "workspace 1";
+        alt-2 = "workspace 2";
+        alt-3 = "workspace 3";
+        alt-4 = "workspace 4";
+        alt-5 = "workspace 5";
+        alt-a = "workspace A";
+        alt-b = "workspace B";
+        alt-c = "workspace C";
+        alt-d = "workspace D";
+        alt-e = "workspace E";
 
-        workspace-to-monitor-force-assignment = {
-          "1" = "main";
-          "2" = "main";
-          "3" = "main";
-          "4" = "main";
-          "5" = "main";
-          A = ["secondary" "main"];
-          B = ["secondary" "main"];
-          C = ["secondary" "main"];
-          D = ["secondary" "main"];
-          E = ["secondary" "main"];
-        };
+        alt-shift-1 = "move-node-to-workspace 1";
+        alt-shift-2 = "move-node-to-workspace 2";
+        alt-shift-3 = "move-node-to-workspace 3";
+        alt-shift-4 = "move-node-to-workspace 4";
+        alt-shift-5 = "move-node-to-workspace 5";
+        alt-shift-a = "move-node-to-workspace A";
+        alt-shift-b = "move-node-to-workspace B";
+        alt-shift-c = "move-node-to-workspace C";
+        alt-shift-d = "move-node-to-workspace D";
+        alt-shift-e = "move-node-to-workspace E";
 
-        mode.main.binding = {
-          alt-slash = "layout tiles horizontal vertical";
-          alt-comma = "layout accordion horizontal vertical";
+        alt-tab = "workspace-back-and-forth";
+        alt-shift-tab = "move-workspace-to-monitor --wrap-around next";
+      };
 
-          alt-h = "focus left";
-          alt-j = "focus down";
-          alt-k = "focus up";
-          alt-l = "focus right";
-          ctrl-alt-cmd-shift-h = "exec-and-forget ${aerospaceExe} focus-monitor left || ${aerospaceExe} focus left";
-          ctrl-alt-cmd-shift-j = "exec-and-forget ${aerospaceExe} focus-monitor down || ${aerospaceExe} focus down";
-          ctrl-alt-cmd-shift-k = "exec-and-forget ${aerospaceExe} focus-monitor up || ${aerospaceExe} focus up";
-          ctrl-alt-cmd-shift-l = "exec-and-forget ${aerospaceExe} focus-monitor right || ${aerospaceExe} focus right";
-
-          alt-f = "layout tiling floating";
-          alt-q = "close";
-
-          alt-shift-h = "move left";
-          alt-shift-j = "move down";
-          alt-shift-k = "move up";
-          alt-shift-l = "move right";
-
-          alt-shift-minus = "resize smart -50";
-          alt-shift-equal = "resize smart +50";
-
-          alt-1 = "workspace 1";
-          alt-2 = "workspace 2";
-          alt-3 = "workspace 3";
-          alt-4 = "workspace 4";
-          alt-5 = "workspace 5";
-          alt-a = "workspace A";
-          alt-b = "workspace B";
-          alt-c = "workspace C";
-          alt-d = "workspace D";
-          alt-e = "workspace E";
-
-          alt-shift-1 = "move-node-to-workspace 1";
-          alt-shift-2 = "move-node-to-workspace 2";
-          alt-shift-3 = "move-node-to-workspace 3";
-          alt-shift-4 = "move-node-to-workspace 4";
-          alt-shift-5 = "move-node-to-workspace 5";
-          alt-shift-a = "move-node-to-workspace A";
-          alt-shift-b = "move-node-to-workspace B";
-          alt-shift-c = "move-node-to-workspace C";
-          alt-shift-d = "move-node-to-workspace D";
-          alt-shift-e = "move-node-to-workspace E";
-
-          alt-tab = "workspace-back-and-forth";
-          alt-shift-tab = "move-workspace-to-monitor --wrap-around next";
-        };
-
-        mode.service.binding = {
-          esc = [
-            "reload-config"
-            "mode main"
-          ];
-          alt-shift-h = [
-            "join-with left"
-            "mode main"
-          ];
-          alt-shift-j = [
-            "join-with down"
-            "mode main"
-          ];
-          alt-shift-k = [
-            "join-with up"
-            "mode main"
-          ];
-          alt-shift-l = [
-            "join-with right"
-            "mode main"
-          ];
-        };
+      mode.service.binding = {
+        esc = [
+          "reload-config"
+          "mode main"
+        ];
+        alt-shift-h = [
+          "join-with left"
+          "mode main"
+        ];
+        alt-shift-j = [
+          "join-with down"
+          "mode main"
+        ];
+        alt-shift-k = [
+          "join-with up"
+          "mode main"
+        ];
+        alt-shift-l = [
+          "join-with right"
+          "mode main"
+        ];
       };
     };
+    configFile = format.generate "aerospace.toml" settings;
+  in {
+    services.aerospace = {
+      enable = true;
+      inherit settings;
+    };
+
+    # Quote the Nix Apps path; nix-darwin wraps `command` as
+    # `wait4path /nix/store && exec ${command}` and the path contains a space.
+    launchd.user.agents.aerospace.command = pkgs.lib.mkForce "${pkgs.lib.escapeShellArg aerospaceExe} --config-path ${configFile}";
   };
 }

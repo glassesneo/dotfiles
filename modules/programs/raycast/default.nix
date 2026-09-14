@@ -1,5 +1,6 @@
 {
   applicationLauncher,
+  copiedDarwinApps,
   delib,
   homeConfig,
   host,
@@ -16,16 +17,18 @@ delib.module {
       enable = readOnly (boolOption applicationLauncher.isRaycast);
     };
 
-  home.ifEnabled = {
+  home.ifEnabled = let
+    raycastApp = copiedDarwinApps.path "Raycast";
+  in {
     home.packages = [
       pkgs.raycast
     ];
 
-    home.activation.raycastPruneStaleInstances = homeConfig.lib.dag.entryAfter ["writeBoundary"] (
+    home.activation.raycastPruneStaleInstances = homeConfig.lib.dag.entryAfter ["copyApps"] (
       builtins.readFile (pkgs.replaceVars ./activation.sh {
-        currentRaycastExe = lib.escapeShellArg "${pkgs.raycast}/Applications/Raycast.app/Contents/MacOS/Raycast";
-        currentRaycastPrefix = lib.escapeShellArg "${pkgs.raycast}/Applications/Raycast.app/Contents/";
-        currentRaycastApp = lib.escapeShellArg "${pkgs.raycast}/Applications/Raycast.app";
+        currentRaycastExe = lib.escapeShellArg "${raycastApp}/Contents/MacOS/Raycast";
+        currentRaycastPrefix = lib.escapeShellArg "${raycastApp}/Contents/";
+        currentRaycastApp = lib.escapeShellArg raycastApp;
       })
     );
 
@@ -37,7 +40,7 @@ delib.module {
           "/usr/bin/open"
           "-g"
           "-a"
-          "${pkgs.raycast}/Applications/Raycast.app"
+          raycastApp
         ];
         RunAtLoad = true;
       };

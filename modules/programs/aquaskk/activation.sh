@@ -1,5 +1,15 @@
 _aquaskk_plist="$HOME/Library/Preferences/jp.sourceforge.inputmethod.aquaskk.plist"
 _aquaskk_domain="jp.sourceforge.inputmethod.aquaskk"
+_src_app="@sourceApp@"
+_dest_app="$HOME/Library/Input Methods/AquaSKK.app"
+
+# Copy the IME bundle as a real tree. A store symlink is not a stable TCC path
+# and is not how macOS discovers Input Methods.
+if [ -L "$_dest_app" ]; then
+  $DRY_RUN_CMD rm "$_dest_app"
+fi
+$DRY_RUN_CMD mkdir -p "$(dirname "$_dest_app")"
+$DRY_RUN_CMD @rsync@ --checksum --copy-unsafe-links -a --delete "$_src_app/" "$_dest_app/"
 
 # Create user dictionary parent directory before AquaSKK first use
 $DRY_RUN_CMD mkdir -p "@userDictDir@"

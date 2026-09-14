@@ -5,6 +5,7 @@
   inputs,
   lib,
   pkgs,
+  tccStableBinaries,
   windowManager,
   ...
 }: let
@@ -65,6 +66,11 @@ in
         startupCommands = listOfOption str [];
       };
 
+    myconfig.ifEnabled.system.tcc-stable-binaries.entries.rift = {
+      source = lib.getExe rift;
+      scope = "user";
+    };
+
     darwin.ifEnabled = {
       cfg,
       myconfig,
@@ -121,7 +127,7 @@ in
           # label and plist path, so keep the generated service compatible with
           # `rift service restart`.
           Label = serviceLabel;
-          ProgramArguments = [(lib.getExe cfg.package)];
+          ProgramArguments = [tccStableBinaries.resolved.rift];
           EnvironmentVariables = {
             RUST_BACKTRACE = "1";
             RUST_LOG = "warn";

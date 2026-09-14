@@ -75,11 +75,6 @@ delib.module {
     userDictDir = dirOf skkeletonUserDictPath;
   in {
     home.file = {
-      # Symlink AquaSKK.app to ~/Library/Input Methods/ for macOS discovery
-      "Library/Input Methods/AquaSKK.app" = {
-        source = "${brewCasks.aquaskk}/Library/Input Methods/AquaSKK.app";
-      };
-
       # AquaSKK keymap configuration (uses tabs as separators, required by AquaSKK parser)
       "Library/Application Support/AquaSKK/keymap.conf" = {
         source = ./keymap.conf;
@@ -103,6 +98,8 @@ delib.module {
     home.activation.aquaskkSetup = homeConfig.lib.dag.entryAfter ["linkGeneration"] (
       builtins.readFile (pkgs.replaceVars ./activation.sh {
         inherit userDictDir;
+        rsync = lib.getExe pkgs.rsync;
+        sourceApp = "${brewCasks.aquaskk}/Library/Input Methods/AquaSKK.app";
         inherit
           (aquaskkPrefs)
           user_dictionary_path

@@ -4,7 +4,8 @@ This is the operational guide for the AquaSKK module in this directory.
 
 ## What activation owns
 
-`default.nix` installs AquaSKK under `~/Library/Input Methods`, manages its
+`default.nix` installs AquaSKK under `~/Library/Input Methods` as a real
+copied `.app` (not a symlink into the Nix store), manages its
 keymap, EUC-JP kana rule, and dictionary set, then runs `activation.sh` after
 Home Manager's `linkGeneration` phase. The activation writes startup-safe
 preferences with `defaults write` to the

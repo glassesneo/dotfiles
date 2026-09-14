@@ -3,6 +3,7 @@
   homeConfig,
   lib,
   pkgs,
+  tccStableBinaries,
   ...
 }: let
   artworkCachePath = "${homeConfig.xdg.cacheHome}/sketchybar/media/artwork.png";
@@ -26,7 +27,7 @@ in
           cache-path = artworkCachePath;
           hover-token-path = hoverTokenPath;
           hover-delay = "500ms";
-          media-control = lib.getExe' myconfig.programs.media-control.package "media-control";
+          media-control = "${tccStableBinaries.userDir}/media-control";
         };
       in {
         enable = boolOption enabled;
@@ -48,7 +49,7 @@ in
     }: let
       service = pkgs.replaceVars ./service.nu {
         cache-path = artworkCachePath;
-        media-control = lib.getExe' myconfig.programs.media-control.package "media-control";
+        media-control = "${tccStableBinaries.userDir}/media-control";
         sips = "/usr/bin/sips";
       };
     in {

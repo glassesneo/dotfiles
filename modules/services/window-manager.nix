@@ -4,6 +4,7 @@
   lib,
   pkgs,
   config,
+  tccStableBinaries,
   ...
 }:
 delib.module {
@@ -23,9 +24,9 @@ delib.module {
     inherit (wm) enable backend;
     isAerospace = wm.enable && wm.backend == "aerospace";
     isRift = wm.enable && wm.backend == "rift";
-    aerospace.executable = lib.getExe pkgs.aerospace;
+    aerospace.executable = "/Applications/Nix Apps/AeroSpace.app/Contents/MacOS/AeroSpace";
     rift = {
-      executable = lib.getExe config.myconfig.services.rift.package;
+      executable = "${tccStableBinaries.userDir}/rift";
       cli = "${config.myconfig.services.rift.package}/bin/rift-cli";
     };
   };

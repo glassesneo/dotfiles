@@ -4,6 +4,7 @@
   inputs,
   lib,
   pkgs,
+  tccStableBinaries,
   ...
 }: let
   integrationType = lib.types.submodule {
@@ -43,13 +44,22 @@ in
         integrations = attrsOfOption integrationType {};
       });
 
+    myconfig.ifEnabled.system.tcc-stable-binaries.entries.kanata = {
+      source = "${pkgs.kanata-with-cmd}/bin/kanata";
+      scope = "system";
+    };
+
     darwin.always = {
       imports = [
         inputs.kanata-darwin.darwinModules.default
       ];
     };
 
-    darwin.ifEnabled = {cfg, ...}: let
+    darwin.ifEnabled = {
+      cfg,
+      myconfig,
+      ...
+    }: let
       selectedProfile = cfg.profile;
       include = path: "(include \"${path}\")";
       selectedProfileConfig = profiles.${selectedProfile}.config;
@@ -123,7 +133,7 @@ in
             enable = true;
             settings = {
               kanata = {
-                path = "${pkgs.kanata-with-cmd}/bin/kanata";
+                path = tccStableBinaries.resolved.kanata;
                 port = 5829;
                 extra_args = ["--nodelay"];
               };
@@ -146,5 +156,8 @@ in
         // {
           configSource = effectiveConfigSource;
         };
+      security.sudo.extraConfig = ''
+        ${myconfig.constants.username} ALL=(root) NOPASSWD: /Library/Application\ Support/dotfiles/bin/kanata
+      '';
     };
   }

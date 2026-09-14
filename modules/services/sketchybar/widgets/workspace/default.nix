@@ -3,6 +3,7 @@
   homeConfig,
   lib,
   pkgs,
+  tccStableBinaries,
   windowManager,
   ...
 }:
@@ -32,18 +33,16 @@ delib.module {
         "providers/aerospace.nu" = ./providers/aerospace.nu;
         "providers/rift.nu" = ./providers/rift.nu;
         "rift-event-bridge.sh" = pkgs.replaceVars ./rift-event-bridge.sh {
-          sketchybar-exe = lib.getExe pkgs.sketchybar;
+          sketchybar-exe = "${tccStableBinaries.userDir}/sketchybar";
         };
       });
     });
 
-  darwin.ifEnabled = let
-    sketchybarExe = lib.getExe pkgs.sketchybar;
-  in {
+  darwin.ifEnabled = {
     services.aerospace.settings.exec-on-workspace-change = lib.mkIf windowManager.isAerospace [
       "/bin/bash"
       "-c"
-      "${sketchybarExe} --trigger workspace_change FOCUSED_WORKSPACE=$AEROSPACE_FOCUSED_WORKSPACE PREV_WORKSPACE=$AEROSPACE_PREV_WORKSPACE"
+      "${tccStableBinaries.userDir}/sketchybar --trigger workspace_change FOCUSED_WORKSPACE=$AEROSPACE_FOCUSED_WORKSPACE PREV_WORKSPACE=$AEROSPACE_PREV_WORKSPACE"
     ];
   };
 

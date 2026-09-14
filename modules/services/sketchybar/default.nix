@@ -6,6 +6,7 @@
   host,
   lib,
   pkgs,
+  tccStableBinaries,
   ...
 }: let
   inherit (colorscheme) palette;
@@ -114,6 +115,11 @@ in
         sections = readOnly (listOfOption str sectionOrder);
       };
 
+    myconfig.ifEnabled.system.tcc-stable-binaries.entries.sketchybar = {
+      source = "${pkgs.sketchybar}/bin/sketchybar";
+      scope = "user";
+    };
+
     darwin.ifEnabled = {cfg, ...}: {
       services.sketchybar = {
         enable = true;
@@ -122,9 +128,13 @@ in
         ];
       };
 
-      launchd.user.agents.sketchybar.serviceConfig = {
-        StandardOutPath = "${homeConfig.xdg.stateHome}/sketchybar/stdout.log";
-        StandardErrorPath = "${homeConfig.xdg.stateHome}/sketchybar/stderr.log";
+      launchd.user.agents.sketchybar = {
+        path = lib.mkBefore [tccStableBinaries.userDir];
+        serviceConfig = {
+          ProgramArguments = lib.mkForce [tccStableBinaries.resolved.sketchybar];
+          StandardOutPath = "${homeConfig.xdg.stateHome}/sketchybar/stdout.log";
+          StandardErrorPath = "${homeConfig.xdg.stateHome}/sketchybar/stderr.log";
+        };
       };
     };
 

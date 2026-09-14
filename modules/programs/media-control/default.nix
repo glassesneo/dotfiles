@@ -1,6 +1,7 @@
 {
   delib,
   inputs,
+  lib,
   pkgs,
   ...
 }: let
@@ -54,6 +55,13 @@ in
         enable = boolOption false;
         package = readOnly (packageOption media-control);
       };
+
+    myconfig.ifEnabled = {cfg, ...}: {
+      system.tcc-stable-binaries.entries.media-control = {
+        source = lib.getExe' cfg.package "media-control";
+        scope = "user";
+      };
+    };
 
     home.ifEnabled = {cfg, ...}: {
       home.packages = [

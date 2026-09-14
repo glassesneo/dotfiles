@@ -2,12 +2,18 @@
   delib,
   host,
   pkgs,
+  tccStableBinaries,
   ...
 }:
 delib.module {
   name = "programs.autoraise";
 
   options = delib.singleEnableOption (pkgs.stdenv.isDarwin && host.guiShellFeatured);
+
+  myconfig.ifEnabled.system.tcc-stable-binaries.entries.autoraise = {
+    source = "${pkgs.autoraise}/bin/autoraise";
+    scope = "user";
+  };
 
   home.ifEnabled = {
     home = {
@@ -28,7 +34,7 @@ delib.module {
       config = {
         Label = "com.${host.name}.autoraise";
         ProgramArguments = [
-          "${pkgs.autoraise}/bin/autoraise"
+          tccStableBinaries.resolved.autoraise
         ];
         RunAtLoad = true;
       };

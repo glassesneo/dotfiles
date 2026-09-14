@@ -1,5 +1,6 @@
 {
   brewCasks,
+  copiedDarwinApps,
   delib,
   host,
   pkgs,
@@ -23,7 +24,7 @@ delib.module {
           "/usr/bin/open"
           "-gj"
           "-a"
-          "BetterTouchTool"
+          (copiedDarwinApps.path "BetterTouchTool")
         ];
         RunAtLoad = true;
       };
