@@ -13,9 +13,25 @@ delib.module {
         "lsp"
         "cmdline"
       ]);
+      source_priority = description (listOfOption str [
+        "lsp"
+        "snippets"
+        "path"
+        "orgmode"
+        "cmdline"
+        "buffer"
+        "ripgrep"
+      ]) "Keep-order for duplicate blink.cmp labels. Earlier entries win; source ids absent from this list lose to every listed source.";
     };
 
-  home.ifEnabled = {...}: {
+  home.ifEnabled = {cfg, ...}: {
+    assertions = [
+      {
+        assertion = lib.length cfg.source_priority == lib.length (lib.unique cfg.source_priority);
+        message = "myconfig.programs.nvf.autocomplete.source_priority must not contain duplicate source ids.";
+      }
+    ];
+
     programs.nvf.settings.vim.autocomplete.blink-cmp = {
       setupOpts.sources = {
         default = lib.mkForce [

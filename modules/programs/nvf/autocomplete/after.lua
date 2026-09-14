@@ -1,24 +1,42 @@
 -- blink.cmp 1.10 has no cross-provider deduplication API yet.
--- Remove plain-text candidates when a structured source has the same label.
+-- Keep one item per label. Earlier source_priority entries win;
+-- source ids absent from that list lose to every listed source.
+local source_priority = vim.json.decode([=[@source_priority_json@]=])
 local fuzzy = require("blink.cmp.fuzzy")
-if not fuzzy._nvf_deduplicates_text_sources then
+if not fuzzy._nvf_deduplicates_labels then
   local original_fuzzy = fuzzy.fuzzy
+  local unknown_rank = #source_priority + 1
+  local rank_by_source = {}
+
+  for index, source_id in ipairs(source_priority) do
+    rank_by_source[source_id] = index
+  end
 
   fuzzy.fuzzy = function (...)
     local items = original_fuzzy(...)
-    local preferred_labels = {}
+    local winner_by_label = {}
 
-    for _, item in ipairs(items) do
-      if item.source_id == "lsp" or item.source_id == "snippets" then
-        preferred_labels[item.label] = true
+    for index, item in ipairs(items) do
+      local rank = rank_by_source[item.source_id] or unknown_rank
+      local winner = winner_by_label[item.label]
+      if not winner or rank < winner.rank then
+        winner_by_label[item.label] = {
+          index = index,
+          rank = rank,
+        }
       end
     end
 
-    return vim.tbl_filter(function (item)
-      local is_plain_text_source = item.source_id == "buffer" or item.source_id == "ripgrep"
-      return not (is_plain_text_source and preferred_labels[item.label])
-    end, items)
+    local deduped = {}
+    for index, item in ipairs(items) do
+      local winner = winner_by_label[item.label]
+      if winner and winner.index == index then
+        deduped[#deduped + 1] = item
+      end
+    end
+
+    return deduped
   end
 
-  fuzzy._nvf_deduplicates_text_sources = true
+  fuzzy._nvf_deduplicates_labels = true
 end
