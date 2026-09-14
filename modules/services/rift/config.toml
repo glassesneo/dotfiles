@@ -30,11 +30,19 @@ mode = "scrolling"
 [settings.layout.scrolling]
 animate = true
 
-column_width_ratio = 0.7
+column_width_ratio = 0.85
 min_column_width_ratio = 0.3
 max_column_width_ratio = 1.0
 # alignment = "right"
 focus_navigation_style = "niri"
+
+[settings.layout.scrolling.gestures]
+enabled = true
+invert_horizontal = true
+fingers = 3
+vertical_tolerance = 0.4
+distance_pct = 0.08
+propagate_to_workspace_swipe = true
 
 [settings.layout.stack]
 default_orientation = "vertical"
