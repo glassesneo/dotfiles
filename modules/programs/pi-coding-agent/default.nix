@@ -251,8 +251,8 @@ in
             thinkingLevel = "medium";
           };
           ops-default = {
-            models = ["openai-codex/gpt-6-astra"];
-            thinkingLevel = "low";
+            models = ["openai-codex/gpt-5.6-sol"];
+            thinkingLevel = "medium";
           };
           small-read = {
             models = [
@@ -291,8 +291,8 @@ in
             };
           };
           advanced = {
-            models = ["openai-codex/gpt-5.6-sol"];
-            thinkingLevel = "medium";
+            models = ["openai-codex/gpt-6-astra"];
+            thinkingLevel = "low";
           };
           research = {
             models = ["openai-codex/gpt-5.6-terra"];
