@@ -100,7 +100,7 @@ in
         systemEntries
       );
     in {
-      system.activationScripts.tccStableBinaries.text = ''
+      system.activationScripts.extraActivation.text = lib.mkAfter ''
         echo "copying TCC-stable system binaries..." >&2
         DRY_RUN_CMD=
         ${lib.optionalString (systemEntries != {}) ''
