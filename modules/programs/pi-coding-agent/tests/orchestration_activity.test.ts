@@ -28,6 +28,8 @@ void test("activity publication is monotonic and rejects delayed or post-stop no
         await assert.rejects(publishAgentActivity(f.root, f.meshId, f.agentId, { ...base, observedAt: "2026-08-09T12:00:00.500Z" }), /older/u);
         await writeFile(join(f.directory, "status.json"), JSON.stringify(status(f.meshId, f.agentId, "stopping")));
         await assert.rejects(publishAgentActivity(f.root, f.meshId, f.agentId, { ...base, phase: "running", observedAt: "2026-08-09T12:00:03.000Z", heartbeatAt: "2026-08-09T12:00:03.000Z" }), /non-terminal/u);
+        const confirming = await publishAgentActivity(f.root, f.meshId, f.agentId, { ...base, phase: "confirming-stop", acceptingTask: false, observedAt: "2026-08-09T12:00:04.000Z", heartbeatAt: "2026-08-09T12:00:04.000Z" });
+        assert.equal(confirming.phase, "confirming-stop");
     } finally { await rm(f.root, { recursive: true, force: true }); }
 });
 

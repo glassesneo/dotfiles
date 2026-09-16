@@ -192,8 +192,7 @@ in
             nodeModules = builtins.hasAttr "${artifactDisabled.config.home.homeDirectory}/.pi/agent/extensions-runtime/node_modules" artifactDisabled.config.home.file;
           };
         };
-        catalog = builtins.fromJSON (builtins.unsafeDiscardStringContext base.config.home.file."${base.config.home.homeDirectory}/.pi/agent/role-catalog.json".text);
-        profiles = builtins.fromJSON (builtins.unsafeDiscardStringContext base.config.home.file."${base.config.home.homeDirectory}/.pi/agent/execution-profiles.json".text);
+        catalog = builtins.fromJSON (builtins.unsafeDiscardStringContext base.config.home.file."${base.config.home.homeDirectory}/.pi/agent/child-catalog.json".text);
         orchestration = builtins.fromJSON (builtins.unsafeDiscardStringContext base.config.home.file."${base.config.home.homeDirectory}/.pi/agent/orchestration.json".text);
         extensionKeybindings = builtins.fromJSON (builtins.unsafeDiscardStringContext aliasOverride.config.home.file."${aliasOverride.config.home.homeDirectory}/.pi/agent/extension-keybindings.json".text);
         decisionUi = builtins.fromJSON (builtins.unsafeDiscardStringContext questionKeybindingOverride.config.home.file."${questionKeybindingOverride.config.home.homeDirectory}/.pi/agent/pi-decision-ui.json".text);

@@ -4,9 +4,10 @@ import { join } from "node:path";
 import { writeAtomicJson as atomicJson } from "./orchestration_json.ts";
 import { meshDirectory, withMeshLock } from "./orchestration_lock.ts";
 import { listMeshAgents, readAgentSnapshot } from "./orchestration_store.ts";
-import type { AgentSnapshot } from "./orchestration_types.ts";
+import { optionalTaskPurpose, type AgentSnapshot } from "./orchestration_types.ts";
 import { isLiveMeshEndpointBinding, type MeshEndpoint } from "./orchestration_events.ts";
 
+export const TUI_NOTICE_SCHEMA_VERSION = 2 as const;
 export const NOTICE_REASON_MAX_BYTES = 512;
 export const NOTICE_PAYLOAD_MAX_BYTES = 32 * 1024;
 export const GC_NOTICE_MAX_AGENTS = 64;
@@ -22,14 +23,18 @@ export interface NoticeRecipient {
 export interface ExplicitStopNoticePayload {
     stopRequestId: string;
     agentId: string;
-    role: string;
+    agent: string;
+    access: "read" | "write";
+    purpose?: string;
     source: (typeof EXPLICIT_SOURCES)[number];
     reason: string;
 }
 
 export interface GcStopNoticeAgent {
     agentId: string;
-    role: string;
+    agent: string;
+    access: "read" | "write";
+    purpose?: string;
     source: (typeof GC_SOURCES)[number];
     reason: string;
 }
@@ -42,7 +47,7 @@ export interface GcStopNoticePayload {
 }
 
 export type TuiNotice = {
-    schemaVersion: 1;
+    schemaVersion: typeof TUI_NOTICE_SCHEMA_VERSION;
     meshId: string;
     noticeId: string;
     state: "pending" | "acknowledged";
@@ -84,21 +89,27 @@ function count(value: unknown, label: string): number {
     return Number(value);
 }
 function reason(value: unknown): string { return boundedText(value, "notice reason", NOTICE_REASON_MAX_BYTES); }
-function role(value: unknown): string { return boundedText(value, "notice role", 128); }
+function access(value: unknown): "read" | "write" {
+    if (value !== "read" && value !== "write") throw new Error("notice access is invalid");
+    return value;
+}
+function publicAgent(value: unknown): string { return boundedText(value, "notice agent", 128); }
 function recipient(value: NoticeRecipient): NoticeRecipient {
     return { endpointId: boundedText(value.endpointId, "recipient endpoint ID", 512) };
 }
 function explicitPayload(value: unknown): ExplicitStopNoticePayload {
     const raw = object(value, "explicit notice payload");
-    exact(raw, ["stopRequestId", "agentId", "role", "source", "reason"], [], "explicit notice payload");
+    exact(raw, ["stopRequestId", "agentId", "agent", "access", "source", "reason"], ["purpose"], "explicit notice payload");
     if (!EXPLICIT_SOURCES.includes(raw.source as never)) throw new Error("explicit notice source is invalid");
-    return { stopRequestId: uuid(raw.stopRequestId, "stop request ID"), agentId: uuid(raw.agentId, "agent ID"), role: role(raw.role), source: raw.source as ExplicitStopNoticePayload["source"], reason: reason(raw.reason) };
+    const taskPurpose = optionalTaskPurpose(raw.purpose);
+    return { stopRequestId: uuid(raw.stopRequestId, "stop request ID"), agentId: uuid(raw.agentId, "agent ID"), agent: publicAgent(raw.agent), access: access(raw.access), ...(taskPurpose ? { purpose: taskPurpose } : {}), source: raw.source as ExplicitStopNoticePayload["source"], reason: reason(raw.reason) };
 }
 function gcAgent(value: unknown): GcStopNoticeAgent {
     const raw = object(value, "GC notice agent");
-    exact(raw, ["agentId", "role", "source", "reason"], [], "GC notice agent");
+    exact(raw, ["agentId", "agent", "access", "source", "reason"], ["purpose"], "GC notice agent");
     if (!GC_SOURCES.includes(raw.source as never)) throw new Error("GC notice source is invalid");
-    return { agentId: uuid(raw.agentId, "agent ID"), role: role(raw.role), source: raw.source as GcStopNoticeAgent["source"], reason: reason(raw.reason) };
+    const taskPurpose = optionalTaskPurpose(raw.purpose);
+    return { agentId: uuid(raw.agentId, "agent ID"), agent: publicAgent(raw.agent), access: access(raw.access), ...(taskPurpose ? { purpose: taskPurpose } : {}), source: raw.source as GcStopNoticeAgent["source"], reason: reason(raw.reason) };
 }
 function gcPayload(value: unknown): GcStopNoticePayload {
     const raw = object(value, "GC notice payload");
@@ -115,7 +126,7 @@ function assertPayloadBound(payload: ExplicitStopNoticePayload | GcStopNoticePay
 export function validateTuiNotice(value: unknown, expected?: { meshId: string; noticeId?: string }): TuiNotice {
     const raw = object(value, "TUI notice");
     exact(raw, ["schemaVersion", "meshId", "noticeId", "state", "recipientEndpointId", "kind", "payload", "createdAt"], ["displayedAt", "acknowledgedAt"], "TUI notice");
-    if (raw.schemaVersion !== 1) throw new Error("Unsupported TUI notice schemaVersion");
+    if (raw.schemaVersion !== TUI_NOTICE_SCHEMA_VERSION) throw new Error("Unsupported TUI notice schemaVersion");
     const meshId = uuid(raw.meshId, "notice mesh ID"); const noticeId = uuid(raw.noticeId, "notice ID");
     if (expected && (meshId !== expected.meshId || expected.noticeId !== undefined && noticeId !== expected.noticeId)) throw new Error("TUI notice does not match path identity");
     if (raw.state !== "pending" && raw.state !== "acknowledged") throw new Error("TUI notice state is invalid");
@@ -126,8 +137,8 @@ export function validateTuiNotice(value: unknown, expected?: { meshId: string; n
     if (raw.state === "pending" && (displayedAt || acknowledgedAt) || raw.state === "acknowledged" && (!displayedAt || !acknowledgedAt)) throw new Error("TUI notice lifecycle timestamps do not match state");
     if (displayedAt && Date.parse(displayedAt) < Date.parse(createdAt) || acknowledgedAt && displayedAt && Date.parse(acknowledgedAt) < Date.parse(displayedAt)) throw new Error("TUI notice lifecycle timestamps are out of order");
     let notice: TuiNotice;
-    if (raw.kind === "explicit-stop") notice = { schemaVersion: 1, meshId, noticeId, state: raw.state, recipientEndpointId: target.endpointId, kind: raw.kind, payload: explicitPayload(raw.payload), createdAt, ...(displayedAt ? { displayedAt } : {}), ...(acknowledgedAt ? { acknowledgedAt } : {}) };
-    else if (raw.kind === "gc-stop") notice = { schemaVersion: 1, meshId, noticeId, state: raw.state, recipientEndpointId: target.endpointId, kind: raw.kind, payload: gcPayload(raw.payload), createdAt, ...(displayedAt ? { displayedAt } : {}), ...(acknowledgedAt ? { acknowledgedAt } : {}) };
+    if (raw.kind === "explicit-stop") notice = { schemaVersion: TUI_NOTICE_SCHEMA_VERSION, meshId, noticeId, state: raw.state, recipientEndpointId: target.endpointId, kind: raw.kind, payload: explicitPayload(raw.payload), createdAt, ...(displayedAt ? { displayedAt } : {}), ...(acknowledgedAt ? { acknowledgedAt } : {}) };
+    else if (raw.kind === "gc-stop") notice = { schemaVersion: TUI_NOTICE_SCHEMA_VERSION, meshId, noticeId, state: raw.state, recipientEndpointId: target.endpointId, kind: raw.kind, payload: gcPayload(raw.payload), createdAt, ...(displayedAt ? { displayedAt } : {}), ...(acknowledgedAt ? { acknowledgedAt } : {}) };
     else throw new Error("TUI notice kind is invalid");
     assertPayloadBound(notice.payload); return notice;
 }
@@ -174,7 +185,14 @@ export async function reconcileGcStopNotices(stateRoot: string, meshId: string, 
         if (!stop?.gcPassId || onlyGcPassId && stop.gcPassId !== onlyGcPassId || !GC_SOURCES.includes(stop.source as never)) continue;
         const endpointId = await resolveProvenanceParentEndpoint(stateRoot, snapshot); if (!endpointId) continue;
         const key = `${stop.gcPassId}\0${endpointId}`; const group = groups.get(key) ?? { gcPassId: stop.gcPassId, confirmed: [], failedCount: 0, pendingCount: 0 };
-        if (stop.state === "confirmed") group.confirmed.push({ agentId: snapshot.agent.agentId, role: snapshot.agent.agent, source: stop.source as GcStopNoticeAgent["source"], reason: stop.reason });
+        if (stop.state === "confirmed") group.confirmed.push({
+            agentId: snapshot.agent.agentId,
+            agent: snapshot.agent.definitionSnapshot.selector.agent,
+            access: snapshot.agent.definitionSnapshot.selector.access,
+            ...(snapshot.task?.request.purpose ? { purpose: snapshot.task.request.purpose } : {}),
+            source: stop.source as GcStopNoticeAgent["source"],
+            reason: stop.reason,
+        });
         else if (stop.state === "failed") group.failedCount += 1;
         else group.pendingCount += 1;
         groups.set(key, group);
@@ -189,13 +207,13 @@ export async function createExplicitStopNotice(stateRoot: string, meshId: string
     if (requesterEndpointId === target.endpointId) return undefined;
     const payload = explicitPayload(input.payload); assertPayloadBound(payload);
     const noticeId = identityNoticeId("explicit-stop", payload.stopRequestId, target.endpointId);
-    return createNotice(stateRoot, { schemaVersion: 1, meshId: uuid(meshId, "mesh ID"), noticeId, state: "pending", recipientEndpointId: target.endpointId, kind: "explicit-stop", payload, createdAt: new Date().toISOString() });
+    return createNotice(stateRoot, { schemaVersion: TUI_NOTICE_SCHEMA_VERSION, meshId: uuid(meshId, "mesh ID"), noticeId, state: "pending", recipientEndpointId: target.endpointId, kind: "explicit-stop", payload, createdAt: new Date().toISOString() });
 }
 
 export async function createGcStopNotice(stateRoot: string, meshId: string, input: NoticeRecipient & { payload: GcStopNoticePayload }, preserveExisting = false): Promise<TuiNotice> {
     const target = recipient(input); const payload = gcPayload(input.payload); assertPayloadBound(payload);
     const noticeId = identityNoticeId("gc-stop", payload.gcPassId, target.endpointId);
-    return createNotice(stateRoot, { schemaVersion: 1, meshId: uuid(meshId, "mesh ID"), noticeId, state: "pending", recipientEndpointId: target.endpointId, kind: "gc-stop", payload, createdAt: new Date().toISOString() }, preserveExisting);
+    return createNotice(stateRoot, { schemaVersion: TUI_NOTICE_SCHEMA_VERSION, meshId: uuid(meshId, "mesh ID"), noticeId, state: "pending", recipientEndpointId: target.endpointId, kind: "gc-stop", payload, createdAt: new Date().toISOString() }, preserveExisting);
 }
 
 export async function listPendingTuiNotices(stateRoot: string, meshId: string, targetInput: NoticeRecipient): Promise<TuiNotice[]> {

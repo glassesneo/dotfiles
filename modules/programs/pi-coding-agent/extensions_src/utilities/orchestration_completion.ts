@@ -6,7 +6,7 @@ import { assertExpectedEndpointBindingUnlocked, endpointRecordPath, hasExpectedE
 import { readCompletionQueueReferences, removeOrchestrationIndexReference, type CompletionQueueReference, type OrchestrationIndexReadObserver } from "./orchestration_index.ts";
 import { readOptionalJson as optionalJson, writeAtomicJson } from "./orchestration_json.ts";
 import { meshDirectory, withMeshLock } from "./orchestration_lock.ts";
-import { TASK_STATES, isTerminalTask, type CompletionBatch, type CompletionLedger, type CompletionReceipt, type CompletionReceiptToolName, type CompletionTarget, type TaskState } from "./orchestration_types.ts";
+import { TASK_REQUEST_SCHEMA_VERSION, TASK_STATES, isTerminalTask, type CompletionBatch, type CompletionLedger, type CompletionReceipt, type CompletionReceiptToolName, type CompletionTarget, type TaskState } from "./orchestration_types.ts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 const SHA256 = /^[0-9a-f]{64}$/u;
@@ -177,7 +177,7 @@ async function completionTaskUnlocked(stateRoot: string, meshId: string, taskId:
         const requestValue = await optionalJson(join(taskDirectory, "request.json"));
         if (!requestValue || typeof requestValue !== "object" || Array.isArray(requestValue)) return undefined;
         const request = requestValue as Record<string, unknown>;
-        if (request.schemaVersion !== 3) throw new Error("Unsupported task request schemaVersion");
+        if (request.schemaVersion !== TASK_REQUEST_SCHEMA_VERSION) throw new Error("Unsupported task request schemaVersion");
         if (request.completion === undefined) return undefined;
         if (request.taskId !== taskId || typeof request.agentId !== "string" || !UUID.test(request.agentId) || typeof request.requesterEndpointId !== "string") throw new Error("completion task request identity is invalid");
         const [statusValue, cancellationValue, stopValue] = await Promise.all([optionalJson(join(taskDirectory, "status.json")), optionalJson(join(meshDirectory(stateRoot, meshId), "tasks", taskId, "cancel.json")), optionalJson(join(meshDirectory(stateRoot, meshId), "agents", request.agentId, "stop.json"))]);

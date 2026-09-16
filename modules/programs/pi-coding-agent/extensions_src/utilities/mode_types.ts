@@ -1,23 +1,21 @@
-export const MODE_SCHEMA_VERSION = 2 as const;
-export const EXECUTION_PROFILE_SCHEMA_VERSION = 2 as const;
+export const MODE_SCHEMA_VERSION = 3 as const;
 export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
 export type ExecutionHarness = "pi" | "cursor-agent" | "codex";
 
-export interface ExecutionProfile {
+export interface ExecutionConfig {
     models: string[];
     thinkingLevel?: ThinkingLevel;
     harness: ExecutionHarness;
     harnessOptions?: Record<string, unknown>;
 }
-export interface ExecutionProfileConfig { schemaVersion: 2; profiles: Record<string, ExecutionProfile> }
 export interface AgentMode {
     description: string;
-    defaultProfile: string;
+    execution: ExecutionConfig;
     tools: string[];
     skillOptIns: string[];
     instructions: string;
 }
-export interface AgentModeConfig { schemaVersion: 2; defaultMode: string; modes: Record<string, AgentMode> }
+export interface AgentModeConfig { schemaVersion: 3; defaultMode: string; modes: Record<string, AgentMode> }
 
 const cursorCommonHarnessOptions = { sandbox: "disabled", trustWorkspace: true, worktree: false } as const;
 export const CURSOR_READ_HARNESS_OPTIONS = Object.freeze({ mode: "ask", permissionPolicy: "reject", ...cursorCommonHarnessOptions });
@@ -57,7 +55,7 @@ function thinkingLevel(value: unknown, label: string): ThinkingLevel {
 
 const CODEX_HARNESS_OPTIONS = { mode: "read-only", permissionPolicy: "reject", webSearch: "cached" } as const;
 
-export function validateExecutionProfile(name: string, value: unknown, label = `profiles.${name}`): ExecutionProfile {
+export function validateExecutionConfig(value: unknown, label = "execution"): ExecutionConfig {
     const profile = object(value, label);
     exact(profile, ["models", "thinkingLevel", "harness", "harnessOptions"], label);
     const harness = profile.harness;
@@ -65,26 +63,22 @@ export function validateExecutionProfile(name: string, value: unknown, label = `
     const resolvedModels = models(profile.models, `${label}.models`);
     const resolvedThinking = profile.thinkingLevel === undefined ? undefined : thinkingLevel(profile.thinkingLevel, `${label}.thinkingLevel`);
     const harnessOptions = profile.harnessOptions === undefined ? undefined : object(profile.harnessOptions, `${label}.harnessOptions`);
-    if (harness === "pi" && (resolvedThinking === undefined || harnessOptions !== undefined)) throw new Error(`${label} pi profile requires thinkingLevel and no harnessOptions`);
+    if (harness === "pi" && (resolvedThinking === undefined || harnessOptions !== undefined)) throw new Error(`${label} pi execution requires thinkingLevel and no harnessOptions`);
     if (harness === "cursor-agent") {
-        if (resolvedModels.length !== 1 || !resolvedModels[0]!.startsWith("cursor/") || resolvedThinking !== undefined || harnessOptions === undefined) throw new Error(`${label} cursor-agent profile requires exactly one cursor model, no thinkingLevel, and harnessOptions`);
-        if (!isApprovedCursorHarnessOptions(harnessOptions)) throw new Error(`${label} cursor-agent profile requires an approved read or write harnessOptions combination`);
+        if (resolvedModels.length !== 1 || !resolvedModels[0]!.startsWith("cursor/") || resolvedThinking !== undefined || harnessOptions === undefined) throw new Error(`${label} cursor-agent execution requires exactly one cursor model, no thinkingLevel, and harnessOptions`);
+        if (!isApprovedCursorHarnessOptions(harnessOptions)) throw new Error(`${label} cursor-agent execution requires an approved read or write harnessOptions combination`);
     }
     if (harness === "codex") {
-        if (resolvedModels.length !== 1 || !resolvedModels[0]!.startsWith("codex/") || resolvedThinking === undefined || harnessOptions === undefined) throw new Error(`${label} codex profile requires exactly one codex model, thinkingLevel, and harnessOptions`);
-        if (!matchesExactOptions(harnessOptions, CODEX_HARNESS_OPTIONS)) throw new Error(`${label} codex profile requires exact read-only cached harnessOptions`);
+        if (resolvedModels.length !== 1 || !resolvedModels[0]!.startsWith("codex/") || resolvedThinking === undefined || harnessOptions === undefined) throw new Error(`${label} codex execution requires exactly one codex model, thinkingLevel, and harnessOptions`);
+        if (!matchesExactOptions(harnessOptions, CODEX_HARNESS_OPTIONS)) throw new Error(`${label} codex execution requires exact read-only cached harnessOptions`);
     }
     return { models: resolvedModels, ...(resolvedThinking === undefined ? {} : { thinkingLevel: resolvedThinking }), harness, ...(harnessOptions === undefined ? {} : { harnessOptions }) };
 }
 
-export function validateExecutionProfileConfig(value: unknown): ExecutionProfileConfig {
-    const root = object(value, "execution profile config");
-    exact(root, ["schemaVersion", "profiles"], "execution profile config");
-    if (root.schemaVersion !== EXECUTION_PROFILE_SCHEMA_VERSION) throw new Error("Unsupported execution profile config schemaVersion");
-    const rawProfiles = object(root.profiles, "profiles");
-    const profiles = Object.fromEntries(Object.entries(rawProfiles).map(([name, profile]) => [text(name, "profile name"), validateExecutionProfile(name, profile)]));
-    if (!Object.keys(profiles).length) throw new Error("profiles must not be empty");
-    return { schemaVersion: 2, profiles };
+export function validateModeExecution(value: unknown, label = "execution"): ExecutionConfig {
+    const execution = validateExecutionConfig(value, label);
+    if (execution.harness !== "pi") throw new Error(`${label} must use the pi harness`);
+    return execution;
 }
 
 export function validateModeConfig(value: unknown): AgentModeConfig {
@@ -96,10 +90,10 @@ export function validateModeConfig(value: unknown): AgentModeConfig {
     for (const [name, raw] of Object.entries(rawModes)) {
         text(name, "mode name");
         const mode = object(raw, `modes.${name}`);
-        exact(mode, ["description", "defaultProfile", "tools", "skillOptIns", "instructions"], `modes.${name}`);
+        exact(mode, ["description", "execution", "tools", "skillOptIns", "instructions"], `modes.${name}`);
         modes[name] = {
             description: text(mode.description, `modes.${name}.description`),
-            defaultProfile: text(mode.defaultProfile, `modes.${name}.defaultProfile`),
+            execution: validateModeExecution(mode.execution, `modes.${name}.execution`),
             tools: strings(mode.tools, `modes.${name}.tools`),
             skillOptIns: strings(mode.skillOptIns, `modes.${name}.skillOptIns`),
             instructions: text(mode.instructions, `modes.${name}.instructions`),
@@ -107,13 +101,5 @@ export function validateModeConfig(value: unknown): AgentModeConfig {
     }
     const defaultMode = text(root.defaultMode, "defaultMode");
     if (!modes[defaultMode]) throw new Error(`defaultMode references unknown mode: ${defaultMode}`);
-    return { schemaVersion: 2, defaultMode, modes };
-}
-
-export function validateModeProfileReferences(config: AgentModeConfig, profileConfig: ExecutionProfileConfig): void {
-    for (const [name, mode] of Object.entries(config.modes)) {
-        const profile = profileConfig.profiles[mode.defaultProfile];
-        if (!profile) throw new Error(`modes.${name}.defaultProfile references unknown profile: ${mode.defaultProfile}`);
-        if (profile.harness !== "pi") throw new Error(`modes.${name}.defaultProfile must use the pi harness`);
-    }
+    return { schemaVersion: MODE_SCHEMA_VERSION, defaultMode, modes };
 }

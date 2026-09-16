@@ -1,5 +1,5 @@
 import type { Model } from "@earendil-works/pi-ai";
-import type { ExecutionProfile } from "./mode_types.ts";
+import type { ExecutionConfig } from "./mode_types.ts";
 
 export const MODEL_ROUTE_ATTEMPT_CATEGORIES = ["unavailable", "context", "invocation"] as const;
 export type ModelRouteAttemptCategory = (typeof MODEL_ROUTE_ATTEMPT_CATEGORIES)[number];
@@ -32,13 +32,13 @@ export function splitProviderModel(model: string): [string, string] {
     return at < 0 ? ["", model] : [model.slice(0, at), model.slice(at + 1)];
 }
 
-export function selectedProfileModel(profile: ExecutionProfile, index = 0): string {
+export function selectedProfileModel(profile: ExecutionConfig, index = 0): string {
     const model = profile.models[index] ?? profile.models[0];
-    if (!model) throw new Error("Execution profile has no models");
+    if (!model) throw new Error("Execution config has no models");
     return model;
 }
 
-export function initialModelRoute(profile: ExecutionProfile, index: number): ModelRouteState {
+export function initialModelRoute(profile: ExecutionConfig, index: number): ModelRouteState {
     if (!Number.isInteger(index) || index < 0 || index >= profile.models.length) throw new Error("initial candidate index is outside the profile models");
     return { activeIndex: index, activeModel: profile.models[index]!, attempts: [], };
 }
@@ -83,7 +83,7 @@ export function formatAggregateFallbackError(profileName: string, models: readon
         const message = attempt.message === undefined ? undefined : sanitizeDiagnostic(attempt.message);
         return `${model} (${attempt.category}${message ? `: ${message}` : ""})`;
     });
-    return `Profile ${sanitizeDiagnostic(profileName)} fallback exhausted: ${parts.join("; ")}`;
+    return `Execution ${sanitizeDiagnostic(profileName)} fallback exhausted: ${parts.join("; ")}`;
 }
 
 export function recordModelRouteAttempt(route: ModelRouteState, attempt: ModelRouteAttempt): ModelRouteState {
@@ -109,7 +109,7 @@ async function inspectCandidate(registry: ModelRegistryLike, model: string, now:
     }
 }
 
-function routeMatchesProfile(profile: ExecutionProfile, route: ModelRouteState): boolean {
+function routeMatchesProfile(profile: ExecutionConfig, route: ModelRouteState): boolean {
     try {
         const validated = validateModelRouteState(route);
         if (validated.activeIndex >= profile.models.length || validated.activeModel !== profile.models[validated.activeIndex]) return false;
@@ -120,7 +120,7 @@ function routeMatchesProfile(profile: ExecutionProfile, route: ModelRouteState):
 }
 
 export async function preflightProfileCandidates(input: {
-    profile: ExecutionProfile;
+    profile: ExecutionConfig;
     profileName: string;
     registry: ModelRegistryLike;
     route?: ModelRouteState;
@@ -151,14 +151,14 @@ export async function preflightProfileCandidates(input: {
     return { ok: false, error: formatAggregateFallbackError(input.profileName, input.profile.models, route.attempts), route };
 }
 
-export function restoreCompatibleRoute(profile: ExecutionProfile, profileName: string, persisted: { profile: string; candidates?: readonly string[]; models?: readonly string[]; route: ModelRouteState } | undefined): ModelRouteState | undefined {
+export function restoreCompatibleRoute(profile: ExecutionConfig, profileName: string, persisted: { profile: string; candidates?: readonly string[]; models?: readonly string[]; route: ModelRouteState } | undefined): ModelRouteState | undefined {
     if (!persisted || persisted.profile !== profileName) return undefined;
     const list = persisted.candidates ?? persisted.models;
     if (!Array.isArray(list) || list.length !== profile.models.length || list.some((model, index) => model !== profile.models[index])) return undefined;
     return routeMatchesProfile(profile, persisted.route) ? validateModelRouteState(persisted.route) : undefined;
 }
 
-export function reconcileForwardIndex(profile: ExecutionProfile, route: ModelRouteState, currentModel: string | undefined): ModelRouteState {
+export function reconcileForwardIndex(profile: ExecutionConfig, route: ModelRouteState, currentModel: string | undefined): ModelRouteState {
     if (!currentModel) return route;
     const currentIndex = profile.models.indexOf(currentModel);
     if (currentIndex > route.activeIndex) return { ...route, activeIndex: currentIndex, activeModel: currentModel };
@@ -172,7 +172,7 @@ export function candidateFitsContext(contextWindow: number, usageTokens: number 
 }
 
 export async function selectRuntimePromotion(input: {
-    profile: ExecutionProfile;
+    profile: ExecutionConfig;
     profileName: string;
     route: ModelRouteState;
     suspended: boolean;
@@ -204,7 +204,7 @@ export async function selectRuntimePromotion(input: {
 }
 
 export async function selectProfileCandidate(input: {
-    profile: ExecutionProfile;
+    profile: ExecutionConfig;
     profileName: string;
     registry: ModelRegistryLike;
     route?: ModelRouteState;
@@ -215,7 +215,7 @@ export async function selectProfileCandidate(input: {
 }
 
 export async function promoteProfileCandidate(input: {
-    profile: ExecutionProfile;
+    profile: ExecutionConfig;
     profileName: string;
     route: ModelRouteState;
     registry: ModelRegistryLike;

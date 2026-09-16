@@ -4,6 +4,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ExtensionContext, ExtensionUIContext } from "@earendil-works/pi-coding-agent";
 
+export const SYNTHETIC_TASK_PURPOSE = "synthetic purpose";
+export function taskWork(prompt: string, purpose = SYNTHETIC_TASK_PURPOSE): { prompt: string; purpose: string } {
+    return { prompt, purpose };
+}
+
 export async function withTemporaryRoot(prefix: string, run: (root: string) => Promise<void>): Promise<void> {
     const root = await mkdtemp(join(tmpdir(), prefix));
     try { await run(root); } finally { await rm(root, { recursive: true, force: true }); }

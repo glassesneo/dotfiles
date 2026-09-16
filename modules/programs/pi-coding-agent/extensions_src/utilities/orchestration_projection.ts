@@ -2,7 +2,6 @@ import type { Usage } from "@earendil-works/pi-ai";
 import { canonicalJson } from "./agent_types.ts";
 import {
     isTerminalTask,
-    promptSummary,
     type AgentSnapshot,
     type AgentState,
     type AgentStatus,
@@ -48,6 +47,7 @@ export type MinimalSubmitResult = {
     taskId: string;
     agent: string;
     access: "read" | "write";
+    purpose: string;
     agentState: AgentState;
     taskState: TaskState;
 };
@@ -94,7 +94,7 @@ export function projectModelVisibleStop(stop: AgentSnapshot["stop"], internalNam
 }
 
 export function publicCapabilityFields(snapshot: AgentSnapshot): { agent: string; access: "read" | "write" } {
-    const selector = snapshot.agent.roleSnapshot.selector;
+    const selector = snapshot.agent.definitionSnapshot.selector;
     return { agent: selector.agent, access: selector.access };
 }
 
@@ -113,7 +113,7 @@ export function configuredModelDiagnosticNames(models: readonly string[], cursor
 }
 
 function internalDiagnosticNames(snapshot: AgentSnapshot): string[] {
-    return [snapshot.agent.role, snapshot.agent.selectedProfile, ...configuredModelDiagnosticNames(snapshot.agent.profileSnapshot.models, snapshot.agent.cursorAcpModelId)];
+    return [snapshot.agent.childId, ...configuredModelDiagnosticNames(snapshot.agent.definitionSnapshot.execution.models, snapshot.agent.cursorAcpModelId)];
 }
 
 export function sanitizeModelVisibleError(value: unknown, internalNames: readonly string[] = []): string {
@@ -126,7 +126,7 @@ function modelVisibleError(snapshot: AgentSnapshot, candidate = snapshot.task?.r
     if (!candidate) return undefined;
     if (candidate === "route_persistence_failed" || snapshot.status.exitReason === "route_persistence_failed") return "route_persistence_failed";
     const route = snapshot.status.modelRoute;
-    if (route && new Set(route.attempts.map(attempt => attempt.index)).size >= snapshot.agent.profileSnapshot.models.length) return "route_exhausted";
+    if (route && new Set(route.attempts.map(attempt => attempt.index)).size >= snapshot.agent.definitionSnapshot.execution.models.length) return "route_exhausted";
     if (candidate === "route_exhausted" || candidate === "route_unavailable") return candidate;
     // Provider diagnostics and persisted exit reasons are operator details. Do not
     // let a provider/model or immutable internal name cross the model boundary.
@@ -139,7 +139,7 @@ export function projectMinimalAgentTask(rawSnapshot: AgentSnapshot): MinimalAgen
     const projected: MinimalAgentTask = {
         agentId: snapshot.agent.agentId,
         ...publicCapabilityFields(snapshot),
-        summary: task ? promptSummary(task.request.prompt) : "No task",
+        summary: task ? task.request.purpose : "No task",
         agentState: snapshot.status.state,
         activity: snapshot.activity,
         stop: projectModelVisibleStop(snapshot.stop, internalDiagnosticNames(snapshot)),
@@ -167,6 +167,7 @@ export function projectMinimalSubmitResult(
         taskId: projected.taskId,
         agent: projected.agent,
         access: projected.access,
+        purpose: rawSnapshot.task.request.purpose,
         agentState: projected.agentState,
         taskState: projected.taskState,
     };
@@ -638,8 +639,8 @@ function projectModelVisibleMeshEvent<T>(value: T): T {
     const message = value as unknown as Record<string, unknown>;
     if (message.customType !== "mesh-event" || !message.details || typeof message.details !== "object" || Array.isArray(message.details)) return value;
     const details = message.details as Record<string, unknown>;
-    if (!Object.hasOwn(details, "identities")) return value;
-    const { identities: _identities, ...modelDetails } = details;
+    if (!Object.hasOwn(details, "identities") && !Object.hasOwn(details, "display")) return value;
+    const { identities: _identities, display: _display, ...modelDetails } = details;
     return { ...message, details: modelDetails } as T;
 }
 
@@ -656,7 +657,7 @@ export function projectMeshCompletionContext<T>(messages: readonly T[], received
         const details = message.details && typeof message.details === "object" && !Array.isArray(message.details) ? message.details as Record<string, unknown> : undefined;
         if (message.customType !== "mesh-event" || details?.kind !== "completion") continue;
         completionIndexes.add(index);
-        const raw = exactRecord(details, ["kind", "sources", "frontier"], "Malformed mesh completion bundle in model context", ["identities"]);
+        const raw = exactRecord(details, ["kind", "sources", "frontier"], "Malformed mesh completion bundle in model context", ["identities", "display"]);
         if (raw.kind !== "completion" || !Array.isArray(raw.sources) || !raw.sources.length) throw new Error("Malformed mesh completion bundle in model context");
         for (const valueSource of raw.sources) {
             const source = validateSource(valueSource);

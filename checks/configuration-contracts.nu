@@ -121,25 +121,30 @@ def main [] {
     import assert from "node:assert/strict";
     import { pathToFileURL } from "node:url";
 
-    const catalog = JSON.parse(process.env.GENERATED_ROLE_CATALOG);
-    const profiles = JSON.parse(process.env.GENERATED_EXECUTION_PROFILES);
+    const catalog = JSON.parse(process.env.GENERATED_CHILD_CATALOG);
     const orchestration = JSON.parse(process.env.GENERATED_ORCHESTRATION);
     const keybindings = JSON.parse(process.env.GENERATED_EXTENSION_KEYBINDINGS);
     const enabledModes = JSON.parse(process.env.GENERATED_ENABLED_MODES);
     const disabledModes = JSON.parse(process.env.GENERATED_DISABLED_MODES);
     const projections = JSON.parse(process.env.GENERATED_WEB_RETRIEVAL);
     const utilities = `${process.env.PACKAGE_ROOT}/extensions_src/utilities`;
-    const { validateExecutionProfileConfig, validateRoleCatalog, validateOrchestrationConfig, validateOrchestrationReferences } = await import(pathToFileURL(process.env.AGENT_TYPES_VALIDATOR).href);
+    const { validateChildCatalog, validateOrchestrationConfig, validateOrchestrationReferences } = await import(pathToFileURL(process.env.AGENT_TYPES_VALIDATOR).href);
     const { validateModeConfig } = await import(pathToFileURL(`${utilities}/mode_types.ts`).href);
     const { validateExtensionKeybindings } = await import(pathToFileURL(`${utilities}/extension_keybindings.ts`).href);
     const { validateWebRetrievalRuntimeConfig } = await import(pathToFileURL(`${utilities}/web_retrieval_types.ts`).href);
 
-    const roleCatalog = validateRoleCatalog(catalog);
-    const executionProfiles = validateExecutionProfileConfig(profiles);
+    const childCatalog = validateChildCatalog(catalog);
     const orchestrationConfig = validateOrchestrationConfig(orchestration);
     const enabledModeConfig = validateModeConfig(enabledModes);
-    validateOrchestrationReferences(orchestrationConfig, roleCatalog, executionProfiles, Object.keys(enabledModeConfig.modes));
+    validateOrchestrationReferences(orchestrationConfig, childCatalog, Object.keys(enabledModeConfig.modes));
     validateModeConfig(disabledModes);
+    assert.equal(childCatalog.schemaVersion, 1);
+    assert.equal(orchestrationConfig.schemaVersion, 6);
+    assert.ok(orchestrationConfig.stateRoot.endsWith("/pi/orchestration-v10"));
+    assert.equal(enabledModeConfig.schemaVersion, 3);
+    for (const mode of Object.values(enabledModeConfig.modes)) {
+      assert.equal(mode.execution.harness, "pi");
+    }
     validateExtensionKeybindings(keybindings, "generated extension-keybindings.json");
 
     const secretForProvider = {
@@ -162,8 +167,7 @@ def main [] {
   let agent_types_validator = ($package_root | path join "extensions_src" "utilities" "agent_types.ts")
   let validator = with-env {
     AGENT_TYPES_VALIDATOR: $agent_types_validator
-    GENERATED_ROLE_CATALOG: ($pi.catalog | to json --raw)
-    GENERATED_EXECUTION_PROFILES: ($pi.profiles | to json --raw)
+    GENERATED_CHILD_CATALOG: ($pi.catalog | to json --raw)
     GENERATED_ORCHESTRATION: ($pi.orchestration | to json --raw)
     GENERATED_EXTENSION_KEYBINDINGS: ($pi.extensionKeybindings | to json --raw)
     GENERATED_ENABLED_MODES: ($pi.enabledQuestion.modes | to json --raw)
@@ -176,6 +180,9 @@ def main [] {
 
   let emergency = $result.generated.emergency
   assert-contract (($emergency.enabled.links | columns | is-not-empty)) "emergency-shared-links"
+  assert-contract ("child-catalog.json" in ($emergency.enabled.links | columns)) "emergency-child-catalog-link"
+  assert-contract ("orchestration.json" in ($emergency.enabled.links | columns)) "emergency-orchestration-link"
+  assert-contract ("agent-modes.json" in ($emergency.enabled.links | columns)) "emergency-agent-modes-link"
   pass "emergency-shared-links"
   let gc_roots = ($env.TMPDIR | path join configuration-contract-gc-roots)
   rm --recursive --force $gc_roots

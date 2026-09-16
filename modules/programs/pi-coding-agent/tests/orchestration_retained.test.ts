@@ -8,29 +8,35 @@ import { unknownAgentActivityProjection } from "../extensions_src/utilities/orch
 import { buildMeshDisplayTree } from "../extensions_src/utilities/orchestration_display_tree.ts";
 import { resolvePaletteKeymap } from "../extensions_src/utilities/command_palette_keymap.ts";
 import { openMeshHistory } from "../extensions_src/utilities/orchestration_history.ts";
-import { MeshAgentsPaletteComponent } from "../extensions_src/utilities/orchestration_palette.ts";
+import { composeIdentityLine, MeshAgentsPaletteComponent } from "../extensions_src/utilities/orchestration_palette.ts";
 import { openLivePreview } from "../extensions_src/utilities/orchestration_preview.ts";
-import { displayIdentityForSnapshot } from "../extensions_src/utilities/orchestration_identity.ts";
+import { displayIdentityForSnapshot, fitUsualIdentityLine, usualAgentStatusForSnapshot } from "../extensions_src/utilities/orchestration_identity.ts";
 import { MAX_MODEL_VISIBLE_BYTES, MAX_MODEL_VISIBLE_LINES, projectDebugSnapshot, projectMinimalAgentTask, serializeModelVisibleJson } from "../extensions_src/utilities/orchestration_projection.ts";
 import { inspectMeshAgentWindow, launchAgentSession, meshHubName, stopAgentSession, type CommandResult } from "../extensions_src/utilities/orchestration_tmux.ts";
 import { emptyUsage, type AgentSnapshot, type AgentState, type TaskState } from "../extensions_src/utilities/orchestration_types.ts";
+import { yieldToIO } from "./test_helpers.ts";
 
-const syntheticRole = (name = "worker") => ({ selector: { agent: name, access: "read" as const }, description: `Synthetic ${name}`, tools: [], instructions: "Return the bounded result.", contextPolicy: "project" as const, childExtensionContributions: [] });
-const syntheticProfile = { models: ["provider/model"], thinkingLevel: "medium" as const, harness: "pi" as const };
-const definition = syntheticRole("worker");
+const syntheticGc = { collectAt: 2, retain: 1, pressureFloor: 0 };
+const syntheticExecution = { models: ["provider/model"], thinkingLevel: "medium" as const, harness: "pi" as const };
+const syntheticChild = (name = "worker") => ({ selector: { agent: name, access: "read" as const }, description: `Synthetic ${name}`, tools: [], instructions: "Return the bounded result.", contextPolicy: "project" as const, childExtensionContributions: [] as string[], execution: syntheticExecution, targets: [] as string[], gc: syntheticGc });
+const definition = syntheticChild("worker");
 const meshId = "11111111-1111-4111-8111-111111111111";
 const epochId = "22222222-2222-4222-8222-222222222222";
 const capabilities = { nativeScreen: true, taskDelivery: true, taskCompletion: true, taskCancellation: true, usage: true, interactiveInterventions: true, terminalHistory: true };
 const tmux = { socket: "/tmp/tmux", serverPid: "10", sessionId: "$hub", sessionName: "hub", windowId: "@child", paneId: "%child", windowName: "worker" };
 
 function snapshot(id: string, state: AgentState, options: { parentAgentId?: string; taskState?: TaskState; createdAt?: string; sessionFile?: string; sessionId?: string } = {}): AgentSnapshot {
-    const taskId = id.replace(/^./u, "b"); const prompt = "Implement retained behavior\nfull detail"; const taskState = options.taskState ?? (state === "failed" ? "failed" : "succeeded"); const terminal = taskState === "succeeded" || taskState === "failed" || taskState === "stopped";
+    const taskId = id.replace(/^./u, "b");
+    const prompt = "Implement retained behavior\nfull detail";
+    const purpose = "Retain idle wave";
+    const taskState = options.taskState ?? (state === "failed" ? "failed" : "succeeded");
+    const terminal = taskState === "succeeded" || taskState === "failed" || taskState === "stopped";
     return {
-        agent: { schemaVersion: 6, meshId, agentId: id, epochId, role: "worker", selectedProfile: "pi-medium", harness: "pi", cwd: "/work", createdAt: options.createdAt ?? id, roleSnapshot: definition, profileSnapshot: syntheticProfile, agent: "worker", agentSnapshot: definition, launchEnvelope: "/envelope", launchEnvelopeDigest: "digest", tmux, capabilities, creatorSessionId: "creator", ...(options.parentAgentId ? { parentAgentId: options.parentAgentId } : {}) },
+        agent: { schemaVersion: 7, meshId, agentId: id, epochId, childId: "worker", harness: "pi", cwd: "/work", createdAt: options.createdAt ?? id, definitionSnapshot: definition, launchEnvelope: "/envelope", launchEnvelopeDigest: "digest", tmux, capabilities, creatorSessionId: "creator", ...(options.parentAgentId ? { parentAgentId: options.parentAgentId } : {}) },
         status: { schemaVersion: 2, meshId, agentId: id, state, bridgeReady: true, meshToolsEnabled: true, agentUsage: emptyUsage(), accountedTaskIds: [], updatedAt: options.createdAt ?? id, ...(options.sessionFile ? { childSessionFile: options.sessionFile } : {}), ...(options.sessionId ? { childSessionId: options.sessionId } : {}) },
         activity: unknownAgentActivityProjection(),
         stop: null,
-        task: { request: { schemaVersion: 3, meshId, agentId: id, taskId, prompt, requesterEndpointId: "root:test", createdAt: options.createdAt ?? id }, status: { schemaVersion: 1, meshId, agentId: id, taskId, state: taskState, createdAt: options.createdAt ?? id, ...(terminal ? { finishedAt: options.createdAt ?? id } : {}) }, result: terminal ? { schemaVersion: 1, meshId, agentId: id, taskId, outcome: taskState, output: "done", usage: emptyUsage(), turns: 1, interventions: [], startedAt: options.createdAt ?? id, finishedAt: options.createdAt ?? id } : null, interventions: [], claimed: false, directory: "/task" },
+        task: { request: { schemaVersion: 4, meshId, agentId: id, taskId, prompt, purpose, requesterEndpointId: "root:test", createdAt: options.createdAt ?? id }, status: { schemaVersion: 1, meshId, agentId: id, taskId, state: taskState, createdAt: options.createdAt ?? id, ...(terminal ? { finishedAt: options.createdAt ?? id } : {}) }, result: terminal ? { schemaVersion: 1, meshId, agentId: id, taskId, outcome: taskState, output: "done", usage: emptyUsage(), turns: 1, interventions: [], startedAt: options.createdAt ?? id, finishedAt: options.createdAt ?? id } : null, interventions: [], claimed: false, directory: "/task" },
     };
 }
 
@@ -43,10 +49,16 @@ void test("mesh tmux launch records mesh hub identity and canonical metadata in 
         if (args.includes("new-session")) return { stdout: "$mesh-hub\t@mesh-window\t%mesh-pane\n", stderr: "", code: 0 };
         return { stdout: "", stderr: "", code: 0 };
     };
-    const launched = await launchAgentSession(exec, "/tmux", { socket: "/tmp/tmux", serverPid: "10", sessionId: "$parent", sessionName: "main", windowId: "@parent", paneId: "%parent" }, { meshId, epochId, agentId: "550e8400-e29b-41d4-a716-446655440000", agent: "worker", cwd: "/work", launch: { command: "/pi", args: [], env: {} } });
+    const launched = await launchAgentSession(exec, "/tmux", { socket: "/tmp/tmux", serverPid: "10", sessionId: "$parent", sessionName: "main", windowId: "@parent", paneId: "%parent" }, { meshId, epochId, agentId: "550e8400-e29b-41d4-a716-446655440000", agent: "worker", access: "read", handle: "May-abcd1234", cwd: "/work", launch: { command: "/pi", args: [], env: {} } });
     assert.deepEqual({ sessionId: launched.sessionId, sessionName: launched.sessionName, windowId: launched.windowId, paneId: launched.paneId }, { sessionId: "$mesh-hub", sessionName: meshHubName(meshId), windowId: "@mesh-window", paneId: "%mesh-pane" });
     const metadata = calls.filter(args => args.includes("set-option") && args.some(value => value.startsWith("@pi_mesh_"))).map(args => args.slice(-2));
     assert.deepEqual(metadata, [["@pi_mesh_parent_server_pid", "10"], ["@pi_mesh_parent_session_id", "$parent"], ["@pi_mesh_parent_window_id", "@parent"], ["@pi_mesh_hub_session_id", "$mesh-hub"], ["@pi_mesh_id", meshId], ["@pi_mesh_agent_id", "550e8400-e29b-41d4-a716-446655440000"], ["@pi_mesh_epoch_id", epochId], ["@pi_mesh_schema", "1"]]);
+    const windowNames = calls.flatMap(args => {
+        const index = args.indexOf("-n");
+        return index >= 0 ? [args[index + 1]!] : [];
+    });
+    assert.deepEqual(windowNames, ["mesh-May-abcd1234-worker-read"]);
+    assert.equal(windowNames.some(name => name.includes("550e8400")), false);
 });
 
 void test("reservation tmux evidence distinguishes unknown inspection, incomplete metadata, and definitive absence", async () => {
@@ -54,7 +66,8 @@ void test("reservation tmux evidence distinguishes unknown inspection, incomplet
     assert.equal(await inspectMeshAgentWindow(async () => ({ stdout: "", stderr: "", code: 1 }), "/tmux", null, meshId, agentId), "unknown");
     const inspect = (windows: string, listCode = 0) => inspectMeshAgentWindow(async (_command, args) => args.at(-1) === "#{pid}" ? { stdout: "10\n", stderr: "", code: 0 } : { stdout: windows, stderr: listCode ? "inspection failed" : "", code: listCode }, "/tmux", context, meshId, agentId);
     assert.equal(await inspect(`${meshId}\t\t0\tmesh-worker-other\n`), "unknown");
-    assert.equal(await inspect(`${meshId}\t\t0\tmesh-worker-${agentId}\n`), "live");
+    assert.equal(await inspect(`${meshId}\t${agentId}\t0\tmesh-handle-worker-read\n`), "live");
+    assert.equal(await inspect(`${meshId}\t\t0\tmesh-worker-${agentId}\n`), "unknown");
     assert.equal(await inspect(""), "absent");
     assert.equal(await inspect("", 2), "unknown");
 });
@@ -96,28 +109,85 @@ void test("palette toggles terminal history while retaining deterministic select
 });
 
 
-// Admission: role/profile inspection and reflow are user-visible palette behavior that static type and keybinding checks cannot observe.
-// Given a resolved snapshot, when it renders at wide and narrow palette widths, the user observes immutable role/profile facts without any line exceeding the terminal width.
-void test("palette exposes immutable role and profile details at wide and narrow widths", () => {
+// Admission: usual identity and reflow are user-visible palette behavior that static type and keybinding checks cannot observe.
+// Given a resolved snapshot, when it renders at wide and narrow palette widths, the user observes handle, public capability, purpose, and textual status without any line exceeding the terminal width.
+void test("palette exposes usual identity at wide and narrow widths without role or profile", () => {
     const live = snapshot("dededede-dede-4ede-8ede-dededededede", "busy", { taskState: "running" });
     live.status.modelRoute = {
         activeIndex: 1,
         activeModel: "provider/fallback",
         attempts: [{ index: 0, model: "provider/model", category: "unavailable", at: "2026-01-01T00:00:00Z", message: "auth missing" }],
     };
+    const handle = displayIdentityForSnapshot(live, ["May"]).handle;
     const createComponent = (rows: number) => new MeshAgentsPaletteComponent({ tui: { terminal: { rows }, requestRender() {} } as never, theme: { fg: (_role: string, text: string) => text, bg: (_role: string, text: string) => text, bold: (text: string) => text } as never, ui: { input: async () => undefined, confirm: async () => false }, keymap: resolvePaletteKeymap({ toggleTerminal: ["t"] }), deps: { meshId, exec: async () => ({ stdout: "", stderr: "", code: 0 }), tmux: "/tmux", historyViewerExtension: "/viewer", piCommand: "/pi", natureHandleWords: ["May"], discover: async () => ({ agents: [live], malformedCount: 0 }), stopAgent: async () => live }, done() {} });
     for (const [rows, width] of [[24, 80], [24, 120], [10, 60]] as const) {
         const component = createComponent(rows); component.replaceAgents([live]);
         const rendered = component.render(width);
         assert.ok(rendered.every(line => visibleWidth(line) <= width));
         const text = rendered.join("\n");
-        assert.match(text, new RegExp(live.agent.agentId, "u")); assert.match(text, /role:worker/u); assert.match(text, /profile:pi-medium/u); assert.match(text, /Synthetic worker/u); assert.match(text, /provider\/fallback/u); assert.match(text, /fallback 1/u); assert.match(text, /thinking medium · harness pi/u);
+        assert.match(text, new RegExp(handle, "u"));
+        assert.match(text, /worker\/read/u);
+        assert.match(text, /Retain idle wave/u);
+        assert.match(text, /Running/u);
+        assert.doesNotMatch(text, /role:worker|profile:worker\/read/u);
         if (width >= 100) {
+            assert.match(text, new RegExp(live.agent.agentId, "u"));
+            assert.match(text, /Synthetic worker/u);
             assert.match(text, /attempt #0 provider\/model unavailable/u);
             assert.match(text, /auth missing/u);
+        } else {
+            assert.doesNotMatch(text, new RegExp(live.agent.agentId, "u"));
+            assert.doesNotMatch(text, /provider\/fallback|fallback 1|thinking medium/u);
         }
         component.dispose();
     }
+});
+
+// Admission: last-resort palette truncation is a user-visible identity contract; types cannot detect dropping textual state to keep a longer handle.
+// Given a width that cannot fit purpose or capability, the usual row keeps handle and textual state.
+void test("narrow usual rows keep handle and textual state instead of truncating state last", () => {
+    const line = composeIdentityLine({
+        width: 18,
+        marker: "▸ ",
+        connector: "├ ",
+        expand: "▾ ",
+        handle: "Maple-12345678",
+        capability: "worker/read",
+        purpose: "Investigate Cursor termination",
+        state: "Running",
+    });
+    assert.ok(visibleWidth(line) <= 18);
+    assert.match(line, /Running/u);
+    assert.match(line, /Maple|…/u);
+});
+
+// Admission: usual identity fitting is the shared projection boundary; palette tree markers cannot observe dropping purpose then capability.
+// Given handle, public capability, a Japanese purpose, and textual status, wide output keeps all four while a narrow width keeps handle and status.
+void test("usual identity fitting keeps handle and textual status before purpose and capability", () => {
+    const identity = {
+        agentId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        handle: "Maple-12345678",
+        publicAgent: "worker",
+        access: "read" as const,
+        purpose: "Cursorの終了処理を調査",
+        status: "running" as const,
+    };
+    const wide = fitUsualIdentityLine(identity, 80);
+    assert.match(wide, /Maple-12345678/u);
+    assert.match(wide, /worker\/read/u);
+    assert.match(wide, /Cursorの終了処理を調査/u);
+    assert.match(wide, /Running/u);
+    const medium = fitUsualIdentityLine(identity, 38);
+    assert.ok(visibleWidth(medium) <= 38);
+    assert.match(medium, /Maple-12345678/u);
+    assert.match(medium, /worker\/read/u);
+    assert.match(medium, /Running/u);
+    assert.doesNotMatch(medium, /Cursorの終了処理を調査/u);
+    const narrow = fitUsualIdentityLine(identity, 18);
+    assert.ok(visibleWidth(narrow) <= 18);
+    assert.match(narrow, /Running/u);
+    assert.match(narrow, /Maple|…/u);
+    assert.doesNotMatch(narrow, /worker\/read|Cursor/u);
 });
 
 void test("model-visible projection truncates content while preserving machine fields and task order", () => {
@@ -145,14 +215,24 @@ void test("model-visible projections omit modelRoute while keeping operator deta
     assert.doesNotMatch(JSON.stringify(debug), /provider\/fallback|modelRoute|temporary failure/u);
 });
 
+// Admission: purpose is the task-specific display name; types cannot stop a projection from substituting the prompt first line.
+// Given a snapshot whose purpose differs from the prompt, compact and debug projections keep the stored purpose and omit the prompt first line from compact identity.
+void test("task-specific projections use purpose rather than the prompt first line", () => {
+    const value = snapshot("acacacac-acac-4cac-8cac-acacacacacac", "idle");
+    const minimal = projectMinimalAgentTask(value);
+    const debug = projectDebugSnapshot(value);
+    assert.equal(minimal.summary, "Retain idle wave");
+    assert.doesNotMatch(JSON.stringify(minimal), /Implement retained behavior/u);
+    assert.equal(debug.task?.request.purpose, "Retain idle wave");
+    assert.equal(debug.task?.request.prompt, "Implement retained behavior\nfull detail");
+});
+
 // Admission: compact/full mesh projections are the model-visible identity boundary; TUI identity may keep execution details that must not be serialized into tool content.
 // Given a snapshot whose internal role and profile names differ from the public selector, model-visible projections keep agent/access while operator identity retains the execution route.
 void test("model-visible projections omit internal role, profile, and model identity", () => {
     const value = snapshot("acacacac-acac-4cac-8cac-acacacacacac", "idle");
-    value.agent.role = "small-write";
-    value.agent.selectedProfile = "small-write";
-    value.agent.roleSnapshot = { selector: { agent: "small", access: "write" }, description: "Synthetic small write", tools: [], instructions: "Return the bounded result.", contextPolicy: "project", childExtensionContributions: [] };
-    value.agent.profileSnapshot = { models: ["openai-codex/gpt-5.6-luna"], thinkingLevel: "xhigh", harness: "pi" };
+    value.agent.childId = "small-write";
+    value.agent.definitionSnapshot = { selector: { agent: "small", access: "write" }, description: "Synthetic small write", tools: [], instructions: "Return the bounded result.", contextPolicy: "project", childExtensionContributions: [], execution: { models: ["openai-codex/gpt-5.6-luna"], thinkingLevel: "xhigh", harness: "pi" }, targets: [], gc: syntheticGc };
     value.status.modelRoute = {
         activeIndex: 0,
         activeModel: "openai-codex/gpt-5.6-luna",
@@ -180,7 +260,9 @@ void test("model-visible projections omit internal role, profile, and model iden
     assert.equal("claimed" in (debug.task ?? {}), false);
     assert.equal(debug.task?.status.error, "route_exhausted");
     const identity = displayIdentityForSnapshot(value);
-    assert.deepEqual({ role: identity.role, profile: identity.profile, model: identity.model }, { role: "small-write", profile: "small-write", model: "openai-codex/gpt-5.6-luna" });
+    assert.deepEqual({ publicAgent: identity.publicAgent, access: identity.access, model: identity.model }, { publicAgent: "small", access: "write", model: "openai-codex/gpt-5.6-luna" });
+    assert.equal("role" in identity, false);
+    assert.equal("profile" in identity, false);
 });
 
 void test("debug projection marks unsupported external telemetry unavailable", () => {
@@ -235,4 +317,89 @@ void test("palette reason validation cancels safely and preserves focus and sele
         const component = new MeshAgentsPaletteComponent({ tui: { terminal: { rows: 24 }, requestRender() {} } as never, theme: { fg: (_role: string, text: string) => text, bg: (_role: string, text: string) => text, bold: (text: string) => text } as never, ui: { input: async () => input, confirm: async () => { confirms += 1; return true; } }, keymap: {} as never, deps: { meshId, exec: async () => ({ stdout: "", stderr: "", code: 0 }), tmux: "/tmux", historyViewerExtension: "/viewer", piCommand: "/pi", natureHandleWords: ["May"], discover: async () => ({ agents: [live], malformedCount: 0 }), stopAgent: async () => { stops += 1; return live; }, setTimeout: (() => ({}) as NodeJS.Timeout) as unknown as typeof setTimeout, clearTimeout: (() => {}) as typeof clearTimeout }, done() {} });
         component.replaceAgents([live]); component.focused = true; const selected = component.selectedAgentId; await component.action("stop"); assert.equal(stops, 0); assert.equal(confirms, 0); assert.equal(component.selectedAgentId, selected); assert.equal(component.focused, true); component.dispose();
     }
+});
+
+// Admission: stale heartbeats must not look idle-reusable; type checks cannot observe the usual-status projection.
+void test("usual agent status keeps stale idle distinct from reusable idle", () => {
+    const live = snapshot("abababab-abab-4bab-8bab-abababababab", "idle");
+    live.activity = { ...unknownAgentActivityProjection(), acceptingTask: true };
+    assert.equal(usualAgentStatusForSnapshot(live), "idle-reusable");
+    live.activity = unknownAgentActivityProjection();
+    assert.equal(usualAgentStatusForSnapshot(live), "status-unknown");
+    const busy = snapshot("abababab-abab-4bab-8bab-abababababab", "busy", { taskState: "running" });
+    assert.equal(usualAgentStatusForSnapshot(busy), "running");
+    const stopping = snapshot("abababab-abab-4bab-8bab-abababababab", "stopping", { taskState: "running" });
+    assert.equal(usualAgentStatusForSnapshot(stopping), "confirming-stop");
+});
+
+// Admission: h is a distinct mesh action from Enter/Space/stop/session history; schemas cannot prove the configured key opens child history or that returning restores selection.
+// Given a selected child, the configured history key opens child history while Enter, Space, and stop keep their mesh actions, including terminal session history.
+void test("palette history key opens child history without stealing enter space or stop", async () => {
+    const live = snapshot("abababab-abab-4bab-8bab-abababababab", "busy", { taskState: "running" });
+    const stopped = snapshot("cdcdcdcd-cdcd-4dcd-8dcd-cdcdcdcdcdcd", "stopped", { sessionFile: "/session.jsonl", sessionId: "sess" });
+    const childHistory: string[] = [];
+    const sessionHistory: string[] = [];
+    const liveOpens: string[] = [];
+    const previews: string[] = [];
+    const stops: string[] = [];
+    const keys = { enter: "\r", space: " ", stop: "x" };
+    const tmuxProbe = { stdout: "10\t$session\tmain\t@1\t%1\tclient\n", stderr: "", code: 0 };
+    const create = (agents: AgentSnapshot[], historyKey: string) => new MeshAgentsPaletteComponent({
+        tui: { terminal: { rows: 24 }, requestRender() {} } as never,
+        theme: { fg: (_role: string, text: string) => text, bg: (_role: string, text: string) => text, bold: (text: string) => text } as never,
+        ui: { input: async () => "planned cleanup", confirm: async () => true },
+        keymap: resolvePaletteKeymap({ history: [historyKey], toggleTerminal: ["t"], confirm: ["enter"], preview: ["space"], stop: ["x"] }),
+        deps: {
+            meshId, exec: async () => tmuxProbe, tmux: "/tmux", historyViewerExtension: "/viewer", piCommand: "/pi", natureHandleWords: ["May"],
+            env: { TMUX: "/tmp/tmux,1,0" },
+            discover: async () => ({ agents, malformedCount: 0 }),
+            stopAgent: async request => { stops.push(request.agentId); return agents[0]!; },
+            openChildHistory: async snapshot => { childHistory.push(snapshot.agent.agentId); },
+            openHistory: (async () => { sessionHistory.push("session"); }) as never,
+            openLiveWindow: async () => { liveOpens.push("live"); },
+            previewLive: async () => { previews.push("preview"); return "dismissed"; },
+            setTimeout: (() => ({}) as NodeJS.Timeout) as unknown as typeof setTimeout,
+            clearTimeout: (() => {}) as typeof clearTimeout,
+        },
+        done() {},
+    });
+    const livePalette = create([live], "h");
+    livePalette.replaceAgents([live]); livePalette.focused = true;
+    const selected = livePalette.selectedAgentId;
+    livePalette.handleInput("h"); await yieldToIO();
+    assert.deepEqual(childHistory, [live.agent.agentId]);
+    assert.equal(livePalette.selectedAgentId, selected);
+    assert.equal(livePalette.focused, true);
+    livePalette.handleInput(keys.space); await yieldToIO();
+    livePalette.handleInput(keys.stop); await yieldToIO();
+    assert.deepEqual(previews, ["preview"]);
+    assert.deepEqual(stops, [live.agent.agentId]);
+    assert.deepEqual(childHistory, [live.agent.agentId]);
+    assert.equal(sessionHistory.length, 0);
+    livePalette.dispose();
+
+    const liveOpen = create([live], "h");
+    liveOpen.replaceAgents([live]);
+    liveOpen.handleInput(keys.enter); await yieldToIO();
+    assert.deepEqual(liveOpens, ["live"]);
+    assert.deepEqual(childHistory, [live.agent.agentId]);
+    liveOpen.dispose();
+
+    const terminalPalette = create([stopped], "h");
+    terminalPalette.replaceAgents([stopped]); terminalPalette.focused = true;
+    terminalPalette.handleInput("t");
+    assert.equal(terminalPalette.selectedAgentId, stopped.agent.agentId);
+    terminalPalette.handleInput("h"); await yieldToIO();
+    assert.deepEqual(childHistory, [live.agent.agentId, stopped.agent.agentId]);
+    terminalPalette.handleInput(keys.enter); await yieldToIO();
+    assert.deepEqual(sessionHistory, ["session"]);
+    assert.deepEqual(childHistory, [live.agent.agentId, stopped.agent.agentId]);
+    terminalPalette.dispose();
+
+    const rebound = create([live], "g");
+    rebound.replaceAgents([live]);
+    rebound.handleInput("h"); await yieldToIO();
+    rebound.handleInput("g"); await yieldToIO();
+    assert.deepEqual(childHistory, [live.agent.agentId, stopped.agent.agentId, live.agent.agentId]);
+    rebound.dispose();
 });

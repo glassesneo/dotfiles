@@ -98,8 +98,8 @@ async function readAgentCapabilities(meshRoot: string, meshId: string, agentIds:
     const entries = await mapConcurrent([...new Set(agentIds)], METRICS_READ_CONCURRENCY, async agentId => {
         const rawAgent = object(await json(join(meshRoot, "agents", agentId, "agent.json")).catch(() => undefined));
         const capabilities = object(rawAgent?.capabilities);
-        const value = rawAgent?.schemaVersion === AGENT_RECORD_SCHEMA_VERSION && rawAgent.meshId === meshId && rawAgent.agentId === agentId && typeof rawAgent.role === "string" && typeof capabilities?.usage === "boolean"
-            ? { agentType: rawAgent.role, usage: capabilities.usage }
+        const value = rawAgent?.schemaVersion === AGENT_RECORD_SCHEMA_VERSION && rawAgent.meshId === meshId && rawAgent.agentId === agentId && typeof rawAgent.childId === "string" && typeof capabilities?.usage === "boolean"
+            ? { agentType: rawAgent.childId, usage: capabilities.usage }
             : undefined;
         return [agentId, value] as const;
     });

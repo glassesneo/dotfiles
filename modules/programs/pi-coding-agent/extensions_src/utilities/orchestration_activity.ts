@@ -8,7 +8,7 @@ import { isTerminalAgent, type AgentStatus } from "./orchestration_types.ts";
 export const DEFAULT_ACTIVITY_STALE_MS = 10_000;
 export const DEFAULT_CONTEXT_HEADROOM_TOKENS = 32_768;
 
-export const ACTIVITY_PHASES = ["starting", "idle", "running", "compacting", "offline"] as const;
+export const ACTIVITY_PHASES = ["starting", "idle", "running", "compacting", "confirming-stop", "offline"] as const;
 export type AgentActivityPhase = (typeof ACTIVITY_PHASES)[number];
 export type AgentCompactionReason = "manual" | "threshold" | "overflow";
 export type AgentContextHealth = "healthy" | "retire" | "unknown";
@@ -131,7 +131,8 @@ export async function publishAgentActivity(stateRoot: string, meshId: string, ag
     return withAgentLock(stateRoot, meshId, agentId, async () => {
         await assertCurrentAgentRuntime(stateRoot, meshId, agentId, publication.runtimeId);
         const status = JSON.parse(await readFile(join(meshDirectory(stateRoot, meshId), "agents", agentId, "status.json"), "utf8")) as AgentStatus;
-        if ((status.state === "stopping" || isTerminalAgent(status.state)) && publication.phase !== "offline") throw new Error(`Agent ${agentId} cannot publish non-terminal activity while ${status.state}`);
+        const allowedWhileStopping = publication.phase === "offline" || status.state === "stopping" && publication.phase === "confirming-stop";
+        if ((status.state === "stopping" || isTerminalAgent(status.state)) && !allowedWhileStopping) throw new Error(`Agent ${agentId} cannot publish non-terminal activity while ${status.state}`);
         const path = activityFile(stateRoot, meshId, agentId); const current = await optionalActivity(path, { meshId, agentId });
         if (current && Date.parse(publication.observedAt) < Date.parse(current.observedAt)) throw new Error("Agent activity observation is older than the current record");
         if (current && current.runtimeId !== publication.runtimeId && publication.phase !== "starting") throw new Error("A new activity runtime must publish starting before other phases");

@@ -15,9 +15,9 @@ export {
     type ModelRouteState as ProfileRoute,
 } from "./orchestration_profile_fallback.ts";
 import { restoreCompatibleRoute, type ModelRouteState } from "./orchestration_profile_fallback.ts";
-import type { ExecutionProfile } from "./mode_types.ts";
+import type { ExecutionConfig } from "./mode_types.ts";
 
-export function restoreCompatibleProfileRoute(profile: ExecutionProfile, profileName: string, value: unknown): ModelRouteState | undefined {
+export function restoreCompatibleProfileRoute(profile: ExecutionConfig, profileName: string, value: unknown): ModelRouteState | undefined {
     if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
     const raw = value as { profile?: string; models?: string[]; candidates?: string[]; route?: ModelRouteState };
     if (typeof raw.profile !== "string" || !raw.route) return undefined;

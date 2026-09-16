@@ -2,39 +2,57 @@
 
 This directory owns the Pi peer-mesh configuration and extension runtime. The
 current configuration writes new meshes below
-`$XDG_STATE_HOME/pi/orchestration-v9` (normally
-`~/.local/state/pi/orchestration-v9`).
+`$XDG_STATE_HOME/pi/orchestration-v10` (normally
+`~/.local/state/pi/orchestration-v10`).
 
-## v9 cutover
+## v10 cutover
 
 Changed owned formats accept only the new version. There is no reader that
 infers, backfills, or resumes an old form. Old state is not deleted
 automatically; see `docs/compatibility-policy.md`.
 
 1. In the old Pi session, finish or stop every old mesh task before activating
-   the v9 configuration.
+   the v10 configuration.
 2. Activate the configuration and start a new root Pi session and mesh.
-3. Do not resume an old Pi session or mix an old mesh with a v9 mesh.
+3. Do not resume an old Pi session or mix an old mesh with a v10 mesh.
 4. The old state directory and user-created artifacts remain until you archive
    or remove them after checking their contents.
 
 A generated `orchestration.json` whose `stateRoot` ends in
-`/pi/orchestration-v9` confirms the new state root. It does not migrate or
+`/pi/orchestration-v10` confirms the new state root. It does not migrate or
 validate an old session.
+
+## Reading child work
+
+In `/mesh`, select a child and press the configured `meshPalette.history` key
+(default `h`) to browse its tasks and messages, including acknowledged messages.
+Enter opens the selected record's full body; arrows and Page Up/Down scroll it.
+Escape returns one view at a time, preserving the selection. The mesh list's
+existing Enter session-opening, Space preview, and stop actions are unchanged.
+
+History is read-only: opening it does not acknowledge messages, retrieve task
+results for the model, or change task state. An intake acknowledgment means a
+follow-up entered model context, not agreement or task completion. Missing or
+malformed records are reported while readable records remain available.
 
 ## Public delegation contract
 
-A new `mesh_send` call is `{ agent, access, message }`. `agent` is a public
+A new `mesh_send` call is `{ agent, access, purpose, message }`. `agent` is a public
 call name. `access` is `read` or `write` on every new call, including
-research, perspective, and search. The public schema exposes only the
-`(agent, access)` pairs the caller is allowed to use. Execution rejects a
-missing or invalid `access` and does not fill it from the current mode. Mode
-selects the authorized candidate set; ops may still choose an authorized read
-role.
+research, perspective, and search. `purpose` is a short display name for that
+new task: control characters are rejected even at the edges; after
+ordinary whitespace trim, 1–120 Unicode code points on a single line.
+The public schema exposes only the `(agent, access)` pairs
+the caller is allowed to use. Execution rejects a missing or invalid `access`
+and does not fill it from the current mode. Mode selects the authorized
+candidate set; ops may still choose an authorized read child.
 
-An existing-agent intervention remains `{ agentId, message }`. Do not combine
-that form with `agent`, `access`, or `profile`. Internal role IDs and
-execution profiles stay off the public call surface.
+An existing-agent call is `{ agentId, purpose?, message }`. New work on an idle
+child requires `purpose`. Follow-ups to an active task may omit it and never
+change the stored purpose. Retrying the same `toolCallId` reproduces the
+original admission result. Do not combine the existing-agent form with `agent`
+or `access`. Internal child IDs and execution settings stay off the public
+call surface.
 
 `mesh_wait({})` arms automatic waiting for the caller's current work and returns
 immediately with `{ armed: true, behavior: "until-drained" }`. Call it once
@@ -82,51 +100,50 @@ authorized direct investigation and edits remain allowed.
 
 ## Selectors and internal IDs
 
-The `roles` attribute key is the internal role ID. `selector.agent` is the
-public call name. Runtime `agentId` identifies one live agent, not a role
+The `children` attribute key is the internal child ID. `selector.agent` is the
+public call name. Runtime `agentId` identifies one live agent, not a child
 kind.
 
-A role whose `selector.agent` is `search` is not published on a root caller.
-Only a caller whose internal role key is `research` may have a search edge.
+A child whose `selector.agent` is `search` is not published on a root caller.
+Only a caller whose internal child key is `research` may have a search edge.
 That restriction stays an internal-ID test; do not rewrite it as a check of
 the caller's public call name.
 
-CallPolicy keeps one profile per edge, unique selectors per caller, and
-rejection of unknown role or profile references. Callers with outbound edges
-must execute through Pi profiles. Prompt-only roles are leaves and may use
-only Pi profiles.
+CallPolicy keeps unique selectors per caller and rejection of unknown child
+references. Callers with outbound edges must execute through Pi. Prompt-only
+children are leaves and must execute through Pi.
 
 ## Harness coverage
 
-Cursor profiles accept only the approved read and write `harnessOptions`
-combinations. Codex profiles accept only the current read-only cached
+Cursor children accept only the approved read and write `harnessOptions`
+combinations. Codex children accept only the current read-only cached
 combination. These are not passthrough interfaces for arbitrary upstream
 flags.
 
 Change Cursor CLI alias to ACP model ID mapping on
 `programs.pi-coding-agent.cursorAcpModelIds` in the parent feature owner.
-Keys are CLI aliases without a `cursor/` prefix. Every in-use Cursor profile
+Keys are CLI aliases without a `cursor/` prefix. Every in-use Cursor child
 alias must have a mapping; unused entries are allowed. Launch resolves the
 alias once and reuses that ACP ID for worker config, the agent record, and
 diagnostic redaction. The driver still passes the CLI alias to Cursor.
 
 ## Host and Web tuning
 
-Orchestration budgets and per-role GC defaults are host-overridable
+Orchestration budgets and per-child GC defaults are host-overridable
 `mkDefault` values. GC timing keeps the existing option defaults; host files
 may assign a subset of budgets or GC values at normal priority. Do not add a
-separate host policy module for those knobs. GC still requires a policy for
-every role, and its comparison relationships stay the same.
+separate host policy module for those knobs. Every child carries its own GC
+policy, and its comparison relationships stay the same.
 
 Tune Web routing weights, search/fetch deadlines, and retry wait through
 `programs.pi-coding-agent.web_retrieval`. Providers, endpoints, credential
 paths, and the single retry remain fixed. Retry count is not an option.
 
-## Parent profile and skills
+## Parent execution and skills
 
-The parent `/profile` command can select any execution profile whose harness
-is `pi`. A mode `defaultProfile` is the initial profile, not a restriction on
-later selection.
+Mode apply uses that mode's inline Pi execution. `/model` and `/thinking`
+remain available; an explicit override suspends automatic fallback until the
+next mode apply. There is no parent `/profile` command.
 
 `skillOptIns` additionally publishes discovered Skills that set
 `disable-model-invocation`. It is not an allowlist that hides ordinary

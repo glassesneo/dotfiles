@@ -27,14 +27,22 @@
   };
   parentNavigationHint = "${tmux.prefix} ${lib.concatStringsSep "/" (map lib.toUpper parentTmuxKeys)}: parent · /parent";
   parentBinding = key: ''bind-key ${key} if-shell -F '#{==:#{@pi_mesh_schema},1}' 'run-shell "${lib.getExe returnParentCommand} --binding #{q:client_name} #{q:session_id} #{q:window_id}"' 'display-message "No mesh parent for this window"' '';
-  gcRoleType = delib.submodule {
+  gcChildModule = {
     options = with delib; {
       collectAt = intOption 1;
       retain = intOption 1;
       pressureFloor = intOption 0;
     };
   };
-  roleType = delib.submodule {
+  executionModule = {
+    options = with delib; {
+      models = noDefault (listOfOption str []);
+      thinkingLevel = allowNull (enumOption ["off" "minimal" "low" "medium" "high" "xhigh" "max"] null);
+      harness = enumOption ["pi" "cursor-agent" "codex"] "pi";
+      harnessOptions = attrsOfOption lib.types.anything {};
+    };
+  };
+  childType = delib.submodule {
     options = with delib; {
       selector = submoduleOption {
         options = with delib; {
@@ -47,14 +55,15 @@
       instructions = noDefault (strOption null);
       contextPolicy = enumOption ["project" "prompt-only"] "project";
       childExtensionContributions = listOfOption str [];
+      execution = submoduleOption executionModule {};
+      targets = listOfOption str [];
+      gc = submoduleOption gcChildModule {};
     };
   };
-  targetPolicyType = delib.submodule {
-    options.profiles = delib.listOfOption delib.str [];
-  };
   callerPolicyType = delib.submodule {
-    options.targets = delib.attrsOfOption targetPolicyType {};
+    options.targets = delib.listOfOption delib.str [];
   };
+  cleanExecution = execution: lib.filterAttrs (_name: value: value != null && value != {}) execution;
   resultContract = ''
     Return the outcome, changed paths when any, verification performed and its
     results, missing evidence, and decisions needed from the caller. Separate
@@ -149,43 +158,89 @@
       childExtensionContributions = [];
     };
   };
-  edge = profile: {profiles = [profile];};
-  settledCallPolicy = {
-    modes = {
-      recon.targets = {
-        small-read = edge "small-read";
-        standard-read = edge "standard-read";
-        advanced-read = edge "advanced";
-        research = edge "research";
-        perspective = edge "perspective";
-      };
-      ops.targets = {
-        small-read = edge "small-read";
-        small-write = edge "small-write";
-        standard-read = edge "standard-read";
-        standard-write = edge "standard-write";
-        advanced-read = edge "advanced";
-        advanced-write = edge "advanced";
-        research = edge "research";
-        perspective = edge "perspective";
+  settledExecutions = {
+    small-read = {
+      models = [
+        "openrouter/cohere/north-mini-code:free"
+        "mistral/mistral-small-2603"
+        "openai-codex/gpt-5.6-luna"
+      ];
+      thinkingLevel = "high";
+      harness = "pi";
+    };
+    small-write = {
+      models = ["openai-codex/gpt-5.6-luna"];
+      thinkingLevel = "high";
+      harness = "pi";
+    };
+    standard-read = {
+      models = ["cursor/cursor-grok-4.6-high-fast"];
+      thinkingLevel = null;
+      harness = "cursor-agent";
+      harnessOptions = {
+        mode = "ask";
+        permissionPolicy = "reject";
+        sandbox = "disabled";
+        trustWorkspace = true;
+        worktree = false;
       };
     };
-    roles = {
-      advanced-read.targets = {
-        small-read = edge "small-read";
-        standard-read = edge "standard-read";
-        research = edge "research";
-        perspective = edge "perspective";
+    standard-write = {
+      models = ["cursor/cursor-grok-4.6-high-fast"];
+      thinkingLevel = null;
+      harness = "cursor-agent";
+      harnessOptions = {
+        mode = "agent";
+        permissionPolicy = "allow-always";
+        sandbox = "disabled";
+        trustWorkspace = true;
+        worktree = false;
       };
-      advanced-write.targets = {
-        small-read = edge "small-read";
-        small-write = edge "small-write";
-        standard-read = edge "standard-read";
-        standard-write = edge "standard-write";
-        research = edge "research";
-        perspective = edge "perspective";
+    };
+    advanced-read = {
+      models = ["openai-codex/gpt-6-astra"];
+      thinkingLevel = "low";
+      harness = "pi";
+    };
+    advanced-write = {
+      models = ["openai-codex/gpt-6-astra"];
+      thinkingLevel = "low";
+      harness = "pi";
+    };
+    research = {
+      models = ["openai-codex/gpt-5.6-terra"];
+      thinkingLevel = "high";
+      harness = "pi";
+    };
+    perspective = {
+      models = [
+        "openrouter/z-ai/glm-5.2:free"
+        "cohere/command-a-plus-05-2026"
+        "mistral/mistral-medium-3.5"
+      ];
+      thinkingLevel = "high";
+      harness = "pi";
+    };
+    search = {
+      models = ["codex/gpt-5.6-luna"];
+      thinkingLevel = "high";
+      harness = "codex";
+      harnessOptions = {
+        mode = "read-only";
+        permissionPolicy = "reject";
+        webSearch = "cached";
       };
-      research.targets.search = edge "search";
+    };
+  };
+  settledChildTargets = {
+    advanced-read = ["small-read" "standard-read" "research" "perspective"];
+    advanced-write = ["small-read" "small-write" "standard-read" "standard-write" "research" "perspective"];
+    research = ["search"];
+  };
+  settledCallPolicy = {
+    modes = {
+      recon.targets = ["small-read" "standard-read" "advanced-read" "research" "perspective"];
+      ops.targets = ["small-read" "small-write" "standard-read" "standard-write" "advanced-read" "advanced-write" "research" "perspective"];
     };
   };
   gcBase = {
@@ -235,6 +290,14 @@
       pressureFloor = 0;
     };
   };
+  settledChildren = lib.mapAttrs (name: role:
+    role
+    // {
+      execution = settledExecutions.${name};
+      targets = settledChildTargets.${name} or [];
+      gc = gcBase.${name};
+    })
+  settledRoles;
 in
   delib.module {
     name = moduleName;
@@ -243,11 +306,10 @@ in
         enable = readOnly (boolOption (parent.enable && builtins.elem "orchestration" parent.defaultExtensions));
         extensionPaths = readOnly (listOfOption str [orchestrationExtension]);
         natureHandleWords = listOfOption str ["Coulson" "May" "Daisy" "Fitz" "Simmons" "Mack" "Elena" "Hunter" "Bobbi" "Deke" "Sousa" "Enoch"];
-        roles = attrsOfOption roleType {};
+        children = attrsOfOption childType {};
         callPolicy = submoduleOption {
           options = with delib; {
             modes = attrsOfOption callerPolicyType {};
-            roles = attrsOfOption callerPolicyType {};
           };
         } {};
         budgets = attrsOfOption lib.types.int {};
@@ -257,24 +319,19 @@ in
             periodicIntervalMs = intOption 5000;
             activityHeartbeatMs = intOption 2000;
             activityStaleMs = intOption 10000;
-            roles = attrsOfOption gcRoleType {};
           };
         } {};
       });
     myconfig.always = {cfg, ...}: {
       args.shared.piOrchestration.enabled = cfg.enable;
       programs.pi-coding-agent.orchestration = {
-        roles = lib.mapAttrs (_: role: lib.mapAttrs (_: lib.mkDefault) role) settledRoles;
-        callPolicy = {
-          modes = lib.mapAttrs (_: policy: {targets = lib.mkDefault policy.targets;}) settledCallPolicy.modes;
-          roles = lib.mapAttrs (_: policy: {targets = lib.mkDefault policy.targets;}) settledCallPolicy.roles;
-        };
+        children = lib.mapAttrs (_: child: lib.mapAttrs (_: lib.mkDefault) child) settledChildren;
+        callPolicy.modes = lib.mapAttrs (_: policy: {targets = lib.mkDefault policy.targets;}) settledCallPolicy.modes;
         budgets = lib.mapAttrs (_: lib.mkDefault) {
           maxLiveAgents = 12;
           maxConcurrentTasks = 12;
           maxTasksPerMesh = 64;
         };
-        gc.roles = lib.mapAttrs (_: role: lib.mapAttrs (_: lib.mkDefault) role) gcBase;
       };
       programs.pi-coding-agent.keybindings.contributions = {
         meshPalette = {
@@ -340,6 +397,12 @@ in
               required = false;
               target = "extension";
             };
+            history = {
+              defaultKeys = ["h"];
+              contexts = ["meshPalette"];
+              required = false;
+              target = "extension";
+            };
             toggleTerminal = {
               defaultKeys = ["t"];
               contexts = ["meshPalette"];
@@ -392,35 +455,34 @@ in
       myconfig,
       ...
     }: let
-      profiles = myconfig.programs.pi-coding-agent.profiles or {};
       modes = myconfig.programs.pi-coding-agent.mode.modes;
-      roleNames = builtins.attrNames cfg.roles;
-      profileNames = builtins.attrNames profiles;
+      childNames = builtins.attrNames cfg.children;
+      cursorAcpModelIds = myconfig.programs.pi-coding-agent.cursorAcpModelIds;
       duplicates = values:
         builtins.filter
         (value: lib.count (candidate: candidate == value) values > 1)
         (lib.unique values);
-      policyEntries = kind: policies:
-        lib.concatMap
-        (caller:
-          map
-          (target: {
-            label = "${kind} ${caller} -> ${target}";
-            inherit target;
-            profiles = policies.${caller}.targets.${target}.profiles;
-          })
-          (builtins.attrNames policies.${caller}.targets))
-        (builtins.attrNames policies);
-      modeEntries = policyEntries "mode" cfg.callPolicy.modes;
-      roleEntries = policyEntries "role" cfg.callPolicy.roles;
-      allEntries = modeEntries ++ roleEntries;
-      duplicateProfiles = lib.concatMap (entry: map (profile: "${entry.label}: ${profile}") (duplicates entry.profiles)) allEntries;
-      emptyEdges = map (entry: entry.label) (builtins.filter (entry: builtins.length entry.profiles != 1) allEntries);
+      modeTargetLists =
+        lib.mapAttrsToList (caller: policy: {
+          label = "mode ${caller}";
+          inherit caller;
+          targets = policy.targets;
+        })
+        cfg.callPolicy.modes;
+      childTargetLists =
+        lib.mapAttrsToList (caller: child: {
+          label = "child ${caller}";
+          inherit caller;
+          targets = child.targets;
+        })
+        cfg.children;
+      allTargetLists = modeTargetLists ++ childTargetLists;
+      duplicateTargets = lib.concatMap (entry: map (target: "${entry.label}: ${target}") (duplicates entry.targets)) allTargetLists;
       selectorKey = target:
-        if !(builtins.hasAttr target cfg.roles)
+        if !(builtins.hasAttr target cfg.children)
         then "unknown:${target}"
         else let
-          selector = cfg.roles.${target}.selector;
+          selector = cfg.children.${target}.selector;
           agent =
             if builtins.isString selector.agent
             then selector.agent
@@ -430,51 +492,83 @@ in
           then ""
           else selector.access
         }";
-      ambiguousSelectors = lib.concatMap (kindPolicies:
-        lib.concatMap (caller: let
-          targets = builtins.attrNames kindPolicies.${caller}.targets;
-          keys = map selectorKey targets;
-        in
-          map (key: "${caller}: ${key}") (duplicates keys)) (builtins.attrNames kindPolicies)) [cfg.callPolicy.modes cfg.callPolicy.roles];
-      referencedRoles = map (entry: entry.target) allEntries;
-      referencedProfiles = lib.concatMap (entry: entry.profiles) allEntries;
+      ambiguousSelectors = lib.concatMap (entry: map (key: "${entry.caller}: ${key}") (duplicates (map selectorKey entry.targets))) allTargetLists;
+      referencedChildren = lib.concatMap (entry: entry.targets) allTargetLists;
       unknownModes = builtins.filter (name: !(builtins.hasAttr name modes)) (builtins.attrNames cfg.callPolicy.modes);
-      unknownRoleCallers = builtins.filter (name: !(builtins.hasAttr name cfg.roles)) (builtins.attrNames cfg.callPolicy.roles);
-      unknownRoleTargets = builtins.filter (name: !(builtins.elem name roleNames)) (lib.unique referencedRoles);
-      unknownProfiles = builtins.filter (name: !(builtins.elem name profileNames)) (lib.unique referencedProfiles);
-      outboundRoleCallers = builtins.filter (name: cfg.callPolicy.roles.${name}.targets != {}) (builtins.attrNames cfg.callPolicy.roles);
-      profilesForRole = name:
-        lib.unique (lib.concatMap (entry:
-          if entry.target == name
-          then entry.profiles
-          else [])
-        allEntries);
-      profileHarness = name: profiles.${name}.harness or null;
-      nonPiCallers = builtins.filter (name:
-        builtins.any (profile: profileHarness profile != "pi") (profilesForRole name))
-      outboundRoleCallers;
-      promptOnlyCallers = builtins.filter (name:
-        builtins.hasAttr name cfg.roles
-        && cfg.roles.${name}.contextPolicy == "prompt-only")
-      outboundRoleCallers;
-      promptOnlyNonPiProfiles = lib.concatMap (name:
-        map (profile: "role ${name}: ${profile}") (builtins.filter (profile: profileHarness profile != "pi") (profilesForRole name)))
-      (builtins.filter (name: cfg.roles.${name}.contextPolicy == "prompt-only") roleNames);
-      unknownGcRoles = builtins.filter (name: !(builtins.elem name roleNames)) (builtins.attrNames cfg.gc.roles);
-      missingGcRoles = builtins.filter (name: !(builtins.hasAttr name cfg.gc.roles)) roleNames;
-      invalidSelectors = builtins.filter (name: let selector = cfg.roles.${name}.selector; in !(builtins.isString selector.agent) || selector.agent == "") roleNames;
-      searchOnRoot = lib.concatMap (mode: map (target: "${mode}: ${target}") (builtins.filter (target: builtins.hasAttr target cfg.roles && cfg.roles.${target}.selector.agent == "search") (builtins.attrNames cfg.callPolicy.modes.${mode}.targets))) (builtins.attrNames cfg.callPolicy.modes);
-      searchFromNonResearch = lib.concatMap (caller: map (target: "${caller}: ${target}") (builtins.filter (target: builtins.hasAttr target cfg.roles && cfg.roles.${target}.selector.agent == "search") (builtins.attrNames cfg.callPolicy.roles.${caller}.targets))) (builtins.filter (caller: caller != "research") (builtins.attrNames cfg.callPolicy.roles));
+      unknownChildTargets = builtins.filter (name: !(builtins.elem name childNames)) (lib.unique referencedChildren);
+      outboundChildCallers = builtins.filter (name: cfg.children.${name}.targets != []) childNames;
+      nonPiCallers = builtins.filter (name: cfg.children.${name}.execution.harness != "pi") outboundChildCallers;
+      promptOnlyCallers = builtins.filter (name: cfg.children.${name}.contextPolicy == "prompt-only" && cfg.children.${name}.targets != []) childNames;
+      promptOnlyNonPi = builtins.filter (name: cfg.children.${name}.contextPolicy == "prompt-only" && cfg.children.${name}.execution.harness != "pi") childNames;
+      invalidSelectors = builtins.filter (name: let selector = cfg.children.${name}.selector; in !(builtins.isString selector.agent) || selector.agent == "") childNames;
+      searchOnRoot = lib.concatMap (mode: map (target: "${mode}: ${target}") (builtins.filter (target: builtins.hasAttr target cfg.children && cfg.children.${target}.selector.agent == "search") cfg.callPolicy.modes.${mode}.targets)) (builtins.attrNames cfg.callPolicy.modes);
+      searchFromNonResearch = lib.concatMap (caller: map (target: "${caller}: ${target}") (builtins.filter (target: builtins.hasAttr target cfg.children && cfg.children.${target}.selector.agent == "search") cfg.children.${caller}.targets)) (builtins.filter (caller: caller != "research") childNames);
+      invalidChildModelLists = builtins.filter (name: let models = cfg.children.${name}.execution.models; in models == [] || duplicates models != []) childNames;
+      invalidChildModelIdentifiers =
+        lib.concatMap (
+          name:
+            builtins.filter (model: builtins.match "^[^/[:space:]]+/[^[:space:]]+$" model == null) cfg.children.${name}.execution.models
+        )
+        childNames;
+      cursorReadHarnessOptions = {
+        mode = "ask";
+        permissionPolicy = "reject";
+        sandbox = "disabled";
+        trustWorkspace = true;
+        worktree = false;
+      };
+      cursorWriteHarnessOptions = {
+        mode = "agent";
+        permissionPolicy = "allow-always";
+        sandbox = "disabled";
+        trustWorkspace = true;
+        worktree = false;
+      };
+      codexHarnessOptions = {
+        mode = "read-only";
+        permissionPolicy = "reject";
+        webSearch = "cached";
+      };
+      unmappedCursorChildren = builtins.filter (name: let
+        execution = cfg.children.${name}.execution;
+        alias =
+          if execution.models == []
+          then ""
+          else lib.removePrefix "cursor/" (builtins.head execution.models);
+      in
+        execution.harness
+        == "cursor-agent"
+        && (execution.models == [] || !(builtins.hasAttr alias cursorAcpModelIds)))
+      childNames;
+      invalidChildHarnesses =
+        builtins.filter (
+          name: let
+            execution = cfg.children.${name}.execution;
+            hasSingletonModel = builtins.length execution.models == 1;
+            model =
+              if hasSingletonModel
+              then builtins.head execution.models
+              else "";
+          in
+            if execution.harness == "pi"
+            then execution.thinkingLevel == null || execution.harnessOptions != {}
+            else if execution.harness == "cursor-agent"
+            then !hasSingletonModel || !(lib.hasPrefix "cursor/" model) || execution.thinkingLevel != null || !(execution.harnessOptions == cursorReadHarnessOptions || execution.harnessOptions == cursorWriteHarnessOptions)
+            else !hasSingletonModel || !(lib.hasPrefix "codex/" model) || execution.thinkingLevel == null || execution.harnessOptions != codexHarnessOptions
+        )
+        childNames;
+      generatedChildren = lib.mapAttrs (_: child:
+        child
+        // {
+          execution = cleanExecution child.execution;
+        })
+      cfg.children;
       names = values: lib.concatStringsSep ", " values;
     in {
       assertions = [
         {
-          assertion = duplicateProfiles == [];
-          message = "Pi orchestration callPolicy profile lists must be duplicate-free: ${names duplicateProfiles}.";
-        }
-        {
-          assertion = emptyEdges == [];
-          message = "Pi orchestration callPolicy target edges must have exactly one profile: ${names emptyEdges}.";
+          assertion = duplicateTargets == [];
+          message = "Pi orchestration callPolicy and child target lists must be duplicate-free: ${names duplicateTargets}.";
         }
         {
           assertion = ambiguousSelectors == [];
@@ -482,43 +576,43 @@ in
         }
         {
           assertion = invalidSelectors == [];
-          message = "Pi orchestration roles must define a non-empty selector agent: ${names invalidSelectors}.";
+          message = "Pi orchestration children must define a non-empty selector agent: ${names invalidSelectors}.";
         }
         {
           assertion = unknownModes == [];
           message = "Pi orchestration callPolicy references unknown mode caller(s): ${names unknownModes}.";
         }
         {
-          assertion = unknownRoleCallers == [];
-          message = "Pi orchestration callPolicy references unknown role caller(s): ${names unknownRoleCallers}.";
-        }
-        {
-          assertion = unknownRoleTargets == [];
-          message = "Pi orchestration callPolicy references unknown role target(s): ${names unknownRoleTargets}.";
-        }
-        {
-          assertion = unknownProfiles == [];
-          message = "Pi orchestration callPolicy references unknown execution profile(s): ${names unknownProfiles}.";
+          assertion = unknownChildTargets == [];
+          message = "Pi orchestration callPolicy or child targets reference unknown child(ren): ${names unknownChildTargets}.";
         }
         {
           assertion = nonPiCallers == [];
-          message = "Pi orchestration callers with outbound edges must execute only through Pi profiles: ${names nonPiCallers}.";
+          message = "Pi orchestration callers with outbound edges must execute only through Pi: ${names nonPiCallers}.";
         }
         {
           assertion = promptOnlyCallers == [];
-          message = "Pi orchestration prompt-only roles must be leaf callers: ${names promptOnlyCallers}.";
+          message = "Pi orchestration prompt-only children must be leaf callers: ${names promptOnlyCallers}.";
         }
         {
-          assertion = promptOnlyNonPiProfiles == [];
-          message = "Pi orchestration prompt-only roles may use only Pi profiles: ${names promptOnlyNonPiProfiles}.";
+          assertion = promptOnlyNonPi == [];
+          message = "Pi orchestration prompt-only children must execute only through Pi: ${names promptOnlyNonPi}.";
         }
         {
-          assertion = unknownGcRoles == [];
-          message = "Pi orchestration GC policy references unknown role(s): ${names unknownGcRoles}.";
+          assertion = invalidChildModelLists == [];
+          message = "Pi orchestration children must have non-empty unique model lists: ${names invalidChildModelLists}.";
         }
         {
-          assertion = missingGcRoles == [];
-          message = "Pi orchestration GC policy must cover every role: ${names missingGcRoles}.";
+          assertion = invalidChildModelIdentifiers == [];
+          message = "Pi orchestration child models must use provider/model format: ${names invalidChildModelIdentifiers}.";
+        }
+        {
+          assertion = invalidChildHarnesses == [];
+          message = "Pi orchestration children must satisfy their exact harness contract: ${names invalidChildHarnesses}.";
+        }
+        {
+          assertion = unmappedCursorChildren == [];
+          message = "Pi Cursor children require a cursorAcpModelIds entry: ${names unmappedCursorChildren}.";
         }
         {
           assertion = searchOnRoot == [];
@@ -530,13 +624,13 @@ in
         }
       ];
       home.file = {
-        "${myconfig.programs.pi-coding-agent.configDir}/role-catalog.json".text = builtins.toJSON {
-          schemaVersion = 6;
-          roles = cfg.roles;
+        "${myconfig.programs.pi-coding-agent.configDir}/child-catalog.json".text = builtins.toJSON {
+          schemaVersion = 1;
+          children = generatedChildren;
         };
         "${myconfig.programs.pi-coding-agent.configDir}/orchestration.json".text = builtins.toJSON {
-          schemaVersion = 5;
-          stateRoot = "${homeConfig.xdg.stateHome}/pi/orchestration-v9";
+          schemaVersion = 6;
+          stateRoot = "${homeConfig.xdg.stateHome}/pi/orchestration-v10";
           tmux = lib.getExe pkgs.tmux;
           returnParentCommand = lib.getExe returnParentCommand;
           inherit parentNavigationHint historyViewerExtension popupExtension orchestrationExtension childBridgeExtension;

@@ -3,7 +3,7 @@ import type { MeshGcConfig } from "./agent_types.ts";
 import { projectAgentActivity, readAgentActivity } from "./orchestration_activity.ts";
 import { readAgentRuntimeBinding } from "./orchestration_runtime.ts";
 import { stopMeshAgentWithDisposition } from "./orchestration_management.ts";
-import { assertRootLeaseOwner, claimIdleAgentForStop, listMeshAgents, readMesh, reserveMeshCapacity, reservePressureCapacityOrClaimIdleAgent, type IdleStopRoleMinimum } from "./orchestration_store.ts";
+import { assertRootLeaseOwner, claimIdleAgentForStop, listMeshAgents, readMesh, reserveMeshCapacity, reservePressureCapacityOrClaimIdleAgent, type IdleStopChildMinimum } from "./orchestration_store.ts";
 import type { CommandExecutor } from "./orchestration_tmux.ts";
 import type { AgentSnapshot, BudgetReservation } from "./orchestration_types.ts";
 import type { ExpectedEndpointBinding } from "./orchestration_binding.ts";
@@ -12,7 +12,7 @@ import { collectRetiredOrchestrationIndexReferences } from "./orchestration_inde
 import { withMeshLock } from "./orchestration_lock.ts";
 
 interface GcOptions { stateRoot: string; meshId: string; leaseId: string; gc: MeshGcConfig; exec: CommandExecutor; tmux: string; signal?: AbortSignal; expectedCurrentEpochId?: string; beforeClaim?: (candidate: { agentId: string; source: "gc-role" | "gc-context" | "gc-pressure" }) => Promise<void> }
-interface Candidate { snapshot: AgentSnapshot; sequence: number; kind: "context" | "reusable"; roleMinimum?: IdleStopRoleMinimum }
+interface Candidate { snapshot: AgentSnapshot; sequence: number; kind: "context" | "reusable"; childMinimum?: IdleStopChildMinimum }
 export interface GcPassResult { gcPassId: string; confirmed: string[]; pending: string[]; failed: Array<{ agentId: string; error: string }> }
 export class PressureAdmissionStaleError extends Error {}
 
@@ -37,10 +37,10 @@ async function assertGcPassActive(options: GcOptions): Promise<void> { if (optio
 async function collect(options: GcOptions, selected: Candidate[], source: "gc-role" | "gc-context" | "gc-pressure", result: GcPassResult, beforeClaim?: () => Promise<void>): Promise<void> {
     for (const candidate of selected) {
         await assertGcPassActive(options);
-        const reason = source === "gc-context" ? "Context headroom reached the retirement threshold" : source === "gc-role" ? `Role ${candidate.snapshot.agent.agent} exceeded its idle retention policy` : "Live-agent capacity required idle agent reclamation";
+        const reason = source === "gc-context" ? "Context headroom reached the retirement threshold" : source === "gc-role" ? `Child ${candidate.snapshot.agent.childId} exceeded its idle retention policy` : "Live-agent capacity required idle agent reclamation";
         await beforeClaim?.();
         await options.beforeClaim?.({ agentId: candidate.snapshot.agent.agentId, source });
-        const request = await claimIdleAgentForStop(options.stateRoot, options.meshId, candidate.snapshot.agent.agentId, { source, reason, activitySequence: candidate.sequence, gcPassId: result.gcPassId, staleMs: options.gc.activityStaleMs, allowContextRetire: candidate.kind === "context", ...(candidate.roleMinimum ? { roleMinimum: candidate.roleMinimum } : {}) });
+        const request = await claimIdleAgentForStop(options.stateRoot, options.meshId, candidate.snapshot.agent.agentId, { source, reason, activitySequence: candidate.sequence, gcPassId: result.gcPassId, staleMs: options.gc.activityStaleMs, allowContextRetire: candidate.kind === "context", ...(candidate.childMinimum ? { childMinimum: candidate.childMinimum } : {}) });
         if (!request) continue;
         try {
             await assertGcPassActive(options);
@@ -54,15 +54,15 @@ async function createGcPassNotices(options: GcOptions, _result: GcPassResult): P
 export async function runPeriodicAgentGc(options: GcOptions): Promise<GcPassResult> {
     await assertGcPassActive(options); const result: GcPassResult = { gcPassId: randomUUID(), confirmed: [], pending: [], failed: [] };
     let current = await candidates(options); await collect(options, current.filter(item => item.kind === "context"), "gc-context", result);
-    current = await candidates(options); const byRole = new Map<string, Candidate[]>();
-    for (const candidate of current.filter(item => item.kind === "reusable")) { const role = candidate.snapshot.agent.agent; const items = byRole.get(role) ?? []; items.push(candidate); byRole.set(role, items); }
-    for (const role of [...byRole.keys()].sort()) { const items = byRole.get(role)!; const policy = options.gc.roles[role]; if (policy && items.length >= policy.collectAt) await collect(options, items.slice(0, Math.max(0, items.length - policy.retain)).map(candidate => ({ ...candidate, roleMinimum: { role, tier: "retain" as const, minimum: policy.retain } })), "gc-role", result); }
+    current = await candidates(options); const byChild = new Map<string, Candidate[]>();
+    for (const candidate of current.filter(item => item.kind === "reusable")) { const childId = candidate.snapshot.agent.childId; const items = byChild.get(childId) ?? []; items.push(candidate); byChild.set(childId, items); }
+    for (const childId of [...byChild.keys()].sort()) { const items = byChild.get(childId)!; const policy = options.gc.children[childId]; if (policy && items.length >= policy.collectAt) await collect(options, items.slice(0, Math.max(0, items.length - policy.retain)).map(candidate => ({ ...candidate, childMinimum: { childId, tier: "retain" as const, minimum: policy.retain } })), "gc-role", result); }
     await withMeshLock(options.stateRoot, options.meshId, () => collectRetiredOrchestrationIndexReferences(options.stateRoot, options.meshId)); await createGcPassNotices(options, result); return result;
 }
 function pressureCandidate(items: Candidate[], gc: MeshGcConfig, attempted: ReadonlySet<string> = new Set()): Candidate | undefined {
     const context = items.filter(item => item.kind === "context" && !attempted.has(item.snapshot.agent.agentId)); if (context.length) return context[0];
-    const reusable = items.filter(item => item.kind === "reusable"); const reusableCounts = new Map<string, number>(); for (const item of reusable) reusableCounts.set(item.snapshot.agent.agent, (reusableCounts.get(item.snapshot.agent.agent) ?? 0) + 1);
-    const select = (tier: IdleStopRoleMinimum["tier"]): Candidate | undefined => { const selected = reusable.find(item => !attempted.has(item.snapshot.agent.agentId) && (reusableCounts.get(item.snapshot.agent.agent) ?? 0) > (gc.roles[item.snapshot.agent.agent]?.[tier] ?? Number.POSITIVE_INFINITY)); if (!selected) return undefined; return { ...selected, roleMinimum: { role: selected.snapshot.agent.agent, tier, minimum: gc.roles[selected.snapshot.agent.agent]![tier] } }; };
+    const reusable = items.filter(item => item.kind === "reusable"); const reusableCounts = new Map<string, number>(); for (const item of reusable) reusableCounts.set(item.snapshot.agent.childId, (reusableCounts.get(item.snapshot.agent.childId) ?? 0) + 1);
+    const select = (tier: IdleStopChildMinimum["tier"]): Candidate | undefined => { const selected = reusable.find(item => !attempted.has(item.snapshot.agent.agentId) && (reusableCounts.get(item.snapshot.agent.childId) ?? 0) > (gc.children[item.snapshot.agent.childId]?.[tier] ?? Number.POSITIVE_INFINITY)); if (!selected) return undefined; return { ...selected, childMinimum: { childId: selected.snapshot.agent.childId, tier, minimum: gc.children[selected.snapshot.agent.childId]![tier] } }; };
     return select("retain") ?? select("pressureFloor");
 }
 export async function reserveNewAgentCapacityWithPressure(options: GcOptions, requestedReservationId?: string, requesterGuard?: () => Promise<void>, requester?: { agentId: string; runtimeId: string; endpointId?: string; endpointSessionFile?: string }, expectedBinding?: ExpectedEndpointBinding): Promise<BudgetReservation> {
@@ -78,7 +78,7 @@ export async function reserveNewAgentCapacityWithPressure(options: GcOptions, re
             await assertGcPassActive(options); const beforeSelection = await retryReservation(); if (beforeSelection) return beforeSelection;
             const snapshots = await listMeshAgents(options.stateRoot, options.meshId); const items = await candidates(options); const victim = pressureCandidate(items, options.gc, attempted); if (!victim) { const unknown = snapshots.filter(item => item.activity.phase === "unknown").length; const stopping = snapshots.filter(item => item.status.state === "stopping").length; throw new Error(`Mesh live-agent capacity exhausted (${mesh.budgets.maxLiveAgents}); no pressure GC candidate (tiers=context,retain,floor; unknown=${unknown}; stopping=${stopping})`); }
             await requesterGuard?.();
-            const boundary = await reservePressureCapacityOrClaimIdleAgent(options.stateRoot, options.meshId, { reservationId, victimAgentId: victim.snapshot.agent.agentId, claim: { source: "gc-pressure", reason: "Live-agent capacity required idle agent reclamation", activitySequence: victim.sequence, gcPassId: result.gcPassId, staleMs: options.gc.activityStaleMs, allowContextRetire: victim.kind === "context", ...(victim.roleMinimum ? { roleMinimum: victim.roleMinimum } : {}) }, ...(requestedReservationId && requester ? { admission: { requestId: requestedReservationId, requesterAgentId: requester.agentId, requesterRuntimeId: requester.runtimeId, ...(requester.endpointId && requester.endpointSessionFile ? { requesterEndpointId: requester.endpointId, requesterEndpointSessionFile: requester.endpointSessionFile } : {}) } } : {}), ...(options.expectedCurrentEpochId ? { expectedCurrentEpochId: options.expectedCurrentEpochId } : {}), ...(expectedBinding ? { expectedBinding } : {}) });
+            const boundary = await reservePressureCapacityOrClaimIdleAgent(options.stateRoot, options.meshId, { reservationId, victimAgentId: victim.snapshot.agent.agentId, claim: { source: "gc-pressure", reason: "Live-agent capacity required idle agent reclamation", activitySequence: victim.sequence, gcPassId: result.gcPassId, staleMs: options.gc.activityStaleMs, allowContextRetire: victim.kind === "context", ...(victim.childMinimum ? { childMinimum: victim.childMinimum } : {}) }, ...(requestedReservationId && requester ? { admission: { requestId: requestedReservationId, requesterAgentId: requester.agentId, requesterRuntimeId: requester.runtimeId, ...(requester.endpointId && requester.endpointSessionFile ? { requesterEndpointId: requester.endpointId, requesterEndpointSessionFile: requester.endpointSessionFile } : {}) } } : {}), ...(options.expectedCurrentEpochId ? { expectedCurrentEpochId: options.expectedCurrentEpochId } : {}), ...(expectedBinding ? { expectedBinding } : {}) });
             if (boundary.kind === "reserved") return boundary.reservation;
             if (boundary.kind === "stale-admission") throw new PressureAdmissionStaleError("Pressure admission is no longer processing for its current requester runtime");
             if (boundary.kind === "ineligible-victim") { attempted.add(victim.snapshot.agent.agentId); continue; }

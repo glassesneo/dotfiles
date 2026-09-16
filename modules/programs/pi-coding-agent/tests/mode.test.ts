@@ -5,44 +5,33 @@ import { join } from "node:path";
 import test from "node:test";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { registerModeController } from "../extensions_src/mode.ts";
-import { validateExecutionProfileConfig, validateModeConfig, validateModeProfileReferences } from "../extensions_src/utilities/mode_types.ts";
+import { validateExecutionConfig, validateModeConfig } from "../extensions_src/utilities/mode_types.ts";
 
-const mode = { description: "Synthetic", defaultProfile: "recon-default", tools: ["read"], skillOptIns: ["prompt-interface-design"], instructions: "Stay coherent." };
-const profiles = {
-    schemaVersion: 2,
-    profiles: {
-        "recon-default": { models: ["provider/recon", "provider/small", "provider/alternate"], thinkingLevel: "low", harness: "pi" },
-        alternate: { models: ["provider/alternate"], thinkingLevel: "high", harness: "pi" },
-        "ops-default": { models: ["provider/ops"], thinkingLevel: "high", harness: "pi" },
-        external: { models: ["cursor/fast"], harness: "cursor-agent", harnessOptions: { worktree: false, trustWorkspace: true, sandbox: "disabled", permissionPolicy: "reject", mode: "ask" } },
-    },
-} as const;
+const reconExecution = { models: ["provider/recon", "provider/small", "provider/alternate"], thinkingLevel: "low" as const, harness: "pi" as const };
+const opsExecution = { models: ["provider/ops"], thinkingLevel: "high" as const, harness: "pi" as const };
+const mode = { description: "Synthetic", execution: reconExecution, tools: ["read"], skillOptIns: ["prompt-interface-design"], instructions: "Stay coherent." };
+const opsMode = { ...mode, execution: opsExecution, tools: ["read", "write"], instructions: "Operate." };
 
-// Mechanical validation: the generated execution-profiles.json boundary rejects stale or malformed profile authority before mode and orchestration consumers use it.
-void test("schema v2 profiles require ordered valid candidates and exact external harness contracts", () => {
-    const profileConfig = validateExecutionProfileConfig(profiles);
-    assert.deepEqual(validateExecutionProfileConfig({ schemaVersion: 2, profiles: { fallback: { models: ["provider/primary", "provider/fallback"], thinkingLevel: "high", harness: "pi" } } }).profiles.fallback?.models, ["provider/primary", "provider/fallback"]);
-    const config = validateModeConfig({ schemaVersion: 2, defaultMode: "recon", modes: { recon: mode } });
-    validateModeProfileReferences(config, profileConfig);
+// Mechanical validation: agent-modes.json schema 3 requires inline Pi execution and rejects retired profile catalogs.
+void test("schema v3 modes require inline Pi execution and exact harness contracts", () => {
+    assert.deepEqual(validateExecutionConfig({ models: ["provider/primary", "provider/fallback"], thinkingLevel: "high", harness: "pi" }).models, ["provider/primary", "provider/fallback"]);
+    const config = validateModeConfig({ schemaVersion: 3, defaultMode: "recon", modes: { recon: mode } });
     assert.deepEqual(config.modes.recon, mode);
-    assert.throws(() => validateExecutionProfileConfig({ ...profiles, schemaVersion: 1 }), /Unsupported/u);
-    assert.throws(() => validateExecutionProfileConfig({ schemaVersion: 2, profiles: { legacy: { model: "provider/legacy", thinkingLevel: "high", harness: "pi" } } }), /unknown keys/u);
-    assert.throws(() => validateExecutionProfileConfig({ schemaVersion: 2, profiles: { empty: { models: [], thinkingLevel: "high", harness: "pi" } } }), /must not be empty/u);
-    assert.throws(() => validateExecutionProfileConfig({ schemaVersion: 2, profiles: { duplicate: { models: ["provider/model", "provider/model"], thinkingLevel: "high", harness: "pi" } } }), /must not contain duplicates/u);
-    assert.throws(() => validateExecutionProfileConfig({ schemaVersion: 2, profiles: { malformed: { models: ["not-a-model"], thinkingLevel: "high", harness: "pi" } } }), /provider\/model/u);
-    assert.throws(() => validateExecutionProfileConfig({ schemaVersion: 2, profiles: { cursor: { ...profiles.profiles.external, models: ["cursor/fast", "cursor/backup"] } } }), /exactly one cursor model/u);
-    assert.throws(() => validateExecutionProfileConfig({ schemaVersion: 2, profiles: { codex: { models: ["codex/model"], thinkingLevel: "high", harness: "codex", harnessOptions: { mode: "read-only", permissionPolicy: "reject", webSearch: "live" } } } }), /exact read-only cached/u);
-    assert.throws(() => validateModeConfig({ schemaVersion: 1, defaultMode: "recon", modes: { recon: mode } }), /Unsupported/u);
-    assert.throws(() => validateModeConfig({ schemaVersion: 2, defaultMode: "recon", modes: { recon: { ...mode, model: "provider/legacy" } } }), /unknown keys/u);
-    assert.throws(() => validateModeProfileReferences(validateModeConfig({ schemaVersion: 2, defaultMode: "recon", modes: { recon: { ...mode, defaultProfile: "external" } } }), profileConfig), /pi harness/u);
+    assert.throws(() => validateExecutionConfig({ model: "provider/legacy", thinkingLevel: "high", harness: "pi" }), /unknown keys/u);
+    assert.throws(() => validateExecutionConfig({ models: [], thinkingLevel: "high", harness: "pi" }), /must not be empty/u);
+    assert.throws(() => validateExecutionConfig({ models: ["provider/model", "provider/model"], thinkingLevel: "high", harness: "pi" }), /must not contain duplicates/u);
+    assert.throws(() => validateExecutionConfig({ models: ["not-a-model"], thinkingLevel: "high", harness: "pi" }), /provider\/model/u);
+    assert.throws(() => validateExecutionConfig({ models: ["cursor/fast", "cursor/backup"], harness: "cursor-agent", harnessOptions: { worktree: false, trustWorkspace: true, sandbox: "disabled", permissionPolicy: "reject", mode: "ask" } }), /exactly one cursor model/u);
+    assert.throws(() => validateExecutionConfig({ models: ["codex/model"], thinkingLevel: "high", harness: "codex", harnessOptions: { mode: "read-only", permissionPolicy: "reject", webSearch: "live" } }), /exact read-only cached/u);
+    assert.throws(() => validateModeConfig({ schemaVersion: 2, defaultMode: "recon", modes: { recon: mode } }), /Unsupported/u);
+    assert.throws(() => validateModeConfig({ schemaVersion: 3, defaultMode: "recon", modes: { recon: { ...mode, defaultProfile: "recon-default" } } }), /unknown keys/u);
+    assert.throws(() => validateModeConfig({ schemaVersion: 3, defaultMode: "recon", modes: { recon: { ...mode, execution: { models: ["cursor/fast"], harness: "cursor-agent", harnessOptions: { worktree: false, trustWorkspace: true, sandbox: "disabled", permissionPolicy: "reject", mode: "ask" } } } } }), /pi harness/u);
 });
 
 async function controllerFixture() {
     const root = await mkdtemp(join(tmpdir(), "mode-controller-"));
     const configPath = join(root, "agent-modes.json");
-    const profilePath = join(root, "execution-profiles.json");
-    await writeFile(configPath, JSON.stringify({ schemaVersion: 2, defaultMode: "recon", modes: { recon: mode, ops: { ...mode, defaultProfile: "ops-default", tools: ["read", "write"], instructions: "Operate." } } }));
-    await writeFile(profilePath, JSON.stringify(profiles));
+    await writeFile(configPath, JSON.stringify({ schemaVersion: 3, defaultMode: "recon", modes: { recon: mode, ops: opsMode } }));
     const handlers = new Map<string, (...args: any[]) => any>();
     const commands = new Map<string, { handler: (args: string, ctx: any) => Promise<void> }>();
     const entries: Array<{ type: string; data: unknown }> = [];
@@ -97,7 +86,7 @@ async function controllerFixture() {
         on: (name: string, handler: (...args: any[]) => any) => handlers.set(name, handler),
         events: { emit() {}, on() { return () => {}; } },
     } as unknown as ExtensionAPI;
-    const controller = registerModeController(pi, configPath, profilePath);
+    const controller = registerModeController(pi, configPath);
     return {
         controller, handlers, commands, entries, statuses, notices, modelCalls, sent, branch, ctx,
         get tools() { return activeTools; },
@@ -112,22 +101,17 @@ async function controllerFixture() {
     };
 }
 
-// Admitted contract: given startup and named profile selection, the parent observes the named model/thinking state while mode-owned tools remain unchanged.
-void test("startup and /profile expose named execution state without changing mode tools", async () => {
+// Admitted contract: given startup, the parent observes the active mode's inline model/thinking while that mode's tools remain unchanged.
+void test("startup applies the active mode execution without changing mode tools", async () => {
     const h = await controllerFixture();
     await h.handlers.get("session_start")?.({}, h.ctx);
     assert.equal(h.controller.activeMode(), "recon");
-    assert.equal(h.controller.activeProfile(), "recon-default");
     assert.equal(h.ctx.model.id, "recon");
     assert.equal(h.thinking, "low");
     assert.deepEqual(h.tools, ["read"]);
     assert.deepEqual(h.entries.find(entry => entry.type === "agent-mode-state")?.data, { schemaVersion: 2, mode: "recon" });
-    await h.commands.get("profile")!.handler("alternate", h.ctx);
-    assert.equal(h.controller.activeProfile(), "alternate");
-    assert.equal(h.ctx.model.id, "alternate");
-    assert.equal(h.thinking, "high");
-    assert.deepEqual(h.tools, ["read"]);
-    assert.match(h.statuses.at(-1) ?? "", /mode:recon · profile:alternate · model:provider\/alternate · fallback:0/u);
+    assert.equal(h.commands.has("profile"), false);
+    assert.match(h.statuses.at(-1) ?? "", /PARENT · mode:recon · model:provider\/recon · fallback:0/u);
 });
 
 // Admitted contract: given unavailable ordered candidates at mode application, the parent observes the first selectable candidate rather than a partial mode change.
@@ -136,11 +120,10 @@ void test("mode application preflights candidates in order and keeps rollback-vi
     h.setAvailable("recon", false);
     await h.handlers.get("session_start")?.({}, h.ctx);
     assert.equal(h.ctx.model.id, "small");
-    assert.equal(h.controller.activeProfile(), "recon-default");
     assert.equal(h.thinking, "low");
     assert.deepEqual(h.tools, ["read"]);
     const route = h.entries.at(-1)?.data as any;
-    assert.equal(route.profile, "recon-default");
+    assert.equal(route.mode, "recon");
     assert.deepEqual(route.models, ["provider/recon", "provider/small", "provider/alternate"]);
     assert.equal(route.route.activeIndex, 1);
     assert.equal(route.route.attempts[0].message, "diagnostic redacted");
@@ -189,8 +172,8 @@ void test("tool-result errors suppress only their turn and restore selections re
     assert.equal(h.sent.length, 1);
 });
 
-// Admitted contract: given exhausted fallback candidates or an explicit human model change, the parent suspends automatic routing until a named profile is applied again.
-void test("exhaustion and human model selection suspend automatic fallback until /profile reapplies it", async () => {
+// Admitted contract: given exhausted fallback candidates or an explicit human model change, the parent suspends automatic routing until the next mode apply.
+void test("exhaustion and human model selection suspend automatic fallback until /mode reapplies it", async () => {
     const h = await controllerFixture();
     await h.handlers.get("session_start")?.({}, h.ctx);
     h.setUsage({ tokens: 10_000, contextWindow: 128_000 });
@@ -204,23 +187,22 @@ void test("exhaustion and human model selection suspend automatic fallback until
     assert.equal(h.modelCalls.length, callsAfterExhaustion);
     h.setAvailable("alternate", true);
     await h.handlers.get("model_select")?.({ model: { provider: "provider", id: "recon" }, source: "set" }, h.ctx);
-    assert.equal(h.controller.activeProfile(), "custom");
     await h.handlers.get("agent_end")?.({ messages: [{ role: "assistant", stopReason: "error" }] }, h.ctx);
     await h.handlers.get("agent_settled")?.({}, h.ctx);
     assert.equal(h.sent.length, 0);
-    await h.commands.get("profile")!.handler("recon-default", h.ctx);
+    await h.commands.get("mode")!.handler("recon", h.ctx);
     await h.handlers.get("agent_end")?.({ messages: [{ role: "assistant", stopReason: "error" }] }, h.ctx);
     await h.handlers.get("agent_settled")?.({}, h.ctx);
     assert.equal(h.ctx.model.id, "alternate");
     assert.equal(h.sent.length, 1);
 });
 
-// Admitted contract: given a persisted profile candidate and a Pi session running a different model, session startup and tree restoration reselect the persisted candidate before exposing its route.
-void test("reload reconciliation reselects the persisted profile candidate", async () => {
+// Admitted contract: given a persisted execution candidate and a Pi session running a different model, session startup and tree restoration reselect the persisted candidate before exposing its route.
+void test("reload reconciliation reselects the persisted execution candidate", async () => {
     const h = await controllerFixture();
     h.branch.push(
         { type: "custom", customType: "agent-mode-state", data: { schemaVersion: 2, mode: "recon" } },
-        { type: "custom", customType: "agent-mode-profile-route", data: { schemaVersion: 1, mode: "recon", profile: "recon-default", models: [...profiles.profiles["recon-default"].models], route: { activeIndex: 2, activeModel: "provider/alternate", attempts: [] } } },
+        { type: "custom", customType: "agent-mode-execution-route", data: { schemaVersion: 1, mode: "recon", models: [...reconExecution.models], route: { activeIndex: 2, activeModel: "provider/alternate", attempts: [] } } },
     );
     await h.handlers.get("session_start")?.({}, h.ctx);
     assert.equal(h.ctx.model.id, "alternate");
@@ -237,7 +219,7 @@ void test("reload reconciliation never moves the parent model backward", async (
     h.setCurrentModel("alternate");
     h.branch.push(
         { type: "custom", customType: "agent-mode-state", data: { schemaVersion: 2, mode: "recon" } },
-        { type: "custom", customType: "agent-mode-profile-route", data: { schemaVersion: 1, mode: "recon", profile: "recon-default", models: [...profiles.profiles["recon-default"].models], route: { activeIndex: 1, activeModel: "provider/small", attempts: [] } } },
+        { type: "custom", customType: "agent-mode-execution-route", data: { schemaVersion: 1, mode: "recon", models: [...reconExecution.models], route: { activeIndex: 1, activeModel: "provider/small", attempts: [] } } },
     );
     await h.handlers.get("session_start")?.({}, h.ctx);
     assert.equal(h.ctx.model.id, "alternate");
@@ -246,6 +228,21 @@ void test("reload reconciliation never moves the parent model backward", async (
     await h.handlers.get("session_tree")?.({}, h.ctx);
     assert.equal(h.ctx.model.id, "alternate");
     assert.equal(h.modelCalls.includes("small"), false);
+});
+
+// Admission: session custom-type names are not a type-system fact; restoring a retired profile-route would apply the wrong parent execution after /profile removal.
+// Given a persisted agent-mode-profile-route for the same mode, startup applies the mode's inline execution instead of that retired candidate.
+void test("retired profile-route entries do not restore parent execution", async () => {
+    const h = await controllerFixture();
+    h.branch.push(
+        { type: "custom", customType: "agent-mode-state", data: { schemaVersion: 2, mode: "recon" } },
+        { type: "custom", customType: "agent-mode-profile-route", data: { schemaVersion: 1, mode: "recon", profile: "recon-default", models: [...reconExecution.models], route: { activeIndex: 2, activeModel: "provider/alternate", attempts: [] } } },
+    );
+    await h.handlers.get("session_start")?.({}, h.ctx);
+    assert.equal(h.controller.activeMode(), "recon");
+    assert.equal(h.ctx.model.id, "recon");
+    assert.equal(h.thinking, "low");
+    assert.equal(h.commands.has("profile"), false);
 });
 
 // Admitted contract: given shutdown while the parent waits for a promotion setModel call, no continuation is sent after Pi resolves the call.
@@ -267,8 +264,8 @@ void test("shutdown fences an in-progress parent promotion", async () => {
     assert.equal(h.sent.length, 0);
 });
 
-// Admitted contract: given a profile route persisted for the same profile name and candidate list, session restoration resumes that route; changing the candidate list discards it.
-void test("route persistence restores only compatible profile candidates", async () => {
+// Admitted contract: given an execution route persisted for the same mode and candidate list, session restoration resumes that route; changing the candidate list discards it.
+void test("route persistence restores only compatible execution candidates", async () => {
     const h = await controllerFixture();
     await h.handlers.get("session_start")?.({}, h.ctx);
     h.setUsage({ tokens: 10_000, contextWindow: 128_000 });
@@ -276,30 +273,22 @@ void test("route persistence restores only compatible profile candidates", async
     await h.handlers.get("agent_settled")?.({}, h.ctx);
     await h.handlers.get("session_tree")?.({}, h.ctx);
     assert.equal(h.ctx.model.id, "alternate");
-    const routeEntry = h.branch.findLast((entry: any) => entry.customType === "agent-mode-profile-route");
+    const routeEntry = h.branch.findLast((entry: any) => entry.customType === "agent-mode-execution-route");
     routeEntry.data.models = ["provider/recon"];
     await h.handlers.get("session_tree")?.({}, h.ctx);
     assert.equal(h.ctx.model.id, "recon");
 });
 
-void test("failed profile and mode applications roll back the complete visible state", async () => {
+void test("failed mode applications roll back the complete visible state", async () => {
     const h = await controllerFixture();
     await h.handlers.get("session_start")?.({}, h.ctx);
     h.failNextHigh();
-    await h.commands.get("profile")!.handler("alternate", h.ctx);
+    await h.commands.get("mode")!.handler("ops", h.ctx);
     assert.equal(h.controller.activeMode(), "recon");
-    assert.equal(h.controller.activeProfile(), "recon-default");
     assert.equal(h.ctx.model.id, "recon");
     assert.equal(h.thinking, "low");
     assert.deepEqual(h.tools, ["read"]);
     assert.match(h.notices.at(-1) ?? "", /thinking failed/u);
-    h.failNextHigh();
-    await h.commands.get("mode")!.handler("ops", h.ctx);
-    assert.equal(h.controller.activeMode(), "recon");
-    assert.equal(h.controller.activeProfile(), "recon-default");
-    assert.equal(h.ctx.model.id, "recon");
-    assert.equal(h.thinking, "low");
-    assert.deepEqual(h.tools, ["read"]);
 });
 
 void test("the provider boundary reasserts the explicit mode-owned tool schema", async () => {
@@ -310,12 +299,11 @@ void test("the provider boundary reasserts the explicit mode-owned tool schema",
     assert.deepEqual(h.tools, ["read"]);
 });
 
-void test("slash-like prompt content cannot invoke mode or profile commands", async () => {
+void test("slash-like prompt content cannot invoke mode commands", async () => {
     const h = await controllerFixture();
     await h.handlers.get("session_start")?.({}, h.ctx);
     const before = h.handlers.get("before_agent_start")!;
     for (const prompt of ["/mode ops", "/profile alternate", "expanded template containing /mode ops"]) await before({ prompt, systemPrompt: "base", systemPromptOptions: { skills: [] } }, h.ctx);
     assert.equal(h.controller.activeMode(), "recon");
-    assert.equal(h.controller.activeProfile(), "recon-default");
     assert.equal(h.ctx.model.id, "recon");
 });

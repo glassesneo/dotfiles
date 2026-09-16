@@ -15,7 +15,7 @@ function target(bindingId = randomUUID()) { return { endpointId: "root:synthetic
 async function json(path: string): Promise<Record<string, unknown>> { return JSON.parse(await readFile(path, "utf8")) as Record<string, unknown>; }
 async function authoritativeTask(root: string, meshId: string, input: { taskId: string; agentId: string; state: "created" | "running" | "succeeded"; completion: { endpointId: string; endpointSessionFile: string; bindingId: string } }) {
     const paths = taskPaths(root, meshId, input.taskId); await mkdir(paths.directory, { recursive: true });
-    await writeFile(paths.request, JSON.stringify({ schemaVersion: 3, meshId, agentId: input.agentId, taskId: input.taskId, prompt: "bounded", requesterEndpointId: input.completion.endpointId, completion: input.completion, createdAt }));
+    await writeFile(paths.request, JSON.stringify({ schemaVersion: 4, meshId, agentId: input.agentId, taskId: input.taskId, prompt: "bounded", purpose: "synthetic purpose", requesterEndpointId: input.completion.endpointId, completion: input.completion, createdAt }));
     await writeFile(paths.status, JSON.stringify({ schemaVersion: 1, meshId, agentId: input.agentId, taskId: input.taskId, state: input.state, createdAt, ...(input.state === "succeeded" ? { finishedAt: queuedAt } : {}) }));
 }
 

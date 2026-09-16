@@ -14,12 +14,14 @@ import { FakeMonotonicTimers, yieldToIO } from "./test_helpers.ts";
 import { availableContext, publishAgentActivity, readAgentActivity } from "../extensions_src/utilities/orchestration_activity.ts";
 import { bindAgentRuntime } from "../extensions_src/utilities/orchestration_runtime.ts";
 import { attachRootMesh, claimPendingTask, createTask, ensurePolicyEpoch, failAgent as persistAgentFailure, finishTask as persistTaskCompletion, initializeMesh, markAgentStopping, patchAgentStatus, prepareAgent, publishAgent, readAgentSnapshot, requestTaskCancellation, reserveMeshCapacity } from "../extensions_src/utilities/orchestration_store.ts";
+import { formatUsualIdentityLine, MESH_CHILD_IDENTITY_STATUS, NATURE_HANDLE_WORDS } from "../extensions_src/utilities/orchestration_identity.ts";
 
 const capabilities = { nativeScreen: true, taskDelivery: true, taskCompletion: true, taskCancellation: true, usage: true, interactiveInterventions: true, terminalHistory: true };
 const tmux = { socket: "/tmp/tmux", serverPid: "1", sessionId: "$1", sessionName: "main", windowId: "@1", paneId: "%1", windowName: "worker" };
-const syntheticRole = (name = "worker", contextPolicy: "project" | "prompt-only" = "project") => ({ selector: { agent: name, access: "read" as const }, description: `Synthetic ${name}`, tools: [], instructions: "Return the bounded result.", contextPolicy, childExtensionContributions: [] });
-const syntheticProfile = { models: ["provider/model"], thinkingLevel: "medium" as const, harness: "pi" as const };
-const syntheticCatalog = (roles: Record<string, ReturnType<typeof syntheticRole>>) => ({ schemaVersion: 6 as const, roles });
+const syntheticGc = { collectAt: 2, retain: 1, pressureFloor: 0 };
+const syntheticExecution = { models: ["provider/model"], thinkingLevel: "medium" as const, harness: "pi" as const };
+const syntheticChild = (name = "worker", extra: { contextPolicy?: "project" | "prompt-only"; execution?: typeof syntheticExecution; targets?: string[] } = {}) => ({ selector: { agent: name, access: "read" as const }, description: `Synthetic ${name}`, tools: [], instructions: "Return the bounded result.", contextPolicy: extra.contextPolicy ?? "project" as const, childExtensionContributions: [] as string[], execution: extra.execution ?? syntheticExecution, targets: extra.targets ?? [], gc: syntheticGc });
+const syntheticCatalog = (children: Record<string, ReturnType<typeof syntheticChild>>) => ({ schemaVersion: 1 as const, children });
 const budgets = { maxLiveAgents: 4, maxConcurrentTasks: 4, maxTasksPerMesh: 20 };
 
 function reverseKeyInsertionOrder(value: unknown): unknown {
@@ -29,24 +31,23 @@ function reverseKeyInsertionOrder(value: unknown): unknown {
 }
 
 async function bridgeFixture(options: { publish?: boolean; contextPolicy?: "project" | "prompt-only"; dependencies?: MeshChildBridgeDependencies; profile?: { models: string[]; thinkingLevel: "medium"; harness: "pi" }; registry?: { find(provider: string, modelId: string): { provider: string; id: string; contextWindow: number } | undefined }; currentModel?: { provider: string; id: string; contextWindow: number }; setModel?: (model: { provider: string; id: string }) => Promise<boolean> } = {}) {
-    const profile = options.profile ?? syntheticProfile;
+    const execution = options.profile ?? syntheticExecution;
     const root = await mkdtemp(join(tmpdir(), "orchestration-bridge-"));
     const mesh = await initializeMesh(root, { rootSessionId: "root", recoverable: false, budgets });
-    const worker = syntheticRole("worker", options.contextPolicy);
-    const roles = { worker };
+    const worker = syntheticChild("worker", { contextPolicy: options.contextPolicy, execution });
+    const children = { worker };
     const epoch = await ensurePolicyEpoch(root, mesh.meshId, {
         mode: "ops",
-        catalog: syntheticCatalog(roles),
-        profiles: { schemaVersion: 2 as const, profiles: { "pi-medium": profile } },
-        callPolicy: { modes: { ops: { targets: { worker: { profiles: ["pi-medium"] } } } }, roles: {} },
+        catalog: syntheticCatalog(children),
+        callPolicy: { modes: { ops: { targets: ["worker"] } } },
     });
     const reservation = await reserveMeshCapacity(root, mesh.meshId, "new-agent-task");
     const agentId = randomUUID();
-    const envelope = buildLaunchEnvelope({ meshId: mesh.meshId, agentId, epochId: epoch.epochId, role: "worker", snapshot: epoch, childExtensions: { worker: ["/popup", "/orchestration", "/bridge"] } });
-    const prepared = await prepareAgent(root, mesh.meshId, { reservationId: reservation.reservationId, agentId, role: "worker", selectedProfile: "pi-medium", harness: "pi", cwd: "/work", roleSnapshot: worker, profileSnapshot: profile, launchEnvelope: "pending", epochId: epoch.epochId, provenance: { creatorSessionId: "parent" }, capabilities });
+    const envelope = buildLaunchEnvelope({ meshId: mesh.meshId, agentId, epochId: epoch.epochId, childId: "worker", snapshot: epoch, childExtensions: { worker: ["/popup", "/orchestration", "/bridge"] } });
+    const prepared = await prepareAgent(root, mesh.meshId, { reservationId: reservation.reservationId, agentId, childId: "worker", harness: "pi", cwd: "/work", definitionSnapshot: worker, launchEnvelope: "pending", epochId: epoch.epochId, provenance: { creatorSessionId: "parent" }, capabilities });
     const envelopePath = join(prepared.paths.directory, "launch-envelope.json");
     await writeFile(envelopePath, JSON.stringify(envelope));
-    const publish = () => publishAgent(root, mesh.meshId, prepared.paths, { agentId, epochId: epoch.epochId, role: "worker", selectedProfile: "pi-medium", harness: "pi", cwd: "/work", roleSnapshot: worker, profileSnapshot: profile, launchEnvelope: envelopePath, creatorSessionId: "parent", tmux, capabilities });
+    const publish = () => publishAgent(root, mesh.meshId, prepared.paths, { agentId, epochId: epoch.epochId, childId: "worker", harness: "pi", cwd: "/work", definitionSnapshot: worker, launchEnvelope: envelopePath, creatorSessionId: "parent", tmux, capabilities });
     if (options.publish !== false) await publish();
 
     const handlers = new Map<string, (...args: any[]) => any>();
@@ -60,6 +61,7 @@ async function bridgeFixture(options: { publish?: boolean; contextPolicy?: "proj
     const delivered: string[] = [];
     const sent: Array<{ message: any; options: any }> = [];
     const selected: string[] = [];
+    const identityStatus: string[] = [];
     const pi = {
         on(name: string, handler: (...args: any[]) => any) { handlers.set(name, handler); },
         events: { on(_name: string, handler: (value: unknown) => void) { eventHandlers.push(handler); return () => {}; } },
@@ -69,13 +71,13 @@ async function bridgeFixture(options: { publish?: boolean; contextPolicy?: "proj
         setThinkingLevel() {},
     } as unknown as ExtensionAPI;
     registerMeshChildBridge(pi, { PI_MESH_ID: mesh.meshId, PI_MESH_AGENT_ID: agentId, PI_MESH_AGENT_DIR: prepared.paths.directory, PI_MESH_EPOCH_ID: epoch.epochId, PI_AGENT_RESOLVED_AGENT: envelopePath }, {
-        wake: { watch: () => ({ close() {}, on() { return this; }, unref() {} }) }, cadenceSetTimeout(callback) { intervalCallback = callback; return 1; }, cadenceClearTimeout() {}, resolveCompactionReserveTokens: () => 68, contextHeadroomTokens: 32, standaloneRuntimeBinding: true, idleClaimIntervalMs: 0, ...options.dependencies,
+        wake: { watch: () => ({ close() {}, on() { return this; }, unref() {} }) }, cadenceSetTimeout(callback) { intervalCallback = callback; return 1; }, cadenceClearTimeout() {}, resolveCompactionReserveTokens: () => 68, contextHeadroomTokens: 32, standaloneRuntimeBinding: true, idleClaimIntervalMs: 0, natureHandleWords: NATURE_HANDLE_WORDS, ...options.dependencies,
     });
     const activate = (value: unknown = envelope) => { for (const handler of eventHandlers) handler({ schemaVersion: 1, identity: envelope.identity, envelope: value }); };
-    const start = () => handlers.get("session_start")?.({}, { cwd: "/work", model: options.currentModel, sessionManager: { getSessionId: () => "child", getSessionFile: () => join(root, "child.jsonl") }, getContextUsage: () => ({ tokens: usageTokens, contextWindow: 200, percent: 49.5 }), isIdle: () => idle, hasPendingMessages: () => pendingMessages, modelRegistry: options.registry, abort() { aborts += 1; }, shutdown() { shutdowns += 1; } });
+    const start = () => handlers.get("session_start")?.({}, { cwd: "/work", model: options.currentModel, sessionManager: { getSessionId: () => "child", getSessionFile: () => join(root, "child.jsonl") }, getContextUsage: () => ({ tokens: usageTokens, contextWindow: 200, percent: 49.5 }), isIdle: () => idle, hasPendingMessages: () => pendingMessages, modelRegistry: options.registry, ui: { setStatus(id: string, text?: string) { if (id === MESH_CHILD_IDENTITY_STATUS && typeof text === "string") identityStatus.push(text); }, notify() {} }, abort() { aborts += 1; }, shutdown() { shutdowns += 1; } });
     const tick = async () => { await intervalCallback?.(); };
     const emit = async (name: string, event: unknown = {}) => { await handlers.get(name)?.(event, {}); };
-    return { root, meshId: mesh.meshId, envelope, envelopePath, prepared, agentId, activate, start, tick, emit, publish, delivered, sent, selected, setUsageTokens(value: number) { usageTokens = value; }, setIdle(value: boolean) { idle = value; }, setPendingMessages(value: boolean) { pendingMessages = value; }, get shutdowns() { return shutdowns; }, get aborts() { return aborts; } };
+    return { root, meshId: mesh.meshId, envelope, envelopePath, prepared, agentId, activate, start, tick, emit, publish, delivered, sent, selected, identityStatus, setUsageTokens(value: number) { usageTokens = value; }, setIdle(value: boolean) { idle = value; }, setPendingMessages(value: boolean) { pendingMessages = value; }, get shutdowns() { return shutdowns; }, get aborts() { return aborts; } };
 }
 
 // Admission: orchestration owns the awaited child wait while the bridge alone owns task completion; isolated wait and bridge tests cannot detect early parent-task settlement across their shared Pi lifecycle.
@@ -86,20 +88,19 @@ void test("child orchestration wait preserves the active parent task through int
     await writeFile(rootSessionFile, ""); await writeFile(childSessionFile, ""); await writeFile(grandchildSessionFile, "");
     const mesh = await initializeMesh(root, { rootSessionId: "root", rootSessionFile, recoverable: true, budgets });
     const lease = await attachRootMesh(root, mesh.meshId, { rootSessionId: "root", rootSessionFile, budgets });
-    const worker = syntheticRole("worker"); const grandchildRole = syntheticRole("grandchild");
-    const roles = { worker, grandchild: grandchildRole };
+    const worker = syntheticChild("worker", { targets: ["grandchild"] }); const grandchildRole = syntheticChild("grandchild");
+    const children = { worker, grandchild: grandchildRole };
     const epoch = await ensurePolicyEpoch(root, mesh.meshId, {
         mode: "ops",
-        catalog: syntheticCatalog(roles),
-        profiles: { schemaVersion: 2, profiles: { "pi-medium": syntheticProfile } },
-        callPolicy: { modes: { ops: { targets: { worker: { profiles: ["pi-medium"] } } } }, roles: { worker: { targets: { grandchild: { profiles: ["pi-medium"] } } }, grandchild: { targets: {} } } },
+        catalog: syntheticCatalog(children),
+        callPolicy: { modes: { ops: { targets: ["worker"] } } },
     });
     const publishChild = async (role: "worker" | "grandchild", parentAgentId?: string) => {
-        const definition = roles[role]; const reservation = await reserveMeshCapacity(root, mesh.meshId, "new-agent-task"); const agentId = randomUUID();
-        const envelope = buildLaunchEnvelope({ meshId: mesh.meshId, agentId, epochId: epoch.epochId, role, selectedProfile: "pi-medium", authorizedProfiles: ["pi-medium"], snapshot: epoch, childExtensions: { worker: ["/orchestration", "/bridge"], grandchild: ["/orchestration", "/bridge"] } });
-        const prepared = await prepareAgent(root, mesh.meshId, { reservationId: reservation.reservationId, agentId, role, selectedProfile: "pi-medium", harness: "pi", cwd: root, roleSnapshot: definition, profileSnapshot: syntheticProfile, launchEnvelope: "pending", epochId: epoch.epochId, provenance: { ...(parentAgentId ? { parentAgentId } : {}), creatorSessionId: "root" }, capabilities });
+        const definition = children[role]; const reservation = await reserveMeshCapacity(root, mesh.meshId, "new-agent-task"); const agentId = randomUUID();
+        const envelope = buildLaunchEnvelope({ meshId: mesh.meshId, agentId, epochId: epoch.epochId, childId: role, snapshot: epoch, childExtensions: { worker: ["/orchestration", "/bridge"], grandchild: ["/orchestration", "/bridge"] } });
+        const prepared = await prepareAgent(root, mesh.meshId, { reservationId: reservation.reservationId, agentId, childId: role, harness: "pi", cwd: root, definitionSnapshot: definition, launchEnvelope: "pending", epochId: epoch.epochId, provenance: { ...(parentAgentId ? { parentAgentId } : {}), creatorSessionId: "root" }, capabilities });
         const envelopePath = join(prepared.paths.directory, "launch-envelope.json"); await writeFile(envelopePath, JSON.stringify(envelope));
-        await publishAgent(root, mesh.meshId, prepared.paths, { agentId, epochId: epoch.epochId, role, selectedProfile: "pi-medium", harness: "pi", cwd: root, roleSnapshot: definition, profileSnapshot: syntheticProfile, launchEnvelope: envelopePath, creatorSessionId: "root", ...(parentAgentId ? { parentAgentId } : {}), tmux, capabilities });
+        await publishAgent(root, mesh.meshId, prepared.paths, { agentId, epochId: epoch.epochId, childId: role, harness: "pi", cwd: root, definitionSnapshot: definition, launchEnvelope: envelopePath, creatorSessionId: "root", ...(parentAgentId ? { parentAgentId } : {}), tmux, capabilities });
         return { agentId, envelope, envelopePath, directory: prepared.paths.directory };
     };
     const child = await publishChild("worker"); const grandchild = await publishChild("grandchild", child.agentId); const grandchildRuntimeId = randomUUID(); const grandchildObservedAt = new Date().toISOString();
@@ -110,9 +111,9 @@ void test("child orchestration wait preserves the active parent task through int
     await bindMeshEndpoint(root, mesh.meshId, { endpointId: `agent:${grandchild.agentId}`, kind: "agent", agentId: grandchild.agentId, harness: "pi", sessionId: "grandchild", sessionFile: grandchildSessionFile });
     const rootEndpoint = await bindMeshEndpoint(root, mesh.meshId, { endpointId: `root:${mesh.meshId}`, kind: "root", harness: "pi", sessionId: "root", sessionFile: rootSessionFile });
     let parentTask!: Awaited<ReturnType<typeof createTask>>;
-    const configPath = join(root, "orchestration.json"); const catalogPath = join(root, "catalog.json"); const profilePath = join(root, "profiles.json"); const modePath = join(root, "modes.json");
-    await writeFile(configPath, JSON.stringify({ schemaVersion: 5, stateRoot: root, tmux: "/tmux", returnParentCommand: "/parent", parentNavigationHint: "parent", historyViewerExtension: "/history", popupExtension: "/popup", orchestrationExtension: "/orchestration", childBridgeExtension: "/bridge", harnesses: { pi: { adapter: "pi-native", command: "/pi" } }, natureHandleWords: ["May"], callPolicy: { modes: { ops: { targets: { worker: { profiles: ["pi-medium"] } } } }, roles: { worker: { targets: { grandchild: { profiles: ["pi-medium"] } } }, grandchild: { targets: {} } } }, budgets, gc: { contextHeadroomTokens: 32, periodicIntervalMs: 5000, activityHeartbeatMs: 2000, activityStaleMs: 10000, roles: { worker: { collectAt: 2, retain: 1, pressureFloor: 0 }, grandchild: { collectAt: 2, retain: 1, pressureFloor: 0 } } } }));
-    await writeFile(catalogPath, JSON.stringify(syntheticCatalog(roles))); await writeFile(profilePath, JSON.stringify({ schemaVersion: 2, profiles: { "pi-medium": syntheticProfile } })); await writeFile(modePath, JSON.stringify({ schemaVersion: 2, defaultMode: "ops", modes: { ops: { description: "ops", defaultProfile: "pi-medium", tools: [], skillOptIns: [], instructions: "Use ops." } } }));
+    const configPath = join(root, "orchestration.json"); const catalogPath = join(root, "catalog.json"); const modePath = join(root, "modes.json");
+    await writeFile(configPath, JSON.stringify({ schemaVersion: 6, stateRoot: root, tmux: "/tmux", returnParentCommand: "/parent", parentNavigationHint: "parent", historyViewerExtension: "/history", popupExtension: "/popup", orchestrationExtension: "/orchestration", childBridgeExtension: "/bridge", harnesses: { pi: { adapter: "pi-native", command: "/pi" } }, natureHandleWords: ["May"], callPolicy: { modes: { ops: { targets: ["worker"] } } }, budgets, gc: { contextHeadroomTokens: 32, periodicIntervalMs: 5000, activityHeartbeatMs: 2000, activityStaleMs: 10000 } }));
+    await writeFile(catalogPath, JSON.stringify(syntheticCatalog(children))); await writeFile(modePath, JSON.stringify({ schemaVersion: 3, defaultMode: "ops", modes: { ops: { description: "ops", execution: syntheticExecution, tools: [], skillOptIns: [], instructions: "Use ops." } } }));
 
     class IntegratedPi {
         readonly tools = new Map<string, any>(); readonly handlers = new Map<string, Array<(...args: any[]) => unknown>>(); readonly eventHandlers = new Map<string, Array<(value: unknown) => unknown>>();
@@ -126,22 +127,22 @@ void test("child orchestration wait preserves the active parent task through int
     const clock = new FakeMonotonicTimers(); clock.now = Date.now(); let finishes = 0; const pi = new IntegratedPi(); const signal = new AbortController();
     const ctx = { cwd: root, sessionManager: { getSessionId: () => "child", getSessionFile: () => childSessionFile, getBranch: () => [] }, ui: { setStatus() {}, notify() {} }, isIdle: () => false, hasPendingMessages: () => false, signal: signal.signal, getContextUsage: () => ({ tokens: 10, contextWindow: 100_000, percent: 0.01 }), modelRegistry: { find: () => ({ provider: "provider", id: "model", contextWindow: 100_000 }) }, shutdown() {}, abort() {} } as never;
     const env = { PI_MESH_ID: mesh.meshId, PI_MESH_AGENT_ID: child.agentId, PI_MESH_AGENT_DIR: child.directory, PI_MESH_EPOCH_ID: epoch.epochId, PI_AGENT_RESOLVED_AGENT: child.envelopePath };
-    await registerOrchestration(pi as never, { configPath, catalogPath, profilePath, modePath, env, now: () => clock.now, setInterval: clock.setTimeout, clearInterval: clock.clearTimeout, wake: { watch: () => ({ close() {}, on() { return this; }, unref() {} }) } });
+    await registerOrchestration(pi as never, { configPath, catalogPath, modePath, env, now: () => clock.now, setInterval: clock.setTimeout, clearInterval: clock.clearTimeout, wake: { watch: () => ({ close() {}, on() { return this; }, unref() {} }) } });
     registerMeshChildBridge(pi as never, env, { now: () => clock.now, resolveCompactionReserveTokens: () => 68, cadenceSetTimeout: clock.setTimeout, cadenceClearTimeout: clock.clearTimeout, wake: { watch: () => ({ close() {}, on() { return this; }, unref() {} }) }, finishTask: async (...args) => { if (args[2] === parentTask.request.taskId) finishes += 1; return persistTaskCompletion(...args); } });
     const invoke = async (name: string, event: unknown = {}) => { for (const handler of pi.handlers.get(name) ?? []) await handler(event, ctx); };
     const consume = async () => { const messages = pi.messages.splice(0).map(item => item.message); await invoke("context", { messages }); return messages; };
     await invoke("session_start");
     const readyChild = await readAgentSnapshot(root, mesh.meshId, child.agentId); assert.equal(readyChild.status.state, "idle", readyChild.status.exitReason);
-    parentTask = await createTask(root, mesh.meshId, child.agentId, "coordinate grandchild", { requesterEndpointId: rootEndpoint.endpointId, completion: { endpointId: rootEndpoint.endpointId, endpointSessionFile: rootEndpoint.sessionFile, bindingId: rootEndpoint.bindingId } });
+    parentTask = await createTask(root, mesh.meshId, child.agentId, { prompt: "coordinate grandchild", purpose: "synthetic purpose" }, { requesterEndpointId: rootEndpoint.endpointId, completion: { endpointId: rootEndpoint.endpointId, endpointSessionFile: rootEndpoint.sessionFile, bindingId: rootEndpoint.bindingId } });
     await clock.advance(3_000);
     assert.deepEqual(pi.delivered, ["coordinate grandchild"]); await invoke("before_agent_start", { prompt: "coordinate grandchild" }); await invoke("agent_start");
-    const delegated = await pi.tools.get("mesh_send")!.execute("delegate-grandchild", { agentId: grandchild.agentId, message: "inspect dependency" }, undefined, undefined, ctx); const grandchildTaskId = JSON.parse(delegated.content[0].text).taskId as string;
+    const delegated = await pi.tools.get("mesh_send")!.execute("delegate-grandchild", { agentId: grandchild.agentId, purpose: "inspect dependency", message: "inspect dependency" }, undefined, undefined, ctx); const grandchildTaskId = JSON.parse(delegated.content[0].text).taskId as string;
     await pi.tools.get("mesh_wait")!.execute("arm", {}, undefined, undefined, ctx);
     await invoke("message_end", { message: { role: "assistant", content: [{ type: "text", text: "waiting" }], stopReason: "stop" } });
     let firstEndResolved = false; const firstEnd = invoke("agent_end", { messages: [{ role: "assistant", stopReason: "stop" }] }).then(() => { firstEndResolved = true; }); await yieldToIO();
     assert.equal(firstEndResolved, false); assert.equal(finishes, 0); assert.equal((await readAgentSnapshot(root, mesh.meshId, child.agentId)).status.activeTaskId, parentTask.request.taskId);
-    const parentCaller: ActiveCaller = { identity: "mode:ops", meshId: mesh.meshId, epoch, catalog: syntheticCatalog(roles), endpointId: rootEndpoint.endpointId, sessionFile: rootSessionFile };
-    const intervention = await createMeshSendTool({ configPath, catalogPath, profilePath, modePath, env: {}, exec: pi.exec, activeCaller: () => parentCaller }, { worker }, { worker: ["pi-medium"] }).execute("parent-intervention", { agentId: child.agentId, message: "include the urgent constraint" }, undefined, undefined, ctx);
+    const parentCaller: ActiveCaller = { identity: "mode:ops", meshId: mesh.meshId, epoch, catalog: syntheticCatalog(children), endpointId: rootEndpoint.endpointId, sessionFile: rootSessionFile };
+    const intervention = await createMeshSendTool({ configPath, catalogPath, modePath, env: {}, exec: pi.exec, activeCaller: () => parentCaller }, { worker }).execute("parent-intervention", { agentId: child.agentId, message: "include the urgent constraint" }, undefined, undefined, ctx);
     assert.equal((intervention.details as any).disposition, "intervened"); assert.equal((intervention.details as any).taskId, parentTask.request.taskId);
     await clock.advance(2_000); await firstEnd; assert.equal(finishes, 0); const interventionMessages = await consume(); assert.equal((interventionMessages[0] as any).details.payload.taskId, parentTask.request.taskId);
     await invoke("message_end", { message: { role: "assistant", content: [{ type: "text", text: "still waiting" }], stopReason: "stop" } });
@@ -215,7 +216,7 @@ void test("Pi child shutdown fences in-flight and stale cadence callbacks", asyn
     } });
     fixture.activate(); await fixture.start();
     assert.equal(claims, 1);
-    const task = await createTask(fixture.root, fixture.meshId, fixture.agentId, "claim during shutdown", `root:${fixture.meshId}`);
+    const task = await createTask(fixture.root, fixture.meshId, fixture.agentId, { prompt: "claim during shutdown", purpose: "synthetic purpose" }, `root:${fixture.meshId}`);
     const stale = clock.captureNextCallback()!;
     const advancing = clock.advance(3000); await inFlight;
     const shutdown = fixture.emit("session_shutdown", { reason: "reload" }); await yieldToIO();
@@ -284,7 +285,7 @@ void test("stalled completion persistence shuts down the settled child after a b
     } });
     fixture.activate();
     await fixture.start();
-    await createTask(fixture.root, fixture.meshId, fixture.agentId, "complete before store failure", `root:${fixture.meshId}`);
+    await createTask(fixture.root, fixture.meshId, fixture.agentId, { prompt: "complete before store failure", purpose: "synthetic purpose" }, `root:${fixture.meshId}`);
     await fixture.tick();
     await fixture.emit("before_agent_start", { prompt: "complete before store failure" });
     await fixture.emit("agent_start");
@@ -300,7 +301,7 @@ void test("stalled completion persistence shuts down the settled child after a b
 void test("Pi child task-inbox wake immediately runs the idempotent claim pass and closes", async () => {
     const clock = new FakeMonotonicTimers(); clock.now = Date.now(); let changed: ((event: string, filename: string | Buffer | null) => void) | undefined; let closed = 0;
     const fixture = await bridgeFixture({ dependencies: { now: () => clock.now, idleClaimIntervalMs: 3000, cadenceSetTimeout: clock.setTimeout, cadenceClearTimeout: clock.clearTimeout, wake: { watch: (_path, _options, listener) => { changed = listener; return { close() { closed += 1; }, on() { return this; }, unref() {} }; }, setTimeout: clock.setTimeout, clearTimeout: clock.clearTimeout } } });
-    fixture.activate(); await fixture.start(); await createTask(fixture.root, fixture.meshId, fixture.agentId, "wake task", `root:${fixture.meshId}`); changed!("change", "task.json"); await clock.advance(10); assert.deepEqual(fixture.delivered, ["wake task"]); await fixture.emit("session_shutdown", { reason: "reload" }); assert.equal(closed, 1); assert.equal(clock.pendingCount, 0);
+    fixture.activate(); await fixture.start(); await createTask(fixture.root, fixture.meshId, fixture.agentId, { prompt: "wake task", purpose: "synthetic purpose" }, `root:${fixture.meshId}`); changed!("change", "task.json"); await clock.advance(10); assert.deepEqual(fixture.delivered, ["wake task"]); await fixture.emit("session_shutdown", { reason: "reload" }); assert.equal(closed, 1); assert.equal(clock.pendingCount, 0);
 });
 
 // Admission: child claim cadence is repository-owned state behavior; types cannot distinguish an idle full-store claim from an active cancellation probe.
@@ -309,7 +310,7 @@ void test("Pi child separates idle task claims from active cancellation cadence"
     const clock = new FakeMonotonicTimers(); clock.now = Date.now();
     const fixture = await bridgeFixture({ dependencies: { now: () => clock.now, idleClaimIntervalMs: 3000, cadenceSetTimeout: clock.setTimeout, cadenceClearTimeout: clock.clearTimeout } });
     fixture.activate(); await fixture.start();
-    const task = await createTask(fixture.root, fixture.meshId, fixture.agentId, "cadenced task", `root:${fixture.meshId}`);
+    const task = await createTask(fixture.root, fixture.meshId, fixture.agentId, { prompt: "cadenced task", purpose: "synthetic purpose" }, `root:${fixture.meshId}`);
     await clock.advance(2999); assert.deepEqual(fixture.delivered, []);
     await clock.advance(1); assert.deepEqual(fixture.delivered, ["cadenced task"]); assert.equal(clock.nextDelay(), 100);
     await requestTaskCancellation(fixture.root, fixture.meshId, task.request.taskId, "cadence cancellation");
@@ -322,7 +323,7 @@ void test("Pi child tasks preserve completion, cancellation, and failure outcome
     fixture.activate();
     await fixture.start();
 
-    const complete = await createTask(fixture.root, fixture.meshId, fixture.agentId, "complete", `root:${fixture.meshId}`);
+    const complete = await createTask(fixture.root, fixture.meshId, fixture.agentId, { prompt: "complete", purpose: "synthetic purpose" }, `root:${fixture.meshId}`);
     await fixture.tick();
     assert.deepEqual(fixture.delivered, ["complete"]);
     await fixture.emit("before_agent_start", { prompt: "complete" });
@@ -333,14 +334,14 @@ void test("Pi child tasks preserve completion, cancellation, and failure outcome
     assert.equal(completed.task?.result?.outcome, "succeeded");
     assert.equal(completed.task?.result?.output, "done");
 
-    const cancel = await createTask(fixture.root, fixture.meshId, fixture.agentId, "cancel", `root:${fixture.meshId}`);
+    const cancel = await createTask(fixture.root, fixture.meshId, fixture.agentId, { prompt: "cancel", purpose: "synthetic purpose" }, `root:${fixture.meshId}`);
     await fixture.tick();
     await requestTaskCancellation(fixture.root, fixture.meshId, cancel.request.taskId, "caller cancelled");
     await fixture.tick();
     const cancelled = await readAgentSnapshot(fixture.root, fixture.meshId, fixture.agentId, cancel.request.taskId);
     assert.equal(cancelled.task?.result?.outcome, "stopped");
 
-    const fail = await createTask(fixture.root, fixture.meshId, fixture.agentId, "fail", `root:${fixture.meshId}`);
+    const fail = await createTask(fixture.root, fixture.meshId, fixture.agentId, { prompt: "fail", purpose: "synthetic purpose" }, `root:${fixture.meshId}`);
     await fixture.tick();
     await fixture.emit("before_agent_start", { prompt: "fail" });
     await fixture.emit("agent_start");
@@ -351,6 +352,51 @@ void test("Pi child tasks preserve completion, cancellation, and failure outcome
     assert.match(failedTask.task?.result?.error ?? "", /fallback exhausted/u);
     assert.doesNotMatch(failedTask.task?.result?.error ?? "", /model failed/u);
     assert.equal(failedTask.status.state, "failed");
+});
+
+// Admission: Pi child usual status is the live identity a user reads in the child terminal; session_start-only projection leaves reused purpose/state as the first task, and types cannot observe setStatus.
+// Given two successive tasks on a live Pi child, when claim and settlement cross the existing bridge hooks, the status consumer observes the current purpose and textual agent state.
+void test("Pi child usual status refreshes purpose and textual state across task reuse", async () => {
+    const fixture = await bridgeFixture();
+    fixture.activate();
+    await fixture.start();
+    const idle = await readAgentSnapshot(fixture.root, fixture.meshId, fixture.agentId);
+    assert.equal(fixture.identityStatus.at(-1), formatUsualIdentityLine(idle, NATURE_HANDLE_WORDS));
+    assert.match(fixture.identityStatus.at(-1) ?? "", /Idle/u);
+    assert.doesNotMatch(fixture.identityStatus.at(-1) ?? "", /first purpose|second purpose/u);
+
+    const first = await createTask(fixture.root, fixture.meshId, fixture.agentId, { prompt: "first", purpose: "first purpose" }, `root:${fixture.meshId}`);
+    await fixture.tick();
+    const runningFirst = await readAgentSnapshot(fixture.root, fixture.meshId, fixture.agentId, first.request.taskId);
+    assert.equal(fixture.identityStatus.at(-1), formatUsualIdentityLine(runningFirst, NATURE_HANDLE_WORDS));
+    assert.match(fixture.identityStatus.at(-1) ?? "", /first purpose/u);
+    assert.match(fixture.identityStatus.at(-1) ?? "", /Running/u);
+    await fixture.emit("before_agent_start", { prompt: "first" });
+    await fixture.emit("agent_start");
+    await fixture.emit("message_end", { message: { role: "assistant", content: [{ type: "text", text: "first done" }], stopReason: "stop" } });
+    await fixture.emit("agent_settled");
+    const idleFirst = await readAgentSnapshot(fixture.root, fixture.meshId, fixture.agentId);
+    assert.equal(fixture.identityStatus.at(-1), formatUsualIdentityLine(idleFirst, NATURE_HANDLE_WORDS));
+    assert.match(fixture.identityStatus.at(-1) ?? "", /first purpose/u);
+    assert.match(fixture.identityStatus.at(-1) ?? "", /Idle/u);
+
+    const second = await createTask(fixture.root, fixture.meshId, fixture.agentId, { prompt: "second", purpose: "second purpose" }, `root:${fixture.meshId}`);
+    await fixture.tick();
+    const runningSecond = await readAgentSnapshot(fixture.root, fixture.meshId, fixture.agentId, second.request.taskId);
+    assert.equal(fixture.identityStatus.at(-1), formatUsualIdentityLine(runningSecond, NATURE_HANDLE_WORDS));
+    assert.match(fixture.identityStatus.at(-1) ?? "", /second purpose/u);
+    assert.doesNotMatch(fixture.identityStatus.at(-1) ?? "", /first purpose/u);
+    assert.match(fixture.identityStatus.at(-1) ?? "", /Running/u);
+    await fixture.emit("before_agent_start", { prompt: "second" });
+    await fixture.emit("agent_start");
+    await fixture.emit("message_end", { message: { role: "assistant", content: [{ type: "text", text: "second done" }], stopReason: "stop" } });
+    await fixture.emit("agent_settled");
+    const idleSecond = await readAgentSnapshot(fixture.root, fixture.meshId, fixture.agentId);
+    assert.equal(fixture.identityStatus.at(-1), formatUsualIdentityLine(idleSecond, NATURE_HANDLE_WORDS));
+    assert.match(fixture.identityStatus.at(-1) ?? "", /second purpose/u);
+    assert.doesNotMatch(fixture.identityStatus.at(-1) ?? "", /first purpose/u);
+    assert.match(fixture.identityStatus.at(-1) ?? "", /Idle/u);
+    await fixture.emit("session_shutdown", { reason: "reload" });
 });
 
 void test("idle child turns aggregate both assistant and mesh tool-result usage", async () => {
@@ -375,7 +421,7 @@ function registryWindows(windows: Record<string, number>) {
 }
 
 async function claimAndStart(fixture: Awaited<ReturnType<typeof bridgeFixture>>, prompt: string) {
-    const task = await createTask(fixture.root, fixture.meshId, fixture.agentId, prompt, `root:${fixture.meshId}`);
+    const task = await createTask(fixture.root, fixture.meshId, fixture.agentId, { prompt, purpose: "synthetic purpose" }, `root:${fixture.meshId}`);
     await fixture.tick();
     await fixture.emit("before_agent_start", { prompt });
     await fixture.emit("agent_start");
@@ -546,7 +592,7 @@ void test("route persistence rejection fails the active task without continuatio
     assert.equal(failed.task?.result?.usage.totalTokens, 2);
     assert.equal(failed.status.state, "failed");
     assert.equal(failed.status.activeTaskId, undefined);
-    await assert.rejects(createTask(fixture.root, fixture.meshId, fixture.agentId, "must not accept", `root:${fixture.meshId}`), /not accepting|failed|idle/iu);
+    await assert.rejects(createTask(fixture.root, fixture.meshId, fixture.agentId, { prompt: "must not accept", purpose: "synthetic purpose" }, `root:${fixture.meshId}`), /not accepting|failed|idle/iu);
 });
 
 // Admission: cancellation lookup failure after route persistence rejection is a repository-owned exception boundary; types cannot observe an escaped settlement that leaves durable work busy.
@@ -609,7 +655,7 @@ void test("cancellation takes precedence over route persistence rejection", asyn
     assert.equal(fixture.sent.length, 0);
     assert.equal(stopped.status.state, "stopped");
     assert.equal(stopped.status.activeTaskId, undefined);
-    await assert.rejects(createTask(fixture.root, fixture.meshId, fixture.agentId, "must not reuse stopped agent", `root:${fixture.meshId}`), /not accepting|stopped|idle/iu);
+    await assert.rejects(createTask(fixture.root, fixture.meshId, fixture.agentId, { prompt: "must not reuse stopped agent", purpose: "synthetic purpose" }, `root:${fixture.meshId}`), /not accepting|stopped|idle/iu);
 });
 
 // Admission: cancellation can become durable after retirement is queued; a captured pre-finish disposition cannot safely determine the terminal agent state.
@@ -644,7 +690,7 @@ void test("durable completion outcome determines queued promotion retirement", a
     assert.equal(stopped.status.state, "stopped");
     assert.equal(stopped.status.activeTaskId, undefined);
     assert.equal(fixture.sent.length, 0);
-    await assert.rejects(createTask(fixture.root, fixture.meshId, fixture.agentId, "must not reuse late-stopped agent", `root:${fixture.meshId}`), /not accepting|stopped|idle/iu);
+    await assert.rejects(createTask(fixture.root, fixture.meshId, fixture.agentId, { prompt: "must not reuse late-stopped agent", purpose: "synthetic purpose" }, `root:${fixture.meshId}`), /not accepting|stopped|idle/iu);
 });
 
 // Admission: finishTask-to-failAgent is a repository-owned child lifecycle; types cannot observe swallowed retirement that republishes idle and pumps new work.
@@ -681,12 +727,12 @@ void test("failAgent rejection after route-persistence completion shuts down wit
     assert.equal(snapshot.task?.result?.usage.totalTokens, 2);
     assert.equal(snapshot.activity.acceptingTask, false);
     assert.notEqual(snapshot.status.state, "busy");
-    await assert.rejects(createTask(fixture.root, fixture.meshId, fixture.agentId, "must not pump", `root:${fixture.meshId}`), /not accepting|failed|runtime|idle/iu);
+    await assert.rejects(createTask(fixture.root, fixture.meshId, fixture.agentId, { prompt: "must not pump", purpose: "synthetic purpose" }, `root:${fixture.meshId}`), /not accepting|failed|runtime|idle/iu);
     await fixture.tick();
     assert.deepEqual(fixture.delivered, ["retire reject"]);
     assert.equal(fixture.sent.length, 0);
     await fixture.emit("session_shutdown", { reason: "quit" });
-    await assert.rejects(createTask(fixture.root, fixture.meshId, fixture.agentId, "must not reuse", `root:${fixture.meshId}`), /not accepting|failed|runtime|idle/iu);
+    await assert.rejects(createTask(fixture.root, fixture.meshId, fixture.agentId, { prompt: "must not reuse", purpose: "synthetic purpose" }, `root:${fixture.meshId}`), /not accepting|failed|runtime|idle/iu);
     await fixture.tick();
     assert.deepEqual(fixture.delivered, ["retire reject"]);
 });
@@ -758,7 +804,7 @@ void test("runtime exhaustion retains retirement through transient persistence f
     await fixture.emit("agent_settled");
     assert.equal(retirementAttempts, 2);
     assert.deepEqual(fixture.delivered, ["transient exhaustion retirement"]);
-    await assert.rejects(createTask(fixture.root, fixture.meshId, fixture.agentId, "must not enter retry window", `root:${fixture.meshId}`), /not accepting|runtime|idle/iu);
+    await assert.rejects(createTask(fixture.root, fixture.meshId, fixture.agentId, { prompt: "must not enter retry window", purpose: "synthetic purpose" }, `root:${fixture.meshId}`), /not accepting|runtime|idle/iu);
     await fixture.tick();
     const recovered = await readAgentSnapshot(fixture.root, fixture.meshId, fixture.agentId, task.request.taskId);
     assert.equal(retirementAttempts, 3);
@@ -795,7 +841,7 @@ void test("runtime exhaustion retirement rejection reaches bounded shutdown", as
     assert.equal(failed.task?.result?.outcome, "failed");
     assert.equal(failed.activity.acceptingTask, false);
     assert.deepEqual(fixture.delivered, ["permanent exhaustion retirement"]);
-    await assert.rejects(createTask(fixture.root, fixture.meshId, fixture.agentId, "must not enter shutdown window", `root:${fixture.meshId}`), /not accepting|runtime|idle/iu);
+    await assert.rejects(createTask(fixture.root, fixture.meshId, fixture.agentId, { prompt: "must not enter shutdown window", purpose: "synthetic purpose" }, `root:${fixture.meshId}`), /not accepting|runtime|idle/iu);
     await fixture.tick();
     assert.deepEqual(fixture.delivered, ["permanent exhaustion retirement"]);
 });
@@ -815,5 +861,5 @@ void test("runtime exhaustion fails the active task and the agent", async () => 
     assert.equal(failed.task?.result?.outcome, "failed");
     assert.match(failed.task?.result?.error ?? "", /fallback exhausted/u);
     assert.equal(failed.status.state, "failed");
-    await assert.rejects(createTask(fixture.root, fixture.meshId, fixture.agentId, "must not accept", `root:${fixture.meshId}`), /not accepting|failed|idle/iu);
+    await assert.rejects(createTask(fixture.root, fixture.meshId, fixture.agentId, { prompt: "must not accept", purpose: "synthetic purpose" }, `root:${fixture.meshId}`), /not accepting|failed|idle/iu);
 });

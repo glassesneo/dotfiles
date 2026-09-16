@@ -29,7 +29,7 @@ async function persistTask(root: string, meshId: string, input: { endpointId: st
     const endpoint = JSON.parse(await readFile(join(meshDirectory(root, meshId), "endpoints", `${endpointKey}.json`), "utf8")) as { bindingId: string };
     const completion = input.completion ?? { endpointId: input.endpointId, endpointSessionFile: "/root.jsonl", bindingId: endpoint.bindingId };
     await mkdir(paths.directory, { recursive: true });
-    await writeFile(paths.request, JSON.stringify({ schemaVersion: input.schemaVersion ?? 3, meshId, agentId, taskId, prompt: "bounded", requesterEndpointId: input.endpointId, completion, createdAt }));
+    await writeFile(paths.request, JSON.stringify({ schemaVersion: input.schemaVersion ?? 4, meshId, agentId, taskId, prompt: "bounded", ...(input.schemaVersion === 2 ? {} : { purpose: "synthetic purpose" }), requesterEndpointId: input.endpointId, completion, createdAt }));
     await writeFile(paths.status, JSON.stringify({ schemaVersion: 1, meshId, agentId, taskId, state: input.state, createdAt, ...(input.state === "created" ? {} : { finishedAt: new Date().toISOString() }) }));
     await indexTaskSubmission(root, meshId, { agentId, taskId, createdAt, completion: completion as { endpointId: string; endpointSessionFile: string; bindingId: string } });
     if (input.state !== "created") await indexTerminalTransition(root, meshId, { agentId, taskId, queuedAt: createdAt, completion: completion as { endpointId: string; endpointSessionFile: string; bindingId: string } });

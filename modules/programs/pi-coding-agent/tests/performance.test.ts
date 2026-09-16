@@ -104,9 +104,9 @@ const taskOther = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
 async function addMeshTask(stateRoot: string, input: { meshId: string; agentId: string; agent: string; taskId: string; start: string; finish?: string; usageCapability?: boolean }): Promise<void> {
     const mesh = join(stateRoot, "meshes", input.meshId); const task = join(mesh, "tasks", input.taskId); const agent = join(mesh, "agents", input.agentId);
     await mkdir(task, { recursive: true }); await mkdir(agent, { recursive: true });
-    await writeFile(join(agent, "agent.json"), JSON.stringify({ schemaVersion: 6, meshId: input.meshId, agentId: input.agentId, role: input.agent, capabilities: { usage: input.usageCapability ?? true } }));
+    await writeFile(join(agent, "agent.json"), JSON.stringify({ schemaVersion: 7, meshId: input.meshId, agentId: input.agentId, childId: input.agent, capabilities: { usage: input.usageCapability ?? true } }));
     await writeFile(join(agent, "events.jsonl"), "");
-    await writeFile(join(task, "request.json"), JSON.stringify({ schemaVersion: 3, meshId: input.meshId, agentId: input.agentId, taskId: input.taskId, prompt: "measure this task", requesterEndpointId: `root:${input.meshId}`, createdAt: input.start }));
+    await writeFile(join(task, "request.json"), JSON.stringify({ schemaVersion: 4, meshId: input.meshId, agentId: input.agentId, taskId: input.taskId, prompt: "measure this task", purpose: "synthetic purpose", requesterEndpointId: `root:${input.meshId}`, createdAt: input.start }));
     await writeFile(join(task, "status.json"), JSON.stringify({ schemaVersion: 1, meshId: input.meshId, agentId: input.agentId, taskId: input.taskId, state: input.finish ? "succeeded" : "running", createdAt: input.start, startedAt: input.start, ...(input.finish ? { finishedAt: input.finish } : {}) }));
     if (input.finish) await writeFile(join(task, "result.json"), JSON.stringify({ schemaVersion: 1, meshId: input.meshId, agentId: input.agentId, taskId: input.taskId, outcome: "succeeded", output: "", usage: { input: 7, output: 2, cacheRead: 3, cacheWrite: 0, totalTokens: 12, cost: { input: 1, output: 1, cacheRead: 1, cacheWrite: 0, total: 3 } }, turns: 2, interventions: [], startedAt: input.start, finishedAt: input.finish }));
 }

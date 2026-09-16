@@ -1,6 +1,18 @@
-import { CURSOR_READ_HARNESS_OPTIONS, CURSOR_WRITE_HARNESS_OPTIONS, type ExecutionProfile } from "./mode_types.ts";
+import { CURSOR_READ_HARNESS_OPTIONS, CURSOR_WRITE_HARNESS_OPTIONS, type ExecutionConfig } from "./mode_types.ts";
 import { CodexAcpDriver } from "./orchestration_codex_acp.ts";
 import { CursorAcpDriver } from "./orchestration_cursor_acp.ts";
+
+export const UNCONFIRMED_TERMINATION = "unconfirmed-termination";
+export class UnconfirmedTerminationError extends Error {
+    readonly code = UNCONFIRMED_TERMINATION;
+    constructor(message: string) {
+        super(message);
+        this.name = "UnconfirmedTerminationError";
+    }
+}
+export function isUnconfirmedTermination(error: unknown): error is UnconfirmedTerminationError {
+    return error instanceof UnconfirmedTerminationError || error instanceof Error && (error as { code?: unknown }).code === UNCONFIRMED_TERMINATION;
+}
 
 export type ExternalWorkerEvent =
     | { type: "state"; text: string }
@@ -9,7 +21,16 @@ export type ExternalWorkerEvent =
     | { type: "tool"; text: string }
     | { type: "permission"; text: string };
 export interface ExternalTaskResult { output: string; stopReason: string }
-export interface ExternalDriver { start(): Promise<void>; runTask(prompt: string): Promise<ExternalTaskResult>; cancel(): Promise<void>; partialOutput?(): string; shutdown(): Promise<void>; waitForClose(): Promise<Error>; fatalError(): Error | undefined }
+export interface ExternalDriver {
+    start(): Promise<void>;
+    runTask(prompt: string): Promise<ExternalTaskResult>;
+    cancel(): Promise<void>;
+    partialOutput?(): string;
+    shutdown(): Promise<void>;
+    waitForClose(): Promise<Error>;
+    fatalError(): Error | undefined;
+    exitObserved(): boolean;
+}
 
 export interface CursorExternalWorkerConfig { adapter: "cursor-acp"; command: string; cwd: string; expectedAcpModelId: string; mode: "ask" | "agent"; permissionPolicy: "reject" | "allow-always" }
 export interface CodexExternalWorkerConfig { adapter: "codex-acp"; command: string; cwd: string; mode: "read-only"; permissionPolicy: "reject"; webSearch: "cached" }
@@ -53,7 +74,7 @@ function exactHarnessOptions(actual: Record<string, unknown> | undefined, expect
     return Object.entries(expected).every(([key, value]) => actual[key] === value);
 }
 
-export function resolveExternalDriver(config: ExternalWorkerConfig, profile: ExecutionProfile): ExternalDriverRoute {
+export function resolveExternalDriver(config: ExternalWorkerConfig, profile: ExecutionConfig): ExternalDriverRoute {
     if (config.adapter === "cursor-acp") {
         if (profile.harness !== "cursor-agent" || profile.models.length !== 1 || !profile.models[0]!.startsWith("cursor/") || profile.thinkingLevel !== undefined) throw new Error("cursor-acp requires a Cursor selected execution profile");
         const expected = config.mode === "ask" ? CURSOR_READ_HARNESS_OPTIONS : CURSOR_WRITE_HARNESS_OPTIONS;

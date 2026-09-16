@@ -188,14 +188,6 @@
       };
     };
   };
-  profileType = delib.submodule {
-    options = with delib; {
-      models = noDefault (listOfOption str []);
-      thinkingLevel = allowNull (enumOption ["off" "minimal" "low" "medium" "high" "xhigh" "max"] null);
-      harness = enumOption ["pi" "cursor-agent" "codex"] "pi";
-      harnessOptions = attrsOfOption lib.types.anything {};
-    };
-  };
   packageContributionType = delib.submodule {
     options = with delib; {
       enabled = boolOption true;
@@ -214,7 +206,6 @@ in
         emergency = submoduleOption {
           options.enable = boolOption true;
         } {};
-        profiles = attrsOfOption profileType {};
         cursorAcpModelIds = attrsOfOption str {};
         packageContributions = attrsOfOption packageContributionType {};
         defaultExtensions = readOnly (listOfOption str [
@@ -245,78 +236,6 @@ in
               else [];
           };
         };
-        profiles = lib.mapAttrs (_: profile: lib.mapAttrs (_: lib.mkDefault) profile) {
-          recon-default = {
-            models = ["openai-codex/gpt-6-astra"];
-            thinkingLevel = "medium";
-          };
-          ops-default = {
-            models = ["openai-codex/gpt-5.6-sol"];
-            thinkingLevel = "medium";
-          };
-          small-read = {
-            models = [
-              "openrouter/cohere/north-mini-code:free"
-              "mistral/mistral-small-2603"
-              "openai-codex/gpt-5.6-luna"
-            ];
-            thinkingLevel = "high";
-          };
-          small-write = {
-            models = ["openai-codex/gpt-5.6-luna"];
-            thinkingLevel = "high";
-          };
-          standard-read = {
-            models = ["cursor/cursor-grok-4.6-high-fast"];
-            thinkingLevel = null;
-            harness = "cursor-agent";
-            harnessOptions = {
-              mode = "ask";
-              permissionPolicy = "reject";
-              sandbox = "disabled";
-              trustWorkspace = true;
-              worktree = false;
-            };
-          };
-          standard-write = {
-            models = ["cursor/cursor-grok-4.6-high-fast"];
-            thinkingLevel = null;
-            harness = "cursor-agent";
-            harnessOptions = {
-              mode = "agent";
-              permissionPolicy = "allow-always";
-              sandbox = "disabled";
-              trustWorkspace = true;
-              worktree = false;
-            };
-          };
-          advanced = {
-            models = ["openai-codex/gpt-6-astra"];
-            thinkingLevel = "low";
-          };
-          research = {
-            models = ["openai-codex/gpt-5.6-terra"];
-            thinkingLevel = "high";
-          };
-          perspective = {
-            models = [
-              "openrouter/z-ai/glm-5.2:free"
-              "cohere/command-a-plus-05-2026"
-              "mistral/mistral-medium-3.5"
-            ];
-            thinkingLevel = "high";
-          };
-          search = {
-            models = ["codex/gpt-5.6-luna"];
-            thinkingLevel = "high";
-            harness = "codex";
-            harnessOptions = {
-              mode = "read-only";
-              permissionPolicy = "reject";
-              webSearch = "cached";
-            };
-          };
-        };
       };
     };
 
@@ -326,7 +245,6 @@ in
       ...
     }: let
       packageContributionNames = builtins.attrNames cfg.packageContributions;
-      profileNames = builtins.attrNames cfg.profiles;
       enabledPackageContributionNames = builtins.filter (name: cfg.packageContributions.${name}.enabled) packageContributionNames;
       packageSources = map (name: let
         contribution = cfg.packageContributions.${name};
@@ -353,70 +271,12 @@ in
         lib.hasPrefix "npm:" source
         && builtins.match concreteNpmSourcePattern source == null)
       packageContributionNames;
-      invalidProfileModelLists = builtins.filter (name: let
-        models = cfg.profiles.${name}.models;
-      in
-        models == [] || duplicateValues models != [])
-      profileNames;
-      invalidProfileModelIdentifiers =
-        lib.concatMap (
-          name:
-            builtins.filter (model: builtins.match "^[^/[:space:]]+/[^[:space:]]+$" model == null) cfg.profiles.${name}.models
-        )
-        profileNames;
-      cursorReadHarnessOptions = {
-        mode = "ask";
-        permissionPolicy = "reject";
-        sandbox = "disabled";
-        trustWorkspace = true;
-        worktree = false;
-      };
-      cursorWriteHarnessOptions = {
-        mode = "agent";
-        permissionPolicy = "allow-always";
-        sandbox = "disabled";
-        trustWorkspace = true;
-        worktree = false;
-      };
-      codexHarnessOptions = {
-        mode = "read-only";
-        permissionPolicy = "reject";
-        webSearch = "cached";
-      };
       invalidCursorAcpModelAliases = builtins.filter (alias:
         alias
         == ""
         || builtins.match ".*[[:space:]/].*" alias != null
         || builtins.match ".*[^[:space:]].*" cfg.cursorAcpModelIds.${alias} == null)
       (builtins.attrNames cfg.cursorAcpModelIds);
-      unmappedCursorProfiles = builtins.filter (name: let
-        profile = cfg.profiles.${name};
-        alias =
-          if profile.models == []
-          then ""
-          else lib.removePrefix "cursor/" (builtins.head profile.models);
-      in
-        profile.harness
-        == "cursor-agent"
-        && (profile.models == [] || !(builtins.hasAttr alias cfg.cursorAcpModelIds)))
-      profileNames;
-      invalidProfileHarnesses =
-        builtins.filter (
-          name: let
-            profile = cfg.profiles.${name};
-            hasSingletonModel = builtins.length profile.models == 1;
-            model =
-              if hasSingletonModel
-              then builtins.head profile.models
-              else "";
-          in
-            if profile.harness == "pi"
-            then profile.thinkingLevel == null || profile.harnessOptions != {}
-            else if profile.harness == "cursor-agent"
-            then !hasSingletonModel || !(lib.hasPrefix "cursor/" model) || profile.thinkingLevel != null || !(profile.harnessOptions == cursorReadHarnessOptions || profile.harnessOptions == cursorWriteHarnessOptions)
-            else !hasSingletonModel || !(lib.hasPrefix "codex/" model) || profile.thinkingLevel == null || profile.harnessOptions != codexHarnessOptions
-        )
-        profileNames;
       resolveModule = name: let
         path = ["programs" "pi-coding-agent"] ++ lib.splitString "." name;
       in
@@ -472,9 +332,8 @@ in
         }) [
           "auth.json"
           "models.json"
-          "execution-profiles.json"
           "agent-modes.json"
-          "role-catalog.json"
+          "child-catalog.json"
           "orchestration.json"
           "web-retrieval.json"
           "extension-keybindings.json"
@@ -490,24 +349,8 @@ in
           message = "Pi npm package contributions must use concrete semver versions: ${lib.concatStringsSep ", " invalidNpmPackageContributionNames}.";
         }
         {
-          assertion = invalidProfileModelLists == [];
-          message = "Pi execution profiles must have non-empty unique model lists: ${lib.concatStringsSep ", " invalidProfileModelLists}.";
-        }
-        {
-          assertion = invalidProfileModelIdentifiers == [];
-          message = "Pi execution profile models must use provider/model format: ${lib.concatStringsSep ", " invalidProfileModelIdentifiers}.";
-        }
-        {
-          assertion = invalidProfileHarnesses == [];
-          message = "Pi execution profiles must satisfy their exact harness contract: ${lib.concatStringsSep ", " invalidProfileHarnesses}.";
-        }
-        {
           assertion = invalidCursorAcpModelAliases == [];
           message = "Pi Cursor ACP model aliases must be non-empty and contain neither whitespace nor '/': ${lib.concatStringsSep ", " invalidCursorAcpModelAliases}.";
-        }
-        {
-          assertion = unmappedCursorProfiles == [];
-          message = "Pi Cursor execution profiles require a cursorAcpModelIds entry: ${lib.concatStringsSep ", " unmappedCursorProfiles}.";
         }
         {
           assertion = builtins.all (item: item.module != null) selected;
@@ -548,10 +391,6 @@ in
         {
           "${cfg.configDir}/models.json".text = builtins.toJSON modelOverrides;
           "${cfg.configDir}/pi-codex-compaction.json".text = builtins.toJSON codexCompactionConfig;
-          "${cfg.configDir}/execution-profiles.json".text = builtins.toJSON {
-            schemaVersion = 2;
-            profiles = lib.mapAttrs (_: profile: lib.filterAttrs (_name: value: value != null && value != {}) profile) cfg.profiles;
-          };
         }
         // lib.optionalAttrs artifactRuntimeRequired {
           "${artifactRuntimeDir}/extensions_src".source = homeConfig.lib.file.mkOutOfStoreSymlink "${./extensions_src}";

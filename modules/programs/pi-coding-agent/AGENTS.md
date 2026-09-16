@@ -3,7 +3,7 @@
 ## Responsibility Boundaries
 
 - `prompts/` owns thin explicit Pi entrypoints. Prompt templates never change the active mode.
-- Mode instructions own the parent's delegation preference, integration, and final verification. Role definitions own mandatory role behavior and role-specific use of Pi resources. Reusable Skills own optional harness-independent methods. Active mesh tool guidance owns wait, yield, retrieval, and report mechanics. Extensions own remaining Pi process, task, tmux, ACP, popup, event, and tool-schema mechanics.
+- Mode instructions own the parent's delegation preference, integration, and final verification. Child definitions own mandatory child behavior and child-specific use of Pi resources. Reusable Skills own optional harness-independent methods. Active mesh tool guidance owns wait, yield, retrieval, and report mechanics. Extensions own remaining Pi process, task, tmux, ACP, popup, event, and tool-schema mechanics.
 - `extensions/mode/` and `extensions_src/mode.ts` own mutable top-level `recon`/`ops` state. Child processes never load mode controls.
 - `extensions/orchestration/` owns peer-mesh mechanics: root-owned epochs, task and event state, harness adapters, and the agent popup view.
 - `extensions/popup/` owns the single overlay lifecycle and registered view stack; consumers provide views but do not open competing root overlays.
@@ -13,5 +13,5 @@
 
 ## Local Contract
 
-- Treat schemas, required `access`, selector uniqueness, one-profile edges, unknown-reference rejection, Pi-only outbound callers, and prompt-only leaves as feature mechanics. Treat selected models, thinking levels, role assignments, budgets, GC, Web weights, and Cursor ACP mappings as mutable user policy unless a nearby invariant says otherwise.
-- Public `selector.agent` is the call name; the `roles` attribute key is the internal role ID. Resolve authority from the configured selector, callPolicy, and explicit restrictions, not from a public name.
+- Treat schemas, required `access`, selector uniqueness, unknown-reference rejection, Pi-only outbound callers, and prompt-only leaves as feature mechanics. Treat selected models, thinking levels, child assignments, budgets, GC, Web weights, and Cursor ACP mappings as mutable user policy unless a nearby invariant says otherwise.
+- Public `selector.agent` is the call name; the `children` attribute key is the internal child ID. Resolve authority from the configured selector, callPolicy, and explicit restrictions, not from a public name.

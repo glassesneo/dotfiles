@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { PopupStack } from "../extensions_src/popup.ts";
+import { createEventBus } from "@earendil-works/pi-coding-agent";
+import { PopupStack, openPopupView, providePopupView, registerPopupHost } from "../extensions_src/popup.ts";
 import type { PopupViewFactory } from "../extensions_src/utilities/popup_types.ts";
 void test("popup host owns back focus and disposes a nested close-all exactly once", async () => {
     let renders = 0; const finishes: string[] = []; const seen: string[][] = []; const disposed: string[] = []; const focus: string[] = [];
@@ -33,4 +34,19 @@ void test("raw Escape defers host back while the current view is busy", async ()
     const factory: PopupViewFactory = { id: "busy", title: "Busy", create(ctx) { let busy = true; release = () => { busy = false; ctx.done("back"); }; return { render: () => [busy ? "working" : "done"], invalidate() {}, requestClose() { return !busy; } }; } };
     const stack = new PopupStack({ requestRender() {} } as never, {} as never, {} as never, new Map([[factory.id, factory]]), () => { finished = true; });
     const result = stack.open("busy"); stack.handleInput("\x1b"); assert.equal(finished, false); assert.deepEqual(stack.render(20), ["working"]); release(); assert.equal(await result, "back"); assert.equal(finished, true);
+});
+void test("popup host reuses one pending overlay when nested push is repeated after back", async () => {
+    const pi = { events: createEventBus() }; registerPopupHost(pi as never);
+    const focus: string[] = [];
+    const factory = (id: string): PopupViewFactory => ({ id, title: id, create(ctx) { let focused = false; return { get focused() { return focused; }, set focused(value: boolean) { focused = value; focus.push(`${id}:${value}`); }, render: () => [id], invalidate() {}, handleInput(data: string) { if (data === "back") ctx.done("back"); } }; } });
+    providePopupView(pi as never, factory("root")); providePopupView(pi as never, factory("child"));
+    let overlays = 0; let stack!: PopupStack;
+    const ctx = { mode: "tui", ui: { custom(create: (tui: unknown, theme: unknown, keys: unknown, done: (value: "back" | "close-all") => void) => PopupStack) { overlays += 1; return new Promise(resolve => { stack = create({ requestRender() {}, terminal: { rows: 24, columns: 80 } }, {}, {}, resolve); stack.focused = true; }); } } } as never;
+    const root = openPopupView(pi as never, "root", ctx, "root");
+    const child = openPopupView(pi as never, "child", ctx, "push");
+    assert.equal(overlays, 1); assert.deepEqual(stack.render(80), ["child"]);
+    stack.handleInput("\x1b"); assert.equal(await child, "back"); assert.deepEqual(stack.render(80), ["root"]);
+    const again = openPopupView(pi as never, "child", ctx, "push");
+    assert.equal(overlays, 1); assert.deepEqual(stack.render(80), ["child"]); assert.deepEqual(focus.slice(-2), ["root:false", "child:true"]);
+    stack.handleInput("\x1b"); assert.equal(await again, "back"); stack.handleInput("\x1b"); assert.equal(await root, "back");
 });

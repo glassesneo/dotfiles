@@ -4,15 +4,24 @@
   piQuestion,
   ...
 }: let
+  executionModule = {
+    options = with delib; {
+      models = noDefault (listOfOption str []);
+      thinkingLevel = allowNull (enumOption ["off" "minimal" "low" "medium" "high" "xhigh" "max"] null);
+      harness = enumOption ["pi" "cursor-agent" "codex"] "pi";
+      harnessOptions = attrsOfOption lib.types.anything {};
+    };
+  };
   modeType = delib.submodule {
     options = with delib; {
       description = noDefault (strOption null);
-      defaultProfile = noDefault (strOption null);
+      execution = submoduleOption executionModule {};
       tools = listOfOption str [];
       skillOptIns = listOfOption str [];
       instructions = noDefault (strOption null);
     };
   };
+  cleanExecution = execution: lib.filterAttrs (_name: value: value != null && value != {}) execution;
   judgmentContract = ''
     Own the requester's outcome as orchestrator and integrator.
 
@@ -59,7 +68,11 @@ in
     myconfig.always.programs.pi-coding-agent.mode.modes = lib.mapAttrs (_: mode: lib.mapAttrs (_: lib.mkDefault) mode) {
       recon = {
         description = "Read-only repository investigation and collaborative dialogue.";
-        defaultProfile = "recon-default";
+        execution = {
+          models = ["openai-codex/gpt-6-astra"];
+          thinkingLevel = "medium";
+          harness = "pi";
+        };
         tools = ["read" "grep" "find" "ls" "bash" "web_fetch" "mesh_send" "mesh_get" "mesh_wait" "mesh_stop" "save_agent_artifact"] ++ lib.optional piQuestion.enabled piQuestion.tool;
         skillOptIns = ["prompt-interface-design" "agent-artifact"];
         instructions = ''
@@ -88,7 +101,11 @@ in
       };
       ops = {
         description = "Direct source work and flexible orchestration.";
-        defaultProfile = "ops-default";
+        execution = {
+          models = ["openai-codex/gpt-5.6-sol"];
+          thinkingLevel = "medium";
+          harness = "pi";
+        };
         tools = ["read" "grep" "find" "ls" "bash" "write" "edit" "web_fetch" "mesh_send" "mesh_get" "mesh_wait" "mesh_stop" "save_agent_artifact"] ++ lib.optional piQuestion.enabled piQuestion.tool;
         skillOptIns = ["prompt-interface-design" "agent-artifact"];
         instructions = ''
@@ -105,23 +122,19 @@ in
       myconfig,
       ...
     }: let
-      profiles = myconfig.programs.pi-coding-agent.profiles;
-      unresolvedModes = lib.filterAttrs (_: mode: !(builtins.hasAttr mode.defaultProfile profiles)) cfg.modes;
-      nonPiModes = lib.filterAttrs (_: mode: builtins.hasAttr mode.defaultProfile profiles && profiles.${mode.defaultProfile}.harness != "pi") cfg.modes;
+      nonPiModes = lib.filterAttrs (_: mode: mode.execution.harness != "pi") cfg.modes;
+      generatedModes = lib.mapAttrs (_: mode: mode // {execution = cleanExecution mode.execution;}) cfg.modes;
     in {
       assertions = [
         {
-          assertion = unresolvedModes == {};
-          message = "Pi mode defaultProfile values must reference execution profiles; invalid modes: ${lib.concatStringsSep ", " (builtins.attrNames unresolvedModes)}.";
-        }
-        {
           assertion = nonPiModes == {};
-          message = "Pi mode defaultProfile values must use the pi harness; invalid modes: ${lib.concatStringsSep ", " (builtins.attrNames nonPiModes)}.";
+          message = "Pi mode execution must use the pi harness; invalid modes: ${lib.concatStringsSep ", " (builtins.attrNames nonPiModes)}.";
         }
       ];
       home.file."${myconfig.programs.pi-coding-agent.configDir}/agent-modes.json".text = builtins.toJSON {
-        schemaVersion = 2;
-        inherit (cfg) defaultMode modes;
+        schemaVersion = 3;
+        inherit (cfg) defaultMode;
+        modes = generatedModes;
       };
     };
   }

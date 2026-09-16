@@ -1,5 +1,5 @@
 import { AcpTransport, type JsonRpcMessage } from "./orchestration_acp.ts";
-import type { ExternalDriver, ExternalTaskResult, ExternalWorkerEvent } from "./orchestration_external_driver.ts";
+import { UnconfirmedTerminationError, isUnconfirmedTermination, type ExternalDriver, type ExternalTaskResult, type ExternalWorkerEvent } from "./orchestration_external_driver.ts";
 
 type JsonObject = Record<string, unknown>;
 function record(value: unknown): JsonObject | undefined { return value && typeof value === "object" && !Array.isArray(value) ? value as JsonObject : undefined; }
@@ -17,6 +17,13 @@ function supportsModel(session: JsonObject, model: string): boolean {
     const models = modelsConfig?.availableModels;
     const advertisedModel = Array.isArray(models) && models.some(candidate => matchesModelCandidate(candidate, model));
     return Boolean(advertised || advertisedModel);
+}
+function sessionIdFrom(message: JsonRpcMessage): string | undefined {
+    const params = record(message.params);
+    const nested = record(params?.update);
+    const candidates = [params?.sessionId, nested?.sessionId];
+    for (const candidate of candidates) if (typeof candidate === "string" && candidate.trim()) return candidate;
+    return undefined;
 }
 
 export interface CursorAcpDriverOptions {
@@ -38,12 +45,53 @@ export class CursorAcpDriver implements ExternalDriver {
     #rejectTurnFailure?: (error: Error) => void;
     #turnActive = false;
     #turnCancelled = false;
+    #reuseBlocked?: UnconfirmedTerminationError;
 
     constructor(options: CursorAcpDriverOptions) { this.#options = options; }
-    #failTurn(message: string): never { const error = new Error(message); this.#turnFailure ??= error; this.#rejectTurnFailure?.(error); throw error; }
+
+    #failUnconfirmed(message: string): never {
+        const error = new UnconfirmedTerminationError(message);
+        this.#turnFailure ??= error;
+        this.#reuseBlocked ??= error;
+        this.#rejectTurnFailure?.(error);
+        throw error;
+    }
+
+    #blockReuse(message: string): UnconfirmedTerminationError {
+        const error = this.#reuseBlocked ?? new UnconfirmedTerminationError(message);
+        this.#reuseBlocked ??= error;
+        this.#options.event({ type: "state", text: message });
+        return error;
+    }
+
+    #closeTurn(): void {
+        if (!isUnconfirmedTermination(this.#turnFailure)) this.#turnActive = false;
+    }
+
+    #assertSession(message: JsonRpcMessage): boolean {
+        const incoming = sessionIdFrom(message);
+        if (!this.#sessionId) {
+            this.#blockReuse(`ACP ${message.method} sessionId is missing`);
+            return false;
+        }
+        if (!incoming) {
+            this.#blockReuse(`ACP ${message.method} sessionId is missing`);
+            return false;
+        }
+        if (incoming !== this.#sessionId) {
+            this.#blockReuse(`ACP ${message.method} sessionId does not match the active session`);
+            return false;
+        }
+        return true;
+    }
 
     async #message(message: JsonRpcMessage): Promise<unknown> {
         if (message.method === "session/update") {
+            if (!this.#assertSession(message)) return null;
+            if (!this.#turnActive) {
+                this.#blockReuse("ACP session/update arrived with no active turn");
+                return null;
+            }
             const update = record(record(message.params)?.update) ?? record(message.params) ?? {};
             const kind = scalar(update.sessionUpdate) || scalar(update.type) || scalar(update.kind) || "update";
             const text = textFrom(update);
@@ -53,7 +101,12 @@ export class CursorAcpDriver implements ExternalDriver {
             return null;
         }
         if (message.method === "session/request_permission") {
-            if (this.#turnCancelled) return { outcome: { outcome: "cancelled" } };
+            if (!this.#assertSession(message)) return { outcome: { outcome: "cancelled" } };
+            if (!this.#turnActive) {
+                this.#blockReuse("ACP permission request with no active turn");
+                return { outcome: { outcome: "cancelled" } };
+            }
+            if (this.#turnCancelled || this.#reuseBlocked) return { outcome: { outcome: "cancelled" } };
             const options = Array.isArray(record(message.params)?.options) ? record(message.params)!.options as unknown[] : [];
             const normalized = options.map(record).filter((option): option is JsonObject => option !== undefined);
             const kind = (option: JsonObject) => scalar(option.kind).replaceAll("-", "_");
@@ -61,7 +114,7 @@ export class CursorAcpDriver implements ExternalDriver {
                 ? normalized.find(option => kind(option) === "reject_once") ?? normalized.find(option => kind(option) === "reject_always")
                 : normalized.find(option => kind(option) === "allow_always") ?? normalized.find(option => kind(option) === "allow_once");
             const optionId = preferred?.optionId;
-            if (typeof optionId !== "string" || !optionId.trim()) this.#failTurn(this.#options.permissionPolicy === "reject" ? "Cursor permission request has no exact reject option" : "Cursor permission request has no exact allow-always or allow-once option");
+            if (typeof optionId !== "string" || !optionId.trim()) this.#failUnconfirmed(this.#options.permissionPolicy === "reject" ? "Cursor permission request has no exact reject option" : "Cursor permission request has no exact allow-always or allow-once option");
             this.#options.event({ type: "permission", text: `${this.#options.permissionPolicy === "reject" ? "rejected" : "selected"} ${optionId}` });
             return { outcome: { outcome: "selected", optionId } };
         }
@@ -75,7 +128,7 @@ export class CursorAcpDriver implements ExternalDriver {
                 },
             };
         }
-        if (message.id !== undefined) this.#failTurn(`Unsupported blocking ACP request: ${message.method}`);
+        if (message.id !== undefined) this.#failUnconfirmed(`Unsupported blocking ACP request: ${message.method}`);
         return null;
     }
 
@@ -101,20 +154,38 @@ export class CursorAcpDriver implements ExternalDriver {
 
     async runTask(prompt: string): Promise<ExternalTaskResult> {
         if (!this.#transport || !this.#sessionId) throw new Error("Cursor ACP driver is not started");
+        if (this.#reuseBlocked) throw this.#reuseBlocked;
         this.#output = ""; this.#turnFailure = undefined; this.#turnActive = true; this.#turnCancelled = false;
         const blockingFailure = new Promise<never>((_resolve, reject) => { this.#rejectTurnFailure = reject; });
         try {
-            const result = record(await Promise.race([this.#transport.request("session/prompt", { sessionId: this.#sessionId, prompt: [{ type: "text", text: prompt }] }, 24 * 60 * 60 * 1000), blockingFailure]));
+            let result: JsonObject | undefined;
+            try {
+                result = record(await Promise.race([this.#transport.request("session/prompt", { sessionId: this.#sessionId, prompt: [{ type: "text", text: prompt }] }, 24 * 60 * 60 * 1000, () => this.#closeTurn()), blockingFailure]));
+            } catch (error) {
+                if (isUnconfirmedTermination(this.#turnFailure)) throw this.#turnFailure;
+                this.#failUnconfirmed(error instanceof Error ? error.message : String(error));
+            }
             if (this.#turnFailure) throw this.#turnFailure;
-            const stopReason = typeof result?.stopReason === "string" ? result.stopReason : "missing";
+            const stopReason = result?.stopReason;
+            if (typeof stopReason !== "string" || !stopReason.trim()) this.#failUnconfirmed("Cursor prompt completed without a stopReason");
             if (stopReason !== "end_turn") throw new Error(`Cursor task stopped with ${stopReason}${this.#transport.stderr() ? `: ${this.#transport.stderr()}` : ""}`);
             return { output: this.#output || textFrom(result), stopReason };
-        } finally { this.#rejectTurnFailure = undefined; this.#turnActive = false; }
+        } finally {
+            this.#rejectTurnFailure = undefined;
+            this.#closeTurn();
+        }
     }
 
     async cancel(): Promise<void> { if (this.#turnActive) this.#turnCancelled = true; if (this.#transport && this.#sessionId) this.#transport.notify("session/cancel", { sessionId: this.#sessionId }); }
     partialOutput(): string { return this.#output; }
     async shutdown(): Promise<void> { await this.#transport?.shutdown(); }
     waitForClose(): Promise<Error> { return this.#transport?.waitForClose() ?? new Promise<Error>(() => {}); }
-    fatalError(): Error | undefined { return this.#transport?.fatalError(); }
+    fatalError(): Error | undefined {
+        if (this.#reuseBlocked) return this.#reuseBlocked;
+        const fatal = this.#transport?.fatalError();
+        if (!fatal) return undefined;
+        if (this.#transport?.exitObserved()) return fatal;
+        return isUnconfirmedTermination(fatal) ? fatal : new UnconfirmedTerminationError(fatal.message);
+    }
+    exitObserved(): boolean { return this.#transport?.exitObserved() ?? false; }
 }

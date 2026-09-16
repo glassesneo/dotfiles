@@ -1,14 +1,15 @@
 import type { Usage } from "@earendil-works/pi-ai";
-import type { AgentHarness, CallerPolicy, HarnessRuntimeConfig, MeshBudgets, OrchestrationConfig, RoleDefinition, TargetPolicy } from "./agent_types.ts";
-import type { ExecutionProfile } from "./mode_types.ts";
+import type { AgentHarness, ChildDefinition, HarnessRuntimeConfig, MeshBudgets, OrchestrationConfig } from "./agent_types.ts";
 import type { AgentActivityProjection } from "./orchestration_activity.ts";
 import type { ModelRouteState } from "./orchestration_profile_fallback.ts";
 export type { HarnessRuntimeConfig, MeshBudgets, OrchestrationConfig } from "./agent_types.ts";
 export type { ModelRouteAttempt, ModelRouteAttemptCategory, ModelRouteState } from "./orchestration_profile_fallback.ts";
 
-export const POLICY_EPOCH_SCHEMA_VERSION = 6 as const;
-export const AGENT_RECORD_SCHEMA_VERSION = 6 as const;
+export const POLICY_EPOCH_SCHEMA_VERSION = 7 as const;
+export const AGENT_RECORD_SCHEMA_VERSION = 7 as const;
 export const AGENT_STATUS_SCHEMA_VERSION = 2 as const;
+export const TASK_REQUEST_SCHEMA_VERSION = 4 as const;
+export const TASK_PURPOSE_MAX_CODE_POINTS = 120;
 
 export const MESH_STATES = ["open", "closing", "closed"] as const;
 export const AGENT_STATES = ["creating", "idle", "busy", "stopping", "stopped", "failed"] as const;
@@ -38,16 +39,17 @@ export type SubagentRuntimeConfig = OrchestrationConfig;
 export interface MeshBudgetMigration { type: "mesh_budget_migrated"; from: MeshBudgets; to: MeshBudgets; migratedAt: string }
 export interface MeshRecord { schemaVersion: 1; meshId: string; state: MeshState; recoverable: boolean; rootSessionId: string; rootSessionFile?: string; budgets: MeshBudgets; createdAt: string; updatedAt: string; rootAttachedAt?: string; currentEpochId?: string; closedAt?: string; budgetMigration?: MeshBudgetMigration }
 export interface RootLease { schemaVersion: 1; meshId: string; leaseId: string; rootSessionId: string; rootSessionFile?: string; pid: number; acquiredAt: string; heartbeatAt: string; tmuxServerPid?: string; tmuxSessionId?: string }
-export interface PolicyEpoch { schemaVersion: 6; meshId: string; epochId: string; mode: string; directTargets: Record<string, TargetPolicy>; roles: Record<string, RoleDefinition>; profiles: Record<string, ExecutionProfile>; policies: Record<string, CallerPolicy>; policyDigest: string; createdAt: string; readonly roleSet: string[] }
+export interface PolicyEpoch { schemaVersion: 7; meshId: string; epochId: string; mode: string; directTargets: string[]; children: Record<string, ChildDefinition>; policyDigest: string; createdAt: string; readonly childSet: string[] }
 export interface BudgetReservation { schemaVersion: 1; meshId: string; reservationId: string; kind: "new-agent-task" | "existing-agent-task"; state: ReservationState; agentId?: string; taskId?: string; liveSlots: 0 | 1; taskSlots: 1; lifetimeTasks: 1; createdAt: string; updatedAt: string; committedAt?: string; releasedAt?: string; releaseReason?: string }
 export interface MeshBudgetUsage { liveAgents: number; concurrentTasks: number; lifetimeTasks: number; pendingLiveSlots: number; pendingTaskSlots: number; pendingLifetimeTasks: number }
 
 /** Creation provenance only. It is never an authority or lookup boundary. */
 export interface AgentProvenance { parentAgentId?: string; creatorSessionId: string; creatorSessionFile?: string }
-export interface AgentRecord extends AgentProvenance { schemaVersion: 6; meshId: string; agentId: string; epochId: string; role: string; selectedProfile: string; harness: AgentHarness; cursorAcpModelId?: string; cwd: string; createdAt: string; roleSnapshot: RoleDefinition; profileSnapshot: ExecutionProfile; launchEnvelope: string; launchEnvelopeDigest: string; tmux: TmuxAgentReference; tmuxOwnership?: TmuxOwnership; capabilities: NativeCapabilities; readonly agent: string; readonly agentSnapshot: RoleDefinition }
+export interface AgentRecord extends AgentProvenance { schemaVersion: 7; meshId: string; agentId: string; epochId: string; childId: string; harness: AgentHarness; cursorAcpModelId?: string; cwd: string; createdAt: string; definitionSnapshot: ChildDefinition; launchEnvelope: string; launchEnvelopeDigest: string; tmux: TmuxAgentReference; tmuxOwnership?: TmuxOwnership; capabilities: NativeCapabilities }
 export interface AgentStatus { schemaVersion: 2; meshId: string; agentId: string; state: AgentState; activeTaskId?: string; latestTaskId?: string; bridgeReady: boolean; meshToolsEnabled: boolean; childSessionId?: string; childSessionFile?: string; agentUsage: Usage; accountedTaskIds: string[]; updatedAt: string; exitReason?: string; modelRoute?: ModelRouteState }
 export interface AgentStopRequest { schemaVersion: 1; meshId: string; agentId: string; stopRequestId: string; state: AgentStopState; source: AgentStopSource; requesterEndpointId?: string; /** Active task captured when the stop was requested; never inferred later. */ affectedTaskId?: string; reason: string; terminalState?: AgentStopTerminalState; activitySequence?: number; gcPassId?: string; previousAgentState: AgentState; requestedAt: string; updatedAt: string; terminatingAt?: string; confirmedAt?: string; failedAt?: string; failureCategory?: string; noticeCreatedAt?: string }
-export interface TaskRequest { schemaVersion: 3; meshId: string; agentId: string; taskId: string; prompt: string; requesterEndpointId: string; requesterAgentId?: string; completion?: CompletionTarget; createdAt: string }
+export interface TaskWork { prompt: string; purpose: string }
+export interface TaskRequest { schemaVersion: 4; meshId: string; agentId: string; taskId: string; prompt: string; purpose: string; requesterEndpointId: string; requesterAgentId?: string; completion?: CompletionTarget; createdAt: string }
 export interface TaskCancelRequest { schemaVersion: 1; meshId: string; agentId: string; taskId: string; requesterEndpointId?: string; requestedAt: string; reason: string }
 export interface Intervention { sequence: number; timestamp: string; taskId?: string; text: string; deliveryMode: "steer" | "followUp" | "idle"; images: string[] }
 export interface TaskStatus { schemaVersion: 1; meshId: string; agentId: string; taskId: string; state: TaskState; createdAt: string; startedAt?: string; finishedAt?: string; error?: string }
@@ -56,7 +58,33 @@ export interface UsageClaim { schemaVersion: 1; meshId: string; claimantSessionF
 export interface AgentSnapshot { agent: AgentRecord; status: AgentStatus; activity: AgentActivityProjection; stop: AgentStopRequest | null; task?: TaskSnapshot }
 export interface TaskSnapshot { request: TaskRequest; status: TaskStatus; result: TaskResult | null; interventions: Intervention[]; claimed: boolean; directory: string }
 
-export function promptSummary(prompt: string, max = 96): string { const line = prompt.split(/\r?\n/u).map(value => value.replace(/\s+/gu, " ").trim()).find(Boolean) ?? "Task"; return Array.from(line).slice(0, max).join(""); }
+function purposeHasControl(purpose: string): boolean {
+    for (const character of purpose) {
+        const codePoint = character.codePointAt(0)!;
+        if (codePoint <= 0x1F || codePoint >= 0x7F && codePoint <= 0x9F || codePoint === 0x2028 || codePoint === 0x2029) return true;
+    }
+    return false;
+}
+function purposeIsOverlong(purpose: string): boolean {
+    let codePoints = 0;
+    for (const _character of purpose) {
+        codePoints += 1;
+        if (codePoints > TASK_PURPOSE_MAX_CODE_POINTS) return true;
+    }
+    return false;
+}
+/** Rejects C0/C1 and Unicode line separators on raw input; trims ordinary whitespace; then enforces 1–120 Unicode code points. */
+export function validateTaskPurpose(value: unknown): string {
+    if (typeof value !== "string") throw new Error("mesh task purpose must be a string");
+    if (purposeHasControl(value)) throw new Error("mesh task purpose must be a single line without control characters");
+    const purpose = value.trim();
+    if (!purpose) throw new Error("mesh task purpose must be a non-empty string");
+    if (purposeIsOverlong(purpose)) throw new Error(`mesh task purpose must be at most ${TASK_PURPOSE_MAX_CODE_POINTS} Unicode code points`);
+    return purpose;
+}
+export function optionalTaskPurpose(value: unknown): string | undefined {
+    return value === undefined ? undefined : validateTaskPurpose(value);
+}
 export function validateNatureHandleWords(value: unknown): string[] { if (!Array.isArray(value) || value.some(v => typeof v !== "string" || !v.trim() || v.includes("-"))) throw new Error("natureHandleWords must be non-empty strings without '-'"); const words = value as string[]; if (!words.length || new Set(words).size !== words.length) throw new Error("natureHandleWords must be a non-empty unique list"); return [...words]; }
 export function emptyUsage(): Usage { return { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } }; }
 export function addUsage(target: Usage, usage: Partial<Usage> | undefined): void { if (!usage) return; for (const key of ["input", "output", "cacheRead", "cacheWrite", "totalTokens"] as const) target[key] += usage[key] ?? 0; if (usage.reasoning !== undefined) target.reasoning = (target.reasoning ?? 0) + usage.reasoning; if (usage.cacheWrite1h !== undefined) target.cacheWrite1h = (target.cacheWrite1h ?? 0) + usage.cacheWrite1h; for (const key of ["input", "output", "cacheRead", "cacheWrite", "total"] as const) target.cost[key] += usage.cost?.[key] ?? 0; }

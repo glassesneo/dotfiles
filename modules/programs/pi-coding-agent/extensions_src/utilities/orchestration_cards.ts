@@ -1,5 +1,5 @@
 import type { AgentToolResult, Theme, ThemeColor, ToolRenderResultOptions } from "@earendil-works/pi-coding-agent";
-import { truncateToWidth, wrapTextWithAnsi, type Component } from "@earendil-works/pi-tui";
+import { truncateToWidth, visibleWidth, wrapTextWithAnsi, type Component } from "@earendil-works/pi-tui";
 import {
     AGENT_STATE_BADGES,
     TASK_STATE_BADGES,
@@ -10,11 +10,15 @@ import {
 import {
     displayIdentityForAgentId,
     displayIdentityForSnapshot,
+    fitUsualIdentityLine,
     formatCompactAgentIdentity,
+    formatUsualStatus,
+    partyLabelForEndpoint,
+    publicCapabilityLabel,
     type AgentDisplayIdentity,
 } from "./orchestration_identity.ts";
 import type { SubmitDetails } from "./orchestration_projection.ts";
-import { promptSummary, type AgentSnapshot, type AgentState, type TaskState } from "./orchestration_types.ts";
+import { type AgentSnapshot, type AgentState, type TaskState } from "./orchestration_types.ts";
 
 /** Subset of Pi ToolRenderContext used by mesh cards (not re-exported by the package). */
 export type CardRenderContext = {
@@ -24,7 +28,7 @@ export type CardRenderContext = {
     isError?: boolean;
 };
 
-export type SendCardArgs = { agent?: string; access?: "read" | "write"; agentId?: string; message: string };
+export type SendCardArgs = { agent?: string; access?: "read" | "write"; agentId?: string; purpose?: string; message: string };
 export type WaitCardArgs = object;
 export type ReportCardArgs = { summary: string };
 
@@ -74,23 +78,26 @@ function isRenderableAgentSnapshot(value: unknown): value is AgentSnapshot {
     const record = value as Record<string, unknown>;
     const agent = record.agent as Record<string, unknown> | undefined;
     const status = record.status as Record<string, unknown> | undefined;
-    if (!agent || !status || typeof agent.agentId !== "string" || typeof agent.role !== "string" || typeof status.state !== "string") return false;
+    if (!agent || !status || typeof agent.agentId !== "string" || typeof agent.childId !== "string" || typeof status.state !== "string") return false;
     const task = record.task;
     if (task === undefined || task === null) return true;
     if (typeof task !== "object") return false;
     const taskRecord = task as Record<string, unknown>;
     const request = taskRecord.request as Record<string, unknown> | undefined;
     const taskStatus = taskRecord.status as Record<string, unknown> | undefined;
-    return Boolean(request && taskStatus && typeof request.prompt === "string" && typeof taskStatus.state === "string");
+    return Boolean(request && taskStatus && typeof request.prompt === "string" && typeof request.purpose === "string" && typeof taskStatus.state === "string");
 }
 function isSubmitDetails(value: unknown): value is SubmitDetails { return isRenderableAgentSnapshot(value) && Boolean((value as unknown as Record<string, unknown>).accounting); }
 function isDisplayIdentity(value: unknown): value is AgentDisplayIdentity {
     if (!value || typeof value !== "object" || Array.isArray(value)) return false;
     const record = value as Record<string, unknown>;
     if (typeof record.agentId !== "string" || typeof record.handle !== "string") return false;
-    if (record.role !== undefined && typeof record.role !== "string") return false;
-    if (record.profile !== undefined && typeof record.profile !== "string") return false;
-    if (record.roleDescription !== undefined && typeof record.roleDescription !== "string") return false;
+    if (record.publicAgent !== undefined && typeof record.publicAgent !== "string") return false;
+    if (record.access !== undefined && record.access !== "read" && record.access !== "write") return false;
+    if (record.purpose !== undefined && typeof record.purpose !== "string") return false;
+    if (record.status !== undefined && typeof record.status !== "string") return false;
+    if (record.taskState !== undefined && typeof record.taskState !== "string") return false;
+    if (record.description !== undefined && typeof record.description !== "string") return false;
     if (record.model !== undefined && typeof record.model !== "string") return false;
     if (record.fallbackCount !== undefined && (!Number.isInteger(record.fallbackCount) || Number(record.fallbackCount) < 0)) return false;
     if (record.thinkingLevel !== undefined && typeof record.thinkingLevel !== "string") return false;
@@ -109,16 +116,88 @@ function isDisplayIdentity(value: unknown): value is AgentDisplayIdentity {
 function identityFor(agentId: string, value?: unknown, words?: readonly string[]): AgentDisplayIdentity {
     return isDisplayIdentity(value) && value.agentId === agentId ? value : displayIdentityForAgentId(agentId, words);
 }
-function compactAgentLine(theme: Theme, snapshot: AgentSnapshot, words?: readonly string[]): string {
-    const acceptance = snapshot.activity.acceptingTask ? theme.fg("success", "ACCEPTING") : theme.fg("muted", "NOT ACCEPTING");
-    return joinParts([
-        theme.bold(formatCompactAgentIdentity(displayIdentityForSnapshot(snapshot, words))),
-        agentStateText(theme, snapshot.status.state),
-        theme.fg("muted", `activity:${snapshot.activity.phase}`),
-        acceptance,
-        snapshot.task ? taskStateText(theme, snapshot.task.status.state) : undefined,
-        theme.fg("muted", snapshot.task ? promptSummary(snapshot.task.request.prompt) : "No task"),
-    ]);
+class CompactAgentCard implements Component {
+    #snapshot: AgentSnapshot;
+    #theme: Theme;
+    #words?: readonly string[];
+    constructor(snapshot: AgentSnapshot, theme: Theme, words?: readonly string[]) {
+        this.#snapshot = snapshot;
+        this.#theme = theme;
+        this.#words = words;
+    }
+    update(snapshot: AgentSnapshot, theme: Theme, words?: readonly string[]): void {
+        this.#snapshot = snapshot;
+        this.#theme = theme;
+        this.#words = words;
+    }
+    invalidate(): void {}
+    render(width: number): string[] {
+        const outer = Math.max(1, width);
+        const identity = displayIdentityForSnapshot(this.#snapshot, this.#words);
+        const fitted = fitUsualIdentityLine(identity, outer);
+        const styled = this.#theme.bold(fitted);
+        const taskBadge = this.#snapshot.task ? taskStateText(this.#theme, this.#snapshot.task.status.state) : undefined;
+        if (!taskBadge) return [styled];
+        const combined = joinParts([styled, taskBadge]);
+        if (visibleWidth(combined) <= outer) return [combined];
+        return [styled, truncateToWidth(taskBadge, outer, "")];
+    }
+}
+
+function compactAgentCard(last: Component | undefined, snapshot: AgentSnapshot, theme: Theme, words?: readonly string[]): CompactAgentCard {
+    if (last instanceof CompactAgentCard) {
+        last.update(snapshot, theme, words);
+        return last;
+    }
+    return new CompactAgentCard(snapshot, theme, words);
+}
+
+type DirectionalBlock = { header: string; body?: string; extra?: string[] };
+
+class EventCard implements Component {
+    #blocks: DirectionalBlock[];
+    #remainderHint: string;
+    #expanded: boolean;
+    #pad: number;
+    constructor(blocks: DirectionalBlock[], remainderHint: string, expanded: boolean, pad = 0) {
+        this.#blocks = blocks;
+        this.#remainderHint = remainderHint;
+        this.#expanded = expanded;
+        this.#pad = pad;
+    }
+    invalidate(): void {}
+    render(width: number): string[] {
+        const outer = Math.max(1, width);
+        const pad = " ".repeat(Math.min(this.#pad, Math.max(0, outer - 1)));
+        const inner = Math.max(1, outer - pad.length);
+        const lines: string[] = [];
+        for (const block of this.#blocks) {
+            lines.push(...wrapTextWithAnsi(block.header, inner));
+            if (block.body) {
+                if (this.#expanded) lines.push(...wrapTextWithAnsi(previewText(block.body, EXPANDED_TEXT_LINES, EXPANDED_TEXT_CHARS), inner));
+                else {
+                    const wrapped = block.body.replace(/\r\n|\r/gu, "\n").split("\n").flatMap(line => line.length ? wrapTextWithAnsi(line, inner) : [""]).filter(line => line.length > 0);
+                    lines.push(...wrapped.slice(0, 2));
+                    if (wrapped.length > 2) lines.push(...wrapTextWithAnsi(this.#remainderHint, inner));
+                }
+            }
+            if (this.#expanded) for (const extra of block.extra ?? []) lines.push(...wrapTextWithAnsi(extra, inner));
+        }
+        return (lines.length ? lines : [""]).map(line => truncateToWidth(`${pad}${line}`, outer, ""));
+    }
+}
+
+function directionalBlock(from: string | undefined, to: string | undefined, kind: string, delivery: string | undefined, body: string | undefined, extra: string[] = []): DirectionalBlock {
+    const arrow = from && to ? `${from} → ${to}` : from ?? to;
+    return { header: joinParts([arrow, kind, delivery]), ...(body ? { body } : {}), extra };
+}
+
+function remainderHint(theme: Theme): string {
+    return theme.fg("muted", "remainder via mesh → child → h");
+}
+
+function eventCard(blocks: DirectionalBlock[], theme: Theme, expanded: boolean, pad = 0): Component {
+    return new EventCard(blocks, remainderHint(theme), expanded, pad);
 }
 
 function attemptLines(theme: Theme, attempts: NonNullable<AgentDisplayIdentity["attempts"]>): string[] {
@@ -132,12 +211,13 @@ function attemptLines(theme: Theme, attempts: NonNullable<AgentDisplayIdentity["
 function expandedAgentCard(theme: Theme, snapshot: AgentSnapshot, argsPrompt?: string, words?: readonly string[]): string {
     const task = snapshot.task;
     const identity = displayIdentityForSnapshot(snapshot, words);
+    const capability = publicCapabilityLabel(identity);
     const lines = [
         labeled(theme, "handle", identity.handle),
+        labeled(theme, "agent", capability ?? "unavailable"),
+        labeled(theme, "status", formatUsualStatus(identity.status) ?? "unavailable"),
+        ...(identity.description ? [labeled(theme, "description", identity.description)] : []),
         labeled(theme, "agentId", snapshot.agent.agentId),
-        labeled(theme, "role", agentTypeText(theme, identity.role ?? "unresolved")),
-        labeled(theme, "roleDescription", identity.roleDescription ?? "unavailable"),
-        labeled(theme, "profile", identity.profile ?? "unresolved"),
         labeled(theme, "model", identity.model ?? "unavailable"),
         labeled(theme, "fallback", String(identity.fallbackCount ?? 0)),
         labeled(theme, "thinking", identity.thinkingLevel ?? "unavailable"),
@@ -153,7 +233,7 @@ function expandedAgentCard(theme: Theme, snapshot: AgentSnapshot, argsPrompt?: s
         lines.push(labeled(theme, "stopState", snapshot.stop.state), labeled(theme, "stopSource", snapshot.stop.source), labeled(theme, "stopReason", previewText(snapshot.stop.reason, 4, 512)));
     }
     if (task) {
-        lines.push(labeled(theme, "taskId", task.request.taskId), labeled(theme, "taskState", taskStateText(theme, task.status.state)), labeled(theme, "summary", promptSummary(task.request.prompt)), labeled(theme, "prompt", previewText(task.request.prompt, EXPANDED_TEXT_LINES, EXPANDED_TEXT_CHARS)), labeled(theme, "createdAt", task.status.createdAt));
+        lines.push(labeled(theme, "taskId", task.request.taskId), labeled(theme, "taskState", taskStateText(theme, task.status.state)), labeled(theme, "purpose", task.request.purpose), labeled(theme, "prompt", previewText(task.request.prompt, EXPANDED_TEXT_LINES, EXPANDED_TEXT_CHARS)), labeled(theme, "createdAt", task.status.createdAt));
         if (task.status.startedAt) lines.push(labeled(theme, "startedAt", task.status.startedAt));
         if (task.status.finishedAt) lines.push(labeled(theme, "finishedAt", task.status.finishedAt));
         if (task.interventions.length > 0) {
@@ -193,7 +273,7 @@ function renderAgentResult(result: AgentToolResult<unknown>, options: ToolRender
     try {
         if (!isRenderableAgentSnapshot(result.details)) throw new Error("invalid snapshot");
         const snapshot = result.details;
-        if (!options.expanded) return textFromComponent(context.lastComponent, compactAgentLine(theme, snapshot, words));
+        if (!options.expanded) return compactAgentCard(context.lastComponent, snapshot, theme, words);
         const args = argsRecord(context);
         const message = typeof args.message === "string" ? args.message : undefined;
         return textFromComponent(context.lastComponent, expandedAgentCard(theme, snapshot, message, words));
@@ -206,6 +286,7 @@ export function renderSendCall(args: SendCardArgs, theme: Theme, context: CardRe
         if (args.agent) lines.push(labeled(theme, "requestedAgent", agentTypeText(theme, args.agent)));
         if (args.access) lines.push(labeled(theme, "requestedAccess", args.access));
         if (args.agentId !== undefined) lines.push(labeled(theme, "agentId", args.agentId));
+        if (args.purpose) lines.push(labeled(theme, "purpose", previewText(args.purpose, 1, 120)));
         lines.push(labeled(theme, "message", previewText(args.message, EXPANDED_TEXT_LINES, EXPANDED_TEXT_CHARS)));
     }
     return textFromComponent(context.lastComponent, lines.join("\n"));
@@ -229,19 +310,26 @@ export function renderReportCall(args: ReportCardArgs, theme: Theme, context: Ca
     return textFromComponent(context.lastComponent, lines.join("\n"));
 }
 export function renderAgentToolResult(result: AgentToolResult<unknown>, options: ToolRenderResultOptions, theme: Theme, context: CardRenderContext, words?: readonly string[]): Component { return renderAgentResult(result, options, theme, context, words); }
+function party(endpointId: unknown, identities: Map<string, AgentDisplayIdentity>, words?: readonly string[]): string | undefined {
+    return partyLabelForEndpoint(typeof endpointId === "string" ? endpointId : undefined, identities, words);
+}
+
 export function renderSendResult(result: AgentToolResult<unknown>, options: ToolRenderResultOptions, theme: Theme, context: CardRenderContext, words?: readonly string[]): Component {
     const disposition = (result.details as { disposition?: unknown } | undefined)?.disposition;
     if (disposition === "intervened") {
-        const details = result.details as { agentId?: unknown; taskId?: unknown; sequence?: unknown; messageId?: unknown; deliveryState?: unknown; displayIdentity?: unknown };
+        const details = result.details as { agentId?: unknown; taskId?: unknown; sequence?: unknown; messageId?: unknown; deliveryState?: unknown; displayIdentity?: unknown; identities?: unknown; fromEndpointId?: unknown; toEndpointId?: unknown };
         if (typeof details.agentId !== "string" || typeof details.taskId !== "string" || typeof details.sequence !== "number" || typeof details.messageId !== "string") return textFromComponent(context.lastComponent, resultProblem(result, options, theme, context));
         const identity = identityFor(details.agentId, details.displayIdentity, words);
-        const lines = [joinParts([formatCompactAgentIdentity(identity), "follow-up queued", `#${details.sequence}`])];
-        if (options.expanded) {
-            const args = argsRecord(context);
-            lines.push(labeled(theme, "agentId", details.agentId), labeled(theme, "taskId", details.taskId), labeled(theme, "messageId", details.messageId), labeled(theme, "deliveryState", typeof details.deliveryState === "string" ? details.deliveryState : "unavailable"));
-            if (typeof args.message === "string") lines.push(labeled(theme, "followUp", previewText(args.message, 4, 512)));
-        }
-        return textFromComponent(context.lastComponent, lines.join("\n"));
+        const identities = identityMap(details.identities);
+        identities.set(details.agentId, identity);
+        const from = party(details.fromEndpointId, identities, words);
+        const to = party(details.toEndpointId ?? `agent:${details.agentId}`, identities, words);
+        const args = argsRecord(context);
+        const body = typeof args.message === "string" ? args.message : undefined;
+        const extra = options.expanded
+            ? [labeled(theme, "agentId", details.agentId), labeled(theme, "taskId", details.taskId), labeled(theme, "messageId", details.messageId)]
+            : [];
+        return eventCard([directionalBlock(from, to, "follow-up", typeof details.deliveryState === "string" ? details.deliveryState : "pending", body, extra)], theme, options.expanded);
     }
     if (!isSubmitDetails(result.details) || !result.details.task) return textFromComponent(context.lastComponent, resultProblem(result, options, theme, context));
     return renderAgentResult(result, options, theme, context, words);
@@ -256,17 +344,23 @@ export function renderStopResult(result: AgentToolResult<unknown>, options: Tool
     return renderAgentResult(result, options, theme, context, words);
 }
 
-export function renderReportResult(result: AgentToolResult<unknown>, options: ToolRenderResultOptions, theme: Theme, context: CardRenderContext): Component {
-    const details = result.details as { reportId?: unknown; taskId?: unknown; state?: unknown; displayIdentity?: unknown } | undefined;
+export function renderReportResult(result: AgentToolResult<unknown>, options: ToolRenderResultOptions, theme: Theme, context: CardRenderContext, words?: readonly string[]): Component {
+    const details = result.details as { reportId?: unknown; taskId?: unknown; state?: unknown; displayIdentity?: unknown; identities?: unknown; fromEndpointId?: unknown; toEndpointId?: unknown } | undefined;
     if (typeof details?.reportId !== "string" || typeof details.taskId !== "string" || details.state !== "queued") return textFromComponent(context.lastComponent, resultProblem(result, options, theme, context));
     const identity = isDisplayIdentity(details.displayIdentity) ? details.displayIdentity : undefined;
-    const lines = [identity ? joinParts([formatCompactAgentIdentity(identity), "report queued"]) : "report queued"];
-    if (options.expanded) lines.push(labeled(theme, "taskId", details.taskId), labeled(theme, "reportId", details.reportId));
-    return textFromComponent(context.lastComponent, lines.join("\n"));
+    const identities = identityMap(details.identities);
+    if (identity) identities.set(identity.agentId, identity);
+    const from = party(details.fromEndpointId ?? (identity ? `agent:${identity.agentId}` : undefined), identities, words);
+    const to = party(details.toEndpointId, identities, words);
+    const args = argsRecord(context);
+    const body = typeof args.summary === "string" ? args.summary : undefined;
+    const extra = options.expanded ? [labeled(theme, "taskId", details.taskId), labeled(theme, "reportId", details.reportId)] : [];
+    return eventCard([directionalBlock(from, to, "report", "pending", body, extra)], theme, options.expanded);
 }
 type CompletionMessage = { customType: string; content: unknown; details?: unknown };
 type CompletionCardTask = { taskId: string; agentId: string; state: TaskState };
-type CompletionCardPayload = { tasks: CompletionCardTask[]; pendingTasks: CompletionCardTask[]; identities: Map<string, AgentDisplayIdentity> };
+type CompletionTaskDisplay = { taskId: string; fromEndpointId?: string; toEndpointId?: string; purpose?: string; deliveryState?: string; preview?: string };
+type CompletionCardPayload = { tasks: CompletionCardTask[]; pendingTasks: CompletionCardTask[]; identities: Map<string, AgentDisplayIdentity>; display: Map<string, CompletionTaskDisplay> };
 
 function identityMap(value: unknown): Map<string, AgentDisplayIdentity> {
     if (!value || typeof value !== "object" || Array.isArray(value)) return new Map();
@@ -291,6 +385,27 @@ function completionTasks(value: unknown): CompletionCardTask[] | undefined {
     return tasks;
 }
 
+function completionTaskDisplays(value: unknown): Map<string, CompletionTaskDisplay> {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return new Map();
+    const record = value as Record<string, unknown>;
+    const items = [...(Array.isArray(record.tasks) ? record.tasks : []), ...(Array.isArray(record.pendingTasks) ? record.pendingTasks : [])];
+    const display = new Map<string, CompletionTaskDisplay>();
+    for (const item of items) {
+        if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+        const task = item as Record<string, unknown>;
+        if (typeof task.taskId !== "string") continue;
+        display.set(task.taskId, {
+            taskId: task.taskId,
+            ...(typeof task.fromEndpointId === "string" ? { fromEndpointId: task.fromEndpointId } : {}),
+            ...(typeof task.toEndpointId === "string" ? { toEndpointId: task.toEndpointId } : {}),
+            ...(typeof task.purpose === "string" ? { purpose: task.purpose } : {}),
+            ...(typeof task.deliveryState === "string" ? { deliveryState: task.deliveryState } : {}),
+            ...(typeof task.preview === "string" ? { preview: task.preview } : {}),
+        });
+    }
+    return display;
+}
+
 function completionPayload(message: CompletionMessage): CompletionCardPayload | undefined {
     const details = eventDetails(message);
     const sources = details?.sources;
@@ -304,7 +419,7 @@ function completionPayload(message: CompletionMessage): CompletionCardPayload | 
         tasks.push(...sourceTasks);
     }
     const pendingTasks = completionTasks(frontier.pendingTasks);
-    return pendingTasks ? { tasks, pendingTasks, identities: identityMap(details.identities) } : undefined;
+    return pendingTasks ? { tasks, pendingTasks, identities: identityMap(details.identities), display: completionTaskDisplays(details.display) } : undefined;
 }
 
 function taskStateSummary(tasks: Array<{ state: TaskState }>): string {
@@ -314,12 +429,35 @@ function taskStateSummary(tasks: Array<{ state: TaskState }>): string {
     return order.filter(state => counts.has(state)).map(state => `${counts.get(state)} ${state}`).join(" · ") || "0 completed";
 }
 
-function completionTaskLine(task: CompletionCardTask, kind: "completed" | "pending", identities: Map<string, AgentDisplayIdentity>, expanded: boolean, words?: readonly string[]): string {
-    const identity = eventIdentity(task.agentId, identities, words);
-    return expanded
-        ? joinParts([kind, formatCompactAgentIdentity(identity), `taskId:${task.taskId}`, `agentId:${task.agentId}`, `state:${task.state}`])
-        : joinParts([kind, formatCompactAgentIdentity(identity), `state:${task.state}`]);
+function completionTaskBlock(task: CompletionCardTask, kind: "completed" | "pending", payload: CompletionCardPayload, theme: Theme, expanded: boolean, words?: readonly string[]): DirectionalBlock {
+    const identity = eventIdentity(task.agentId, payload.identities, words);
+    payload.identities.set(task.agentId, identity);
+    const view = payload.display.get(task.taskId);
+    const from = party(`agent:${task.agentId}`, payload.identities, words);
+    const to = party(view?.toEndpointId, payload.identities, words);
+    const extra = expanded
+        ? [labeled(theme, "taskId", task.taskId), labeled(theme, "agentId", task.agentId), labeled(theme, "state", task.state)]
+        : [];
+    return directionalBlock(from, to, kind, joinParts([view?.purpose, task.state, view?.deliveryState]), view?.preview, extra);
 }
+
+function followupMessages(details: Record<string, unknown>, messageIds: string[]): string[] {
+    const display = details.display;
+    if (!display || typeof display !== "object" || Array.isArray(display)) return [];
+    const followups = (display as Record<string, unknown>).followups;
+    if (!Array.isArray(followups)) return [];
+    const byId = new Map<string, string>();
+    for (const item of followups) {
+        if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+        const record = item as Record<string, unknown>;
+        if (typeof record.messageId === "string" && typeof record.message === "string") byId.set(record.messageId, record.message);
+    }
+    return messageIds.flatMap(id => {
+        const message = byId.get(id);
+        return message ? [message] : [];
+    });
+}
+
 function eventRecord(message: CompletionMessage, kind: string): Record<string, unknown> | undefined {
     const details = eventDetails(message);
     return details?.kind === kind ? details : undefined;
@@ -327,56 +465,73 @@ function eventRecord(message: CompletionMessage, kind: string): Record<string, u
 function validEventTarget(value: unknown): value is { agentId: string; taskId: string } {
     return Boolean(value && typeof value === "object" && !Array.isArray(value) && typeof (value as Record<string, unknown>).agentId === "string" && typeof (value as Record<string, unknown>).taskId === "string");
 }
-function renderInterventionEvent(message: CompletionMessage, options: { expanded: boolean }, theme: Theme, words?: readonly string[]): string | undefined {
+function renderInterventionEvent(message: CompletionMessage, _options: { expanded: boolean }, theme: Theme, words?: readonly string[]): DirectionalBlock[] | undefined {
     const details = eventRecord(message, "intervention");
     if (!details) return undefined;
     const payload = details.payload;
     if (!validEventTarget(payload)) return undefined;
     const event = payload as Record<string, unknown>;
     if (typeof event.sequence !== "number") return undefined;
-    const identity = eventIdentity(payload.agentId, identityMap(details.identities), words);
-    const lines = [joinParts([formatCompactAgentIdentity(identity), "follow-up received", `#${event.sequence}`])];
-    if (options.expanded) {
-        lines.push(labeled(theme, "agentId", payload.agentId), labeled(theme, "taskId", payload.taskId));
-        if (typeof event.messageId === "string") lines.push(labeled(theme, "messageId", event.messageId));
-        if (typeof details.eventId === "string") lines.push(labeled(theme, "eventId", details.eventId));
-        if (typeof event.message === "string") lines.push(labeled(theme, "followUp", previewText(event.message, 4, 512)));
-    }
-    return lines.join("\n");
+    const identities = identityMap(details.identities);
+    const identity = eventIdentity(payload.agentId, identities, words);
+    identities.set(payload.agentId, identity);
+    const from = party(details.fromEndpointId, identities, words);
+    const to = party(details.toEndpointId ?? `agent:${payload.agentId}`, identities, words);
+    const body = typeof event.message === "string" ? event.message : undefined;
+    const extra = [
+        labeled(theme, "agentId", payload.agentId),
+        labeled(theme, "taskId", payload.taskId),
+        ...(typeof event.messageId === "string" ? [labeled(theme, "messageId", event.messageId)] : []),
+        ...(typeof details.eventId === "string" ? [labeled(theme, "eventId", details.eventId)] : []),
+    ];
+    return [directionalBlock(from, to, "follow-up", typeof details.deliveryState === "string" ? details.deliveryState : undefined, body, extra)];
 }
-function renderAcknowledgmentEvent(message: CompletionMessage, options: { expanded: boolean }, theme: Theme, words?: readonly string[]): string | undefined {
+function renderAcknowledgmentEvent(message: CompletionMessage, _options: { expanded: boolean }, theme: Theme, words?: readonly string[]): DirectionalBlock[] | undefined {
     const details = eventRecord(message, "delivery-ack");
     if (!details || !Array.isArray(details.payloads)) return undefined;
-    const identities = identityMap(details.identities); const lines: string[] = [];
+    const identities = identityMap(details.identities);
+    const blocks: DirectionalBlock[] = [];
     for (const payload of details.payloads) {
         if (!validEventTarget(payload)) return undefined;
         const acknowledgment = payload as Record<string, unknown>;
         if (typeof acknowledgment.acknowledgedThrough !== "number") return undefined;
-        lines.push(joinParts([formatCompactAgentIdentity(eventIdentity(payload.agentId, identities, words)), `follow-up acknowledged through #${acknowledgment.acknowledgedThrough}`]));
-        if (options.expanded) {
-            lines.push(labeled(theme, "agentId", payload.agentId), labeled(theme, "taskId", payload.taskId));
-            if (typeof acknowledgment.ackId === "string") lines.push(labeled(theme, "ackId", acknowledgment.ackId));
-            if (Array.isArray(acknowledgment.messageIds)) lines.push(labeled(theme, "messageIds", acknowledgment.messageIds.filter((value): value is string => typeof value === "string").join(", ")));
-        }
+        const identity = eventIdentity(payload.agentId, identities, words);
+        identities.set(payload.agentId, identity);
+        const from = party(details.fromEndpointId ?? `agent:${payload.agentId}`, identities, words);
+        const to = party(details.toEndpointId, identities, words);
+        const messageIds = Array.isArray(acknowledgment.messageIds) ? acknowledgment.messageIds.filter((value): value is string => typeof value === "string") : [];
+        const originals = followupMessages(details, messageIds);
+        const extra = [
+            labeled(theme, "agentId", payload.agentId),
+            labeled(theme, "taskId", payload.taskId),
+            ...(typeof acknowledgment.ackId === "string" ? [labeled(theme, "ackId", acknowledgment.ackId)] : []),
+            ...(messageIds.length ? [labeled(theme, "messageIds", messageIds.join(", "))] : []),
+        ];
+        const delivery = typeof details.deliveryState === "string" ? details.deliveryState : "acknowledged";
+        if (originals.length) for (const original of originals) blocks.push(directionalBlock(from, to, "intake confirmed", delivery, original, extra));
+        else blocks.push(directionalBlock(from, to, "intake confirmed", delivery, undefined, extra));
     }
-    return lines.length ? lines.join("\n") : undefined;
+    return blocks.length ? blocks : undefined;
 }
-function renderReportEvent(message: CompletionMessage, options: { expanded: boolean }, theme: Theme, words?: readonly string[]): string | undefined {
+function renderReportEvent(message: CompletionMessage, _options: { expanded: boolean }, theme: Theme, words?: readonly string[]): DirectionalBlock[] | undefined {
     const details = eventRecord(message, "report");
     if (!details) return undefined;
     const payload = details.payload;
     if (!validEventTarget(payload)) return undefined;
     const report = payload as Record<string, unknown>;
     if (typeof report.summary !== "string") return undefined;
-    const identity = eventIdentity(payload.agentId, identityMap(details.identities), words);
-    const lines = [joinParts([formatCompactAgentIdentity(identity), "report", previewText(report.summary, 2, 320)])];
-    if (options.expanded) {
-        lines.push(labeled(theme, "agentId", payload.agentId), labeled(theme, "taskId", payload.taskId));
-        if (typeof report.reportId === "string") lines.push(labeled(theme, "reportId", report.reportId));
-        if (typeof details.eventId === "string") lines.push(labeled(theme, "eventId", details.eventId));
-        lines.push(labeled(theme, "summary", previewText(report.summary, EXPANDED_TEXT_LINES, EXPANDED_TEXT_CHARS)));
-    }
-    return lines.join("\n");
+    const identities = identityMap(details.identities);
+    const identity = eventIdentity(payload.agentId, identities, words);
+    identities.set(payload.agentId, identity);
+    const from = party(details.fromEndpointId ?? `agent:${payload.agentId}`, identities, words);
+    const to = party(details.toEndpointId, identities, words);
+    const extra = [
+        labeled(theme, "agentId", payload.agentId),
+        labeled(theme, "taskId", payload.taskId),
+        ...(typeof report.reportId === "string" ? [labeled(theme, "reportId", report.reportId)] : []),
+        ...(typeof details.eventId === "string" ? [labeled(theme, "eventId", details.eventId)] : []),
+    ];
+    return [directionalBlock(from, to, "report", typeof details.deliveryState === "string" ? details.deliveryState : undefined, report.summary, extra)];
 }
 
 function agentIdFromEventValue(value: unknown, depth = 0): string | undefined {
@@ -408,17 +563,18 @@ function fallbackEventAgentId(message: CompletionMessage): string | undefined {
 export function renderMeshEventMessage(message: CompletionMessage, options: { expanded: boolean; outputPad?: number }, theme: Theme, words?: readonly string[]): Component {
     const payload = completionPayload(message);
     if (payload) {
-        const lines = [theme.fg("accent", `completion · ${taskStateSummary(payload.tasks)} · ${payload.pendingTasks.length} pending`)];
-        lines.push(...payload.tasks.map(task => completionTaskLine(task, "completed", payload.identities, options.expanded, words)));
-        lines.push(...payload.pendingTasks.map(task => completionTaskLine(task, "pending", payload.identities, options.expanded, words)));
-        return new WidthSafeText(lines.join("\n"), options.outputPad ?? 0);
+        const blocks: DirectionalBlock[] = [{ header: theme.fg("accent", `completion · ${taskStateSummary(payload.tasks)} · ${payload.pendingTasks.length} pending`) }];
+        blocks.push(...payload.tasks.map(task => completionTaskBlock(task, "completed", payload, theme, options.expanded, words)));
+        blocks.push(...payload.pendingTasks.map(task => completionTaskBlock(task, "pending", payload, theme, options.expanded, words)));
+        return eventCard(blocks, theme, options.expanded, options.outputPad ?? 0);
     }
     const event = renderInterventionEvent(message, options, theme, words) ?? renderAcknowledgmentEvent(message, options, theme, words) ?? renderReportEvent(message, options, theme, words);
-    if (event) return new WidthSafeText(event, options.outputPad ?? 0);
+    if (event) return eventCard(event, theme, options.expanded, options.outputPad ?? 0);
     const agentId = fallbackEventAgentId(message);
     const identity = agentId ? formatCompactAgentIdentity(displayIdentityForAgentId(agentId, words)) : undefined;
-    const lines = [joinParts([identity, "mesh event · unresolved"])];
-    if (options.expanded && agentId) lines.push(labeled(theme, "agentId", agentId));
-    if (options.expanded && typeof message.content === "string") lines.push(previewText(message.content, 4, 512));
-    return new WidthSafeText(theme.fg("muted", lines.join("\n")), options.outputPad ?? 0);
+    const extra = [
+        ...(options.expanded && agentId ? [labeled(theme, "agentId", agentId)] : []),
+        ...(options.expanded && typeof message.content === "string" ? [previewText(message.content, 4, 512)] : []),
+    ];
+    return eventCard([{ header: theme.fg("muted", joinParts([identity, "mesh event · unresolved"])), extra }], theme, options.expanded, options.outputPad ?? 0);
 }

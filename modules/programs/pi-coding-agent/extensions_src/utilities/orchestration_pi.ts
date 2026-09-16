@@ -1,38 +1,38 @@
-import type { AgentLaunchEnvelope, CallerPolicy } from "./agent_types.ts";
+import type { AgentLaunchEnvelope } from "./agent_types.ts";
 import type { NativeLaunchDescriptor } from "./orchestration_harness.ts";
 import type { SubagentRuntimeConfig } from "./orchestration_types.ts";
 
 export const MESH_REPORT_TOOL_NAME = "mesh_report" as const;
 export const MESH_PEER_TOOL_NAMES = Object.freeze(["mesh_send", "mesh_get", "mesh_wait", "mesh_stop", MESH_REPORT_TOOL_NAME] as const);
 
-export function meshPiLaunchTools(roleTools: readonly string[], policy: CallerPolicy): string[] {
-    const canDispatch = Object.keys(policy.targets).length > 0;
+export function meshPiLaunchTools(roleTools: readonly string[], targets: readonly string[]): string[] {
+    const canDispatch = targets.length > 0;
     return [...new Set([...roleTools, ...(canDispatch ? MESH_PEER_TOOL_NAMES : [MESH_REPORT_TOOL_NAME])])];
 }
 
 function runtimeExtensions(envelope: AgentLaunchEnvelope): string[] {
-    const extensions = envelope.childExtensions[envelope.role];
-    if (!extensions) throw new Error(`Immutable launch envelope has no child manifest for ${envelope.role}`);
-    if (envelope.selfRole.contextPolicy !== "prompt-only") return extensions;
+    const extensions = envelope.childExtensions[envelope.childId];
+    if (!extensions) throw new Error(`Immutable launch envelope has no child manifest for ${envelope.childId}`);
+    if (envelope.self.contextPolicy !== "prompt-only") return extensions;
     return extensions.filter(path => /(?:^|\/)(?:orchestration|orchestration_child_bridge)\.ts$/u.test(path));
 }
 
-export function piLaunchDescriptor(config: SubagentRuntimeConfig, input: { meshId: string; agentId: string; agentDirectory: string; role: string; taskPath: string; launchEnvelope: string; epochSnapshot: AgentLaunchEnvelope }): NativeLaunchDescriptor {
+export function piLaunchDescriptor(config: SubagentRuntimeConfig, input: { meshId: string; agentId: string; agentDirectory: string; childId: string; taskPath: string; launchEnvelope: string; epochSnapshot: AgentLaunchEnvelope }): NativeLaunchDescriptor {
     const envelope = input.epochSnapshot;
     if (envelope.meshId !== input.meshId || envelope.agentId !== input.agentId) throw new Error("Pi launch metadata does not match the immutable launch envelope");
-    if (envelope.role !== input.role) throw new Error("Pi launch role does not match the immutable launch envelope");
-    const profile = envelope.executionProfile;
-    if (profile.harness !== "pi" || profile.harnessOptions !== undefined) throw new Error("Selected execution profile is not a Pi execution profile");
+    if (envelope.childId !== input.childId) throw new Error("Pi launch child does not match the immutable launch envelope");
+    const execution = envelope.self.execution;
+    if (execution.harness !== "pi" || execution.harnessOptions !== undefined) throw new Error("Selected execution is not Pi execution");
 
     const args = ["--session-dir", `${input.agentDirectory}/session`, "--no-extensions"];
     for (const extension of runtimeExtensions(envelope)) args.push("-e", extension);
-    args.push("--model", profile.models[envelope.initialCandidateIndex] ?? profile.models[0]!);
-    if (profile.thinkingLevel) args.push("--thinking", profile.thinkingLevel);
+    args.push("--model", execution.models[envelope.initialCandidateIndex] ?? execution.models[0]!);
+    if (execution.thinkingLevel) args.push("--thinking", execution.thinkingLevel);
 
-    if (envelope.selfRole.contextPolicy === "prompt-only") {
+    if (envelope.self.contextPolicy === "prompt-only") {
         args.push("--no-context-files", "--no-skills", "--no-prompt-templates", "--no-tools");
     } else {
-        const tools = meshPiLaunchTools(envelope.selfRole.tools, envelope.policies[envelope.role] ?? { targets: {} });
+        const tools = meshPiLaunchTools(envelope.self.tools, envelope.self.targets);
         if (tools.length) args.push("--tools", tools.join(","));
         else args.push("--no-tools");
     }

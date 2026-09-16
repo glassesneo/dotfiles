@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { CursorAcpDriver } from "../extensions_src/utilities/orchestration_cursor_acp.ts";
+import { UnconfirmedTerminationError, isUnconfirmedTermination } from "../extensions_src/utilities/orchestration_external_driver.ts";
+import { eventually } from "./test_helpers.ts";
 
 const peer = `#!/usr/bin/env node
 const fs=require("fs"); const readline=require("readline");
@@ -25,11 +27,30 @@ input.on("line",line=>{const message=JSON.parse(line); record(message);
   if(scenario==="update-todos-request") send({jsonrpc:"2.0",id:0,method:"cursor/update_todos",params:{todos:[{id:"1",content:"x",status:"pending"}]}});
   else if(scenario==="update-todos-notify"){
    send({jsonrpc:"2.0",method:"cursor/update_todos",params:{todos:[{id:"1",content:"x",status:"pending"}]}});
-   send({jsonrpc:"2.0",id:"sync-1",method:"session/update",params:{update:{sessionUpdate:"agent_message_chunk",content:{text:"continued after todos"}}}});
+   send({jsonrpc:"2.0",id:"sync-1",method:"session/update",params:{sessionId:"session-1",update:{sessionUpdate:"agent_message_chunk",content:{text:"continued after todos"}}}});
+  } else if(scenario==="wrong-session-update"){
+   send({jsonrpc:"2.0",method:"session/update",params:{sessionId:"other-session",update:{sessionUpdate:"agent_message_chunk",content:{text:"foreign"}}}});
+   send({jsonrpc:"2.0",method:"session/update",params:{sessionId:"session-1",update:{sessionUpdate:"agent_message_chunk",content:{text:"local"}}}});
+   send({jsonrpc:"2.0",id:message.id,result:{stopReason:"end_turn"}});
+  } else if(scenario==="wrong-session-permission") send({jsonrpc:"2.0",id:"permission-1",method:"session/request_permission",params:{sessionId:"other-session",options:[{kind:"allow_always",optionId:"allow-always"},{kind:"reject_once",optionId:"reject-once"}]}});
+  else if(scenario==="missing-session-update"){
+   send({jsonrpc:"2.0",method:"session/update",params:{update:{sessionUpdate:"agent_message_chunk",content:{text:"dropped"}}}});
+   send({jsonrpc:"2.0",id:message.id,result:{stopReason:"end_turn"}});
+  } else if(scenario==="missing-session-permission") send({jsonrpc:"2.0",id:"permission-1",method:"session/request_permission",params:{options:[{kind:"allow_always",optionId:"allow-always"},{kind:"reject_once",optionId:"reject-once"}]}});
+  else if(scenario==="late-update"){
+   send({jsonrpc:"2.0",method:"session/update",params:{sessionId:"session-1",update:{sessionUpdate:"agent_message_chunk",content:{text:"cursor answer"}}}});
+   send({jsonrpc:"2.0",id:message.id,result:{stopReason:"end_turn"}});
+   send({jsonrpc:"2.0",method:"session/update",params:{sessionId:"session-1",update:{sessionUpdate:"agent_message_chunk",content:{text:"late"}}}});
+  } else if(scenario==="idle-permission"){
+   send({jsonrpc:"2.0",method:"session/update",params:{sessionId:"session-1",update:{sessionUpdate:"agent_message_chunk",content:{text:"cursor answer"}}}});
+   send({jsonrpc:"2.0",id:message.id,result:{stopReason:"end_turn"}});
+   send({jsonrpc:"2.0",id:"permission-late",method:"session/request_permission",params:{sessionId:"session-1",options:[{kind:"allow_always",optionId:"allow-always"}]}});
   } else {
-   send({jsonrpc:"2.0",method:"session/update",params:{update:{sessionUpdate:"agent_message_chunk",content:{text:"cursor answer"}}}});
-   if(scenario==="blocking") send({jsonrpc:"2.0",id:"blocking-1",method:"cursor/blocking_request",params:{}});
+   send({jsonrpc:"2.0",method:"session/update",params:{sessionId:"session-1",update:{sessionUpdate:"agent_message_chunk",content:{text:"cursor answer"}}}});
+   if(scenario==="blocking") send({jsonrpc:"2.0",id:"blocking-1",method:"cursor/blocking_request",params:{sessionId:"session-1"}});
    else if(scenario==="stop") send({jsonrpc:"2.0",id:message.id,result:{stopReason:"max_tokens"}});
+   else if(scenario==="missing-stop-reason") send({jsonrpc:"2.0",id:message.id,result:{}});
+   else if(scenario==="malformed-stop-reason") send({jsonrpc:"2.0",id:message.id,result:{stopReason:1}});
    else {
    let options;
    if(scenario==="reject-always") options=[{kind:"allow_once",optionId:"allow-once"},{kind:"reject_always",optionId:"reject-always"}];
@@ -37,12 +58,12 @@ input.on("line",line=>{const message=JSON.parse(line); record(message);
    else if(scenario==="allow-once") options=[{kind:"reject_once",optionId:"reject-once"},{kind:"allow_once",optionId:"allow-once"}];
    else if(scenario==="reject-only") options=[{kind:"reject_once",optionId:"reject-once"}];
    else options=[{kind:"allow_once",optionId:"allow-once"},{kind:"allow_always",optionId:"allow-always"},{kind:"reject_once",optionId:"reject-once"},{kind:"reject_always",optionId:"reject-always"}];
-    send({jsonrpc:"2.0",id:"permission-1",method:"session/request_permission",params:{options}});
+    send({jsonrpc:"2.0",id:"permission-1",method:"session/request_permission",params:{sessionId:"session-1",options}});
    }
   }
  } else if(message.id==="permission-1") send({jsonrpc:"2.0",id:promptId,result:{stopReason:"end_turn"}});
  else if(message.id===0){
-  send({jsonrpc:"2.0",method:"session/update",params:{update:{sessionUpdate:"agent_message_chunk",content:{text:"continued after todos"}}}});
+  send({jsonrpc:"2.0",method:"session/update",params:{sessionId:"session-1",update:{sessionUpdate:"agent_message_chunk",content:{text:"continued after todos"}}}});
   send({jsonrpc:"2.0",id:promptId,result:{stopReason:"end_turn"}});
  } else if(message.id==="sync-1") send({jsonrpc:"2.0",id:promptId,result:{stopReason:"end_turn"}});
 });`;
@@ -114,11 +135,30 @@ void test("Cursor read rejects allow-only requests and write prefers persistent 
     }
 });
 
-void test("Cursor ACP fails unsupported blocking requests and non-end-turn completion", async () => {
-    for (const scenario of ["blocking", "stop"]) {
-        const f = await fixture(scenario); const driver = new CursorAcpDriver(options(f, "agent", () => {})); await driver.start();
-        await assert.rejects(driver.runTask("task"), scenario === "blocking" ? /Unsupported blocking ACP request/u : /stopped with max_tokens/u);
-        await driver.shutdown();
+// Admission: missing/malformed prompt stopReason is not a provider terminal reason; treating it as a reusable confirmed stop would idle a child whose turn never ended.
+void test("Cursor ACP fails unsupported blocking requests as unconfirmed termination and non-end-turn completion as a confirmed stop", async () => {
+    const blocking = await fixture("blocking"); const blockingDriver = new CursorAcpDriver(options(blocking, "agent", () => {})); await blockingDriver.start();
+    await assert.rejects(blockingDriver.runTask("task"), error => {
+        assert.equal(isUnconfirmedTermination(error), true);
+        assert.match((error as Error).message, /Unsupported blocking ACP request/u);
+        return true;
+    });
+    await blockingDriver.shutdown();
+    const stopped = await fixture("stop"); const stopDriver = new CursorAcpDriver(options(stopped, "agent", () => {})); await stopDriver.start();
+    await assert.rejects(stopDriver.runTask("task"), error => {
+        assert.equal(error instanceof UnconfirmedTerminationError, false);
+        assert.match((error as Error).message, /stopped with max_tokens/u);
+        return true;
+    });
+    await stopDriver.shutdown();
+    for (const scenario of ["missing-stop-reason", "malformed-stop-reason"] as const) {
+        const missing = await fixture(scenario); const missingDriver = new CursorAcpDriver(options(missing, "agent", () => {})); await missingDriver.start();
+        await assert.rejects(missingDriver.runTask("task"), error => {
+            assert.equal(isUnconfirmedTermination(error), true);
+            assert.match((error as Error).message, /without a stopReason/u);
+            return true;
+        });
+        await missingDriver.shutdown();
     }
 });
 
@@ -150,5 +190,84 @@ void test("Cursor ACP does not reply to cursor/update_todos notifications and co
         assert.equal(replies.length, 1);
         assert.equal(replies[0]?.id, "sync-1");
         assert.ok(!("error" in (replies[0] ?? {})));
+    } finally { await driver.shutdown(); }
+});
+
+// Admission: session/update is a session-scoped ACP notification; types cannot observe a foreign sessionId being folded into the active turn.
+// Given a prompt that also receives a different session's update, the driver keeps only the matching session text and blocks reuse.
+void test("Cursor ACP ignores a foreign session/update and blocks reuse", { timeout: 15_000 }, async () => {
+    const f = await fixture("wrong-session-update");
+    const driver = new CursorAcpDriver(options(f, "agent", () => {}));
+    try {
+        await driver.start();
+        assert.deepEqual(await driver.runTask("bounded task"), { output: "local", stopReason: "end_turn" });
+        const fatal = driver.fatalError();
+        assert.equal(isUnconfirmedTermination(fatal), true);
+        assert.match(fatal!.message, /sessionId does not match/u);
+        await assert.rejects(driver.runTask("next"), isUnconfirmedTermination);
+    } finally { await driver.shutdown(); }
+});
+
+// Admission: a permission request can grant write access; types cannot observe a foreign session option being selected.
+void test("Cursor ACP does not allow a foreign-session permission request", { timeout: 15_000 }, async () => {
+    const f = await fixture("wrong-session-permission");
+    const driver = new CursorAcpDriver(options(f, "agent", () => {}));
+    try {
+        await driver.start();
+        assert.deepEqual(await driver.runTask("bounded task"), { output: "", stopReason: "end_turn" });
+        const permission = (await requests(f.requestsPath)).find(message => message.id === "permission-1" && ("result" in message || "error" in message));
+        assert.deepEqual(permission?.result, { outcome: { outcome: "cancelled" } });
+        assert.equal(isUnconfirmedTermination(driver.fatalError()), true);
+    } finally { await driver.shutdown(); }
+});
+
+// Admission: session/update and permission are session-scoped; a missing sessionId is as untrusted as a foreign one.
+void test("Cursor ACP requires sessionId on session/update and permission requests", { timeout: 15_000 }, async () => {
+    const update = await fixture("missing-session-update");
+    const updateDriver = new CursorAcpDriver(options(update, "agent", () => {}));
+    try {
+        await updateDriver.start();
+        assert.deepEqual(await updateDriver.runTask("bounded task"), { output: "", stopReason: "end_turn" });
+        assert.equal(updateDriver.partialOutput().includes("dropped"), false);
+        assert.equal(isUnconfirmedTermination(updateDriver.fatalError()), true);
+        assert.match(updateDriver.fatalError()!.message, /sessionId is missing/u);
+        await assert.rejects(updateDriver.runTask("next"), isUnconfirmedTermination);
+    } finally { await updateDriver.shutdown(); }
+    const permission = await fixture("missing-session-permission");
+    const permissionDriver = new CursorAcpDriver(options(permission, "agent", () => {}));
+    try {
+        await permissionDriver.start();
+        assert.deepEqual(await permissionDriver.runTask("bounded task"), { output: "", stopReason: "end_turn" });
+        const reply = (await requests(permission.requestsPath)).find(message => message.id === "permission-1" && ("result" in message || "error" in message));
+        assert.deepEqual(reply?.result, { outcome: { outcome: "cancelled" } });
+        assert.equal(isUnconfirmedTermination(permissionDriver.fatalError()), true);
+        assert.match(permissionDriver.fatalError()!.message, /sessionId is missing/u);
+    } finally { await permissionDriver.shutdown(); }
+});
+
+// Admission: ACP may emit session/update after end_turn on the same stdout burst; applying it as in-turn text would reuse a child whose prior work already completed.
+void test("Cursor ACP does not apply a late session/update as a new turn and blocks reuse", { timeout: 15_000 }, async () => {
+    const f = await fixture("late-update");
+    const driver = new CursorAcpDriver(options(f, "agent", () => {}));
+    try {
+        await driver.start();
+        assert.deepEqual(await driver.runTask("bounded task"), { output: "cursor answer", stopReason: "end_turn" });
+        await eventually(() => isUnconfirmedTermination(driver.fatalError()));
+        assert.equal(driver.partialOutput().includes("late"), false);
+        await assert.rejects(driver.runTask("next"), isUnconfirmedTermination);
+    } finally { await driver.shutdown(); }
+});
+
+// Admission: a permission request with no active turn can still be granted if the client answers selected; types cannot observe that the option was cancelled.
+void test("Cursor ACP does not allow a permission request after the turn has ended", { timeout: 15_000 }, async () => {
+    const f = await fixture("idle-permission");
+    const driver = new CursorAcpDriver(options(f, "agent", () => {}));
+    try {
+        await driver.start();
+        assert.deepEqual(await driver.runTask("bounded task"), { output: "cursor answer", stopReason: "end_turn" });
+        await eventually(async () => (await requests(f.requestsPath)).some(message => message.id === "permission-late" && "result" in message));
+        const permission = (await requests(f.requestsPath)).find(message => message.id === "permission-late" && "result" in message);
+        assert.deepEqual(permission?.result, { outcome: { outcome: "cancelled" } });
+        assert.equal(isUnconfirmedTermination(driver.fatalError()), true);
     } finally { await driver.shutdown(); }
 });

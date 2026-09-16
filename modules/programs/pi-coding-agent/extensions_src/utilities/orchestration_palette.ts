@@ -5,7 +5,7 @@ import { paletteHelp, paletteKeyAction, type ResolvedPaletteKeymap } from "./com
 import { actionHint } from "./extension_keybindings.ts";
 import { formatPaletteBreadcrumb, renderFramedLines } from "./command_palette_tui.ts";
 import { historyAvailability, openMeshHistory } from "./orchestration_history.ts";
-import { displayIdentityForSnapshot } from "./orchestration_identity.ts";
+import { displayIdentityForSnapshot, formatUsualStatus, publicCapabilityLabel } from "./orchestration_identity.ts";
 import {
     AGENT_STATE_BADGES,
     buildMeshDisplayTree,
@@ -20,7 +20,7 @@ import {
 } from "./orchestration_display_tree.ts";
 import { openLivePreview, type LivePreviewDisposition } from "./orchestration_preview.ts";
 import { openAgentWindow, probeTmux, unlinkAgentWindow, type CommandExecutor } from "./orchestration_tmux.ts";
-import { isTerminalAgent, isTerminalTask, promptSummary, type AgentSnapshot, type TaskState } from "./orchestration_types.ts";
+import { isTerminalAgent, isTerminalTask, type AgentSnapshot, type TaskState } from "./orchestration_types.ts";
 
 export interface MeshIdentity {
     meshId: string;
@@ -39,6 +39,7 @@ export interface MeshPaletteDependencies extends MeshIdentity {
     /** Mesh-wide data and authority boundaries supplied by the orchestration owner. */
     discover: (identity: MeshIdentity) => Promise<{ agents: AgentSnapshot[]; malformedCount: number }>;
     stopAgent: (request: MeshIdentity & { agentId: string; reason: string }) => Promise<AgentSnapshot>;
+    openChildHistory?: (snapshot: AgentSnapshot) => Promise<void>;
     /** Optional test/harness overrides for open paths. */
     openHistory?: typeof openMeshHistory;
     openLiveWindow?: typeof openAgentWindow;
@@ -78,51 +79,54 @@ function isNonblank(text: string | undefined): text is string {
     return typeof text === "string" && text.trim().length > 0;
 }
 
-/** Width-aware identity line. Identity fields always precede lifecycle and summary. */
+/** Width-aware identity line. Handle and textual state stay ahead of capability and purpose. */
 export function composeIdentityLine(options: {
     width: number;
     marker: string;
     connector: string;
     expand: string;
     handle: string;
-    role: string;
-    profile: string;
+    capability: string;
+    purpose: string;
     state: string;
 }): string {
     const prefixes = [
-        `${options.marker}${options.connector}${options.expand}${options.handle} role:${options.role} profile:${options.profile}`,
-        `${options.marker}${options.expand}${options.handle} role:${options.role} profile:${options.profile}`,
-        `${options.marker}${options.expand}${options.handle} role:${options.role}`,
+        `${options.marker}${options.connector}${options.expand}${options.handle} ${options.capability} ${options.purpose}`,
+        `${options.marker}${options.expand}${options.handle} ${options.capability} ${options.purpose}`,
+        `${options.marker}${options.expand}${options.handle} ${options.capability}`,
         `${options.marker}${options.expand}${options.handle}`,
     ];
     for (const prefix of prefixes) {
         const line = `${prefix} ${options.state}`;
         if (visibleWidth(line) <= options.width) return line;
     }
-    return truncateToWidth(prefixes.at(-1)!, options.width, "");
+    const prefix = `${options.marker}${options.expand}`;
+    const state = ` ${options.state}`;
+    const handleBudget = options.width - visibleWidth(prefix) - visibleWidth(state);
+    if (handleBudget >= 1) return `${prefix}${truncateToWidth(options.handle, handleBudget, "…")}${state}`;
+    return truncateToWidth(`${prefix}${truncateToWidth(options.handle, 1, "")}${state}`, options.width, "");
 }
 
-/** One-row agent line, dropping summary then lifecycle before identity fields. */
+/** One-row agent line, dropping purpose then capability before handle and state. */
 export function composeAgentRow(options: {
     width: number;
     marker: string;
     connector: string;
     expand: string;
     handle: string;
-    role: string;
-    profile: string;
+    capability: string;
+    purpose: string;
     state: string;
-    summary: string;
 }): string {
-    const identity = `${options.marker}${options.connector}${options.expand}${options.handle} role:${options.role} profile:${options.profile}`;
+    const identity = `${options.marker}${options.connector}${options.expand}${options.handle} ${options.capability}`;
     const candidates = [
-        `${identity} ${options.state} ${options.summary}`,
+        `${identity} ${options.purpose} ${options.state}`,
         `${identity} ${options.state}`,
-        identity,
+        `${options.marker}${options.connector}${options.expand}${options.handle} ${options.state}`,
     ];
     for (const candidate of candidates) if (visibleWidth(candidate) <= options.width) return candidate;
-    const summaryBudget = options.width - visibleWidth(`${identity} ${options.state} `);
-    if (summaryBudget >= 2) return truncateToWidth(`${identity} ${options.state} ${truncateToWidth(options.summary, summaryBudget, "…")}`, options.width, "");
+    const purposeBudget = options.width - visibleWidth(`${identity}  ${options.state}`);
+    if (purposeBudget >= 2) return truncateToWidth(`${identity} ${truncateToWidth(options.purpose, purposeBudget, "…")} ${options.state}`, options.width, "");
     return composeIdentityLine(options);
 }
 
@@ -147,12 +151,16 @@ export function detailPaneModel(snapshot: AgentSnapshot | undefined, words?: rea
         return { role: "muted", title: "Detail", identityLines: [], body: "", notices: [{ text: "No agent selected.", role: "muted" }] };
     }
     const identity = displayIdentityForSnapshot(snapshot, words);
+    const capability = publicCapabilityLabel(identity) ?? "unavailable";
     const identityLines = [
-        `Handle ${identity.handle} · ID ${identity.agentId}`,
-        `role:${identity.role ?? "unresolved"} · ${identity.roleDescription ?? "unavailable"}`,
-        `profile:${identity.profile ?? "unresolved"} · model ${identity.model ?? "unavailable"} · fallback ${identity.fallbackCount ?? 0}`,
-        `thinking ${identity.thinkingLevel ?? "unavailable"} · harness ${identity.harness ?? "unavailable"}`,
+        `Handle ${identity.handle}`,
+        capability,
+        identity.purpose ? `purpose ${identity.purpose}` : "No task",
+        formatUsualStatus(identity.status) ?? "Status unknown",
+        ...(identity.description ? [identity.description] : []),
+        `ID ${identity.agentId}`,
         ...(identity.attempts ?? []).map(attempt => `attempt #${attempt.index} ${attempt.model} ${attempt.category}${attempt.message ? `: ${attempt.message}` : ""}`),
+        `thinking ${identity.thinkingLevel ?? "unavailable"} · harness ${identity.harness ?? "unavailable"} · model ${identity.model ?? "unavailable"} · fallback ${identity.fallbackCount ?? 0}`,
     ];
     const task = snapshot.task;
     if (!task) {
@@ -160,7 +168,7 @@ export function detailPaneModel(snapshot: AgentSnapshot | undefined, words?: rea
             role: "accent",
             title: "Agent",
             identityLines,
-            body: `${snapshot.agent.agent}\n\n${snapshot.agent.agentSnapshot.instructions}`,
+            body: [identity.description, snapshot.agent.definitionSnapshot.instructions].filter(isNonblank).join("\n\n"),
             notices: [{ text: "No task record", role: "muted" }, ...lifecycleNotices(snapshot)],
         };
     }
@@ -620,6 +628,30 @@ export class MeshAgentsPaletteComponent implements Component, Focusable {
         } finally { this.#acting = false; }
     }
 
+    async #openChildHistory(): Promise<void> {
+        const selected = this.selected();
+        if (!selected || this.#acting || this.#disposed) return;
+        if (!this.#deps.openChildHistory) {
+            this.#setStatus("warning", "Child history is unavailable in this session.");
+            return;
+        }
+        const selection = selected.agent.agentId;
+        this.#acting = true;
+        this.#cancelRequested = false;
+        this.#setStatus("warning", "WORKING");
+        try {
+            await this.#deps.openChildHistory(selected);
+            if (this.#disposed) return;
+            if (this.#tree.byId.has(selection)) this.#selectAgent(selection);
+            this.#focused = true;
+            this.#setStatus("dim", `History closed for ${displayIdentityForSnapshot(selected, this.#deps.natureHandleWords).handle}`);
+            if (this.#cancelRequested) this.close("return");
+        } catch (error) {
+            if (this.#cancelRequested) { this.close("return"); return; }
+            if (!this.#disposed) this.#setStatus("error", `history failed: ${error instanceof Error ? error.message : String(error)}`);
+        } finally { this.#acting = false; }
+    }
+
     handleInput(data: string) {
         if (this.#disposed) return;
         const action = paletteKeyAction(data, this.#keymap);
@@ -643,6 +675,7 @@ export class MeshAgentsPaletteComponent implements Component, Focusable {
         else if (action === "preview") void this.action("preview");
         else if (action === "unlink") void this.action("unlink");
         else if (action === "toggleTerminal") this.#toggleTerminal();
+        else if (action === "history") void this.#openChildHistory();
         else return;
         this.invalidate();
         this.#tui.requestRender();
@@ -654,21 +687,18 @@ export class MeshAgentsPaletteComponent implements Component, Focusable {
         const expand = node.children.length > 0 ? (this.#collapsed.has(node.agentId) ? "▸ " : "▾ ") : "  ";
         const marker = selected ? "> " : "  ";
         const handle = dimIf(this.#theme, node.ghost, this.#theme.bold(identity.handle));
-        const lifecycle = this.#theme.fg(badge.role, formatStateBadge(node.snapshot.status.state));
-        const activity = this.#theme.fg("muted", node.snapshot.activity.phase.toUpperCase());
-        const acceptance = node.snapshot.activity.acceptingTask ? this.#theme.fg("success", "ACCEPTING") : this.#theme.fg("muted", "NOT ACCEPTING");
-        const stateText = `${lifecycle} ${activity} ${acceptance}`;
-        const summary = dimIf(this.#theme, node.ghost, this.#theme.fg("muted", node.snapshot.task ? promptSummary(node.snapshot.task.request.prompt) : "No task"));
+        const lifecycle = this.#theme.fg(badge.role, formatUsualStatus(identity.status) ?? formatStateBadge(node.snapshot.status.state));
+        const stateText = lifecycle;
+        const purpose = dimIf(this.#theme, node.ghost, this.#theme.fg("muted", identity.purpose ?? "No task"));
         const lineRaw = composeAgentRow({
             width,
             marker,
             connector,
             expand,
             handle,
-            role: identity.role ?? "unresolved",
-            profile: identity.profile ?? "unresolved",
+            capability: publicCapabilityLabel(identity) ?? "",
+            purpose,
             state: stateText,
-            summary,
         });
         // Selected background must cover the full padded left-list row, not only the text remnant.
         const padded = padToWidth(truncateToWidth(lineRaw, width, ""), width);
@@ -735,10 +765,7 @@ export class MeshAgentsPaletteComponent implements Component, Focusable {
         if (columns.detailWidth === undefined) {
             const selected = this.selected();
             const identity = selected ? detailPaneModel(selected, this.#deps.natureHandleWords).identityLines : [];
-            const narrowIdentity = selected && identity[0]?.startsWith("Handle ")
-                ? [`ID ${selected.agent.agentId}`, ...identity.slice(1)]
-                : identity;
-            const detail = narrowIdentity.slice(0, Math.min(4, Math.max(0, rows - 1))).map(line => padToWidth(this.#theme.fg("muted", line), width));
+            const detail = identity.slice(0, Math.min(4, Math.max(0, rows - 1))).map(line => padToWidth(this.#theme.fg("muted", line), width));
             const list = this.#listViewport(allRows, width, Math.max(1, rows - detail.length));
             return [...list, ...detail].map(line => truncateToWidth(line, width, ""));
         }
@@ -757,7 +784,7 @@ export class MeshAgentsPaletteComponent implements Component, Focusable {
         const rows = Math.max(10, Math.min(22, Math.floor(this.#tui.terminal.rows * 0.7)));
         const inner = Math.max(1, w - 2);
         const allRows = this.#rows();
-        const help = paletteHelp(this.#keymap, ["moveUp", "moveDown", "collapse", "expand", "confirm", "stop", "refresh", "preview", "unlink", "toggleTerminal", "cancel"]);
+        const help = paletteHelp(this.#keymap, ["moveUp", "moveDown", "collapse", "expand", "confirm", "stop", "refresh", "preview", "unlink", "history", "toggleTerminal", "cancel"]);
         const confirmHint = actionHint(this.#keymap, "confirm");
         const terminalPreviewMessage = `Live preview is available only for live agents. Press ${confirmHint} for history.`;
         const statusLines = !this.#acting && this.#status === terminalPreviewMessage

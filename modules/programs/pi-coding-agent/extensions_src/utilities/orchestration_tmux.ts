@@ -68,11 +68,15 @@ export async function launchHubWindow(exec: CommandExecutor, tmux: string, conte
     }
     return target;
 }
-export async function launchAgentSession(exec: CommandExecutor, tmux: string, context: TmuxContext, input: MeshHubIdentity & { epochId: string; agentId: string; agent: string; cwd: string; launch: NativeLaunchDescriptor }): Promise<TmuxAgentReference> {
-    const short = input.agentId.slice(0, 8);
+export function meshAgentWindowName(input: { handle?: string; agent: string; access?: "read" | "write" }): string {
+    const safeHandle = (input.handle ?? "agent").replace(/[^a-zA-Z0-9_-]/gu, "-").slice(0, 24);
     const safeAgent = input.agent.replace(/[^a-zA-Z0-9_-]/gu, "-").slice(0, 24);
+    const safeAccess = input.access === "write" ? "write" : input.access === "read" ? "read" : undefined;
+    return ["mesh", safeHandle, safeAgent, safeAccess].filter(Boolean).join("-");
+}
+export async function launchAgentSession(exec: CommandExecutor, tmux: string, context: TmuxContext, input: MeshHubIdentity & { epochId: string; agentId: string; agent: string; access?: "read" | "write"; handle?: string; cwd: string; launch: NativeLaunchDescriptor }): Promise<TmuxAgentReference> {
     const command = ["env", ...Object.entries(input.launch.env).map(([key, value]) => `${key}=${value}`), input.launch.command, ...input.launch.args].map(quote).join(" ");
-    const target = await launchHubWindow(exec, tmux, context, { meshId: input.meshId, windowName: `mesh-${safeAgent}-${short}-${input.agentId}`, cwd: input.cwd, command });
+    const target = await launchHubWindow(exec, tmux, context, { meshId: input.meshId, windowName: meshAgentWindowName(input), cwd: input.cwd, command });
     const metadata = [
         ["@pi_mesh_parent_server_pid", context.serverPid],
         ["@pi_mesh_parent_session_id", context.sessionId],
@@ -107,9 +111,9 @@ export async function inspectMeshAgentWindow(exec: CommandExecutor, tmux: string
     if (result.code !== 0) return "unknown";
     let incompleteLaunch = false;
     for (const line of result.stdout.split("\n")) {
-        const [recordedMeshId, recordedAgentId, paneDead, windowName] = line.split("\t");
+        const [recordedMeshId, recordedAgentId, paneDead] = line.split("\t");
         if (paneDead !== "0") continue;
-        if (recordedMeshId === meshId && recordedAgentId === agentId || windowName?.endsWith(`-${agentId}`)) return "live";
+        if (recordedMeshId === meshId && recordedAgentId === agentId) return "live";
         if (recordedMeshId === meshId && !recordedAgentId) incompleteLaunch = true;
     }
     return incompleteLaunch ? "unknown" : "absent";

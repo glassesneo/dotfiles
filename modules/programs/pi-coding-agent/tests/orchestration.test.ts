@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { access, mkdir, readFile, readdir, stat, utimes, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import test from "node:test";
-import { buildLaunchEnvelope, buildPolicySnapshot, policyDigest, projectLaunchEnvelope, publicCapability, resolveAuthorizedSelectors, validateLaunchEnvelope, validateOrchestrationConfig, validateOrchestrationReferences, validateRoleCatalog } from "../extensions_src/utilities/agent_types.ts";
+import { buildLaunchEnvelope, buildPolicySnapshot, policyDigest, projectLaunchEnvelope, publicCapability, resolveAuthorizedSelectors, validateChildCatalog, validateLaunchEnvelope, validateOrchestrationConfig, validateOrchestrationReferences } from "../extensions_src/utilities/agent_types.ts";
 import { availableContext, publishAgentActivity } from "../extensions_src/utilities/orchestration_activity.ts";
 import { bindAgentRuntime } from "../extensions_src/utilities/orchestration_runtime.ts";
 import {
@@ -35,30 +35,30 @@ import { withMeshLock } from "../extensions_src/utilities/orchestration_lock.ts"
 import { emptyUsage } from "../extensions_src/utilities/orchestration_types.ts";
 import { settleWithinEventLoopTurns, withTemporaryRoot as withRoot, yieldToIO } from "./test_helpers.ts";
 
-const syntheticRole = (name = "worker") => ({ selector: { agent: name, access: "read" as const }, description: `Synthetic ${name}`, tools: [], instructions: "Return the bounded result.", contextPolicy: "project" as const, childExtensionContributions: [] });
-const syntheticProfile = { models: ["provider/model"], thinkingLevel: "medium" as const, harness: "pi" as const };
-const syntheticCatalog = (roles: Record<string, ReturnType<typeof syntheticRole>>) => ({ schemaVersion: 6 as const, roles });
-const syntheticEpochInput = (mode: string, roles: Record<string, ReturnType<typeof syntheticRole>>) => ({
+const syntheticExecution = { models: ["provider/model"], thinkingLevel: "medium" as const, harness: "pi" as const };
+const syntheticGc = { collectAt: 2, retain: 1, pressureFloor: 0 };
+const syntheticChild = (name = "worker", extra: Record<string, unknown> = {}) => ({ selector: { agent: name, access: "read" as const }, description: `Synthetic ${name}`, tools: [], instructions: "Return the bounded result.", contextPolicy: "project" as const, childExtensionContributions: [], execution: syntheticExecution, targets: [] as string[], gc: syntheticGc, ...extra });
+const syntheticCatalog = (children: Record<string, ReturnType<typeof syntheticChild>>) => ({ schemaVersion: 1 as const, children });
+const syntheticEpochInput = (mode: string, children: Record<string, ReturnType<typeof syntheticChild>>) => ({
     mode,
-    catalog: syntheticCatalog(roles),
-    profiles: { schemaVersion: 2 as const, profiles: { "pi-medium": syntheticProfile } },
-    callPolicy: { modes: { [mode]: { targets: Object.fromEntries(Object.keys(roles).map(name => [name, { profiles: ["pi-medium"] }])) } }, roles: {} },
+    catalog: syntheticCatalog(children),
+    callPolicy: { modes: { [mode]: { targets: Object.keys(children) } } },
 });
 
 const budgets = { maxLiveAgents: 2, maxConcurrentTasks: 2, maxTasksPerMesh: 8 };
 const tmux = { socket: "/tmp/tmux", serverPid: "10", sessionId: "$1", sessionName: "mesh", windowId: "@1", paneId: "%1", windowName: "worker" };
 const capabilities = { nativeScreen: true, taskDelivery: true, taskCompletion: true, taskCancellation: true, usage: true, interactiveInterventions: true, terminalHistory: true };
 
-async function createPublishedAgent(stateRoot: string, meshId: string, epochId: string, role = "worker") {
-    const definition = syntheticRole(role);
+async function createPublishedAgent(stateRoot: string, meshId: string, epochId: string, childId = "worker") {
+    const definition = syntheticChild(childId);
     const reservation = await reserveMeshCapacity(stateRoot, meshId, "new-agent-task");
-    const prepared = await prepareAgent(stateRoot, meshId, { reservationId: reservation.reservationId, role, selectedProfile: "pi-medium", harness: syntheticProfile.harness, cwd: stateRoot, roleSnapshot: definition, profileSnapshot: syntheticProfile, launchEnvelope: "pending", epochId, provenance: { creatorSessionId: "creator" }, capabilities });
+    const prepared = await prepareAgent(stateRoot, meshId, { reservationId: reservation.reservationId, childId, harness: definition.execution.harness, cwd: stateRoot, definitionSnapshot: definition, launchEnvelope: "pending", epochId, provenance: { creatorSessionId: "creator" }, capabilities });
     const epoch = await readPolicyEpoch(stateRoot, meshId, epochId);
-    const childExtensions = Object.fromEntries(Object.keys(epoch.roles).map(name => [name, ["/popup.ts", "/orchestration.ts", ...epoch.roles[name]!.childExtensionContributions, "/bridge.ts"]]));
-    const envelope = buildLaunchEnvelope({ meshId, agentId: prepared.agentId, epochId, role, snapshot: epoch, childExtensions });
+    const childExtensions = Object.fromEntries(Object.keys(epoch.children).map(name => [name, ["/popup.ts", "/orchestration.ts", ...epoch.children[name]!.childExtensionContributions, "/bridge.ts"]]));
+    const envelope = buildLaunchEnvelope({ meshId, agentId: prepared.agentId, epochId, childId, snapshot: epoch, childExtensions });
     const envelopePath = join(prepared.paths.directory, "launch-envelope.json");
     await writeFile(envelopePath, `${JSON.stringify(envelope)}\n`, { mode: 0o600 });
-    await publishAgent(stateRoot, meshId, prepared.paths, { agentId: prepared.agentId, epochId, role, selectedProfile: "pi-medium", harness: syntheticProfile.harness, cwd: stateRoot, roleSnapshot: definition, profileSnapshot: syntheticProfile, launchEnvelope: envelopePath, tmux, capabilities, creatorSessionId: "creator" });
+    await publishAgent(stateRoot, meshId, prepared.paths, { agentId: prepared.agentId, epochId, childId, harness: definition.execution.harness, cwd: stateRoot, definitionSnapshot: definition, launchEnvelope: envelopePath, tmux, capabilities, creatorSessionId: "creator" });
     await patchAgentStatus(stateRoot, meshId, prepared.agentId, { state: "idle", bridgeReady: true });
     const runtimeId = randomUUID(); await bindAgentRuntime(stateRoot, meshId, prepared.agentId, { runtimeId, kind: "external" }); const now = new Date().toISOString(); await publishAgentActivity(stateRoot, meshId, prepared.agentId, { runtimeId, phase: "idle", acceptingTask: true, pendingMessages: false, phaseSince: now, observedAt: now, heartbeatAt: now, context: availableContext(10, 100_000, 100) });
     return { ...prepared, reservation };
@@ -137,7 +137,7 @@ void test("an ownerless lock left before owner publication ages into recoverable
 
 void test("an idle agent poll does not queue behind unrelated mesh-wide work", async () => withRoot("mesh-idle-poll-", async root => {
     const mesh = await initializeMesh(root, { rootSessionId: "root", recoverable: true, budgets });
-    const epoch = await ensurePolicyEpoch(root, mesh.meshId, syntheticEpochInput("ops", { worker: syntheticRole("worker") }));
+    const epoch = await ensurePolicyEpoch(root, mesh.meshId, syntheticEpochInput("ops", { worker: syntheticChild("worker") }));
     const agent = await createPublishedAgent(root, mesh.meshId, epoch.epochId);
     let release!: () => void; let acquired!: () => void; const acquiredPromise = new Promise<void>(resolve => { acquired = resolve; }); const gate = new Promise<void>(resolve => { release = resolve; });
     const held = withMeshLock(root, mesh.meshId, async () => { acquired(); await gate; });
@@ -163,188 +163,185 @@ void test("an ephemeral root remains nonrecoverable while supporting the persist
     const mesh = await initializeMesh(root, { rootSessionId: "memory", recoverable: false, budgets });
     await attachRootMesh(root, mesh.meshId, { rootSessionId: "memory", budgets, pid: 101 });
     await assert.rejects(attachRootMesh(root, mesh.meshId, { rootSessionId: "other", budgets, pid: 202, inspectExisting: async () => ({ pidAlive: false, sameSession: false, tmuxMatches: true }) }), /nonrecoverable/u);
-    const roles = { worker: syntheticRole("worker") };
+    const roles = { worker: syntheticChild("worker") };
     const epoch = await ensurePolicyEpoch(root, mesh.meshId, syntheticEpochInput("ops", roles));
     const agent = await createPublishedAgent(root, mesh.meshId, epoch.epochId);
-    const task = await createTask(root, mesh.meshId, agent.agentId, "Complete one bounded task", `root:${mesh.meshId}`);
+    const task = await createTask(root, mesh.meshId, agent.agentId, { prompt: "Complete one bounded task", purpose: "synthetic purpose" }, `root:${mesh.meshId}`);
     await finishTask(root, mesh.meshId, task.request.taskId, { outcome: "succeeded", output: "done" });
     assert.equal((await readAgentSnapshot(root, mesh.meshId, agent.agentId, task.request.taskId)).task?.result?.output, "done");
 }));
 
-void test("holistic orchestration references reject unknown and incompatible target-profile edges", () => {
-    const role = (name: string, contextPolicy: "project" | "prompt-only" = "project") => ({ ...syntheticRole(name), contextPolicy });
-    const catalog = { schemaVersion: 6 as const, roles: { worker: role("worker"), external: role("external"), isolated: role("isolated", "prompt-only") } };
-    const profiles = { schemaVersion: 2 as const, profiles: { "pi-medium": syntheticProfile, external: { models: ["cursor/model"], harness: "cursor-agent" as const, harnessOptions: { mode: "agent", permissionPolicy: "allow-always", sandbox: "disabled", trustWorkspace: true, worktree: false } } } };
+void test("holistic orchestration references reject unknown and incompatible child edges", () => {
+    const child = (name: string, extra: Record<string, unknown> = {}) => ({ ...syntheticChild(name), ...extra });
+    const cursorExecution = { models: ["cursor/model"], harness: "cursor-agent" as const, harnessOptions: { mode: "agent" as const, permissionPolicy: "allow-always" as const, sandbox: "disabled" as const, trustWorkspace: true, worktree: false } };
+    const catalog = { schemaVersion: 1 as const, children: { worker: child("worker"), external: child("external", { execution: cursorExecution }), isolated: child("isolated", { contextPolicy: "prompt-only" as const }) } };
     const raw = {
-        schemaVersion: 5, stateRoot: "/state", tmux: "/tmux", returnParentCommand: "/return", parentNavigationHint: "parent", historyViewerExtension: "/history", popupExtension: "/popup", orchestrationExtension: "/orchestration", childBridgeExtension: "/bridge",
+        schemaVersion: 6, stateRoot: "/state", tmux: "/tmux", returnParentCommand: "/return", parentNavigationHint: "parent", historyViewerExtension: "/history", popupExtension: "/popup", orchestrationExtension: "/orchestration", childBridgeExtension: "/bridge",
         harnesses: { pi: { adapter: "pi-native", command: "/pi" }, "cursor-agent": { adapter: "cursor-acp", command: "/cursor", modelIds: { model: "synthetic-acp-model" } } }, natureHandleWords: ["May"],
-        callPolicy: { modes: { ops: { targets: { worker: { profiles: ["pi-medium"] } } } }, roles: {} },
+        callPolicy: { modes: { ops: { targets: ["worker"] } } },
         budgets: { maxLiveAgents: 2, maxConcurrentTasks: 2, maxTasksPerMesh: 4 },
-        gc: { contextHeadroomTokens: 1, periodicIntervalMs: 1, activityHeartbeatMs: 1, activityStaleMs: 2, roles: {} },
+        gc: { contextHeadroomTokens: 1, periodicIntervalMs: 1, activityHeartbeatMs: 1, activityStaleMs: 2 },
     };
     const config = validateOrchestrationConfig(raw);
-    validateOrchestrationReferences(config, catalog, profiles, ["ops"]);
-    const reject = (callPolicy: unknown, pattern: RegExp, modes: readonly string[] = ["ops"]) => assert.throws(() => validateOrchestrationReferences(validateOrchestrationConfig({ ...raw, callPolicy }), catalog, profiles, modes), pattern);
-    reject({ modes: { ghostMode: { targets: { worker: { profiles: ["pi-medium"] } } } }, roles: {} }, /unknown mode caller/u);
-    reject({ modes: { ops: { targets: { ghost: { profiles: ["pi-medium"] } } } }, roles: {} }, /unknown role|unknown role target/u);
-    reject({ modes: { ops: { targets: { worker: { profiles: ["pi-medium"] } } } }, roles: { ghost: { targets: {} } } }, /unknown role caller/u);
-    reject({ modes: { ops: { targets: { worker: { profiles: ["pi-medium"] } } } }, roles: { worker: { targets: { ghost: { profiles: ["pi-medium"] } } } } }, /unknown role|unknown role target/u);
-    reject({ modes: { ops: { targets: { worker: { profiles: ["ghost"] } } } }, roles: {} }, /unknown profiles/u);
-    reject({ modes: { ops: { targets: { external: { profiles: ["external"] } } } }, roles: { external: { targets: { worker: { profiles: ["pi-medium"] } } } } }, /external-profile caller/u);
-    reject({ modes: { ops: { targets: { isolated: { profiles: ["pi-medium"] } } } }, roles: { isolated: { targets: { worker: { profiles: ["pi-medium"] } } } } }, /prompt-only caller/u);
-    reject({ modes: { ops: { targets: { isolated: { profiles: ["external"] } } } }, roles: {} }, /prompt-only role isolated/u);
-    assert.throws(() => validateOrchestrationConfig({ ...raw, callPolicy: { modes: { ops: { targets: { worker: { profiles: [] } } } }, roles: {} } }), /exactly one profile/u);
-    assert.throws(() => resolveAuthorizedSelectors({ targets: { worker: { profiles: ["pi-medium"] }, alias: { profiles: ["pi-medium"] } } }, { worker: role("worker"), alias: { ...role("worker"), selector: { agent: "worker", access: "read" } } }), /ambiguous/u);
-    const searchCatalog = { ...catalog, roles: { ...catalog.roles, research: { ...role("research"), selector: { agent: "research", access: "read" as const } }, search: { ...role("search"), selector: { agent: "search", access: "read" as const } } } };
-    const searchPolicy = (callPolicy: unknown) => validateOrchestrationReferences(validateOrchestrationConfig({ ...raw, callPolicy }), searchCatalog, profiles, ["ops"]);
-    assert.throws(() => searchPolicy({ modes: { ops: { targets: { search: { profiles: ["pi-medium"] } } } }, roles: {} }), /root target/u);
-    assert.throws(() => searchPolicy({ modes: { ops: { targets: { worker: { profiles: ["pi-medium"] } } } }, roles: { worker: { targets: { search: { profiles: ["pi-medium"] } } } } }), /only be targeted by research/u);
-    searchPolicy({ modes: { ops: { targets: { worker: { profiles: ["pi-medium"] } } } }, roles: { research: { targets: { search: { profiles: ["pi-medium"] } } } } });
+    validateOrchestrationReferences(config, catalog, ["ops"]);
+    const reject = (callPolicy: unknown, pattern: RegExp, modes: readonly string[] = ["ops"]) => assert.throws(() => validateOrchestrationReferences(validateOrchestrationConfig({ ...raw, callPolicy }), catalog, modes), pattern);
+    reject({ modes: { ghostMode: { targets: ["worker"] } } }, /unknown mode caller/u);
+    reject({ modes: { ops: { targets: ["ghost"] } } }, /unknown child/u);
+    assert.throws(() => validateOrchestrationConfig({ ...raw, callPolicy: { modes: { ops: { targets: ["worker"] } }, roles: {} } }), /unknown keys/u);
+    assert.throws(() => validateOrchestrationConfig({ ...raw, gc: { ...raw.gc, roles: {} } }), /unknown keys/u);
+    assert.throws(() => validateOrchestrationReferences(config, { schemaVersion: 1, children: { ...catalog.children, worker: { ...catalog.children.worker, targets: ["ghost"] } } }, ["ops"]), /unknown child/u);
+    assert.throws(() => validateOrchestrationReferences(config, { schemaVersion: 1, children: { ...catalog.children, external: { ...catalog.children.external, targets: ["worker"] } } }, ["ops"]), /external-harness caller/u);
+    assert.throws(() => validateOrchestrationReferences(config, { schemaVersion: 1, children: { ...catalog.children, isolated: { ...catalog.children.isolated, targets: ["worker"] } } }, ["ops"]), /prompt-only caller/u);
+    assert.throws(() => validateOrchestrationReferences(config, { schemaVersion: 1, children: { ...catalog.children, isolated: { ...catalog.children.isolated, execution: cursorExecution } } }, ["ops"]), /prompt-only child isolated/u);
+    assert.throws(() => resolveAuthorizedSelectors({ targets: ["worker", "alias"] }, { worker: child("worker"), alias: { ...child("worker"), selector: { agent: "worker", access: "read" } } }), /ambiguous/u);
+    const searchCatalog = { schemaVersion: 1 as const, children: { ...catalog.children, research: { ...child("research"), selector: { agent: "research", access: "read" as const }, targets: ["search"] }, search: { ...child("search"), selector: { agent: "search", access: "read" as const } } } };
+    const searchPolicy = (callPolicy: unknown, extra = searchCatalog) => validateOrchestrationReferences(validateOrchestrationConfig({ ...raw, callPolicy }), extra, ["ops"]);
+    assert.throws(() => searchPolicy({ modes: { ops: { targets: ["search"] } } }), /root target/u);
+    assert.throws(() => searchPolicy({ modes: { ops: { targets: ["worker"] } } }, { ...searchCatalog, children: { ...searchCatalog.children, worker: { ...searchCatalog.children.worker, targets: ["search"] } } }), /only be targeted by research/u);
+    searchPolicy({ modes: { ops: { targets: ["research"] } } });
 });
 
-// Admission: persisted consumers parse the authority protocol; accepting the retired default-profile shape could restore stale execution authority.
-// Given a v6 role catalog and target-profile policy, protocol consumers retain exact closure and reject older/defaultProfile records.
-void test("role protocol v6 captures required-access closure and rejects retired role generations", async () => withRoot("mesh-role-v6-", async root => {
+// Admission: persisted consumers parse the authority protocol; accepting the retired role/profile catalogs could restore stale execution authority.
+// Given a v1 child catalog and mode-target policy, protocol consumers retain exact closure and reject older/defaultProfile records.
+void test("child protocol v1 captures required-access closure and rejects retired role generations", async () => withRoot("mesh-child-v1-", async root => {
     const mesh = await initializeMesh(root, { rootSessionId: "session", recoverable: true, budgets });
-    const role = (description: string) => ({ selector: { agent: description, access: "read" as const }, description, tools: [], instructions: "Return evidence.", contextPolicy: "project" as const, childExtensionContributions: [] });
-    const catalog = { schemaVersion: 6 as const, roles: { reviewer: role("Review"), lens: role("Lens"), leaf: role("Leaf"), sibling: role("Sibling") } };
-    assert.deepEqual(validateRoleCatalog(catalog), catalog);
-    assert.throws(() => validateRoleCatalog({ ...catalog, schemaVersion: 5 }), /Unsupported/u);
-    assert.throws(() => validateRoleCatalog({ ...catalog, roles: { ...catalog.roles, invalid: { ...role("Invalid"), selector: { agent: "small" } } } }), /missing required keys/u);
-    assert.doesNotThrow(() => validateRoleCatalog({ ...catalog, roles: { ...catalog.roles, research: { ...role("Research"), selector: { agent: "research", access: "read" } } } }));
-    assert.throws(() => validateRoleCatalog({ ...catalog, roles: { ...catalog.roles, reviewer: { ...catalog.roles.reviewer, defaultProfile: "review" } } }), /unknown keys/u);
-    const profiles = { schemaVersion: 2 as const, profiles: { review: { models: ["provider/review"], thinkingLevel: "high" as const, harness: "pi" as const }, lens: { models: ["provider/lens"], thinkingLevel: "medium" as const, harness: "pi" as const }, leaf: { models: ["provider/leaf"], thinkingLevel: "low" as const, harness: "pi" as const } } };
-    const callPolicy = { modes: { ops: { targets: { reviewer: { profiles: ["review"] }, sibling: { profiles: ["leaf"] } } } }, roles: { reviewer: { targets: { lens: { profiles: ["lens"] } } }, lens: { targets: { leaf: { profiles: ["leaf"] } } } } };
-    const epoch = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", catalog, profiles, callPolicy });
-    assert.equal(epoch.schemaVersion, 6);
-    assert.deepEqual(Object.keys(epoch.directTargets), ["reviewer", "sibling"]);
-    assert.deepEqual(Object.keys(epoch.roles).sort(), ["leaf", "lens", "reviewer", "sibling"]);
-    assert.deepEqual(Object.keys(epoch.profiles).sort(), ["leaf", "lens", "review"]);
-    assert.equal(epoch.policyDigest, policyDigest({ mode: epoch.mode, directTargets: epoch.directTargets, roles: epoch.roles, profiles: epoch.profiles, policies: epoch.policies }));
-    const envelope = buildLaunchEnvelope({ meshId: mesh.meshId, agentId: randomUUID(), epochId: epoch.epochId, role: "reviewer", selectedProfile: "review", snapshot: epoch, childExtensions: Object.fromEntries(Object.keys(epoch.roles).map(name => [name, [`/${name}`]])) });
-    assert.deepEqual({ schemaVersion: envelope.schemaVersion, marker: envelope.marker }, { schemaVersion: 7, marker: "pi-mesh-role-launch-v7" });
-    assert.deepEqual(Object.keys(envelope.roles).sort(), ["leaf", "lens", "reviewer"]);
-    assert.equal(envelope.roles.sibling, undefined);
-    assert.deepEqual(envelope.policies.reviewer?.targets, { lens: { profiles: ["lens"] } });
+    const child = (name: string, extra: Record<string, unknown> = {}) => ({ ...syntheticChild(name), description: name, ...extra });
+    const catalog = { schemaVersion: 1 as const, children: {
+        reviewer: child("reviewer", { execution: { models: ["provider/review"], thinkingLevel: "high" as const, harness: "pi" as const }, targets: ["lens"] }),
+        lens: child("lens", { execution: { models: ["provider/lens"], thinkingLevel: "medium" as const, harness: "pi" as const }, targets: ["leaf"] }),
+        leaf: child("leaf", { execution: { models: ["provider/leaf"], thinkingLevel: "low" as const, harness: "pi" as const } }),
+        sibling: child("sibling", { execution: { models: ["provider/leaf"], thinkingLevel: "low" as const, harness: "pi" as const } }),
+    } };
+    assert.deepEqual(validateChildCatalog(catalog), catalog);
+    assert.throws(() => validateChildCatalog({ ...catalog, schemaVersion: 6 }), /Unsupported/u);
+    assert.throws(() => validateChildCatalog({ ...catalog, children: { ...catalog.children, invalid: { ...child("invalid"), selector: { agent: "small" } } } }), /missing required keys/u);
+    assert.doesNotThrow(() => validateChildCatalog({ ...catalog, children: { ...catalog.children, research: { ...child("research"), selector: { agent: "research", access: "read" } } } }));
+    assert.throws(() => validateChildCatalog({ ...catalog, children: { ...catalog.children, reviewer: { ...catalog.children.reviewer, defaultProfile: "review" } } }), /unknown keys/u);
+    const callPolicy = { modes: { ops: { targets: ["reviewer", "sibling"] } } };
+    const epoch = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", catalog, callPolicy });
+    assert.equal(epoch.schemaVersion, 7);
+    assert.deepEqual(epoch.directTargets, ["reviewer", "sibling"]);
+    assert.deepEqual(Object.keys(epoch.children).sort(), ["leaf", "lens", "reviewer", "sibling"]);
+    assert.equal(epoch.policyDigest, policyDigest({ mode: epoch.mode, directTargets: epoch.directTargets, children: epoch.children }));
+    const envelope = buildLaunchEnvelope({ meshId: mesh.meshId, agentId: randomUUID(), epochId: epoch.epochId, childId: "reviewer", snapshot: epoch, childExtensions: Object.fromEntries(Object.keys(epoch.children).map(name => [name, [`/${name}`]])) });
+    assert.deepEqual({ schemaVersion: envelope.schemaVersion, marker: envelope.marker }, { schemaVersion: 8, marker: "pi-mesh-child-launch-v8" });
+    assert.deepEqual(Object.keys(envelope.children).sort(), ["leaf", "lens", "reviewer"]);
+    assert.equal(envelope.children.sibling, undefined);
+    assert.deepEqual(envelope.self.targets, ["lens"]);
+    assert.deepEqual(envelope.self.execution, catalog.children.reviewer.execution);
+    assert.deepEqual(envelope.children.leaf!.execution.models, ["provider/leaf"]);
     const forgedExternalCaller = structuredClone(envelope);
-    forgedExternalCaller.profiles.external = { models: ["cursor/model"], harness: "cursor-agent", harnessOptions: { mode: "ask", permissionPolicy: "reject", sandbox: "disabled", trustWorkspace: true, worktree: false } };
-    forgedExternalCaller.policies.reviewer!.targets.lens = { profiles: ["external"] };
-    assert.throws(() => validateLaunchEnvelope(forgedExternalCaller), /external profile caller lens/u);
-    const empty = buildPolicySnapshot({ mode: "missing", catalog, profiles, callPolicy });
-    assert.deepEqual(empty, { mode: "missing", directTargets: {}, roles: {}, profiles: {}, policies: {} });
-    assert.throws(() => buildLaunchEnvelope({ meshId: mesh.meshId, agentId: randomUUID(), epochId: epoch.epochId, role: "reviewer", selectedProfile: "lens", snapshot: epoch, childExtensions: Object.fromEntries(Object.keys(epoch.roles).map(name => [name, [`/${name}`]])) }), /not authorized/u);
-    assert.throws(() => validateLaunchEnvelope({ ...envelope, schemaVersion: 6, marker: "pi-mesh-role-launch-v6" }), /Unsupported/u);
+    forgedExternalCaller.children.lens!.execution = { models: ["cursor/model"], harness: "cursor-agent", harnessOptions: { mode: "ask", permissionPolicy: "reject", sandbox: "disabled", trustWorkspace: true, worktree: false } };
+    assert.throws(() => validateLaunchEnvelope(forgedExternalCaller), /external harness caller lens/u);
+    const empty = buildPolicySnapshot({ mode: "missing", catalog, callPolicy });
+    assert.deepEqual(empty, { mode: "missing", directTargets: [], children: {} });
+    assert.throws(() => buildLaunchEnvelope({ meshId: mesh.meshId, agentId: randomUUID(), epochId: epoch.epochId, childId: "ghost", snapshot: epoch, childExtensions: Object.fromEntries(Object.keys(epoch.children).map(name => [name, [`/${name}`]])) }), /outside policy snapshot|unknown child/u);
+    assert.throws(() => validateLaunchEnvelope({ ...envelope, schemaVersion: 7, marker: "pi-mesh-role-launch-v7" }), /Unsupported/u);
     const persisted = JSON.parse(await readFile(epochPath(root, mesh.meshId, epoch.epochId), "utf8")) as Record<string, any>;
-    const malformedEdge = structuredClone(persisted); malformedEdge.directTargets.reviewer.profiles = [];
+    const malformedEdge = structuredClone(persisted); malformedEdge.directTargets = { reviewer: true };
     await writeFile(epochPath(root, mesh.meshId, epoch.epochId), JSON.stringify(malformedEdge));
-    await assert.rejects(readPolicyEpoch(root, mesh.meshId, epoch.epochId), /exactly one profile/u);
-    await writeFile(epochPath(root, mesh.meshId, epoch.epochId), JSON.stringify({ ...persisted, schemaVersion: 5 }));
+    await assert.rejects(readPolicyEpoch(root, mesh.meshId, epoch.epochId), /non-empty string array/u);
+    await writeFile(epochPath(root, mesh.meshId, epoch.epochId), JSON.stringify({ ...persisted, schemaVersion: 6 }));
     await assert.rejects(readPolicyEpoch(root, mesh.meshId, epoch.epochId), /Unsupported/u);
 }));
 
-// Admission: Nix assertions cannot observe TypeScript consumer resolution of public selectors into one internal role, write leakage into a read-only closure, or root publication of search.
-// Given capability-shaped roles, the shared resolver and launch closure expose only authorized public pairs and keep search off the root edge.
+// Admission: Nix assertions cannot observe TypeScript consumer resolution of public selectors into one internal child, write leakage into a read-only closure, or root publication of search.
+// Given capability-shaped children, the shared resolver and launch closure expose only authorized public pairs and keep search off the root edge.
 void test("capability selectors resolve uniquely and keep write and search out of unauthorized closures", () => {
-    const capabilityRole = (agent: string, access: "read" | "write" = "read") => ({ selector: { agent, access }, description: `${publicCapability({ agent, access })}`, tools: [], instructions: "Return evidence.", contextPolicy: agent === "perspective" ? "prompt-only" as const : "project" as const, childExtensionContributions: [] });
-    const roles = {
-        "small-read": capabilityRole("small", "read"),
-        "small-write": capabilityRole("small", "write"),
-        "standard-read": capabilityRole("standard", "read"),
-        "advanced-read": capabilityRole("advanced", "read"),
-        "advanced-write": capabilityRole("advanced", "write"),
-        research: capabilityRole("research"),
-        perspective: capabilityRole("perspective"),
-        search: capabilityRole("search"),
+    const capabilityChild = (agent: string, access: "read" | "write" = "read", extra: Record<string, unknown> = {}) => ({ ...syntheticChild(agent), selector: { agent, access }, description: `${publicCapability({ agent, access })}`, contextPolicy: agent === "perspective" ? "prompt-only" as const : "project" as const, ...extra });
+    const children = {
+        "small-read": capabilityChild("small", "read"),
+        "small-write": capabilityChild("small", "write"),
+        "standard-read": capabilityChild("standard", "read"),
+        "advanced-read": capabilityChild("advanced", "read", { targets: ["small-read", "standard-read", "research", "perspective"] }),
+        "advanced-write": capabilityChild("advanced", "write", { targets: ["small-read", "small-write", "standard-read", "research", "perspective"] }),
+        research: capabilityChild("research", "read", { targets: ["search"] }),
+        perspective: capabilityChild("perspective"),
+        search: capabilityChild("search"),
     };
-    const catalog = { schemaVersion: 6 as const, roles };
-    const profiles = { schemaVersion: 2 as const, profiles: Object.fromEntries(["small-read", "small-write", "standard-read", "advanced", "research", "perspective", "search"].map(name => [name, syntheticProfile])) };
+    const catalog = { schemaVersion: 1 as const, children };
     const callPolicy = {
         modes: {
-            recon: { targets: { "small-read": { profiles: ["small-read"] }, "standard-read": { profiles: ["standard-read"] }, "advanced-read": { profiles: ["advanced"] }, research: { profiles: ["research"] }, perspective: { profiles: ["perspective"] } } },
-            ops: { targets: { "small-read": { profiles: ["small-read"] }, "small-write": { profiles: ["small-write"] }, "standard-read": { profiles: ["standard-read"] }, "advanced-read": { profiles: ["advanced"] }, "advanced-write": { profiles: ["advanced"] }, research: { profiles: ["research"] }, perspective: { profiles: ["perspective"] } } },
-        },
-        roles: {
-            "advanced-read": { targets: { "small-read": { profiles: ["small-read"] }, "standard-read": { profiles: ["standard-read"] }, research: { profiles: ["research"] }, perspective: { profiles: ["perspective"] } } },
-            "advanced-write": { targets: { "small-read": { profiles: ["small-read"] }, "small-write": { profiles: ["small-write"] }, "standard-read": { profiles: ["standard-read"] }, research: { profiles: ["research"] }, perspective: { profiles: ["perspective"] } } },
-            research: { targets: { search: { profiles: ["search"] } } },
+            recon: { targets: ["small-read", "standard-read", "advanced-read", "research", "perspective"] },
+            ops: { targets: ["small-read", "small-write", "standard-read", "advanced-read", "advanced-write", "research", "perspective"] },
         },
     };
-    const recon = resolveAuthorizedSelectors(callPolicy.modes.recon, roles);
-    assert.deepEqual(recon.map(route => [route.selector.agent, route.selector.access, route.role]), [["small", "read", "small-read"], ["standard", "read", "standard-read"], ["advanced", "read", "advanced-read"], ["research", "read", "research"], ["perspective", "read", "perspective"]]);
+    const recon = resolveAuthorizedSelectors(callPolicy.modes.recon, children);
+    assert.deepEqual(recon.map(route => [route.selector.agent, route.selector.access, route.childId]), [["small", "read", "small-read"], ["standard", "read", "standard-read"], ["advanced", "read", "advanced-read"], ["research", "read", "research"], ["perspective", "read", "perspective"]]);
     assert.equal(recon.some(route => route.selector.agent === "search"), false);
-    const advancedRead = resolveAuthorizedSelectors(callPolicy.roles["advanced-read"], roles);
+    const advancedRead = resolveAuthorizedSelectors({ targets: children["advanced-read"]!.targets }, children);
     assert.equal(advancedRead.some(route => route.selector.access === "write"), false);
-    const researchRoutes = resolveAuthorizedSelectors(callPolicy.roles.research, roles);
+    const researchRoutes = resolveAuthorizedSelectors({ targets: children.research.targets }, children);
     assert.deepEqual(researchRoutes.map(route => route.selector.agent), ["search"]);
-    const snapshot = buildPolicySnapshot({ mode: "recon", catalog, profiles, callPolicy });
-    assert.equal(snapshot.directTargets.search, undefined);
-    const envelope = buildLaunchEnvelope({ meshId: randomUUID(), agentId: randomUUID(), epochId: randomUUID(), role: "advanced-read", selectedProfile: "advanced", snapshot, childExtensions: Object.fromEntries(Object.keys(snapshot.roles).map(name => [name, [`/${name}`]])) });
-    assert.equal(envelope.roles["small-write"], undefined);
-    assert.equal(envelope.roles["advanced-write"], undefined);
-    assert.ok(envelope.roles.search);
-    assert.deepEqual(Object.keys(envelope.policies["advanced-read"]!.targets).sort(), ["perspective", "research", "small-read", "standard-read"]);
-    assert.equal(envelope.selfRole.contextPolicy, "project");
-    const isolated = buildLaunchEnvelope({ meshId: randomUUID(), agentId: randomUUID(), epochId: randomUUID(), role: "perspective", selectedProfile: "perspective", snapshot, childExtensions: Object.fromEntries(Object.keys(snapshot.roles).map(name => [name, [`/${name}`]])) });
-    assert.equal(isolated.selfRole.contextPolicy, "prompt-only");
-    assert.deepEqual(isolated.selfRole.tools, []);
-    assert.deepEqual(isolated.policies.perspective?.targets, {});
+    const snapshot = buildPolicySnapshot({ mode: "recon", catalog, callPolicy });
+    assert.equal(snapshot.directTargets.includes("search"), false);
+    const envelope = buildLaunchEnvelope({ meshId: randomUUID(), agentId: randomUUID(), epochId: randomUUID(), childId: "advanced-read", snapshot, childExtensions: Object.fromEntries(Object.keys(snapshot.children).map(name => [name, [`/${name}`]])) });
+    assert.equal(envelope.children["small-write"], undefined);
+    assert.equal(envelope.children["advanced-write"], undefined);
+    assert.ok(envelope.children.search);
+    assert.deepEqual([...envelope.self.targets].sort(), ["perspective", "research", "small-read", "standard-read"]);
+    assert.equal(envelope.self.contextPolicy, "project");
+    const isolated = buildLaunchEnvelope({ meshId: randomUUID(), agentId: randomUUID(), epochId: randomUUID(), childId: "perspective", snapshot, childExtensions: Object.fromEntries(Object.keys(snapshot.children).map(name => [name, [`/${name}`]])) });
+    assert.equal(isolated.self.contextPolicy, "prompt-only");
+    assert.deepEqual(isolated.self.tools, []);
+    assert.deepEqual(isolated.self.targets, []);
 });
 
 // Admission: closure inventory cannot observe the actual nested launch-envelope boundary that turns research's authorized edge into a search child.
 // Given a root policy that exposes research and a research-only search edge, projecting a child envelope permits search only through research while root construction still rejects search.
 void test("nested child envelope permits research-only search dispatch without exposing a root search target", () => {
-    const capabilityRole = (agent: string) => ({ selector: { agent, access: "read" as const }, description: `Synthetic ${agent}`, tools: [], instructions: "Return evidence.", contextPolicy: "project" as const, childExtensionContributions: [] });
-    const catalog = { schemaVersion: 6 as const, roles: { research: capabilityRole("research"), search: capabilityRole("search") } };
-    const profiles = { schemaVersion: 2 as const, profiles: { research: syntheticProfile, search: syntheticProfile } };
-    const callPolicy = { modes: { recon: { targets: { research: { profiles: ["research"] } } } }, roles: { research: { targets: { search: { profiles: ["search"] } } } } };
-    const snapshot = buildPolicySnapshot({ mode: "recon", catalog, profiles, callPolicy });
-    assert.equal(snapshot.directTargets.search, undefined);
+    const capabilityChild = (agent: string, extra: Record<string, unknown> = {}) => ({ ...syntheticChild(agent), selector: { agent, access: "read" as const }, ...extra });
+    const catalog = { schemaVersion: 1 as const, children: { research: capabilityChild("research", { targets: ["search"] }), search: capabilityChild("search") } };
+    const callPolicy = { modes: { recon: { targets: ["research"] } } };
+    const snapshot = buildPolicySnapshot({ mode: "recon", catalog, callPolicy });
+    assert.equal(snapshot.directTargets.includes("search"), false);
     const childExtensions = { research: ["/research"], search: ["/search"] };
-    const research = buildLaunchEnvelope({ meshId: randomUUID(), agentId: randomUUID(), epochId: randomUUID(), role: "research", selectedProfile: "research", snapshot, childExtensions });
-    const search = projectLaunchEnvelope("search", randomUUID(), research, "search");
+    const research = buildLaunchEnvelope({ meshId: randomUUID(), agentId: randomUUID(), epochId: randomUUID(), childId: "research", snapshot, childExtensions });
+    const search = projectLaunchEnvelope("search", randomUUID(), research);
     const roundTripped = validateLaunchEnvelope(JSON.parse(JSON.stringify(search)));
-    assert.equal(roundTripped.role, "search");
-    assert.deepEqual(roundTripped.directTargets, { search: { profiles: ["search"] } });
-    assert.deepEqual(roundTripped.policies, { search: { targets: {} } });
-    assert.equal(roundTripped.roles.research, undefined);
+    assert.equal(roundTripped.childId, "search");
+    assert.deepEqual(roundTripped.self.targets, []);
+    assert.equal(roundTripped.children.research, undefined);
     const forgedRoot = structuredClone(snapshot);
-    forgedRoot.directTargets.search = { profiles: ["search"] };
-    assert.throws(() => buildLaunchEnvelope({ meshId: randomUUID(), agentId: randomUUID(), epochId: randomUUID(), role: "search", selectedProfile: "search", snapshot: forgedRoot, childExtensions }), /root target/u);
+    forgedRoot.directTargets = [...forgedRoot.directTargets, "search"];
+    assert.throws(() => buildLaunchEnvelope({ meshId: randomUUID(), agentId: randomUUID(), epochId: randomUUID(), childId: "search", snapshot: forgedRoot, childExtensions }), /root target/u);
 });
 
 void test("persisted agents reject a forged sibling policy edge even when the epoch digest remains valid", async () => withRoot("mesh-forged-envelope-", async root => {
     const mesh = await initializeMesh(root, { rootSessionId: "root", recoverable: true, budgets });
-    const reviewer = syntheticRole("reviewer");
-    const lens = syntheticRole("lens");
-    const sibling = syntheticRole("sibling");
-    const catalog = syntheticCatalog({ reviewer, lens, sibling });
-    const profiles = { schemaVersion: 2 as const, profiles: { "pi-medium": syntheticProfile } };
-    const callPolicy = { modes: { ops: { targets: { reviewer: { profiles: ["pi-medium"] }, sibling: { profiles: ["pi-medium"] } } } }, roles: { reviewer: { targets: { lens: { profiles: ["pi-medium"] } } } } };
-    const epoch = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", catalog, profiles, callPolicy });
+    const reviewer = syntheticChild("reviewer");
+    const lens = syntheticChild("lens");
+    const sibling = syntheticChild("sibling");
+    const catalog = syntheticCatalog({ reviewer: { ...reviewer, targets: ["lens"] }, lens, sibling });
+    const callPolicy = { modes: { ops: { targets: ["reviewer", "sibling"] } } };
+    const epoch = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", catalog, callPolicy });
     const reservation = await reserveMeshCapacity(root, mesh.meshId, "new-agent-task");
-    const prepared = await prepareAgent(root, mesh.meshId, { reservationId: reservation.reservationId, role: "reviewer", selectedProfile: "pi-medium", harness: "pi", cwd: root, roleSnapshot: reviewer, profileSnapshot: syntheticProfile, launchEnvelope: "pending", epochId: epoch.epochId, provenance: { creatorSessionId: "root" }, capabilities });
-    const extensions = Object.fromEntries(Object.keys(epoch.roles).map(name => [name, [`/${name}`]]));
-    const envelope = buildLaunchEnvelope({ meshId: mesh.meshId, agentId: prepared.agentId, epochId: epoch.epochId, role: "reviewer", snapshot: epoch, childExtensions: extensions });
+    const prepared = await prepareAgent(root, mesh.meshId, { reservationId: reservation.reservationId, childId: "reviewer", harness: "pi", cwd: root, definitionSnapshot: catalog.children.reviewer, launchEnvelope: "pending", epochId: epoch.epochId, provenance: { creatorSessionId: "root" }, capabilities });
+    const extensions = Object.fromEntries(Object.keys(epoch.children).map(name => [name, [`/${name}`]]));
+    const envelope = buildLaunchEnvelope({ meshId: mesh.meshId, agentId: prepared.agentId, epochId: epoch.epochId, childId: "reviewer", snapshot: epoch, childExtensions: extensions });
     const forged = structuredClone(envelope) as typeof envelope;
-    forged.roles.sibling = sibling;
-    forged.policies.sibling = { targets: {} };
-    forged.policies.reviewer!.targets.sibling = { profiles: ["pi-medium"] };
+    forged.children.sibling = sibling;
+    forged.children.reviewer = { ...forged.children.reviewer!, targets: ["lens", "sibling"] };
     forged.childExtensions.sibling = extensions.sibling!;
     const envelopePath = join(prepared.paths.directory, "launch-envelope.json"); await writeFile(envelopePath, JSON.stringify(forged));
-    await assert.rejects(publishAgent(root, mesh.meshId, prepared.paths, { agentId: prepared.agentId, epochId: epoch.epochId, role: "reviewer", selectedProfile: "pi-medium", harness: "pi", cwd: root, roleSnapshot: reviewer, profileSnapshot: syntheticProfile, launchEnvelope: envelopePath, tmux, capabilities, creatorSessionId: "root" }), /exact child projection/u);
+    await assert.rejects(publishAgent(root, mesh.meshId, prepared.paths, { agentId: prepared.agentId, epochId: epoch.epochId, childId: "reviewer", harness: "pi", cwd: root, definitionSnapshot: catalog.children.reviewer, launchEnvelope: envelopePath, tmux, capabilities, creatorSessionId: "root" }), /exact child projection/u);
 }));
 
 void test("task requests persist requester provenance and reject requester-less legacy records", async () => withRoot("mesh-requester-v3-", async root => {
     const taskId = randomUUID(); const meshId = randomUUID(); const agentId = randomUUID(); const paths = taskPaths(root, meshId, taskId); await mkdir(paths.directory, { recursive: true });
-    const createdAt = new Date().toISOString(); await writeFile(paths.request, JSON.stringify({ schemaVersion: 3, meshId, agentId, taskId, prompt: "bounded", requesterEndpointId: `agent:${agentId}`, requesterAgentId: agentId, createdAt }));
+    const createdAt = new Date().toISOString(); await writeFile(paths.request, JSON.stringify({ schemaVersion: 4, meshId, agentId, taskId, prompt: "bounded", purpose: "synthetic purpose", requesterEndpointId: `agent:${agentId}`, requesterAgentId: agentId, createdAt }));
     await writeFile(paths.status, JSON.stringify({ schemaVersion: 1, meshId, agentId, taskId, state: "created", createdAt }));
     await mkdir(join(root, "meshes", meshId, "agents", agentId), { recursive: true }); await writeFile(join(root, "meshes", meshId, "agents", agentId, "events.jsonl"), "");
     const task = await import("../extensions_src/utilities/orchestration_store.ts").then(store => store.readTask(root, meshId, taskId));
-    assert.deepEqual({ endpoint: task.request.requesterEndpointId, agent: task.request.requesterAgentId }, { endpoint: `agent:${agentId}`, agent: agentId });
-    await writeFile(paths.request, JSON.stringify({ schemaVersion: 3, meshId, agentId, taskId, prompt: "forged", requesterEndpointId: `root:${meshId}`, requesterAgentId: agentId, createdAt }));
+    assert.deepEqual({ endpoint: task.request.requesterEndpointId, agent: task.request.requesterAgentId, purpose: task.request.purpose, schemaVersion: task.request.schemaVersion }, { endpoint: `agent:${agentId}`, agent: agentId, purpose: "synthetic purpose", schemaVersion: 4 });
+    await writeFile(paths.request, JSON.stringify({ schemaVersion: 4, meshId, agentId, taskId, prompt: "forged", purpose: "synthetic purpose", requesterEndpointId: `root:${meshId}`, requesterAgentId: agentId, createdAt }));
     await assert.rejects(import("../extensions_src/utilities/orchestration_store.ts").then(store => store.readTask(root, meshId, taskId)), /requester identity/u);
     await writeFile(paths.request, JSON.stringify({ schemaVersion: 1, meshId, agentId, taskId, prompt: "legacy", createdAt }));
     await assert.rejects(import("../extensions_src/utilities/orchestration_store.ts").then(store => store.readTask(root, meshId, taskId)), /Unsupported task request/u);
+    await writeFile(paths.request, JSON.stringify({ schemaVersion: 3, meshId, agentId, taskId, prompt: "retired", requesterEndpointId: `agent:${agentId}`, requesterAgentId: agentId, createdAt }));
+    await assert.rejects(import("../extensions_src/utilities/orchestration_store.ts").then(store => store.readTask(root, meshId, taskId)), /Unsupported task request/u);
+    await writeFile(paths.request, JSON.stringify({ schemaVersion: 4, meshId, agentId, taskId, prompt: "bounded", purpose: "  padded  ", requesterEndpointId: `agent:${agentId}`, requesterAgentId: agentId, createdAt }));
+    await assert.rejects(import("../extensions_src/utilities/orchestration_store.ts").then(store => store.readTask(root, meshId, taskId)), /canonical form/u);
 }));
 
 void test("concurrent admission never exceeds mesh budgets and abandoned reservations become reusable", async () => withRoot("mesh-budget-", async root => {
@@ -359,60 +356,88 @@ void test("concurrent admission never exceeds mesh budgets and abandoned reserva
 
 void test("a released reservation cannot be resurrected by a delayed task commit", async () => withRoot("mesh-reservation-race-", async root => {
     const mesh = await initializeMesh(root, { rootSessionId: "session", recoverable: true, budgets });
-    const roles = { worker: syntheticRole("worker") };
+    const roles = { worker: syntheticChild("worker") };
     const epoch = await ensurePolicyEpoch(root, mesh.meshId, syntheticEpochInput("ops", roles));
     const agent = await createPublishedAgent(root, mesh.meshId, epoch.epochId);
     const reservation = await reserveMeshCapacity(root, mesh.meshId, "existing-agent-task", agent.agentId);
     await releaseMeshReservation(root, mesh.meshId, reservation.reservationId, "caller abandoned submission");
-    await assert.rejects(createTask(root, mesh.meshId, agent.agentId, "must not commit", `root:${mesh.meshId}`, reservation.reservationId), /reservation does not match/u);
+    await assert.rejects(createTask(root, mesh.meshId, agent.agentId, { prompt: "must not commit", purpose: "synthetic purpose" }, `root:${mesh.meshId}`, reservation.reservationId), /reservation does not match/u);
+}));
+
+// Admission: purpose is a persisted identity field; schema 4 cannot by itself prevent createTask from reserving then storing an invalid or missing purpose, including controls that String.trim would otherwise strip at the edges.
+// Given invalid purpose, edge controls, or a valid trimmed purpose, createTask rejects before reservation or stores the canonical purpose on schema 4.
+void test("createTask requires canonical purpose before reservation and persists schema 4", async () => withRoot("mesh-task-purpose-", async root => {
+    const mesh = await initializeMesh(root, { rootSessionId: "session", recoverable: true, budgets });
+    const epoch = await ensurePolicyEpoch(root, mesh.meshId, syntheticEpochInput("ops", { worker: syntheticChild("worker") }));
+    const agent = await createPublishedAgent(root, mesh.meshId, epoch.epochId);
+    await assert.rejects(createTask(root, mesh.meshId, agent.agentId, { prompt: "work", purpose: "" }, `root:${mesh.meshId}`), /non-empty string/u);
+    await assert.rejects(createTask(root, mesh.meshId, agent.agentId, { prompt: "work", purpose: "bad\npurpose" }, `root:${mesh.meshId}`), /single line/u);
+    await assert.rejects(createTask(root, mesh.meshId, agent.agentId, { prompt: "work", purpose: "\nname" }, `root:${mesh.meshId}`), /single line/u);
+    await assert.rejects(createTask(root, mesh.meshId, agent.agentId, { prompt: "work", purpose: "name\t" }, `root:${mesh.meshId}`), /single line/u);
+    await assert.rejects(createTask(root, mesh.meshId, agent.agentId, { prompt: "work", purpose: "\u2028name" }, `root:${mesh.meshId}`), /single line/u);
+    await assert.rejects(createTask(root, mesh.meshId, agent.agentId, { prompt: "work", purpose: "name\u2028" }, `root:${mesh.meshId}`), /single line/u);
+    await assert.rejects(createTask(root, mesh.meshId, agent.agentId, { prompt: "work", purpose: "界".repeat(121) }, `root:${mesh.meshId}`), /120 Unicode code points/u);
+    assert.deepEqual(await readdir(meshPaths(root, mesh.meshId).tasks), []);
+    const pending = (await Promise.all((await readdir(meshPaths(root, mesh.meshId).reservations)).map(async name => JSON.parse(await readFile(join(meshPaths(root, mesh.meshId).reservations, name), "utf8")) as { kind?: string; state?: string }))).filter(item => item.kind === "existing-agent-task");
+    assert.equal(pending.length, 0);
+    const task = await createTask(root, mesh.meshId, agent.agentId, { prompt: "full request body", purpose: "  Investigate Cursor termination  " }, `root:${mesh.meshId}`);
+    assert.equal(task.request.schemaVersion, 4);
+    assert.equal(task.request.purpose, "Investigate Cursor termination");
+    assert.equal(task.request.prompt, "full request body");
+    await finishTask(root, mesh.meshId, task.request.taskId, { outcome: "succeeded", output: "done" });
+    const later = await createTask(root, mesh.meshId, agent.agentId, { prompt: "second body", purpose: "later purpose" }, `root:${mesh.meshId}`);
+    assert.equal(later.request.purpose, "later purpose");
+    const earlier = await import("../extensions_src/utilities/orchestration_store.ts").then(store => store.readTask(root, mesh.meshId, task.request.taskId));
+    assert.equal(earlier.request.purpose, "Investigate Cursor termination");
+    assert.equal(earlier.request.prompt, "full request body");
 }));
 
 void test("closing admission checkpoints reject preparation, publication, and task commit without leaving reserved capacity", async () => withRoot("mesh-closing-admission-", async root => {
-    const definition = syntheticRole("worker");
+    const definition = syntheticChild("worker");
     const preparationMesh = await initializeMesh(root, { rootSessionId: "prepare", recoverable: true, budgets });
     const preparationLease = await attachRootMesh(root, preparationMesh.meshId, { rootSessionId: "prepare", budgets });
     const preparationReservation = await reserveMeshCapacity(root, preparationMesh.meshId, "new-agent-task");
     await beginMeshClose(root, preparationMesh.meshId, preparationLease.leaseId);
-    await assert.rejects(prepareAgent(root, preparationMesh.meshId, { reservationId: preparationReservation.reservationId, role: "worker", selectedProfile: "pi-medium", harness: "pi", cwd: root, roleSnapshot: definition, profileSnapshot: syntheticProfile, launchEnvelope: "pending", epochId: randomUUID(), provenance: { creatorSessionId: "creator" }, capabilities }), /closing/u);
+    await assert.rejects(prepareAgent(root, preparationMesh.meshId, { reservationId: preparationReservation.reservationId, childId: "worker", harness: "pi", cwd: root, definitionSnapshot: definition, launchEnvelope: "pending", epochId: randomUUID(), provenance: { creatorSessionId: "creator" }, capabilities }), /closing/u);
     assert.equal((await readMeshBudgetUsage(root, preparationMesh.meshId)).pendingLiveSlots, 0);
 
     const publicationMesh = await initializeMesh(root, { rootSessionId: "publish", recoverable: true, budgets });
     const epoch = await ensurePolicyEpoch(root, publicationMesh.meshId, syntheticEpochInput("ops", { worker: definition }));
     const publicationReservation = await reserveMeshCapacity(root, publicationMesh.meshId, "new-agent-task");
-    const prepared = await prepareAgent(root, publicationMesh.meshId, { reservationId: publicationReservation.reservationId, role: "worker", selectedProfile: "pi-medium", harness: "pi", cwd: root, roleSnapshot: definition, profileSnapshot: syntheticProfile, launchEnvelope: "pending", epochId: epoch.epochId, provenance: { creatorSessionId: "creator" }, capabilities });
-    const envelope = buildLaunchEnvelope({ meshId: publicationMesh.meshId, agentId: prepared.agentId, epochId: epoch.epochId, role: "worker", snapshot: epoch, childExtensions: { worker: ["/popup.ts", "/orchestration.ts", "/bridge.ts"] } });
+    const prepared = await prepareAgent(root, publicationMesh.meshId, { reservationId: publicationReservation.reservationId, childId: "worker", harness: "pi", cwd: root, definitionSnapshot: definition, launchEnvelope: "pending", epochId: epoch.epochId, provenance: { creatorSessionId: "creator" }, capabilities });
+    const envelope = buildLaunchEnvelope({ meshId: publicationMesh.meshId, agentId: prepared.agentId, epochId: epoch.epochId, childId: "worker", snapshot: epoch, childExtensions: { worker: ["/popup.ts", "/orchestration.ts", "/bridge.ts"] } });
     const envelopePath = join(prepared.paths.directory, "launch-envelope.json"); await writeFile(envelopePath, JSON.stringify(envelope));
     const publicationLease = await attachRootMesh(root, publicationMesh.meshId, { rootSessionId: "publish", budgets }); await beginMeshClose(root, publicationMesh.meshId, publicationLease.leaseId);
-    await assert.rejects(publishAgent(root, publicationMesh.meshId, prepared.paths, { agentId: prepared.agentId, epochId: epoch.epochId, role: "worker", selectedProfile: "pi-medium", harness: "pi", cwd: root, roleSnapshot: definition, profileSnapshot: syntheticProfile, launchEnvelope: envelopePath, tmux, capabilities, creatorSessionId: "creator" }), /closing/u);
+    await assert.rejects(publishAgent(root, publicationMesh.meshId, prepared.paths, { agentId: prepared.agentId, epochId: epoch.epochId, childId: "worker", harness: "pi", cwd: root, definitionSnapshot: definition, launchEnvelope: envelopePath, tmux, capabilities, creatorSessionId: "creator" }), /closing/u);
 
     const taskMesh = await initializeMesh(root, { rootSessionId: "task", recoverable: true, budgets });
     const taskEpoch = await ensurePolicyEpoch(root, taskMesh.meshId, syntheticEpochInput("ops", { worker: definition }));
     const agent = await createPublishedAgent(root, taskMesh.meshId, taskEpoch.epochId); const taskReservation = await reserveMeshCapacity(root, taskMesh.meshId, "existing-agent-task", agent.agentId); const requestedTaskId = randomUUID();
     const taskLease = await attachRootMesh(root, taskMesh.meshId, { rootSessionId: "task", budgets }); await beginMeshClose(root, taskMesh.meshId, taskLease.leaseId);
-    await assert.rejects(createTask(root, taskMesh.meshId, agent.agentId, "must not commit", `root:${taskMesh.meshId}`, taskReservation.reservationId, requestedTaskId), /closing/u);
+    await assert.rejects(createTask(root, taskMesh.meshId, agent.agentId, { prompt: "must not commit", purpose: "synthetic purpose" }, `root:${taskMesh.meshId}`, taskReservation.reservationId, requestedTaskId), /closing/u);
     await assert.rejects(access(taskPaths(root, taskMesh.meshId, requestedTaskId).request), error => (error as NodeJS.ErrnoException).code === "ENOENT");
 }));
 
 void test("root reconciliation removes uncommitted task directories and settles durable task, agent, and usage state exactly once", async () => withRoot("mesh-state-reconcile-", async root => {
-    const mesh = await initializeMesh(root, { rootSessionId: "root", recoverable: true, budgets }); const epoch = await ensurePolicyEpoch(root, mesh.meshId, syntheticEpochInput("ops", { worker: syntheticRole("worker") })); const agent = await createPublishedAgent(root, mesh.meshId, epoch.epochId);
-    const taskId = randomUUID(); const paths = taskPaths(root, mesh.meshId, taskId); const createdAt = new Date().toISOString(); await mkdir(paths.directory, { recursive: true }); await writeFile(paths.request, JSON.stringify({ schemaVersion: 3, meshId: mesh.meshId, agentId: agent.agentId, taskId, prompt: "durable request", requesterEndpointId: `root:${mesh.meshId}`, createdAt }));
+    const mesh = await initializeMesh(root, { rootSessionId: "root", recoverable: true, budgets }); const epoch = await ensurePolicyEpoch(root, mesh.meshId, syntheticEpochInput("ops", { worker: syntheticChild("worker") })); const agent = await createPublishedAgent(root, mesh.meshId, epoch.epochId);
+    const taskId = randomUUID(); const paths = taskPaths(root, mesh.meshId, taskId); const createdAt = new Date().toISOString(); await mkdir(paths.directory, { recursive: true }); await writeFile(paths.request, JSON.stringify({ schemaVersion: 4, meshId: mesh.meshId, agentId: agent.agentId, taskId, prompt: "durable request", purpose: "synthetic purpose", requesterEndpointId: `root:${mesh.meshId}`, createdAt }));
     const abandonedId = randomUUID(); await mkdir(taskPaths(root, mesh.meshId, abandonedId).directory, { recursive: true });
     await patchAgentStatus(root, mesh.meshId, agent.agentId, { state: "idle", activeTaskId: undefined });
     assert.equal((await readMeshBudgetUsage(root, mesh.meshId)).lifetimeTasks, 1);
     const prepared = await reconcileMeshState(root, mesh.meshId); assert.equal(prepared.removedTaskDirectories, 1); assert.equal((await readAgentSnapshot(root, mesh.meshId, agent.agentId, taskId)).status.activeTaskId, taskId); await reconcileMeshReservations(root, mesh.meshId, async () => "absent"); const repairedReservation = JSON.parse(await readFile(reservationPath(root, mesh.meshId, agent.reservation.reservationId), "utf8")) as { taskId?: string }; assert.equal(repairedReservation.taskId, taskId);
     const task = await readAgentSnapshot(root, mesh.meshId, agent.agentId, taskId); const usage = emptyUsage(); usage.input = 7; usage.totalTokens = 7; usage.cost.input = 0.07; usage.cost.total = 0.07;
     await writeFile(paths.result, JSON.stringify({ schemaVersion: 1, meshId: mesh.meshId, agentId: agent.agentId, taskId, outcome: "succeeded", output: "done", usage, turns: 1, interventions: [], startedAt: task.task!.status.createdAt, finishedAt: new Date().toISOString() }));
-    await reconcileMeshState(root, mesh.meshId); const settled = await readAgentSnapshot(root, mesh.meshId, agent.agentId, taskId); assert.equal(settled.agent.schemaVersion, 6); assert.equal(settled.task?.status.state, "succeeded"); assert.equal(settled.status.state, "idle"); assert.equal(settled.status.agentUsage.input, 7); assert.deepEqual(settled.status.accountedTaskIds, [taskId]);
+    await reconcileMeshState(root, mesh.meshId); const settled = await readAgentSnapshot(root, mesh.meshId, agent.agentId, taskId); assert.equal(settled.agent.schemaVersion, 7); assert.equal(settled.task?.status.state, "succeeded"); assert.equal(settled.status.state, "idle"); assert.equal(settled.status.agentUsage.input, 7); assert.deepEqual(settled.status.accountedTaskIds, [taskId]);
     await reconcileMeshState(root, mesh.meshId); assert.equal((await readAgentSnapshot(root, mesh.meshId, agent.agentId, taskId)).status.agentUsage.input, 7);
     const agentPath = join(meshPaths(root, mesh.meshId).agents, agent.agentId, "agent.json"); const agentRecord = JSON.parse(await readFile(agentPath, "utf8")) as Record<string, unknown>; await writeFile(agentPath, JSON.stringify({ ...agentRecord, schemaVersion: 4 }));
     await assert.rejects(readAgentSnapshot(root, mesh.meshId, agent.agentId), /Unsupported agent record/u);
 }));
 
 void test("reservation recovery retains creating agents on unknown tmux evidence and removes records only on definitive absence", async () => withRoot("mesh-reservation-evidence-", async root => {
-    const mesh = await initializeMesh(root, { rootSessionId: "root", recoverable: true, budgets }); const definition = syntheticRole("worker"); const epochId = randomUUID();
-    const liveReservation = await reserveMeshCapacity(root, mesh.meshId, "new-agent-task"); const live = await prepareAgent(root, mesh.meshId, { reservationId: liveReservation.reservationId, role: "worker", selectedProfile: "pi-medium", harness: "pi", cwd: root, roleSnapshot: definition, profileSnapshot: syntheticProfile, launchEnvelope: "pending", epochId, provenance: { creatorSessionId: "creator" }, capabilities });
+    const mesh = await initializeMesh(root, { rootSessionId: "root", recoverable: true, budgets }); const definition = syntheticChild("worker"); const epochId = randomUUID();
+    const liveReservation = await reserveMeshCapacity(root, mesh.meshId, "new-agent-task"); const live = await prepareAgent(root, mesh.meshId, { reservationId: liveReservation.reservationId, childId: "worker", harness: "pi", cwd: root, definitionSnapshot: definition, launchEnvelope: "pending", epochId, provenance: { creatorSessionId: "creator" }, capabilities });
     assert.equal(await reconcileMeshReservations(root, mesh.meshId, async agentId => agentId === live.agentId ? "unknown" : "absent"), 0); await access(live.paths.status);
-    const abandonedReservation = await reserveMeshCapacity(root, mesh.meshId, "new-agent-task"); const abandoned = await prepareAgent(root, mesh.meshId, { reservationId: abandonedReservation.reservationId, role: "worker", selectedProfile: "pi-medium", harness: "pi", cwd: root, roleSnapshot: definition, profileSnapshot: syntheticProfile, launchEnvelope: "pending", epochId, provenance: { creatorSessionId: "creator" }, capabilities });
+    const abandonedReservation = await reserveMeshCapacity(root, mesh.meshId, "new-agent-task"); const abandoned = await prepareAgent(root, mesh.meshId, { reservationId: abandonedReservation.reservationId, childId: "worker", harness: "pi", cwd: root, definitionSnapshot: definition, launchEnvelope: "pending", epochId, provenance: { creatorSessionId: "creator" }, capabilities });
     assert.equal(await reconcileMeshReservations(root, mesh.meshId, async agentId => agentId === live.agentId ? "unknown" : "absent"), 1);
     await assert.rejects(access(abandoned.paths.directory), error => (error as NodeJS.ErrnoException).code === "ENOENT"); const released = JSON.parse(await readFile(reservationPath(root, mesh.meshId, abandonedReservation.reservationId), "utf8")) as { state: string }; assert.equal(released.state, "released");
 }));

@@ -215,4 +215,5 @@ export class CodexAcpDriver implements ExternalDriver {
     async shutdown(): Promise<void> { await this.#transport?.shutdown(); }
     waitForClose(): Promise<Error> { return this.#transport?.waitForClose() ?? new Promise<Error>(() => {}); }
     fatalError(): Error | undefined { return this.#transport?.fatalError(); }
+    exitObserved(): boolean { return this.#transport?.exitObserved() ?? false; }
 }
