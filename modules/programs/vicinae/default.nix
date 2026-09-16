@@ -21,10 +21,12 @@ delib.module {
       enable = true;
       # Compact/expand and list selection motion only; compact-mode logic stays upstream.
       package = inputs.vicinae.packages.${pkgs.stdenv.hostPlatform.system}.default.overrideAttrs (old: {
-        patches = (old.patches or []) ++ [
-          ./vicinae-compact-transition.patch
-          ./vicinae-selection-highlight.patch
-        ];
+        patches =
+          (old.patches or [])
+          ++ [
+            ./vicinae-compact-transition.patch
+            ./vicinae-selection-highlight.patch
+          ];
       });
       launchd.enable = pkgs.stdenv.isDarwin;
       settings = {
@@ -35,6 +37,7 @@ delib.module {
         pop_to_root_on_close = true;
         close_on_focus_loss = true;
         activate_on_single_click = false;
+        wrap_navigation = true;
 
         launcher_window = {
           material = "liquid_glass";
