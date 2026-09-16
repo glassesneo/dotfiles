@@ -1,0 +1,91 @@
+diff --git a/src/server/src/ui/qml/launcher/LauncherWindow.qml b/src/server/src/ui/qml/launcher/LauncherWindow.qml
+index 1ea8227..eb895e7 100644
+--- a/src/server/src/ui/qml/launcher/LauncherWindow.qml
++++ b/src/server/src/ui/qml/launcher/LauncherWindow.qml
+@@ -132,8 +132,18 @@ Window {
+             HorizontalLoadingBar {
+                 Layout.fillWidth: true
+                 implicitHeight: Launcher.searchVisible ? 1 : 0
+-                visible: Launcher.searchVisible && !Launcher.compacted
++                opacity: Launcher.compacted ? 0 : 1
++                visible: Launcher.searchVisible && opacity > 0
++                enabled: !Launcher.compacted
+                 loading: Launcher.isLoading
++
++                Behavior on opacity {
++                    enabled: root.visible && root.opacity > 0
++                    NumberAnimation {
++                        duration: 120
++                        easing.type: Easing.InOutQuad
++                    }
++                }
+             }
+ 
+             Item {
+@@ -155,7 +165,17 @@ Window {
+                         StackView {
+                             id: commandStack
+                             anchors.fill: parent
+-                            visible: !Launcher.compacted
++                            opacity: Launcher.compacted ? 0 : 1
++                            visible: opacity > 0
++                            enabled: !Launcher.compacted
++
++                            Behavior on opacity {
++                                enabled: root.visible && root.opacity > 0
++                                NumberAnimation {
++                                    duration: 120
++                                    easing.type: Easing.InOutQuad
++                                }
++                            }
+                         }
+                     }
+                 }
+@@ -164,13 +184,23 @@ Window {
+ 
+         Item {
+             id: floatingStatusBar
+-            visible: !Launcher.compacted && !Launcher.hasOverlay && Launcher.statusBarVisible
++            opacity: Launcher.compacted ? 0 : 1
++            visible: opacity > 0 && !Launcher.hasOverlay && Launcher.statusBarVisible
++            enabled: !Launcher.compacted
+             anchors.left: parent.left
+             anchors.right: parent.right
+             anchors.bottom: parent.bottom
+             height: 41 + Config.borderWidth
+             clip: true
+ 
++            Behavior on opacity {
++                enabled: root.visible && root.opacity > 0
++                NumberAnimation {
++                    duration: 120
++                    easing.type: Easing.InOutQuad
++                }
++            }
++
+             readonly property int backdropPad: 64
+ 
+             ShaderEffectSource {
+diff --git a/src/server/src/ui/qml/launcher/LauncherWindowMacOS.qml b/src/server/src/ui/qml/launcher/LauncherWindowMacOS.qml
+index db7b771..d464054 100644
+--- a/src/server/src/ui/qml/launcher/LauncherWindowMacOS.qml
++++ b/src/server/src/ui/qml/launcher/LauncherWindowMacOS.qml
+@@ -10,8 +10,16 @@ LauncherWindow {
+     autoPlaceOnShow: false
+ 
+     height: _contentH
+-    minimumHeight: _contentH
+-    maximumHeight: _contentH
++    minimumHeight: Math.min(height, _contentH)
++    maximumHeight: Math.max(height, _contentH)
++
++    Behavior on height {
++        enabled: visible && opacity > 0
++        NumberAnimation {
++            duration: 200
++            easing.type: Easing.InOutQuad
++        }
++    }
+ 
+     onAboutToShow: Launcher.prepareShow()
+     onShown: Launcher.finalizeShow()

@@ -1,0 +1,232 @@
+diff --git a/src/server/src/ui/qml/list/SelectableDelegate.qml b/src/server/src/ui/qml/list/SelectableDelegate.qml
+index bb39999..f9b4de4 100644
+--- a/src/server/src/ui/qml/list/SelectableDelegate.qml
++++ b/src/server/src/ui/qml/list/SelectableDelegate.qml
+@@ -37,21 +37,18 @@ Item {
+         anchors.leftMargin: 6
+         anchors.rightMargin: 6
+         radius: 10
++        // Selection fill is the list's floating highlight; hover stays here.
+         backgroundColor: {
++            if (root.selected || !root.hovered)
++                return "transparent";
+             var bg = Theme.background;
+             return Qt.rgba(bg.r, bg.g, bg.b, Config.windowOpacity);
+         }
+         color: {
+-            if (root.selected) {
+-                var c = Theme.listItemSelectionBg;
+-                return Qt.rgba(c.r, c.g, c.b, Config.surfaceOpacity);
+-            }
+-            if (root.hovered) {
+-                var h = Theme.listItemHoverBg;
+-                return Qt.rgba(h.r, h.g, h.b, Config.surfaceOpacity);
+-            }
+-            var bg = Theme.background;
+-            return Qt.rgba(bg.r, bg.g, bg.b, Config.windowOpacity);
++            if (root.selected || !root.hovered)
++                return "transparent";
++            var h = Theme.listItemHoverBg;
++            return Qt.rgba(h.r, h.g, h.b, Config.surfaceOpacity);
+         }
+     }
+ 
+diff --git a/src/server/src/ui/qml/views/GenericListView.qml b/src/server/src/ui/qml/views/GenericListView.qml
+index 762275d..7ca215e 100644
+--- a/src/server/src/ui/qml/views/GenericListView.qml
++++ b/src/server/src/ui/qml/views/GenericListView.qml
+@@ -83,12 +83,27 @@ Item {
+         }
+     }
+ 
++    readonly property int _selectionMoveDuration: 120
++
+     function sectionScrollTarget(index, direction) {
+         if (!root.listModel || typeof root.listModel.scrollTargetIndex !== "function")
+             return index;
+         return root.listModel.scrollTargetIndex(index, direction);
+     }
+ 
++    function _moveSelection(next) {
++        if (next === listView.currentIndex)
++            return;
++        listView._animateHighlight = true;
++        listView.currentIndex = next;
++        const scrollTarget = sectionScrollTarget(next, -1);
++        listView.positionViewAtIndex(scrollTarget, ListView.Contain);
++        _liftAboveInset(next);
++        Qt.callLater(function () {
++            listView._animateHighlight = false;
++        });
++    }
++
+     function revealCurrentSectionHeaderIfHidden() {
+         if (listView.currentIndex < 0)
+             return false;
+@@ -117,13 +132,7 @@ Item {
+     }
+ 
+     function moveDown() {
+-        const next = root.listModel.nextSelectableIndex(listView.currentIndex, 1);
+-        if (next !== listView.currentIndex) {
+-            listView.currentIndex = next;
+-            const scrollTarget = sectionScrollTarget(next, -1);
+-            listView.positionViewAtIndex(scrollTarget, ListView.Contain);
+-            _liftAboveInset(next);
+-        }
++        _moveSelection(root.listModel.nextSelectableIndex(listView.currentIndex, 1));
+         return true;
+     }
+ 
+@@ -131,13 +140,7 @@ Item {
+         if (revealCurrentSectionHeaderIfHidden())
+             return true;
+ 
+-        const next = root.listModel.nextSelectableIndex(listView.currentIndex, -1);
+-        if (next !== listView.currentIndex) {
+-            listView.currentIndex = next;
+-            const scrollTarget = sectionScrollTarget(next, -1);
+-            listView.positionViewAtIndex(scrollTarget, ListView.Contain);
+-            _liftAboveInset(next);
+-        }
++        _moveSelection(root.listModel.nextSelectableIndex(listView.currentIndex, -1));
+         return true;
+     }
+ 
+@@ -145,13 +148,7 @@ Item {
+         if (typeof root.listModel.nextSectionIndex !== "function") {
+             return moveDown();
+         }
+-        const next = root.listModel.nextSectionIndex(listView.currentIndex, 1);
+-        if (next !== listView.currentIndex) {
+-            listView.currentIndex = next;
+-            const scrollTarget = sectionScrollTarget(next, -1);
+-            listView.positionViewAtIndex(scrollTarget, ListView.Contain);
+-            _liftAboveInset(next);
+-        }
++        _moveSelection(root.listModel.nextSectionIndex(listView.currentIndex, 1));
+         return true;
+     }
+ 
+@@ -162,18 +159,14 @@ Item {
+         if (revealCurrentSectionHeaderIfHidden())
+             return true;
+ 
+-        const next = root.listModel.nextSectionIndex(listView.currentIndex, -1);
+-        if (next !== listView.currentIndex) {
+-            listView.currentIndex = next;
+-            const scrollTarget = sectionScrollTarget(next, -1);
+-            listView.positionViewAtIndex(scrollTarget, ListView.Contain);
+-            _liftAboveInset(next);
+-        }
++        _moveSelection(root.listModel.nextSectionIndex(listView.currentIndex, -1));
+         return true;
+     }
+ 
+     function selectFirst() {
++        listView._animateHighlight = false;
+         listView.currentIndex = root.listModel.nextSelectableIndex(-1, 1);
++        listView._syncHighlight();
+     }
+ 
+     onListModelChanged: {
+@@ -198,9 +191,13 @@ Item {
+     Connections {
+         target: root.listModel
+         function onModelReset() {
++            listView._animateHighlight = false;
+             root._endArmed = true;
+             listView._lastContentHeight = 0;
+-            Qt.callLater(root._maybeFireEnd);
++            Qt.callLater(function () {
++                listView._syncHighlight();
++                root._maybeFireEnd();
++            });
+         }
+     }
+ 
+@@ -240,12 +237,24 @@ Item {
+             cacheBuffer: 200
+             interactive: false
+             boundsBehavior: Flickable.StopAtBounds
++            highlightFollowsCurrentItem: false
+             highlightMoveDuration: 0
+             currentIndex: -1
+             topMargin: 4
+             bottomMargin: 4 + root._bottomInset
+ 
+             property real _lastContentHeight: 0
++            property bool _animateHighlight: false
++            property real _highlightY: 0
++            property real _highlightH: 0
++
++            function _syncHighlight() {
++                const item = currentItem;
++                if (!item)
++                    return;
++                _highlightY = item.y;
++                _highlightH = item.height;
++            }
+ 
+             onContentYChanged: root._maybeFireEnd()
+             onContentHeightChanged: {
+@@ -259,7 +268,11 @@ Item {
+                 target: listView
+             }
+ 
+-            onCurrentIndexChanged: root.itemSelected(currentIndex)
++            onCurrentIndexChanged: {
++                root.itemSelected(currentIndex);
++                _syncHighlight();
++            }
++            onCurrentItemChanged: _syncHighlight()
+             onCountChanged: {
+                 if (root.autoWireModel && root.listModel && currentIndex < 0 && count > 0) {
+                     root.selectFirst();
+@@ -267,6 +280,46 @@ Item {
+                 }
+             }
+ 
++            highlight: Item {
++                z: 0
++                enabled: false
++                visible: listView.currentIndex >= 0 && listView._highlightH > 0
++                x: 0
++                width: listView.width
++                y: listView._highlightY
++                height: listView._highlightH
++
++                Behavior on y {
++                    enabled: listView._animateHighlight
++                    NumberAnimation {
++                        duration: root._selectionMoveDuration
++                        easing.type: Easing.OutCubic
++                    }
++                }
++                Behavior on height {
++                    enabled: listView._animateHighlight
++                    NumberAnimation {
++                        duration: root._selectionMoveDuration
++                        easing.type: Easing.OutCubic
++                    }
++                }
++
++                SourceBlendRect {
++                    anchors.fill: parent
++                    anchors.leftMargin: 6
++                    anchors.rightMargin: 6
++                    radius: 10
++                    backgroundColor: {
++                        var bg = Theme.background;
++                        return Qt.rgba(bg.r, bg.g, bg.b, Config.windowOpacity);
++                    }
++                    color: {
++                        var c = Theme.listItemSelectionBg;
++                        return Qt.rgba(c.r, c.g, c.b, Config.surfaceOpacity);
++                    }
++                }
++            }
++
+             ScrollBar.vertical: ViciScrollBar {
+                 policy: listView.contentHeight > listView.height ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
+             }
