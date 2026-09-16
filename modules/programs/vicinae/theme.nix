@@ -1,10 +1,11 @@
 {
+  applicationLauncher,
   colorscheme,
   delib,
   lib,
   ...
 }: let
-  palette = colorscheme.palette;
+  inherit (colorscheme) palette;
   themeId = "${colorscheme.name}-${colorscheme.variant}";
   themeDisplayName = "${lib.toSentenceCase colorscheme.name} ${lib.toSentenceCase colorscheme.variant}";
   hexColor = lib.types.strMatching "#[0-9a-fA-F]{6}";
@@ -17,7 +18,7 @@ in
 
     options = with delib;
       moduleOptions {
-        enable = description (boolOption false) "Enable a Vicinae theme derived from the selected colorscheme.";
+        enable = description (boolOption applicationLauncher.isVicinae) "Enable a Vicinae theme derived from the selected colorscheme. Defaults on when Vicinae is the launcher backend.";
         name = description ((strOption themeId) // {type = lib.types.strMatching "[A-Za-z0-9][A-Za-z0-9._-]*";}) "Theme identifier used for the generated Vicinae theme file.";
         display-name = description (strOption themeDisplayName) "Human-readable Vicinae theme name.";
         icon-theme = description (strOption "default") "Vicinae icon theme paired with the generated color theme.";
@@ -36,7 +37,7 @@ in
       ...
     }: let
       customSelection = {
-        name = cfg.name;
+        inherit (cfg) name;
         icon_theme = cfg.icon-theme;
       };
       builtInSelection = polarity: {

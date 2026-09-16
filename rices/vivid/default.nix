@@ -12,8 +12,7 @@ delib.rice {
     wallpaper.title = "sakura";
 
     programs = {
-      application-launcher.backend = "raycast";
-      # vicinae.theme.enable = true;
+      application-launcher.backend = "vicinae";
       ghostty = {
         appearance = {
           background-opacity = 0.34;
