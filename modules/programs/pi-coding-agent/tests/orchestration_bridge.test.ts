@@ -9,7 +9,7 @@ import { registerOrchestration, createMeshSendTool, type ActiveCaller } from "..
 import { registerMeshChildBridge, type MeshChildBridgeDependencies } from "../extensions_src/orchestration_child_bridge.ts";
 import { buildLaunchEnvelope } from "../extensions_src/utilities/agent_types.ts";
 import { bindMeshEndpoint, materializeMeshCompletionEvents } from "../extensions_src/utilities/orchestration_events.ts";
-import { FALLBACK_CONTINUE_CONTENT, FALLBACK_CONTINUE_CUSTOM_TYPE } from "../extensions_src/utilities/orchestration_profile_fallback.ts";
+import { FALLBACK_CONTINUE_CUSTOM_TYPE, formatFallbackContinueContent } from "../extensions_src/utilities/orchestration_profile_fallback.ts";
 import { FakeMonotonicTimers, yieldToIO } from "./test_helpers.ts";
 import { availableContext, publishAgentActivity, readAgentActivity } from "../extensions_src/utilities/orchestration_activity.ts";
 import { bindAgentRuntime } from "../extensions_src/utilities/orchestration_runtime.ts";
@@ -491,7 +491,8 @@ void test("error settlement continues the same child task on a later candidate w
     assert.equal(mid.status.state, "busy");
     assert.equal(fixture.sent.length, 1);
     assert.equal(fixture.sent[0]?.message.customType, FALLBACK_CONTINUE_CUSTOM_TYPE);
-    assert.equal(fixture.sent[0]?.message.content, FALLBACK_CONTINUE_CONTENT);
+    assert.equal(fixture.sent[0]?.message.content, formatFallbackContinueContent("continue once"));
+    assert.match(fixture.sent[0]?.message.content ?? "", /Active task:\ncontinue once$/u);
     assert.equal(fixture.sent[0]?.message.display, false);
     assert.deepEqual(fixture.sent[0]?.options, { triggerTurn: true });
     assert.doesNotMatch(fixture.sent[0]?.message.content, /provider\/|primary|fallback/u);

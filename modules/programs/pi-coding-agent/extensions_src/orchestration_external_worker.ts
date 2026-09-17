@@ -6,7 +6,7 @@ import { externalContext, publishAgentActivity, type AgentActivityPhase } from "
 import { bindAgentRuntime } from "./utilities/orchestration_runtime.ts";
 import { agentPaths, claimPendingTask, failAgent, finishTask, markBridgeReady, readAgentSnapshot, readAgentStatus, readTaskCancellation, requestAgentStop } from "./utilities/orchestration_store.ts";
 import { emptyUsage, isTerminalAgent } from "./utilities/orchestration_types.ts";
-import { displayIdentityForSnapshot, formatCompactAgentIdentity, type AgentDisplayIdentity } from "./utilities/orchestration_identity.ts";
+import { displayIdentityForSnapshot, formatCompactAgentIdentity, type AgentDisplayIdentity } from "./utilities/orchestration_identity_core.ts";
 import { isUnconfirmedTermination, resolveExternalDriver, validateExternalWorkerConfig, type ExternalDriver, type ExternalWorkerConfig, type ExternalWorkerEvent } from "./utilities/orchestration_external_driver.ts";
 import { createDirectoryWake, workerTaskInboxDirectory, type DirectoryWake, type DirectoryWakeDependencies } from "./utilities/orchestration_wake.ts";
 

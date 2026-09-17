@@ -18,7 +18,11 @@ export interface ModelRouteState {
 
 export const NATIVE_COMPACTION_RESERVE_TOKENS = 16_384;
 export const FALLBACK_CONTINUE_CUSTOM_TYPE = "profile-fallback-continue";
-export const FALLBACK_CONTINUE_CONTENT = "Continue the active task from the existing conversation and completed tool results. The prior model route could not complete the next model call. Do not repeat completed work.";
+export const FALLBACK_CONTINUE_CONTENT = "Continue the active task below using the existing conversation and completed tool results. The prior model route could not complete the next model call. Do not repeat completed work.";
+export function formatFallbackContinueContent(activeTaskPrompt: string): string {
+    if (!activeTaskPrompt.trim()) throw new Error("Fallback continuation requires the active task prompt");
+    return `${FALLBACK_CONTINUE_CONTENT}\n\nActive task:\n${activeTaskPrompt}`;
+}
 const REDACTED_DIAGNOSTIC = "diagnostic redacted";
 
 export interface ModelRegistryLike {

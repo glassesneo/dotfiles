@@ -88,12 +88,17 @@ export class CursorAcpDriver implements ExternalDriver {
     async #message(message: JsonRpcMessage): Promise<unknown> {
         if (message.method === "session/update") {
             if (!this.#assertSession(message)) return null;
+            const update = record(record(message.params)?.update) ?? record(message.params) ?? {};
+            const kind = scalar(update.sessionUpdate) || scalar(update.type) || scalar(update.kind) || "update";
+            // Cursor acknowledges session/set_mode with this session-scoped state notification before any turn starts.
+            if (!this.#turnActive && kind === "current_mode_update") {
+                this.#options.event({ type: "state", text: `mode ${scalar(update.currentModeId) || "updated"}` });
+                return null;
+            }
             if (!this.#turnActive) {
                 this.#blockReuse("ACP session/update arrived with no active turn");
                 return null;
             }
-            const update = record(record(message.params)?.update) ?? record(message.params) ?? {};
-            const kind = scalar(update.sessionUpdate) || scalar(update.type) || scalar(update.kind) || "update";
             const text = textFrom(update);
             if (/agent_message|message_chunk|agentMessage/iu.test(kind) && text) { this.#output += text; this.#options.event({ type: "text", text }); }
             else if (/thought/iu.test(kind) && text) this.#options.event({ type: "thought", text });

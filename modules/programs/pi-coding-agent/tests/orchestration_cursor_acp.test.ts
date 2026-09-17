@@ -21,7 +21,10 @@ input.on("line",line=>{const message=JSON.parse(line); record(message);
   const current=scenario==="model-current"?"default[]":""+advertised;
   const configCurrent=scenario==="model-conflict"?"default[]":current;
   send({jsonrpc:"2.0",id:message.id,result:{sessionId:"session-1",modes:{availableModes:modes},models:{currentModelId:current,availableModels:[{modelId:advertised,name:"Synthetic"}]},configOptions:[{id:"model",currentValue:configCurrent,options:[{value:advertised}]}]}});
- } else if(message.method==="session/set_mode") send({jsonrpc:"2.0",id:message.id,result:{}});
+ } else if(message.method==="session/set_mode"){
+  if(scenario==="mode-update") send({jsonrpc:"2.0",method:"session/update",params:{sessionId:"session-1",update:{sessionUpdate:"current_mode_update",currentModeId:message.params.modeId}}});
+  send({jsonrpc:"2.0",id:message.id,result:{}});
+ }
  else if(message.method==="session/prompt"){
   promptId=message.id;
   if(scenario==="update-todos-request") send({jsonrpc:"2.0",id:0,method:"cursor/update_todos",params:{todos:[{id:"1",content:"x",status:"pending"}]}});
@@ -102,6 +105,18 @@ void test("Cursor ACP resolves the configured CLI model alias to the active ACP 
             assert.deepEqual(events.filter(event => event.type === "permission").map(event => event.text), [mode === "ask" ? "rejected reject-once" : "selected allow-always"]);
         } finally { await driver.shutdown(); }
     }
+});
+
+// Admission: Cursor reports the selected mode as an out-of-turn session update during startup; this state acknowledgement must not poison the first task.
+void test("Cursor ACP accepts the startup current_mode_update and remains reusable", async () => {
+    const f = await fixture("mode-update"); const events: Event[] = [];
+    const driver = new CursorAcpDriver(options(f, "ask", event => events.push(event)));
+    try {
+        await driver.start();
+        assert.deepEqual(await driver.runTask("bounded task"), { output: "cursor answer", stopReason: "end_turn" });
+        assert.deepEqual(events.filter(event => event.type === "state" && event.text.startsWith("mode ")).map(event => event.text), ["mode ask"]);
+        assert.equal(driver.fatalError(), undefined);
+    } finally { await driver.shutdown(); }
 });
 
 void test("Cursor ACP fails closed when protocol, requested mode, or selected model is not advertised", async () => {

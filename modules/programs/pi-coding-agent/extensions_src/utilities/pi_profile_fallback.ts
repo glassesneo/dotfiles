@@ -3,6 +3,7 @@ export {
     FALLBACK_CONTINUE_CUSTOM_TYPE as PROFILE_FALLBACK_CONTINUATION_TYPE,
     NATIVE_COMPACTION_RESERVE_TOKENS,
     candidateFitsContext as candidateHasContextCapacity,
+    formatFallbackContinueContent as formatProfileFallbackContinuation,
     initialModelRoute as initialProfileRoute,
     promoteProfileCandidate,
     reconcileForwardIndex as reconcileProfileRoute,

@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { chmod, mkdtemp, writeFile } from "node:fs/promises";
+import { chmod, cp, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import test from "node:test";
+import { promisify } from "node:util";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { externalTaskPrompt, externalWorkerHeading, runExternalWorker } from "../extensions_src/orchestration_external_worker.ts";
 import { buildLaunchEnvelope, type AgentLaunchEnvelope, type ChildDefinition } from "../extensions_src/utilities/agent_types.ts";
 import type { ExecutionConfig } from "../extensions_src/utilities/mode_types.ts";
@@ -23,7 +26,22 @@ const agentId = "22222222-2222-4222-8222-222222222222";
 const epochId = "33333333-3333-4333-8333-333333333333";
 const SYNTHETIC_CURSOR_ALIAS = "synthetic-cli-alias";
 const SYNTHETIC_ACP_MODEL_ID = "synthetic-acp-model";
+const execFileAsync = promisify(execFile);
 const runtime = { stateRoot: "/state", harnesses: { pi: { adapter: "pi-native", command: "/pi" }, "cursor-agent": { adapter: "cursor-acp", command: "/cursor", workerCommand: "/node", workerEntrypoint: "/worker.ts", modelIds: { [SYNTHETIC_CURSOR_ALIAS]: SYNTHETIC_ACP_MODEL_ID } }, codex: { adapter: "codex-acp", command: "/codex-acp", workerCommand: "/node", workerEntrypoint: "/worker.ts" } } } as never;
+
+// Admission: the configured worker runs directly from the Nix store, where repository devDependencies are absent.
+void test("external worker module loads without package resolution from a standalone source tree", async () => {
+    const root = await mkdtemp(join(tmpdir(), "orchestration-worker-module-"));
+    const source = join(dirname(fileURLToPath(import.meta.url)), "../extensions_src");
+    const isolated = join(root, "extensions_src");
+    try {
+        await cp(source, isolated, { recursive: true });
+        const entrypoint = join(isolated, "orchestration_external_worker.ts");
+        const script = `await import(${JSON.stringify(pathToFileURL(entrypoint).href)}); process.stdout.write("loaded")`;
+        const result = await execFileAsync(process.execPath, ["--input-type=module", "-e", script], { cwd: root, env: { PATH: process.env.PATH ?? "" } });
+        assert.equal(result.stdout, "loaded");
+    } finally { await rm(root, { recursive: true, force: true }); }
+});
 
 const childGc = { collectAt: 2, retain: 1, pressureFloor: 0 };
 function child(overrides: Partial<ChildDefinition> = {}): ChildDefinition {

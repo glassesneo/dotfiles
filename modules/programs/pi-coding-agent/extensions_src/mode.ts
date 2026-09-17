@@ -4,8 +4,8 @@ import { formatSkillsForPrompt, getAgentDir, type ExtensionAPI, type ExtensionCo
 import { provideCommandPaletteContribution } from "./utilities/command_palette_contributions.ts";
 import { emitActiveMode, type ActiveModeReason } from "./utilities/mode_events.ts";
 import {
-    PROFILE_FALLBACK_CONTINUATION,
     PROFILE_FALLBACK_CONTINUATION_TYPE,
+    formatProfileFallbackContinuation,
     reconcileProfileRoute,
     restoreCompatibleProfileRoute,
     selectProfileCandidate,
@@ -50,6 +50,8 @@ export function registerModeController(pi: ExtensionAPI, configPath = CONFIG): {
     let shuttingDown = false;
     let lastAssistantStopReason: string | undefined;
     let turnHadToolError = false;
+    let activeTaskPrompt: string | undefined;
+    let pendingFallbackPrompt: string | undefined;
     const setTools = (tools: string[]) => { const current = pi.getActiveTools(); if (current.length !== tools.length || current.some((tool, index) => tool !== tools[index])) pi.setActiveTools(tools); };
     const reassertTools = () => { if (activeMode) setTools(activeMode.tools); };
     const setIdentity = (ctx: ExtensionContext) => {
@@ -177,7 +179,7 @@ export function registerModeController(pi: ExtensionAPI, configPath = CONFIG): {
         lastAssistantStopReason = undefined;
         turnHadToolError = false;
         const execution = activeMode?.execution;
-        if (shuttingDown || fallbackSuspended || !execution || !activeRoute || stopReason !== "error" || toolError) return;
+        if (shuttingDown || fallbackSuspended || !execution || !activeRoute || stopReason !== "error" || toolError) { activeTaskPrompt = undefined; return; }
         const usage = ctx.getContextUsage();
         applyingSelection = true;
         let promotion: Awaited<ReturnType<typeof promoteProfileCandidate>>;
@@ -196,15 +198,19 @@ export function registerModeController(pi: ExtensionAPI, configPath = CONFIG): {
         setIdentity(ctx);
         if (promotion.action === "exhausted") {
             fallbackSuspended = true;
+            activeTaskPrompt = undefined;
             ctx.ui.notify(promotion.error, "error");
             return;
         }
         if (shuttingDown) return;
-        pi.sendMessage({ customType: PROFILE_FALLBACK_CONTINUATION_TYPE, content: PROFILE_FALLBACK_CONTINUATION, display: false }, { triggerTurn: true });
+        pendingFallbackPrompt = formatProfileFallbackContinuation(activeTaskPrompt!);
+        pi.sendMessage({ customType: PROFILE_FALLBACK_CONTINUATION_TYPE, content: pendingFallbackPrompt, display: false }, { triggerTurn: true });
     });
     pi.on("session_shutdown", () => { shuttingDown = true; });
     pi.on("context", () => { reassertTools(); });
     pi.on("before_agent_start", (event, ctx) => {
+        if (event.prompt === pendingFallbackPrompt) pendingFallbackPrompt = undefined;
+        else activeTaskPrompt = event.prompt;
         if (!activeMode) return;
         reassertTools();
         const loaded = event.systemPromptOptions.skills ?? []; const names = new Set(loaded.map(skill => skill.name));

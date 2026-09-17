@@ -134,6 +134,7 @@ void test("settled errors promote stickily, skip insufficient context, and conti
     const h = await controllerFixture();
     await h.handlers.get("session_start")?.({}, h.ctx);
     h.setUsage({ tokens: 10_000, contextWindow: 128_000 });
+    await h.handlers.get("before_agent_start")?.({ prompt: "inspect the active change", systemPrompt: "base", systemPromptOptions: { skills: [] } }, h.ctx);
     await h.handlers.get("agent_end")?.({ messages: [{ role: "assistant", stopReason: "error" }] }, h.ctx);
     await h.handlers.get("agent_settled")?.({}, h.ctx);
     assert.equal(h.ctx.model.id, "alternate");
@@ -142,6 +143,7 @@ void test("settled errors promote stickily, skip insufficient context, and conti
     assert.deepEqual(h.sent[0]?.options, { triggerTurn: true });
     assert.equal(h.sent[0]?.message.display, false);
     assert.doesNotMatch(h.sent[0]?.message.content ?? "", /provider\/|openai|alternate/iu);
+    assert.match(h.sent[0]?.message.content ?? "", /Active task:\ninspect the active change$/u);
     assert.match(h.statuses.at(-1) ?? "", /model:provider\/alternate · fallback:2/u);
     const route = h.entries.at(-1)?.data as any;
     assert.equal(route.route.activeIndex, 2);
@@ -164,6 +166,7 @@ void test("tool-result errors suppress only their turn and restore selections re
     assert.equal(h.sent.length, 0);
     assert.equal(h.ctx.model.id, "recon");
 
+    await h.handlers.get("before_agent_start")?.({ prompt: "retry after a clean provider failure", systemPrompt: "base", systemPromptOptions: { skills: [] } }, h.ctx);
     await h.handlers.get("agent_start")?.({}, h.ctx);
     await h.handlers.get("model_select")?.({ model: { provider: "provider", id: "recon" }, source: "restore" }, h.ctx);
     await h.handlers.get("agent_end")?.({ messages: [{ role: "assistant", stopReason: "error" }] }, h.ctx);
@@ -191,6 +194,7 @@ void test("exhaustion and human model selection suspend automatic fallback until
     await h.handlers.get("agent_settled")?.({}, h.ctx);
     assert.equal(h.sent.length, 0);
     await h.commands.get("mode")!.handler("recon", h.ctx);
+    await h.handlers.get("before_agent_start")?.({ prompt: "retry after reapplying the mode", systemPrompt: "base", systemPromptOptions: { skills: [] } }, h.ctx);
     await h.handlers.get("agent_end")?.({ messages: [{ role: "assistant", stopReason: "error" }] }, h.ctx);
     await h.handlers.get("agent_settled")?.({}, h.ctx);
     assert.equal(h.ctx.model.id, "alternate");
@@ -269,6 +273,7 @@ void test("route persistence restores only compatible execution candidates", asy
     const h = await controllerFixture();
     await h.handlers.get("session_start")?.({}, h.ctx);
     h.setUsage({ tokens: 10_000, contextWindow: 128_000 });
+    await h.handlers.get("before_agent_start")?.({ prompt: "persist this routed task", systemPrompt: "base", systemPromptOptions: { skills: [] } }, h.ctx);
     await h.handlers.get("agent_end")?.({ messages: [{ role: "assistant", stopReason: "error" }] }, h.ctx);
     await h.handlers.get("agent_settled")?.({}, h.ctx);
     await h.handlers.get("session_tree")?.({}, h.ctx);
