@@ -198,13 +198,13 @@
       };
     };
     advanced-read = {
-      models = ["openai-codex/gpt-6-astra"];
-      thinkingLevel = "low";
+      models = ["openai-codex/gpt-5.6-sol"];
+      thinkingLevel = "medium";
       harness = "pi";
     };
     advanced-write = {
-      models = ["openai-codex/gpt-6-astra"];
-      thinkingLevel = "low";
+      models = ["openai-codex/gpt-5.6-sol"];
+      thinkingLevel = "medium";
       harness = "pi";
     };
     research = {
