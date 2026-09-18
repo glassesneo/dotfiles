@@ -9,15 +9,26 @@ import { availableContext, publishAgentActivity, type AgentActivityPhase, type A
 import { formatUsualIdentityLine, MESH_CHILD_IDENTITY_STATUS, NATURE_HANDLE_WORDS } from "./utilities/orchestration_identity.ts";
 import { addUsage, emptyUsage, type TerminalTaskState } from "./utilities/orchestration_types.ts";
 import { bindAgentRuntime, readCurrentPiRuntimeGeneration, unbindAgentRuntime } from "./utilities/orchestration_runtime.ts";
-import { claimPendingTask, failAgent, finishTask, markBridgeReady, patchAgentStatus, readAgentSnapshot, readAgentStatus, readTaskCancellation, recordChildSessionIdentity, recordIdleUsage, recordIntervention } from "./utilities/orchestration_store.ts";
-import { FALLBACK_CONTINUE_CUSTOM_TYPE, NATIVE_COMPACTION_RESERVE_TOKENS, formatFallbackContinueContent, initialModelRoute, preflightProfileCandidates, reconcileForwardIndex, recordModelRouteAttempt, restoreCompatibleRoute, sanitizeDiagnostic, selectRuntimePromotion, type ModelRouteState } from "./utilities/orchestration_profile_fallback.ts";
+import { applyAgentControl, appendLimitHistory, claimPendingTask, confirmAgentInterrupt, failAgent, finishTask, markBridgeReady, patchAgentStatus, readAgentExecution, readAgentSnapshot, readAgentStatus, readTaskCancellation, recordChildSessionIdentity, recordIdleUsage, recordIntervention } from "./utilities/orchestration_store.ts";
+import { classifyInvocationFailure, limitAttemptRecord, recoverableLimitInCycle } from "./utilities/orchestration_limit.ts";
+import { EXECUTION_RESUME_CONTENT, EXECUTION_RESUME_CUSTOM_TYPE, ProcessExecutionGate, shouldOpenExecutionGate, successfulEndResponseMarker } from "./utilities/orchestration_execution.ts";
+import { FALLBACK_CONTINUE_CUSTOM_TYPE, NATIVE_COMPACTION_RESERVE_TOKENS, beginLimitRetryCycle, formatFallbackContinueContent, initialModelRoute, preflightProfileCandidates, reconcileForwardIndex, recordModelRouteAttempt, restoreCompatibleRoute, sanitizeDiagnostic, selectRuntimePromotion, type ModelRouteState } from "./utilities/orchestration_profile_fallback.ts";
 import { createDirectoryWake, workerTaskInboxDirectory, type DirectoryWake, type DirectoryWakeDependencies } from "./utilities/orchestration_wake.ts";
 
 function record(value: unknown): Record<string, unknown> { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {}; }
 function usage(value: unknown): Partial<Usage> | undefined { const item = record(value); return ["input", "output", "cacheRead", "cacheWrite", "totalTokens", "reasoning", "cacheWrite1h"].some(key => typeof item[key] === "number") || item.cost && typeof item.cost === "object" ? item as unknown as Partial<Usage> : undefined; }
 function text(value: unknown): string { const message = record(value); if (!Array.isArray(message.content)) return ""; return message.content.map(part => { const item = record(part); return item.type === "text" && typeof item.text === "string" ? item.text : ""; }).join(""); }
 function imageTypes(images: unknown): string[] { if (!Array.isArray(images)) return []; return images.map(image => record(image).mimeType).filter((type): type is string => typeof type === "string"); }
-function terminal(stopReason: StopReason | undefined, errorMessage: string | undefined): { outcome: TerminalTaskState; error?: string } { if (stopReason === "aborted") return { outcome: "stopped", error: errorMessage ?? "Assistant turn was aborted" }; if (stopReason === "error") return { outcome: "failed", error: errorMessage ?? "Assistant turn failed" }; if (stopReason === "length") return { outcome: "failed", error: errorMessage ?? "Assistant turn reached the token limit" }; if (stopReason === "toolUse") return { outcome: "failed", error: errorMessage ?? "Assistant settled while awaiting tool execution" }; return { outcome: "succeeded" }; }
+function terminal(stopReason: StopReason | undefined, errorMessage: string | undefined, messages: readonly unknown[] = []): { outcome: TerminalTaskState; error?: string } {
+    if (stopReason === "aborted") return { outcome: "stopped", error: errorMessage ?? "Assistant turn was aborted" };
+    if (stopReason === "error") return { outcome: "failed", error: errorMessage ?? "Assistant turn failed" };
+    if (stopReason === "length") return { outcome: "failed", error: errorMessage ?? "Assistant turn reached the token limit" };
+    if (stopReason === "toolUse") {
+        if (successfulEndResponseMarker(messages)) return { outcome: "succeeded" };
+        return { outcome: "failed", error: errorMessage ?? "Assistant settled while awaiting tool execution" };
+    }
+    return { outcome: "succeeded" };
+}
 
 export interface MeshChildBridgeDependencies { claimPendingTask?: typeof claimPendingTask; readTaskCancellation?: typeof readTaskCancellation; finishTask?: typeof finishTask; failAgent?: typeof failAgent; markBridgeReady?: typeof markBridgeReady; patchAgentStatus?: typeof patchAgentStatus; recordChildSessionIdentity?: typeof recordChildSessionIdentity; readAgentSnapshot?: typeof readAgentSnapshot; publishAgentActivity?: typeof publishAgentActivity; natureHandleWords?: readonly string[]; resolveCompactionReserveTokens?: (ctx: ExtensionContext) => number | undefined; standaloneRuntimeBinding?: boolean; retryIntervalMs?: number; idleClaimIntervalMs?: number; activityHeartbeatMs?: number; contextHeadroomTokens?: number; deliveryAckTimeoutMs?: number; completionPersistenceTimeoutMs?: number; publicationTimeoutMs?: number; publicationRetryMs?: number; sleep?: (milliseconds: number) => Promise<void>; now?: () => number; setInterval?: (callback: () => void | Promise<void>, intervalMs: number) => unknown; clearInterval?: (timer: unknown) => void; cadenceSetTimeout?: (callback: () => void | Promise<void>, timeoutMs: number) => unknown; cadenceClearTimeout?: (timer: unknown) => void; setTimeout?: (callback: () => void, timeoutMs: number) => unknown; clearTimeout?: (timer: unknown) => void; wake?: DirectoryWakeDependencies }
 function configuredNatureHandleWords(): readonly string[] {
@@ -33,7 +44,9 @@ export function registerMeshChildBridge(pi: ExtensionAPI, env: NodeJS.ProcessEnv
     onResolvedAgent(pi, event => { if (expectedEnvelope && launchEnvelopeDigest(event.envelope) === launchEnvelopeDigest(expectedEnvelope)) activatedExpected = true; });
     let activeTaskId: string | undefined; let activeTaskPrompt: string | undefined; let taskUsage = emptyUsage(); let turns = 0; let output = ""; let stopReason: StopReason | undefined; let errorMessage: string | undefined; let pumping = false; let completing = false; let settled = true; let pendingCompletion: { taskId: string; input: Parameters<typeof finishTask>[3]; deadline: number; retirement?: { reason: string; stopped: boolean } } | undefined; let awaitingDelivery: { taskId: string; prompt: string; deadline: number } | undefined; let timer: unknown; let tickPass: Promise<void> | undefined; let nextClaimAt = Number.NEGATIVE_INFINITY; let bridgeContext: ExtensionContext | undefined; let cancellationAbortedTaskId: string | undefined; let taskWake: DirectoryWake | undefined; let shuttingDown = false; let shutdownAfterStoreFailure = false;
     let runtimeId: string = randomUUID(); let activityPhase: AgentActivityPhase = "starting"; let phaseSince = new Date((dependencies.now ?? Date.now)()).toISOString(); let compactionReason: AgentCompactionReason | undefined; let awaitingPostCompactionSettlement = false; let reserveTokens: number | undefined; let lastHeartbeat = Number.NEGATIVE_INFINITY; let compactionObservation = 0;
-    let route: ModelRouteState | undefined; let fallbackSuspended = false; let applyingSetModel = false; let turnHadToolError = false; let promotionPass: Promise<"promoted" | "exhausted" | "stopped" | "settle"> | undefined;
+    let route: ModelRouteState | undefined; let fallbackSuspended = false; let applyingSetModel = false; let turnHadToolError = false; let promotionPass: Promise<"promoted" | "exhausted" | "stopped" | "settle" | "held"> | undefined;
+    let lastMessages: unknown[] = [];
+    const executionGate = new ProcessExecutionGate();
     const natureHandleWords = dependencies.natureHandleWords ?? configuredNatureHandleWords();
     const projectUsualIdentity = async () => {
         const ctx = bridgeContext;
@@ -67,18 +80,36 @@ export function registerMeshChildBridge(pi: ExtensionAPI, env: NodeJS.ProcessEnv
         if (activeTaskId && !pendingCompletion) queueCompletion(activeTaskId, { outcome: stopped ? "stopped" : "failed", error: reason, output, usage: taskUsage, turns }, { reason, stopped });
         return stopped ? "stopped" : "exhausted";
     };
-    const promoteAfterError = async (settledStopReason = stopReason, settledErrorMessage = errorMessage): Promise<"promoted" | "exhausted" | "stopped" | "settle"> => {
+    const promoteAfterError = async (settledStopReason = stopReason, settledErrorMessage = errorMessage): Promise<"promoted" | "exhausted" | "stopped" | "settle" | "held"> => {
         const ctx = bridgeContext; const profile = expectedEnvelope?.self.execution;
         if (!activeTaskId || pendingCompletion || fallbackSuspended || settledStopReason !== "error" || !profile || profile.harness !== "pi" || !route || !ctx) return "settle";
         if (await queueStoppedPromotion()) return "stopped";
         const registry = ctx.modelRegistry ?? { find: () => undefined };
         let currentRoute = route;
+        const classified = classifyInvocationFailure({ errorMessage: settledErrorMessage });
+        const execution = await readAgentExecution(stateRoot, meshId, agentId).catch(() => undefined);
+        const cycle = execution?.limitCycle ?? 0;
+        await appendLimitHistory(stateRoot, meshId, agentId, [limitAttemptRecord({ cycle, candidateIndex: currentRoute.activeIndex, model: currentRoute.activeModel, failure: classified })]).catch(() => {});
         while (true) {
             if (await queueStoppedPromotion()) return "stopped";
             const decision = await selectRuntimePromotion({ profile, profileName: expectedEnvelope!.childId, route: currentRoute, suspended: fallbackSuspended, stopReason: settledStopReason, cancelled: false, shuttingDown, usageTokens: ctx.getContextUsage?.()?.tokens, reserveTokens, registry, errorMessage: settledErrorMessage });
             if (await queueStoppedPromotion()) return "stopped";
             if (decision.action === "settle") return "settle";
             if (decision.action === "exhausted") {
+                const history = (await readAgentExecution(stateRoot, meshId, agentId).catch(() => undefined))?.limitHistory ?? [];
+                if (recoverableLimitInCycle(history, cycle) || classified.class === "limit" && classified.resumeEligible) {
+                    route = decision.route;
+                    await persistRouteStatus(decision.route).catch(() => {});
+                    await applyAgentControl(stateRoot, meshId, agentId, {
+                        action: "pause",
+                        source: "system",
+                        issuer: "limit",
+                        expectedRuntimeId: runtimeId,
+                        expectedBindingId: runtimeId,
+                        limitHold: { holdId: randomUUID(), kind: "limit", requestId: randomUUID(), source: "system", targetRoot: agentId },
+                    }).catch(() => {});
+                    return "held";
+                }
                 route = decision.route;
                 await persistRouteStatus(decision.route).catch(() => {});
                 const outcome = await queuePromotionRetirement(decision.error);
@@ -106,10 +137,135 @@ export function registerMeshChildBridge(pi: ExtensionAPI, env: NodeJS.ProcessEnv
             return "promoted";
         }
     };
-    const pump = async (force = false) => { if (shuttingDown || shutdownAfterStoreFailure || pumping || pendingCompletion || activeTaskId || !settled) return; const now = (dependencies.now ?? Date.now)(); if (!force && now < nextClaimAt) return; nextClaimAt = now + (dependencies.idleClaimIntervalMs ?? 3000); pumping = true; try { const task = await (dependencies.claimPendingTask ?? claimPendingTask)(stateRoot, meshId, agentId, runtimeId); if (!task) return; activeTaskId = task.request.taskId; activeTaskPrompt = task.request.prompt; await projectUsualIdentity(); if (shuttingDown) return; cancellationAbortedTaskId = undefined; taskUsage = emptyUsage(); turns = 0; output = ""; stopReason = undefined; errorMessage = undefined; turnHadToolError = false; settled = false; awaitingDelivery = { taskId: task.request.taskId, prompt: task.request.prompt, deadline: (dependencies.now ?? Date.now)() + (dependencies.deliveryAckTimeoutMs ?? 5000) }; try { pi.sendUserMessage(task.request.prompt); } catch (error) { awaitingDelivery = undefined; settled = true; queueCompletion(task.request.taskId, { outcome: "failed", error: `Could not deliver task: ${error instanceof Error ? error.message : String(error)}` }); await persistCompletion(); } } finally { pumping = false; } };
-    const tickOnce = async (forceClaim = false) => { if (shuttingDown) return; if (pendingCompletion) await persistCompletion(); if (shutdownAfterStoreFailure) return; if (!pendingCompletion && activeTaskId && cancellationAbortedTaskId !== activeTaskId) { const cancellation = await (dependencies.readTaskCancellation ?? readTaskCancellation)(stateRoot, meshId, activeTaskId); if (cancellation) { cancellationAbortedTaskId = activeTaskId; if (awaitingDelivery?.taskId === activeTaskId) { awaitingDelivery = undefined; settled = true; queueCompletion(activeTaskId, { outcome: "stopped", output, usage: taskUsage, turns, error: cancellation.reason }); } else bridgeContext?.abort(); } } if (awaitingDelivery && (dependencies.now ?? Date.now)() >= awaitingDelivery.deadline) { const taskId = awaitingDelivery.taskId; awaitingDelivery = undefined; settled = true; queueCompletion(taskId, { outcome: "failed", error: "Could not deliver task: child Pi did not accept the extension message" }); } if (pendingCompletion) await persistCompletion(); const ctx = bridgeContext; if (awaitingPostCompactionSettlement && settled && !activeTaskId && ctx?.isIdle() && !(ctx.hasPendingMessages?.() ?? false)) { awaitingPostCompactionSettlement = false; compactionReason = undefined; await publishActivity("idle"); } if (!pendingCompletion) await pump(forceClaim); await publishActivity(activityPhase, true); };
+    let lastHoldCount = 0;
+    let lastLimitHold = false;
+    const sendResumeContinuation = () => {
+        pi.sendMessage({ customType: EXECUTION_RESUME_CUSTOM_TYPE, content: EXECUTION_RESUME_CONTENT, display: false }, { triggerTurn: true });
+    };
+    const pump = async (force = false) => {
+        const execution = await readAgentExecution(stateRoot, meshId, agentId).catch(() => undefined);
+        if (execution?.holds.length) return;
+        if (shuttingDown || shutdownAfterStoreFailure || pumping || pendingCompletion || activeTaskId || !settled) return;
+        const now = (dependencies.now ?? Date.now)();
+        if (!force && now < nextClaimAt) return;
+        nextClaimAt = now + (dependencies.idleClaimIntervalMs ?? 3000);
+        pumping = true;
+        try {
+            const task = await (dependencies.claimPendingTask ?? claimPendingTask)(stateRoot, meshId, agentId, runtimeId);
+            if (!task) return;
+            activeTaskId = task.request.taskId;
+            activeTaskPrompt = task.request.prompt;
+            await projectUsualIdentity();
+            if (shuttingDown) return;
+            cancellationAbortedTaskId = undefined;
+            taskUsage = emptyUsage();
+            turns = 0;
+            output = "";
+            stopReason = undefined;
+            errorMessage = undefined;
+            turnHadToolError = false;
+            settled = false;
+            awaitingDelivery = { taskId: task.request.taskId, prompt: task.request.prompt, deadline: (dependencies.now ?? Date.now)() + (dependencies.deliveryAckTimeoutMs ?? 5000) };
+            try { pi.sendUserMessage(task.request.prompt); }
+            catch (error) {
+                awaitingDelivery = undefined;
+                settled = true;
+                queueCompletion(task.request.taskId, { outcome: "failed", error: `Could not deliver task: ${error instanceof Error ? error.message : String(error)}` });
+                await persistCompletion();
+            }
+        } finally { pumping = false; }
+    };
+    const tickOnce = async (forceClaim = false) => {
+        if (shuttingDown) return;
+        if (pendingCompletion) await persistCompletion();
+        if (shutdownAfterStoreFailure) return;
+        const execution = await readAgentExecution(stateRoot, meshId, agentId).catch(() => undefined);
+        const holdCount = execution?.holds.length ?? 0;
+        if (holdCount) lastLimitHold = execution?.holds.some(hold => hold.kind === "limit") ?? false;
+        if (execution?.interrupting && !execution.interruptConfirmed && (!activeTaskId || settled || awaitingDelivery?.taskId === activeTaskId)) {
+            await confirmAgentInterrupt(stateRoot, meshId, agentId, execution.revision, runtimeId).catch(() => {});
+        }
+        if (execution?.interrupting) executionGate.requestInterrupt(execution.revision);
+        else if (holdCount) executionGate.requestPause(execution?.revision ?? executionGate.currentRevision + 1);
+        else if (lastHoldCount) executionGate.resume(execution?.revision ?? executionGate.currentRevision + 1);
+        if (!pendingCompletion && activeTaskId && cancellationAbortedTaskId !== activeTaskId) {
+            const cancellation = await (dependencies.readTaskCancellation ?? readTaskCancellation)(stateRoot, meshId, activeTaskId);
+            if (cancellation && !holdCount) {
+                cancellationAbortedTaskId = activeTaskId;
+                if (awaitingDelivery?.taskId === activeTaskId) {
+                    awaitingDelivery = undefined;
+                    settled = true;
+                    queueCompletion(activeTaskId, { outcome: "stopped", output, usage: taskUsage, turns, error: cancellation.reason });
+                } else bridgeContext?.abort();
+            } else if (execution?.interrupting) {
+                if (awaitingDelivery?.taskId !== activeTaskId) {
+                    cancellationAbortedTaskId = activeTaskId;
+                    bridgeContext?.abort();
+                }
+            }
+        }
+        if (awaitingDelivery && lastHoldCount > 0 && holdCount === 0) {
+            awaitingDelivery.deadline = (dependencies.now ?? Date.now)() + (dependencies.deliveryAckTimeoutMs ?? 5000);
+        }
+        if (awaitingDelivery && !holdCount && (dependencies.now ?? Date.now)() >= awaitingDelivery.deadline) {
+            const taskId = awaitingDelivery.taskId;
+            awaitingDelivery = undefined;
+            settled = true;
+            queueCompletion(taskId, { outcome: "failed", error: "Could not deliver task: child Pi did not accept the extension message" });
+        }
+        if (pendingCompletion) await persistCompletion();
+        const ctx = bridgeContext;
+        if (awaitingPostCompactionSettlement && settled && !activeTaskId && ctx?.isIdle() && !(ctx.hasPendingMessages?.() ?? false)) {
+            awaitingPostCompactionSettlement = false;
+            compactionReason = undefined;
+            await publishActivity("idle");
+        }
+        if (lastHoldCount > 0 && holdCount === 0 && settled && activeTaskId && !pendingCompletion) {
+            const retryLimit = lastLimitHold;
+            lastHoldCount = 0;
+            lastLimitHold = false;
+            settled = false;
+            if (retryLimit && expectedEnvelope?.self.execution.harness === "pi") {
+                const profile = expectedEnvelope.self.execution;
+                route = beginLimitRetryCycle(profile);
+                applyingSetModel = true;
+                try {
+                    const [provider, modelId] = route.activeModel.split("/") as [string, string];
+                    if (typeof pi.setModel === "function") await pi.setModel({ provider, id: modelId } as never);
+                    if (profile.thinkingLevel) pi.setThinkingLevel(profile.thinkingLevel);
+                    await persistRouteStatus(route).catch(() => {});
+                } catch {
+                    settled = true;
+                    await applyAgentControl(stateRoot, meshId, agentId, { action: "pause", source: "system", issuer: "limit", expectedRuntimeId: runtimeId, expectedBindingId: runtimeId, limitHold: { holdId: randomUUID(), kind: "limit", requestId: randomUUID(), source: "system", targetRoot: agentId }, unavailable: true }).catch(() => {});
+                    await publishActivity("running", true);
+                    return;
+                } finally { applyingSetModel = false; }
+            }
+            try { sendResumeContinuation(); }
+            catch (error) {
+                settled = true;
+                queueCompletion(activeTaskId, { outcome: "failed", error: `Could not resume task: ${error instanceof Error ? error.message : String(error)}` });
+                await persistCompletion();
+            }
+            await publishActivity("running", true);
+            return;
+        }
+        lastHoldCount = holdCount;
+        if (!pendingCompletion && !holdCount) await pump(forceClaim);
+        await publishActivity(activityPhase, true);
+    };
     const runTick = (forceClaim = false): Promise<void> => { if (shuttingDown) return Promise.resolve(); if (tickPass) return tickPass; const pass = tickOnce(forceClaim); tickPass = pass; const clear = () => { if (tickPass === pass) tickPass = undefined; }; void pass.then(clear, clear); return pass; };
     const scheduleNext = () => { if (shuttingDown || shutdownAfterStoreFailure || !bridgeContext) return; if (timer !== undefined) (dependencies.cadenceClearTimeout ?? (value => globalThis.clearTimeout(value as NodeJS.Timeout)))(timer); const now = (dependencies.now ?? Date.now)(); const activeState = Boolean(activeTaskId || awaitingDelivery || pendingCompletion || completing || !settled); const heartbeatAt = lastHeartbeat + (dependencies.activityHeartbeatMs ?? 2000); const deadline = activeState ? now + (dependencies.retryIntervalMs ?? 100) : Math.min(nextClaimAt, heartbeatAt); const scheduleTimeout = dependencies.cadenceSetTimeout ?? ((callback: () => void | Promise<void>, timeoutMs: number) => globalThis.setTimeout(() => { void callback(); }, timeoutMs)); timer = scheduleTimeout(() => runTick().catch(() => {}).finally(scheduleNext), Math.max(0, deadline - now)); };
+    pi.on("tool_call", async (event, ctx) => {
+        const admission = await executionGate.waitForAdmission(event.toolCallId, ctx.signal);
+        if (admission === "abort") return { block: true, reason: "Mesh execution interrupted" };
+    });
+    pi.on("tool_execution_end", event => { executionGate.complete(event.toolCallId); });
+    pi.on("before_provider_request", async (_event, ctx) => {
+        const admission = await executionGate.waitForAdmission("provider", ctx.signal);
+        if (admission === "abort") throw ctx.signal?.reason ?? new Error("Mesh execution interrupted");
+    });
+    pi.on("after_provider_response", () => { executionGate.complete("provider"); });
     pi.on("session_start", async (_event, ctx) => { bridgeContext = ctx; try { const childSessionId = ctx?.sessionManager.getSessionId() ?? env.PI_SESSION_ID; const childSessionFile = ctx?.sessionManager.getSessionFile() ?? env.PI_SESSION_FILE; if (childSessionId && childSessionFile) { let binding; try { binding = await readCurrentPiRuntimeGeneration(stateRoot, meshId, agentId, childSessionId, childSessionFile); } catch (error) { if (!dependencies.standaloneRuntimeBinding) throw error; binding = await bindAgentRuntime(stateRoot, meshId, agentId, { runtimeId, kind: "pi", sessionId: childSessionId, sessionFile: childSessionFile }); } runtimeId = binding.runtimeId; await (dependencies.recordChildSessionIdentity ?? recordChildSessionIdentity)(stateRoot, meshId, agentId, childSessionId, childSessionFile, runtimeId); } else throw new Error("Mesh child session requires durable session identity"); if (hasResolvedAgent && (invalid || !activatedExpected)) throw new Error(invalid || !expectedEnvelope ? "Mesh launch envelope is invalid" : `Child ${expectedEnvelope.childId} did not resolve from its launch envelope`); try { const configuredReserveTokens = dependencies.resolveCompactionReserveTokens?.(ctx) ?? SettingsManager.create(ctx.cwd ?? process.cwd(), getAgentDir()).getCompactionReserveTokens(); reserveTokens = configuredReserveTokens ?? NATIVE_COMPACTION_RESERVE_TOKENS; } catch { reserveTokens = NATIVE_COMPACTION_RESERVE_TOKENS; } await publishActivity("starting"); await markReadyAfterPublication(stateRoot, meshId, agentId, launchEnvelopeDigest(expectedEnvelope!), runtimeId, dependencies);
             fallbackSuspended = false;
             if (expectedEnvelope) {
@@ -142,17 +298,34 @@ export function registerMeshChildBridge(pi: ExtensionAPI, env: NodeJS.ProcessEnv
     pi.on("turn_end", event => { if (event.toolResults.some(result => result.isError)) turnHadToolError = true; });
     pi.on("session_before_compact", async event => { awaitingPostCompactionSettlement = false; compactionReason = event.reason; const observation = ++compactionObservation; await publishActivity("compacting"); event.signal.addEventListener("abort", () => { if (compactionObservation === observation && activityPhase === "compacting") { awaitingPostCompactionSettlement = false; void publishActivity(activeTaskId || !settled ? "running" : "idle").catch(() => {}); } }, { once: true }); });
     pi.on("session_compact", async event => { if (event.willRetry || activeTaskId || !settled) { awaitingPostCompactionSettlement = false; compactionReason = undefined; await publishActivity("running"); } else awaitingPostCompactionSettlement = true; });
-    pi.on("input", async event => { if (event.source !== "interactive") return { action: "continue" as const }; settled = false; const mode = event.streamingBehavior ?? (activeTaskId ? "followUp" : "idle"); await recordIntervention(stateRoot, meshId, agentId, { taskId: activeTaskId, text: event.text, deliveryMode: mode, images: imageTypes(event.images) }, runtimeId); return { action: "continue" as const }; });
+    pi.on("input", async event => {
+        if (event.source !== "interactive") return { action: "continue" as const };
+        settled = false;
+        const result = await applyAgentControl(stateRoot, meshId, agentId, { action: "resume", source: "user", issuer: "interactive" }).catch(() => undefined);
+        if (result && shouldOpenExecutionGate(result)) executionGate.resume(result.state.revision);
+        const mode = event.streamingBehavior ?? (activeTaskId ? "followUp" : "idle");
+        await recordIntervention(stateRoot, meshId, agentId, { taskId: activeTaskId, text: event.text, deliveryMode: mode, images: imageTypes(event.images) }, runtimeId);
+        return { action: "continue" as const };
+    });
     pi.on("message_end", async event => { const message = record(event.message); if (message.role === "assistant") { if (activeTaskId) { addUsage(taskUsage, usage(message.usage)); turns += 1; output = text(message); stopReason = typeof message.stopReason === "string" ? message.stopReason as StopReason : undefined; errorMessage = typeof message.errorMessage === "string" ? message.errorMessage : undefined; } else { const idle = emptyUsage(); addUsage(idle, usage(message.usage)); await recordIdleUsage(stateRoot, meshId, agentId, idle, runtimeId); } } else if (message.role === "toolResult") { if (message.isError === true) turnHadToolError = true; if (activeTaskId) addUsage(taskUsage, usage(message.usage)); else { const idle = emptyUsage(); addUsage(idle, usage(message.usage)); await recordIdleUsage(stateRoot, meshId, agentId, idle, runtimeId); } } });
     pi.on("model_select", event => { if (applyingSetModel || event.source === "restore") return; fallbackSuspended = true; bridgeContext?.ui.notify("Automatic execution fallback suspended after explicit model selection", "info"); });
+    pi.on("agent_end", event => { lastMessages = Array.isArray(event.messages) ? event.messages : lastMessages; });
     pi.on("agent_settled", async () => {
         const settledStopReason = stopReason;
         const settledErrorMessage = errorMessage;
         const toolError = turnHadToolError;
+        const settledMessages = lastMessages;
         stopReason = undefined;
         errorMessage = undefined;
         turnHadToolError = false;
         awaitingDelivery = undefined; awaitingPostCompactionSettlement = false; compactionReason = undefined;
+        const execution = await readAgentExecution(stateRoot, meshId, agentId).catch(() => undefined);
+        if (execution?.holds.length) {
+            if (execution.interrupting && !execution.interruptConfirmed) await confirmAgentInterrupt(stateRoot, meshId, agentId, execution.revision, runtimeId).catch(() => {});
+            settled = true;
+            await runTick().catch(() => {}); scheduleNext(); await publishActivity("running").catch(() => {});
+            return;
+        }
         if (activeTaskId && !pendingCompletion && await queueStoppedPromotion()) {
             settled = true;
             await runTick().catch(() => {}); scheduleNext(); await publishActivity("idle").catch(() => {});
@@ -160,12 +333,16 @@ export function registerMeshChildBridge(pi: ExtensionAPI, env: NodeJS.ProcessEnv
         }
         const pendingPromotion = toolError ? undefined : promoteAfterError(settledStopReason, settledErrorMessage);
         if (pendingPromotion) promotionPass = pendingPromotion;
-        let fallback: "promoted" | "exhausted" | "stopped" | "settle";
+        let fallback: "promoted" | "exhausted" | "stopped" | "settle" | "held";
         try { fallback = toolError ? "settle" : await pendingPromotion!; } catch { fallback = pendingCompletion?.retirement?.stopped ? "stopped" : pendingCompletion ? "exhausted" : await queuePromotionRetirement("route_persistence_failed"); } finally { if (promotionPass === pendingPromotion) promotionPass = undefined; }
         if (fallback === "promoted") { settled = false; scheduleNext(); await publishActivity("running").catch(() => {}); return; }
         settled = true;
+        if (fallback === "held") {
+            await runTick().catch(() => {}); scheduleNext(); await publishActivity("running").catch(() => {});
+            return;
+        }
         if (fallback !== "exhausted" && fallback !== "stopped" && activeTaskId && !pendingCompletion) {
-            if (!await queueStoppedPromotion()) queueCompletion(activeTaskId, { ...terminal(settledStopReason, settledErrorMessage), output, usage: taskUsage, turns });
+            if (!await queueStoppedPromotion()) queueCompletion(activeTaskId, { ...terminal(settledStopReason, settledErrorMessage, settledMessages), output, usage: taskUsage, turns });
         }
         await runTick().catch(() => {}); scheduleNext(); if (!shutdownAfterStoreFailure && !pendingCompletion?.retirement) await publishActivity("idle").catch(() => {});
     });

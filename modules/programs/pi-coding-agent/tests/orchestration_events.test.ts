@@ -9,7 +9,7 @@ import { createCompletionReceipt, readCompletionLedger } from "../extensions_src
 import { acknowledgeMeshContextInterventions, acknowledgeMeshEvents, bindMeshEndpoint, markMeshEventsInjected, materializeMeshCompletionEvents, readEndpointDeliverySnapshot, registerMeshReport, registerStateAwareMeshSend, setMeshEndpointOffline } from "../extensions_src/utilities/orchestration_events.ts";
 import { indexEventCreation, orchestrationIndexPath } from "../extensions_src/utilities/orchestration_index.ts";
 import { bindAgentRuntime } from "../extensions_src/utilities/orchestration_runtime.ts";
-import { attachRootMesh, claimPendingTask, createTask, ensurePolicyEpoch, finishTask, initializeMesh, meshPaths, patchAgentStatus, prepareAgent, publishAgent, readPolicyEpoch, reserveMeshCapacity } from "../extensions_src/utilities/orchestration_store.ts";
+import { attachRootMesh, applyAgentControl, claimPendingTask, createTask, ensurePolicyEpoch, finishTask, initializeMesh, meshPaths, patchAgentStatus, prepareAgent, publishAgent, readPolicyEpoch, reserveMeshCapacity } from "../extensions_src/utilities/orchestration_store.ts";
 import { DirectoryReadObserver, withTemporaryRoot as withRoot } from "./test_helpers.ts";
 
 const syntheticGc = { collectAt: 2, retain: 1, pressureFloor: 0 };
@@ -232,6 +232,22 @@ void test("busy state-aware send fences dispatch authority before intervention",
     await createTask(root, fixture.mesh.meshId, fixture.agentId, { prompt: "active", purpose: "synthetic purpose" }, { requesterEndpointId: fixture.endpoint.endpointId, completion });
     await assert.rejects(registerStateAwareMeshSend(root, fixture.mesh.meshId, { callerEndpointId: fixture.endpoint.endpointId, callerEndpointSessionFile: fixture.endpoint.sessionFile, toolCallId: "stale-busy-send", canonicalArguments: { agentId: fixture.agentId, message: "must fail" }, endpoint: agentEndpoint, agentId: fixture.agentId, message: "must fail", completion, authority: { requesterEndpointId: fixture.endpoint.endpointId, requesterEndpointSessionFile: fixture.endpoint.sessionFile, epochId: fixture.epoch.epochId, policyDigest: "invalid", targetChildId: "worker" } }), /policy digest changed/u);
     assert.deepEqual((await readEndpointDeliverySnapshot(root, fixture.mesh.meshId, agentEndpoint)).events, []);
+}));
+
+// Admission: a held busy agent must not accept new intervention work; retry of an already admitted call remains stable. Schemas cannot observe that hold gate.
+// Given a busy child with a manual hold, a new mesh_send is rejected and the same toolCallId still reproduces a prior intervention.
+void test("busy intervention is rejected while held and retries remain stable", async () => withRoot("mesh-send-hold-intervention-", async root => {
+    const fixture = await eventFixture(root);
+    const agentEndpoint = await bindEventAgentEndpoint(root, fixture.mesh.meshId, fixture.agentId);
+    const completion = { endpointId: fixture.endpoint.endpointId, endpointSessionFile: fixture.endpoint.sessionFile };
+    await createTask(root, fixture.mesh.meshId, fixture.agentId, { prompt: "active", purpose: "synthetic purpose" }, { requesterEndpointId: fixture.endpoint.endpointId, completion });
+    const admitted = { callerEndpointId: fixture.endpoint.endpointId, callerEndpointSessionFile: fixture.endpoint.sessionFile, toolCallId: "intervene-before-hold", canonicalArguments: { agentId: fixture.agentId, message: "before hold" }, endpoint: agentEndpoint, agentId: fixture.agentId, message: "before hold", completion };
+    const first = await registerStateAwareMeshSend(root, fixture.mesh.meshId, admitted);
+    assert.equal(first.disposition, "intervened");
+    await applyAgentControl(root, fixture.mesh.meshId, fixture.agentId, { action: "pause", source: "user", issuer: "root" });
+    await assert.rejects(registerStateAwareMeshSend(root, fixture.mesh.meshId, { ...admitted, toolCallId: "intervene-while-held", canonicalArguments: { agentId: fixture.agentId, message: "while held" }, message: "while held" }), /held and cannot accept new work/u);
+    assert.deepEqual(await registerStateAwareMeshSend(root, fixture.mesh.meshId, admitted), first);
+    assert.equal((await readEndpointDeliverySnapshot(root, fixture.mesh.meshId, agentEndpoint)).events.filter(event => event.kind === "intervention").length, 1);
 }));
 
 async function sendRetryNames(root: string, meshId: string): Promise<string[]> {

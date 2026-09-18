@@ -250,6 +250,46 @@ export function exceedsModelVisibleLimit(text: string): boolean {
     return utf8Bytes(text) > MAX_MODEL_VISIBLE_BYTES || countLines(text) > MAX_MODEL_VISIBLE_LINES;
 }
 
+export interface CompletionPackView {
+    taskId: string;
+    eventId: string;
+    full: Record<string, unknown>;
+    identity: Record<string, unknown>;
+}
+
+/** Fill one delivery per-task: include compact result while it fits, else identity, else leave the rest for a later delivery. */
+export function packCompactCompletionDelivery(input: {
+    deliveryId: string;
+    wakeId: string;
+    pendingTasks: unknown;
+    items: readonly CompletionPackView[];
+}): { views: Record<string, unknown>[]; resultTaskIds: string[]; packedTaskIds: string[]; completeEventIds: string[] } {
+    const envelope = (tasks: Array<Record<string, unknown>>) => JSON.stringify({ deliveryId: input.deliveryId, wakeId: input.wakeId, wakeOrigin: "mesh-event", tasks, pendingTasks: input.pendingTasks });
+    const views: Record<string, unknown>[] = [];
+    const resultTaskIds: string[] = [];
+    const packedTaskIds: string[] = [];
+    const remainingByEvent = new Map<string, number>();
+    for (const item of input.items) remainingByEvent.set(item.eventId, (remainingByEvent.get(item.eventId) ?? 0) + 1);
+    for (const item of input.items) {
+        const tryView = (view: Record<string, unknown>, includeResult: boolean): boolean => {
+            if (exceedsModelVisibleLimit(envelope([...views, view]))) return false;
+            views.push(view);
+            packedTaskIds.push(item.taskId);
+            if (includeResult) resultTaskIds.push(item.taskId);
+            remainingByEvent.set(item.eventId, (remainingByEvent.get(item.eventId) ?? 1) - 1);
+            return true;
+        };
+        if (tryView(item.full, true) || tryView(item.identity, false)) continue;
+        break;
+    }
+    const completeEventIds = [...new Set(input.items.map(item => item.eventId))].filter(eventId => {
+        if ((remainingByEvent.get(eventId) ?? 0) !== 0) return false;
+        const eventTaskIds = input.items.filter(item => item.eventId === eventId).map(item => item.taskId);
+        return eventTaskIds.length > 0 && eventTaskIds.every(taskId => resultTaskIds.includes(taskId));
+    });
+    return { views, resultTaskIds, packedTaskIds, completeEventIds };
+}
+
 const CANONICAL_STRING_KEYS = new Set([
     "agentId", "taskId", "agentState", "taskState", "state", "outcome", "condition",
 ]);
@@ -640,7 +680,7 @@ function projectModelVisibleMeshEvent<T>(value: T): T {
     if (message.customType !== "mesh-event" || !message.details || typeof message.details !== "object" || Array.isArray(message.details)) return value;
     const details = message.details as Record<string, unknown>;
     if (!Object.hasOwn(details, "identities") && !Object.hasOwn(details, "display")) return value;
-    const { identities: _identities, display: _display, ...modelDetails } = details;
+    const { identities: _identities, display: _display, accounting: _accounting, deliveryId: _deliveryId, wakeId: _wakeId, wakeOrigin: _wakeOrigin, resultTaskIds: _resultTaskIds, ...modelDetails } = details;
     return { ...message, details: modelDetails } as T;
 }
 
@@ -657,7 +697,7 @@ export function projectMeshCompletionContext<T>(messages: readonly T[], received
         const details = message.details && typeof message.details === "object" && !Array.isArray(message.details) ? message.details as Record<string, unknown> : undefined;
         if (message.customType !== "mesh-event" || details?.kind !== "completion") continue;
         completionIndexes.add(index);
-        const raw = exactRecord(details, ["kind", "sources", "frontier"], "Malformed mesh completion bundle in model context", ["identities", "display"]);
+        const raw = exactRecord(details, ["kind", "sources", "frontier"], "Malformed mesh completion bundle in model context", ["identities", "display", "deliveryId", "wakeId", "wakeOrigin", "accounting", "resultTaskIds"]);
         if (raw.kind !== "completion" || !Array.isArray(raw.sources) || !raw.sources.length) throw new Error("Malformed mesh completion bundle in model context");
         for (const valueSource of raw.sources) {
             const source = validateSource(valueSource);
@@ -680,10 +720,24 @@ export function projectMeshCompletionContext<T>(messages: readonly T[], received
 
     const eventIds = sources.map(source => source.eventId);
     if (!completionIndexes.size) return { messages: messages.map(projectModelVisibleMeshEvent), eventIds };
+    const lastCompletionIndex = Math.max(...completionIndexes);
+    const lastCompletion = messages[lastCompletionIndex] as unknown as Record<string, unknown>;
+    const lastDetails = lastCompletion.details && typeof lastCompletion.details === "object" && !Array.isArray(lastCompletion.details) ? lastCompletion.details as Record<string, unknown> : undefined;
+    if (lastDetails && (Object.hasOwn(lastDetails, "deliveryId") || Object.hasOwn(lastDetails, "accounting"))) {
+        const projected: T[] = [];
+        for (const [index, value] of messages.entries()) {
+            if (!completionIndexes.has(index)) { projected.push(projectModelVisibleMeshEvent(value)); continue; }
+            if (index !== lastCompletionIndex) continue;
+            projected.push(projectModelVisibleMeshEvent(value));
+        }
+        const retainedEventIds = Array.isArray(lastDetails.sources)
+            ? lastDetails.sources.map(source => validateSource(source).eventId)
+            : [];
+        return { messages: projected, eventIds: retainedEventIds };
+    }
     const residualTasks = [...completed.values()].filter(task => !receivedTaskIds.has(task.taskId));
     const completedIds = new Set(completed.keys());
     const pendingTasks = (latestFrontier?.pendingTasks ?? []).filter(task => !completedIds.has(task.taskId) && !receivedTaskIds.has(task.taskId));
-    const lastCompletionIndex = Math.max(...completionIndexes);
     const projected: T[] = [];
     for (const [index, value] of messages.entries()) {
         if (!completionIndexes.has(index)) { projected.push(projectModelVisibleMeshEvent(value)); continue; }

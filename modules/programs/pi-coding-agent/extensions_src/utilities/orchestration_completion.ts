@@ -6,11 +6,12 @@ import { assertExpectedEndpointBindingUnlocked, endpointRecordPath, hasExpectedE
 import { readCompletionQueueReferences, removeOrchestrationIndexReference, type CompletionQueueReference, type OrchestrationIndexReadObserver } from "./orchestration_index.ts";
 import { readOptionalJson as optionalJson, writeAtomicJson } from "./orchestration_json.ts";
 import { meshDirectory, withMeshLock } from "./orchestration_lock.ts";
-import { TASK_REQUEST_SCHEMA_VERSION, TASK_STATES, isTerminalTask, type CompletionBatch, type CompletionLedger, type CompletionReceipt, type CompletionReceiptToolName, type CompletionTarget, type TaskState } from "./orchestration_types.ts";
+import { TASK_REQUEST_SCHEMA_VERSION, TASK_STATES, isTerminalTask, type CompletionBatch, type CompletionLedger, type CompletionNotificationReceipt, type CompletionReceipt, type CompletionReceiptToolName, type CompletionTarget, type CompletionToolReceipt, type TaskState } from "./orchestration_types.ts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 const SHA256 = /^[0-9a-f]{64}$/u;
-const RECEIPT_TOOLS: readonly CompletionReceiptToolName[] = ["mesh_get", "mesh_wait"];
+const LEDGER_SCHEMA_VERSION = 5 as const;
+const RECEIPT_TOOLS: readonly CompletionReceiptToolName[] = ["mesh_get"];
 
 export interface CompletionTask {
     taskId: string;
@@ -29,12 +30,9 @@ export interface CompletionReceiptCreationResult {
     receivedTaskIds: string[];
 }
 
-export interface PersistedCompletionReceiptEvidence {
-    toolCallId: string;
-    toolName: CompletionReceiptToolName;
-    receivedTaskIds: string[];
-    claimedTaskIds: string[];
-}
+export interface PersistedToolReceiptEvidence { source: "tool"; toolCallId: string; toolName: CompletionReceiptToolName; receivedTaskIds: string[]; claimedTaskIds: string[] }
+export interface PersistedNotificationReceiptEvidence { source: "notification"; deliveryId: string; wakeId: string; eventIds: string[]; receivedTaskIds: string[] }
+export type PersistedCompletionReceiptEvidence = PersistedToolReceiptEvidence | PersistedNotificationReceiptEvidence
 
 export interface CompletionReceiptInput {
     endpointId: string;
@@ -43,6 +41,17 @@ export interface CompletionReceiptInput {
     toolCallId: string;
     toolName: CompletionReceiptToolName;
     canonicalArguments: unknown;
+    taskIds: string[];
+    maxTasksPerMesh: number;
+}
+
+export interface NotificationCompletionReceiptInput {
+    endpointId: string;
+    endpointSessionFile: string;
+    claimantSessionFile: string;
+    deliveryId: string;
+    wakeId: string;
+    eventIds: readonly string[];
     taskIds: string[];
     maxTasksPerMesh: number;
 }
@@ -120,22 +129,36 @@ function validateBatch(value: unknown): CompletionBatch {
 function validateReceipt(value: unknown): CompletionReceipt {
     if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("completion receipt must be an object");
     const raw = value as Record<string, unknown>;
-    exactKeys(raw, ["receiptId", "claimantSessionFile", "toolCallId", "toolName", "argumentsDigest", "taskIds", "receivedAt"], [], "completion receipt");
-    uuid(raw.receiptId, "completion receiptId");
-    text(raw.claimantSessionFile, "completion receipt claimantSessionFile");
-    text(raw.toolCallId, "completion receipt toolCallId");
-    if (!RECEIPT_TOOLS.includes(raw.toolName as CompletionReceiptToolName)) throw new Error("completion receipt toolName is invalid");
-    if (typeof raw.argumentsDigest !== "string" || !SHA256.test(raw.argumentsDigest)) throw new Error("completion receipt argumentsDigest is invalid");
-    taskIds(raw.taskIds, "completion receipt taskIds");
-    timestamp(raw.receivedAt, "completion receipt receivedAt");
-    return value as CompletionReceipt;
+    if (raw.source === "tool") {
+        exactKeys(raw, ["receiptId", "source", "claimantSessionFile", "toolCallId", "toolName", "argumentsDigest", "taskIds", "receivedAt"], [], "completion receipt");
+        uuid(raw.receiptId, "completion receiptId");
+        text(raw.claimantSessionFile, "completion receipt claimantSessionFile");
+        text(raw.toolCallId, "completion receipt toolCallId");
+        if (!RECEIPT_TOOLS.includes(raw.toolName as CompletionReceiptToolName)) throw new Error("completion receipt toolName is invalid");
+        if (typeof raw.argumentsDigest !== "string" || !SHA256.test(raw.argumentsDigest)) throw new Error("completion receipt argumentsDigest is invalid");
+        taskIds(raw.taskIds, "completion receipt taskIds");
+        timestamp(raw.receivedAt, "completion receipt receivedAt");
+        return value as CompletionToolReceipt;
+    }
+    if (raw.source === "notification") {
+        exactKeys(raw, ["receiptId", "source", "claimantSessionFile", "deliveryId", "wakeId", "eventIds", "taskIds", "receivedAt"], [], "completion receipt");
+        uuid(raw.receiptId, "completion receiptId");
+        text(raw.claimantSessionFile, "completion receipt claimantSessionFile");
+        uuid(raw.deliveryId, "completion receipt deliveryId");
+        uuid(raw.wakeId, "completion receipt wakeId");
+        if (!Array.isArray(raw.eventIds) || raw.eventIds.some(item => typeof item !== "string" || !UUID.test(item))) throw new Error("completion receipt eventIds is invalid");
+        taskIds(raw.taskIds, "completion receipt taskIds");
+        timestamp(raw.receivedAt, "completion receipt receivedAt");
+        return value as CompletionNotificationReceipt;
+    }
+    throw new Error("completion receipt source is invalid");
 }
 
 function validateLedger(value: unknown, meshId: string, endpointId?: string, endpointSessionFile?: string, bindingId?: string): CompletionLedger {
     if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("completion ledger must be an object");
     const raw = value as Record<string, unknown>;
     exactKeys(raw, ["schemaVersion", "meshId", "endpointId", "endpointSessionFile", "bindingId", "batches", "receipts", "updatedAt"], [], "completion ledger");
-    if (raw.schemaVersion !== 4 || raw.meshId !== meshId) throw new Error("Unsupported completion ledger schemaVersion");
+    if (raw.schemaVersion !== LEDGER_SCHEMA_VERSION || raw.meshId !== meshId) throw new Error("Unsupported completion ledger schemaVersion");
     if (endpointId !== undefined && raw.endpointId !== endpointId || endpointSessionFile !== undefined && raw.endpointSessionFile !== endpointSessionFile || bindingId !== undefined && raw.bindingId !== bindingId) throw new Error("completion ledger identity does not match path");
     const normalizedEndpointId = text(raw.endpointId, "completion ledger endpointId");
     const normalizedSessionFile = text(raw.endpointSessionFile, "completion ledger endpointSessionFile");
@@ -149,13 +172,13 @@ function validateLedger(value: unknown, meshId: string, endpointId?: string, end
     if (new Set(batchTaskIds).size !== batchTaskIds.length) throw new Error("completion ledger assigns a task more than once");
     if (new Set(receiptTaskIds).size !== receiptTaskIds.length) throw new Error("completion ledger receives a task more than once");
     if (new Set(receipts.map(receipt => receipt.receiptId)).size !== receipts.length) throw new Error("completion ledger repeats a receipt ID");
-    const retryKeys = receipts.map(receipt => `${receipt.claimantSessionFile}\0${receipt.toolCallId}`);
+    const retryKeys = receipts.map(receipt => receipt.source === "tool" ? `${receipt.claimantSessionFile}\0tool\0${receipt.toolCallId}` : `${receipt.claimantSessionFile}\0notification\0${receipt.deliveryId}`);
     if (new Set(retryKeys).size !== retryKeys.length) throw new Error("completion ledger repeats a receipt tool call");
-    return { schemaVersion: 4, meshId, endpointId: normalizedEndpointId, endpointSessionFile: normalizedSessionFile, bindingId: normalizedBindingId, batches, receipts, updatedAt };
+    return { schemaVersion: LEDGER_SCHEMA_VERSION, meshId, endpointId: normalizedEndpointId, endpointSessionFile: normalizedSessionFile, bindingId: normalizedBindingId, batches, receipts, updatedAt };
 }
 
 function emptyLedger(meshId: string, target: Required<CompletionTarget>): CompletionLedger {
-    return { schemaVersion: 4, meshId, ...target, batches: [], receipts: [], updatedAt: new Date().toISOString() };
+    return { schemaVersion: LEDGER_SCHEMA_VERSION, meshId, ...target, batches: [], receipts: [], updatedAt: new Date().toISOString() };
 }
 
 function assertLedgerBudget(ledger: CompletionLedger, maxTasksPerMesh: number): void {
@@ -255,7 +278,7 @@ async function createCompletionReceiptUnlocked(stateRoot: string, meshId: string
     if (requestedIds.length > 16) throw new Error("completion receipt accepts at most 16 tasks");
     const target = await bindCompletionTargetUnlocked(stateRoot, meshId, input); let ledger = await readCompletionLedgerForTarget(stateRoot, meshId, target as Required<CompletionTarget>) ?? emptyLedger(meshId, target as Required<CompletionTarget>);
     const digest = argumentsDigest(input.canonicalArguments);
-    const existing = ledger.receipts.find(receipt => receipt.claimantSessionFile === input.claimantSessionFile && receipt.toolCallId === input.toolCallId);
+    const existing = ledger.receipts.find((receipt): receipt is CompletionToolReceipt => receipt.source === "tool" && receipt.claimantSessionFile === input.claimantSessionFile && receipt.toolCallId === input.toolCallId);
     if (existing && (existing.toolName !== input.toolName || existing.argumentsDigest !== digest)) throw new Error(`${input.toolName} retry reused toolCallId with different arguments`);
     const currentTasks = tasks ?? await completionTasksByIdUnlocked(stateRoot, meshId, existing?.taskIds ?? requestedIds);
     const byId = new Map(currentTasks.map(task => [task.taskId, task]));
@@ -269,7 +292,7 @@ async function createCompletionReceiptUnlocked(stateRoot: string, meshId: string
     const newlyReceived = requestedIds.filter(taskId => !received.has(taskId));
     if (!newlyReceived.length) return { created: false, receivedTaskIds: [] };
     const receivedAt = new Date().toISOString();
-    const receipt: CompletionReceipt = { receiptId: randomUUID(), claimantSessionFile: input.claimantSessionFile, toolCallId: input.toolCallId, toolName: input.toolName, argumentsDigest: digest, taskIds: newlyReceived, receivedAt };
+    const receipt: CompletionToolReceipt = { receiptId: randomUUID(), source: "tool", claimantSessionFile: input.claimantSessionFile, toolCallId: input.toolCallId, toolName: input.toolName, argumentsDigest: digest, taskIds: newlyReceived, receivedAt };
     ledger = { ...ledger, receipts: [...ledger.receipts, receipt], updatedAt: receivedAt };
     assertLedgerBudget(ledger, input.maxTasksPerMesh);
     await writeAtomicJson(completionLedgerPath(stateRoot, meshId, input.endpointId, input.endpointSessionFile, target.bindingId), ledger);
@@ -278,6 +301,40 @@ async function createCompletionReceiptUnlocked(stateRoot: string, meshId: string
 
 export async function createCompletionReceipt(stateRoot: string, meshId: string, input: CompletionReceiptInput): Promise<CompletionReceiptCreationResult> {
     return withMeshLock(stateRoot, meshId, () => createCompletionReceiptUnlocked(stateRoot, meshId, input));
+}
+
+async function createNotificationCompletionReceiptUnlocked(stateRoot: string, meshId: string, input: NotificationCompletionReceiptInput): Promise<CompletionReceiptCreationResult> {
+    await assertExpectedEndpointBindingUnlocked(stateRoot, meshId, input);
+    text(input.claimantSessionFile, "completion receipt claimantSessionFile");
+    uuid(input.deliveryId, "completion receipt deliveryId");
+    uuid(input.wakeId, "completion receipt wakeId");
+    if (!Number.isInteger(input.maxTasksPerMesh) || input.maxTasksPerMesh < 1) throw new Error("maxTasksPerMesh must be a positive integer");
+    const requestedIds = taskIds(input.taskIds, "completion receipt taskIds");
+    if (requestedIds.length > 16) throw new Error("completion receipt accepts at most 16 tasks");
+    const target = await bindCompletionTargetUnlocked(stateRoot, meshId, input);
+    let ledger = await readCompletionLedgerForTarget(stateRoot, meshId, target as Required<CompletionTarget>) ?? emptyLedger(meshId, target as Required<CompletionTarget>);
+    const existing = ledger.receipts.find((receipt): receipt is CompletionNotificationReceipt => receipt.source === "notification" && receipt.claimantSessionFile === input.claimantSessionFile && receipt.deliveryId === input.deliveryId);
+    const currentTasks = await completionTasksByIdUnlocked(stateRoot, meshId, existing?.taskIds ?? requestedIds);
+    const byId = new Map(currentTasks.map(task => [task.taskId, task]));
+    for (const taskId of existing?.taskIds ?? requestedIds) {
+        const task = byId.get(taskId);
+        if (!task || task.completion.endpointId !== input.endpointId || task.completion.endpointSessionFile !== input.endpointSessionFile || task.completion.bindingId !== target.bindingId) throw new Error(`Task ${taskId} is not routed to the caller endpoint session`);
+        if (!isTerminalTask(task.state)) throw new Error(`Task ${taskId} is not terminal`);
+    }
+    if (existing) return { receipt: existing, created: false, receivedTaskIds: [] };
+    const received = new Set(ledger.receipts.flatMap(receipt => receipt.taskIds));
+    const newlyReceived = requestedIds.filter(taskId => !received.has(taskId));
+    if (!newlyReceived.length) return { created: false, receivedTaskIds: [] };
+    const receivedAt = new Date().toISOString();
+    const receipt: CompletionNotificationReceipt = { receiptId: randomUUID(), source: "notification", claimantSessionFile: input.claimantSessionFile, deliveryId: input.deliveryId, wakeId: input.wakeId, eventIds: [...input.eventIds], taskIds: newlyReceived, receivedAt };
+    ledger = { ...ledger, receipts: [...ledger.receipts, receipt], updatedAt: receivedAt };
+    assertLedgerBudget(ledger, input.maxTasksPerMesh);
+    await writeAtomicJson(completionLedgerPath(stateRoot, meshId, input.endpointId, input.endpointSessionFile, target.bindingId), ledger);
+    return { receipt, created: true, receivedTaskIds: newlyReceived };
+}
+
+export async function createNotificationCompletionReceipt(stateRoot: string, meshId: string, input: NotificationCompletionReceiptInput): Promise<CompletionReceiptCreationResult> {
+    return withMeshLock(stateRoot, meshId, () => createNotificationCompletionReceiptUnlocked(stateRoot, meshId, input));
 }
 
 export async function rollbackCompletionReceipt(stateRoot: string, meshId: string, input: { endpointId: string; endpointSessionFile: string; receiptId: string }): Promise<boolean> {
@@ -298,7 +355,10 @@ export async function reconcileCompletionReceipts(stateRoot: string, meshId: str
         for (const receiptId of input.persistedReceipts.keys()) uuid(receiptId, "persisted completion receiptId");
         const ledger = await readCompletionLedger(stateRoot, meshId, input.endpointId, input.endpointSessionFile);
         if (!ledger) return { removedReceiptIds: [] };
-        const committed = (receipt: CompletionReceipt): boolean => (input.persistedReceipts.get(receipt.receiptId) ?? []).some(evidence => evidence.toolCallId === receipt.toolCallId && evidence.toolName === receipt.toolName && (evidence.receivedTaskIds.length === 0 || canonicalJson(evidence.receivedTaskIds) === canonicalJson(receipt.taskIds)) && evidence.claimedTaskIds.every(taskId => receipt.taskIds.includes(taskId)));
+        const committed = (receipt: CompletionReceipt): boolean => (input.persistedReceipts.get(receipt.receiptId) ?? []).some(evidence => {
+            if (receipt.source === "tool") return evidence.source === "tool" && evidence.toolCallId === receipt.toolCallId && evidence.toolName === receipt.toolName && (evidence.receivedTaskIds.length === 0 || canonicalJson(evidence.receivedTaskIds) === canonicalJson(receipt.taskIds)) && evidence.claimedTaskIds.every(taskId => receipt.taskIds.includes(taskId));
+            return evidence.source === "notification" && evidence.deliveryId === receipt.deliveryId && evidence.wakeId === receipt.wakeId && (evidence.receivedTaskIds.length === 0 || canonicalJson(evidence.receivedTaskIds) === canonicalJson(receipt.taskIds));
+        });
         const removed = ledger.receipts.filter(receipt => receipt.claimantSessionFile === input.claimantSessionFile && !committed(receipt));
         const retainedCommitted = ledger.receipts.filter(receipt => receipt.claimantSessionFile === input.claimantSessionFile && committed(receipt));
         if (removed.length) { const removedIds = new Set(removed.map(receipt => receipt.receiptId)); const updatedAt = new Date().toISOString(); await writeAtomicJson(completionLedgerPath(stateRoot, meshId, input.endpointId, input.endpointSessionFile, ledger.bindingId), { ...ledger, receipts: ledger.receipts.filter(receipt => !removedIds.has(receipt.receiptId)), updatedAt }); }

@@ -1,4 +1,4 @@
-import { AcpTransport, type JsonRpcMessage } from "./orchestration_acp.ts";
+import { AcpTransport, isAcpJsonRpcError, type JsonRpcMessage } from "./orchestration_acp.ts";
 import { UnconfirmedTerminationError, isUnconfirmedTermination, type ExternalDriver, type ExternalTaskResult, type ExternalWorkerEvent } from "./orchestration_external_driver.ts";
 
 type JsonObject = Record<string, unknown>;
@@ -168,6 +168,7 @@ export class CursorAcpDriver implements ExternalDriver {
                 result = record(await Promise.race([this.#transport.request("session/prompt", { sessionId: this.#sessionId, prompt: [{ type: "text", text: prompt }] }, 24 * 60 * 60 * 1000, () => this.#closeTurn()), blockingFailure]));
             } catch (error) {
                 if (isUnconfirmedTermination(this.#turnFailure)) throw this.#turnFailure;
+                if (isAcpJsonRpcError(error)) throw error;
                 this.#failUnconfirmed(error instanceof Error ? error.message : String(error));
             }
             if (this.#turnFailure) throw this.#turnFailure;

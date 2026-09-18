@@ -47,6 +47,11 @@ export function initialModelRoute(profile: ExecutionConfig, index: number): Mode
     return { activeIndex: index, activeModel: profile.models[index]!, attempts: [], };
 }
 
+/** Start a new limit-retry cycle. Prior attempt history stays on execution limitHistory, not on this route. */
+export function beginLimitRetryCycle(profile: ExecutionConfig): ModelRouteState {
+    return initialModelRoute(profile, 0);
+}
+
 export function sanitizeDiagnostic(value: unknown): string {
     const raw = value instanceof Error ? value.message : typeof value === "string" ? value : "";
     return raw.trim() ? REDACTED_DIAGNOSTIC : "";

@@ -5,6 +5,35 @@ export interface JsonRpcMessage { jsonrpc: "2.0"; id?: string | number; method: 
 export type JsonRpcHandler = (message: JsonRpcMessage) => unknown;
 export type AcpSpawn = (command: string, args: string[], options: SpawnOptions) => ChildProcessWithoutNullStreams;
 
+export interface AcpJsonRpcErrorBody {
+    code: number;
+    message: string;
+    data?: unknown;
+}
+
+export class AcpJsonRpcError extends Error {
+    readonly jsonRpcCode: number;
+    readonly jsonRpcData?: unknown;
+    constructor(error: unknown, stderr = "") {
+        const body = parseJsonRpcError(error);
+        super(`ACP request failed: ${body.message}${stderr ? `: ${stderr}` : ""}`);
+        this.name = "AcpJsonRpcError";
+        this.jsonRpcCode = body.code;
+        if (body.data !== undefined) this.jsonRpcData = body.data;
+    }
+}
+
+export function isAcpJsonRpcError(error: unknown): error is AcpJsonRpcError {
+    return error instanceof AcpJsonRpcError;
+}
+
+function parseJsonRpcError(error: unknown): AcpJsonRpcErrorBody {
+    const raw = error && typeof error === "object" && !Array.isArray(error) ? error as Record<string, unknown> : {};
+    const code = typeof raw.code === "number" && Number.isInteger(raw.code) ? raw.code : -32603;
+    const message = typeof raw.message === "string" && raw.message.trim() ? raw.message : JSON.stringify(error);
+    return raw.data === undefined ? { code, message } : { code, message, data: raw.data };
+}
+
 export const ACP_TERMINATE_GRACE_MS = 2000;
 export const ACP_EXIT_CONFIRM_MS = 2000;
 
@@ -70,7 +99,7 @@ export class AcpTransport {
             this.#pending.delete(id);
             clearTimeout(pending.timer);
             pending.onSettled?.();
-            if (message.error) pending.reject(new Error(`ACP request failed: ${JSON.stringify(message.error)}${this.stderr() ? `: ${this.stderr()}` : ""}`));
+            if (message.error) pending.reject(new AcpJsonRpcError(message.error, this.stderr()));
             else pending.resolve(message.result);
             return;
         }

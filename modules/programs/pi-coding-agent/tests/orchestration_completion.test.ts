@@ -66,7 +66,7 @@ void test("one settlement pass durably batches all newly terminal endpoint tasks
     const repaired = await withMeshLock(root, mesh.meshId, () => settleCompletionDeliveriesUnlocked(root, mesh.meshId, 256));
     assert.equal(repaired.ledgersPersisted, false);
     assert.deepEqual(repaired.eventBatches.map(item => item.batch), [frozen]);
-    assert.equal((await readCompletionLedger(root, mesh.meshId, endpointId, "/root.jsonl"))!.schemaVersion, 4);
+    assert.equal((await readCompletionLedger(root, mesh.meshId, endpointId, "/root.jsonl"))!.schemaVersion, 5);
 }));
 
 // Admitted: receipt-before-settlement loss and at-most-once reception cross the durable ledger boundary and are not mechanically detectable.
@@ -96,7 +96,7 @@ void test("rollback and reconciliation remove only uncommitted provisional recei
     const orphan = await createCompletionReceipt(root, mesh.meshId, receiptInput(endpointId, [orphanTask], { toolCallId: "orphan" }));
     const retained = await createCompletionReceipt(root, mesh.meshId, receiptInput(endpointId, [retainedTask], { toolCallId: "retained" }));
 
-    const result = await reconcileCompletionReceipts(root, mesh.meshId, { endpointId, endpointSessionFile: "/root.jsonl", claimantSessionFile: "/root.jsonl", persistedReceipts: new Map([[retained.receipt!.receiptId, [{ toolCallId: "retained", toolName: "mesh_get", receivedTaskIds: [], claimedTaskIds: [] }]]]) });
+    const result = await reconcileCompletionReceipts(root, mesh.meshId, { endpointId, endpointSessionFile: "/root.jsonl", claimantSessionFile: "/root.jsonl", persistedReceipts: new Map([[retained.receipt!.receiptId, [{ source: "tool" as const, toolCallId: "retained", toolName: "mesh_get" as const, receivedTaskIds: [], claimedTaskIds: [] }]]]) });
     assert.deepEqual(result.removedReceiptIds, [orphan.receipt!.receiptId]);
     assert.deepEqual((await readCompletionLedger(root, mesh.meshId, endpointId, "/root.jsonl"))!.receipts.map(receipt => receipt.taskIds), [[retainedTask]]);
     const endpointKey = createHash("sha256").update(endpointId).digest("hex"); const endpoint = JSON.parse(await readFile(join(meshDirectory(root, mesh.meshId), "endpoints", `${endpointKey}.json`), "utf8")) as { bindingId: string }; const reference = (taskId: string) => orchestrationIndexPath(root, mesh.meshId, "completion-queue", { endpointId, endpointSessionFile: "/root.jsonl", bindingId: endpoint.bindingId, taskId });
@@ -153,14 +153,16 @@ void test("completion target, task request, and ledger reject old channel protoc
     await writeFile(path, JSON.stringify({ schemaVersion: 3, meshId: mesh.meshId, endpointId, endpointSessionFile: "/root.jsonl", bindingId: endpoint.bindingId, batches: [], receipts: [], updatedAt: new Date().toISOString() }));
     await assert.rejects(readCompletionLedger(root, mesh.meshId, endpointId, "/root.jsonl"), /Unsupported completion ledger schemaVersion/u);
     await writeFile(path, JSON.stringify({ schemaVersion: 4, meshId: mesh.meshId, endpointId, endpointSessionFile: "/root.jsonl", bindingId: endpoint.bindingId, batches: [{ batchId: randomUUID(), disposition: "event", route: "channel", channel: "A", taskIds: [oldTask], settledAt: new Date().toISOString(), eventId: randomUUID() }], receipts: [], updatedAt: new Date().toISOString() }));
-    await assert.rejects(readCompletionLedger(root, mesh.meshId, endpointId, "/root.jsonl"), /invalid keys/u);
+    await assert.rejects(readCompletionLedger(root, mesh.meshId, endpointId, "/root.jsonl"), /Unsupported completion ledger schemaVersion/u);
 }));
 
 // Mechanical parser validation: only receipt-owning v3 retrieval tools contribute startup evidence.
-void test("persisted receipt evidence accepts mesh_get and mesh_wait but ignores removed channel tools", async () => withRoot("mesh-completion-evidence-", async root => {
+void test("persisted receipt evidence accepts mesh_get tool and notification sources but ignores removed tools", async () => withRoot("mesh-completion-evidence-", async root => {
     const receiptId = randomUUID();
     const sessionFile = `${root}/session.jsonl`;
     const accounting = { receiptIds: [receiptId], receivedTaskIds: [], claimedTaskIds: [] };
-    await writeFile(sessionFile, `${JSON.stringify({ type: "message", message: { role: "toolResult", toolCallId: "channel-call", toolName: "mesh_channel", details: { accounting } } })}\n${JSON.stringify({ type: "message", message: { role: "toolResult", toolCallId: "wait-call", toolName: "mesh_wait", details: { accounting } } })}\n`);
-    assert.deepEqual(await readPersistedCompletionReceiptEvidence(sessionFile), new Map([[receiptId, [{ toolCallId: "wait-call", toolName: "mesh_wait", receivedTaskIds: [], claimedTaskIds: [] }]]]));
+    const notification = { type: "message", message: { role: "custom", customType: "mesh-event", details: { kind: "completion", deliveryId: "22222222-2222-4222-8222-222222222222", wakeId: "33333333-3333-4333-8333-333333333333", eventIds: ["44444444-4444-4444-8444-444444444444"], accounting: { receiptIds: [receiptId], receivedTaskIds: ["11111111-1111-4111-8111-111111111111"] } } } };
+    await writeFile(sessionFile, `${JSON.stringify({ type: "message", message: { role: "toolResult", toolCallId: "channel-call", toolName: "mesh_channel", details: { accounting } } })}\n${JSON.stringify({ type: "message", message: { role: "toolResult", toolCallId: "get-call", toolName: "mesh_get", details: { accounting } } })}\n${JSON.stringify(notification)}\n`);
+    const evidence = await readPersistedCompletionReceiptEvidence(sessionFile);
+    assert.deepEqual(evidence.get(receiptId)?.map(item => item.source), ["tool", "notification"]);
 }));

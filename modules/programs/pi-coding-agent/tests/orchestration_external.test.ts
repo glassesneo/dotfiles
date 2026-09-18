@@ -17,7 +17,8 @@ import { UnconfirmedTerminationError, resolveExternalDriver, validateExternalWor
 import { resolveHarnessAdapter } from "../extensions_src/utilities/orchestration_harness.ts";
 import { piLaunchDescriptor } from "../extensions_src/utilities/orchestration_pi.ts";
 import { projectDebugSnapshot } from "../extensions_src/utilities/orchestration_projection.ts";
-import { claimPendingTask, createTask, ensurePolicyEpoch, failAgentStop, finishTask, initializeMesh, markAgentStopping, patchAgentStatus, prepareAgent, publishAgent, readAgentSnapshot, readAgentStatus, readAgentStopRequest, requestAgentStop, requestTaskCancellation, reserveMeshCapacity, taskPaths } from "../extensions_src/utilities/orchestration_store.ts";
+import { applyAgentControl, claimPendingTask, createTask, ensurePolicyEpoch, failAgentStop, finishTask, initializeMesh, markAgentStopping, patchAgentStatus, prepareAgent, publishAgent, readAgentExecution, readAgentSnapshot, readAgentStatus, readAgentStopRequest, readTask, requestAgentStop, requestTaskCancellation, reserveMeshCapacity, taskPaths } from "../extensions_src/utilities/orchestration_store.ts";
+import { EXECUTION_RESUME_CONTENT } from "../extensions_src/utilities/orchestration_execution.ts";
 import { handleForAgentId } from "../extensions_src/utilities/orchestration_identity.ts";
 import { withTemporaryRoot, yieldToIO } from "./test_helpers.ts";
 
@@ -203,10 +204,10 @@ void test("Pi launch descriptors isolate prompt-only roles and expose outbound o
     const reviewLens = child({ selector: { agent: "review-lens", access: "read" }, execution: piExecution });
     const caller = envelope({ childId: "reviewer", self: child({ tools: ["read", "save_agent_artifact"], execution: { models: ["openai-codex/gpt-5.6-sol"], thinkingLevel: "high", harness: "pi" }, targets: ["review-lens"] }), extra: { "review-lens": reviewLens } });
     const callerTools = option(piLaunchDescriptor(runtime, launchInput("reviewer", caller)).args, "--tools")!.split(",");
-    assert.deepEqual(callerTools, ["read", "save_agent_artifact", "mesh_send", "mesh_get", "mesh_wait", "mesh_stop", "mesh_report"]);
+    assert.deepEqual(callerTools, ["read", "save_agent_artifact", "end_response", "mesh_send", "mesh_get", "mesh_stop", "mesh_control", "mesh_report"]);
 
     const leaf = envelope({ childId: "validator", self: child({ tools: ["read", "bash"], execution: { models: ["openai-codex/gpt-5.6-luna"], thinkingLevel: "xhigh", harness: "pi" } }) });
-    assert.deepEqual(option(piLaunchDescriptor(runtime, launchInput("validator", leaf)).args, "--tools")!.split(","), ["read", "bash", "mesh_report"]);
+    assert.deepEqual(option(piLaunchDescriptor(runtime, launchInput("validator", leaf)).args, "--tools")!.split(","), ["read", "bash", "end_response", "mesh_report"]);
 });
 
 // Admission: selected-profile misrouting changes the actual model/harness while preserving an apparently correct purpose identity; final worker config and prompt composition are not guaranteed by envelope validation alone.
@@ -472,7 +473,7 @@ void test("unconfirmed stop-confirmation failure does not publish idle or succee
         const task = await createTask(root, fixture.meshId, fixture.agentId, { prompt: "timeout", purpose: "synthetic purpose" }, { requesterEndpointId: `root:${fixture.meshId}` });
         await waitUntil(() => shutdownStarted);
         await waitUntil(async () => (await readAgentStopRequest(root, fixture.meshId, fixture.agentId))?.state === "requested");
-        const raced = await Promise.race([worker.then(() => "settled" as const), new Promise<"pending">(resolve => setTimeout(() => resolve("pending"), 40))]);
+        const raced = await Promise.race([worker.then(() => "settled" as const), Promise.resolve("pending" as const)]);
         assert.equal(raced, "pending");
         const snapshot = await readAgentSnapshot(root, fixture.meshId, fixture.agentId, task.request.taskId);
         assert.notEqual(snapshot.task?.status.state, "succeeded");
@@ -544,6 +545,55 @@ void test("Cursor ACP blocking failure retires only after the fake peer process 
     } finally {
         if (!workerStopped) {
             await driver.shutdown().catch(() => {});
+            await worker.catch(() => {});
+        }
+    }
+}));
+
+const usageLimitPeer = `#!/usr/bin/env node
+const readline=require("readline");
+const send=m=>process.stdout.write(JSON.stringify(m)+"\\n");
+const input=readline.createInterface({input:process.stdin});
+input.on("line",line=>{const message=JSON.parse(line);
+ if(message.method==="initialize") send({jsonrpc:"2.0",id:message.id,result:{protocolVersion:1}});
+ else if(message.method==="session/new") send({jsonrpc:"2.0",id:message.id,result:{sessionId:"session-1",modes:{availableModes:[{id:"ask"},{id:"agent"}]},models:{currentModelId:"synthetic-acp-model",availableModels:[{modelId:"synthetic-acp-model"}]},configOptions:[{id:"model",currentValue:"synthetic-acp-model",options:[{value:"synthetic-acp-model"}]}]}});
+ else if(message.method==="session/set_mode") send({jsonrpc:"2.0",id:message.id,result:{}});
+ else if(message.method==="session/prompt") send({jsonrpc:"2.0",id:message.id,error:{code:-32001,message:"usage limit",data:{code:"usage_limit_reached"}}});
+});`;
+
+// Admission: a fake ACP JSON-RPC usage-limit error must reach blocked-limit through typed code/data; stringifying the error would retire the task.
+// Given a live Cursor ACP peer that returns usage_limit_reached on session/prompt, the worker holds the task at blocked-limit without finishing it.
+void test("fake ACP JSON-RPC usage limit holds the task at blocked-limit", async () => withTemporaryRoot("orchestration-external-acp-limit-", async root => {
+    const fixture = await externalFixture(root);
+    const directory = await mkdtemp(join(tmpdir(), "orchestration-cursor-limit-"));
+    const command = join(directory, "peer.cjs");
+    await writeFile(command, usageLimitPeer);
+    await chmod(command, 0o755);
+    const driver = new CursorAcpDriver({
+        command,
+        cwd: directory,
+        model: SYNTHETIC_CURSOR_ALIAS,
+        expectedAcpModelId: SYNTHETIC_ACP_MODEL_ID,
+        mode: "agent",
+        permissionPolicy: "allow-always",
+        event: () => {},
+    });
+    const worker = runExternalWorker(fixture.env, { createDriver: () => driver, sleep: yieldToIO, activityHeartbeatMs: 1, idleClaimIntervalMs: 1 });
+    let workerStopped = false;
+    try {
+        await waitUntil(async () => (await readAgentSnapshot(root, fixture.meshId, fixture.agentId)).activity.phase === "idle");
+        const task = await createTask(root, fixture.meshId, fixture.agentId, { prompt: "limited", purpose: "synthetic purpose" }, { requesterEndpointId: `root:${fixture.meshId}` });
+        await waitUntil(async () => (await readAgentExecution(root, fixture.meshId, fixture.agentId))?.holds.some(hold => hold.kind === "limit") === true);
+        const snapshot = await readAgentSnapshot(root, fixture.meshId, fixture.agentId, task.request.taskId);
+        assert.equal(snapshot.task?.status.state, "running");
+        assert.equal(snapshot.status.state, "busy");
+        assert.equal((await readAgentExecution(root, fixture.meshId, fixture.agentId))?.holds.some(hold => hold.kind === "limit"), true);
+        process.emit("SIGTERM");
+        await worker;
+        workerStopped = true;
+    } finally {
+        if (!workerStopped) {
+            process.emit("SIGTERM");
             await worker.catch(() => {});
         }
     }
@@ -732,4 +782,96 @@ void test("requestAgentStop expectedRuntimeId rejects a stale runtime before wri
     assert.equal(created.created, true);
     assert.equal(created.status.state, "stopping");
     assert.equal(created.request.terminalState, "failed");
+}));
+
+// Admission: ACP interrupt confirmation is owned at cancelled prompt settlement; confirming earlier would leave leftover cancel semantics and replay the original prompt.
+void test("ACP interrupt confirms only after cancelled prompt and resumes with continuation context", async () => withTemporaryRoot("orchestration-external-interrupt-resume-", async root => {
+    const fixture = await externalFixture(root);
+    const prompts: string[] = [];
+    let cancelCalls = 0;
+    let resolveTurn!: (value: { output: string; stopReason: string }) => void;
+    const driver: ExternalDriver = {
+        async start() {},
+        async runTask(prompt) {
+            prompts.push(prompt);
+            if (prompts.length === 1) return new Promise(resolve => { resolveTurn = resolve; });
+            return { output: "continued", stopReason: "end_turn" };
+        },
+        async cancel() { cancelCalls += 1; },
+        async shutdown() {},
+        waitForClose: () => new Promise(() => {}),
+        fatalError: () => undefined,
+        exitObserved: () => false,
+    };
+    const worker = runExternalWorker(fixture.env, { createDriver: () => driver, sleep: yieldToIO, activityHeartbeatMs: 1, idleClaimIntervalMs: 1, activeCancellationIntervalMs: 5 });
+    let workerStopped = false;
+    try {
+        await waitUntil(async () => (await readAgentSnapshot(root, fixture.meshId, fixture.agentId)).activity.phase === "idle");
+        const task = await createTask(root, fixture.meshId, fixture.agentId, { prompt: "original-acp-prompt", purpose: "synthetic purpose" }, { requesterEndpointId: `root:${fixture.meshId}` });
+        await waitUntil(() => prompts.length === 1);
+        await applyAgentControl(root, fixture.meshId, fixture.agentId, { action: "interrupt", source: "user", issuer: "root" });
+        await waitUntil(() => cancelCalls === 1);
+        const interrupting = await readAgentExecution(root, fixture.meshId, fixture.agentId);
+        assert.equal(interrupting?.interrupting, true);
+        assert.equal(interrupting?.interruptConfirmed, false);
+        assert.equal((await readTask(root, fixture.meshId, task.request.taskId)).status.state, "running");
+        resolveTurn({ output: "partial", stopReason: "cancelled" });
+        await waitUntil(async () => (await readAgentExecution(root, fixture.meshId, fixture.agentId))?.interruptConfirmed === true);
+        assert.equal((await readTask(root, fixture.meshId, task.request.taskId)).status.state, "running");
+        await applyAgentControl(root, fixture.meshId, fixture.agentId, { action: "resume", source: "user", issuer: "root" });
+        await waitUntil(() => prompts.length === 2);
+        assert.equal(prompts[1], EXECUTION_RESUME_CONTENT);
+        assert.equal(prompts[1] === prompts[0], false);
+        await waitUntil(async () => (await readAgentSnapshot(root, fixture.meshId, fixture.agentId, task.request.taskId)).task?.result?.outcome === "succeeded");
+        process.emit("SIGTERM");
+        await worker;
+        workerStopped = true;
+    } finally {
+        if (!workerStopped) {
+            process.emit("SIGTERM");
+            await worker.catch(() => {});
+        }
+    }
+}));
+
+// Admission: an unconfirmed ACP cancel must not look reusable; replaying the original prompt would resume a dead session.
+void test("unconfirmed ACP interrupt stays unavailable and does not replay the original prompt", async () => withTemporaryRoot("orchestration-external-interrupt-unavailable-", async root => {
+    const fixture = await externalFixture(root);
+    const prompts: string[] = [];
+    let rejectTurn!: (error: Error) => void;
+    const hung = new Promise<never>((_resolve, reject) => { rejectTurn = reject; });
+    const driver: ExternalDriver = {
+        async start() {},
+        async runTask(prompt) { prompts.push(prompt); return hung; },
+        async cancel() { rejectTurn(new UnconfirmedTerminationError("ACP session is no longer reusable")); },
+        async shutdown() {},
+        waitForClose: () => new Promise(() => {}),
+        fatalError: () => undefined,
+        exitObserved: () => false,
+    };
+    let ticks = 0;
+    const worker = runExternalWorker(fixture.env, { createDriver: () => driver, sleep: async () => { ticks += 1; await yieldToIO(); }, activityHeartbeatMs: 1, idleClaimIntervalMs: 1, activeCancellationIntervalMs: 5 });
+    let workerStopped = false;
+    try {
+        await waitUntil(async () => (await readAgentSnapshot(root, fixture.meshId, fixture.agentId)).activity.phase === "idle");
+        const task = await createTask(root, fixture.meshId, fixture.agentId, { prompt: "original-acp-prompt", purpose: "synthetic purpose" }, { requesterEndpointId: `root:${fixture.meshId}` });
+        await waitUntil(() => prompts.length === 1);
+        await applyAgentControl(root, fixture.meshId, fixture.agentId, { action: "interrupt", source: "user", issuer: "root" });
+        await waitUntil(async () => (await readAgentExecution(root, fixture.meshId, fixture.agentId))?.unavailable === true);
+        assert.equal((await readAgentExecution(root, fixture.meshId, fixture.agentId))?.interruptConfirmed, false);
+        assert.equal((await readTask(root, fixture.meshId, task.request.taskId)).status.state, "running");
+        const ticksBeforeResume = ticks;
+        await applyAgentControl(root, fixture.meshId, fixture.agentId, { action: "resume", source: "user", issuer: "root" });
+        await waitUntil(() => ticks >= ticksBeforeResume + 3 || prompts.length > 1);
+        assert.equal(prompts.length, 1);
+        assert.equal((await readAgentExecution(root, fixture.meshId, fixture.agentId))?.unavailable, true);
+        process.emit("SIGTERM");
+        await worker;
+        workerStopped = true;
+    } finally {
+        if (!workerStopped) {
+            process.emit("SIGTERM");
+            await worker.catch(() => {});
+        }
+    }
 }));

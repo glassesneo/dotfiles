@@ -14,6 +14,15 @@ export function isUnconfirmedTermination(error: unknown): error is UnconfirmedTe
     return error instanceof UnconfirmedTerminationError || error instanceof Error && (error as { code?: unknown }).code === UNCONFIRMED_TERMINATION;
 }
 
+export function isConfirmedAcpCancellation(value: unknown): boolean {
+    if (isUnconfirmedTermination(value)) return false;
+    if (value && typeof value === "object" && "stopReason" in value && typeof (value as { stopReason?: unknown }).stopReason === "string") {
+        return (value as { stopReason: string }).stopReason.toLowerCase() === "cancelled";
+    }
+    const message = value instanceof Error ? value.message : String(value);
+    return /\bstopped with cancelled\b/iu.test(message) || /stopReason["']?\s*[:=]\s*["']?cancelled\b/iu.test(message);
+}
+
 export type ExternalWorkerEvent =
     | { type: "state"; text: string }
     | { type: "text"; text: string }

@@ -3,7 +3,7 @@ import type { MeshGcConfig } from "./agent_types.ts";
 import { projectAgentActivity, readAgentActivity } from "./orchestration_activity.ts";
 import { readAgentRuntimeBinding } from "./orchestration_runtime.ts";
 import { stopMeshAgentWithDisposition } from "./orchestration_management.ts";
-import { assertRootLeaseOwner, claimIdleAgentForStop, listMeshAgents, readMesh, reserveMeshCapacity, reservePressureCapacityOrClaimIdleAgent, type IdleStopChildMinimum } from "./orchestration_store.ts";
+import { assertRootLeaseOwner, claimIdleAgentForStop, listMeshAgents, readAgentExecution, readMesh, reserveMeshCapacity, reservePressureCapacityOrClaimIdleAgent, type IdleStopChildMinimum } from "./orchestration_store.ts";
 import type { CommandExecutor } from "./orchestration_tmux.ts";
 import type { AgentSnapshot, BudgetReservation } from "./orchestration_types.ts";
 import type { ExpectedEndpointBinding } from "./orchestration_binding.ts";
@@ -25,6 +25,7 @@ async function candidates(options: GcOptions): Promise<Candidate[]> {
     const snapshots = await listMeshAgents(options.stateRoot, options.meshId); const values: Candidate[] = [];
     for (const snapshot of snapshots) {
         if (snapshot.status.state !== "idle" || snapshot.status.activeTaskId || snapshot.activity.phase !== "idle" || snapshot.activity.pendingMessages) continue;
+        if ((await readAgentExecution(options.stateRoot, options.meshId, snapshot.agent.agentId))?.holds.length) continue;
         const [activity, runtime] = await Promise.all([readAgentActivity(options.stateRoot, options.meshId, snapshot.agent.agentId).catch(() => undefined), readAgentRuntimeBinding(options.stateRoot, options.meshId, snapshot.agent.agentId)]);
         if (!activity || !runtime || activity.runtimeId !== runtime.runtimeId || activity.sequence < 1) continue;
         const observed = projectAgentActivity(snapshot.status, activity, { staleMs: options.gc.activityStaleMs, expectedRuntimeId: runtime.runtimeId, allowUnsupportedContext: snapshot.agent.harness !== "pi" });

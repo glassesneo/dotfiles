@@ -140,7 +140,7 @@ def main [] {
     validateModeConfig(disabledModes);
     assert.equal(childCatalog.schemaVersion, 1);
     assert.equal(orchestrationConfig.schemaVersion, 6);
-    assert.ok(orchestrationConfig.stateRoot.endsWith("/pi/orchestration-v10"));
+    assert.ok(orchestrationConfig.stateRoot.endsWith("/pi/orchestration-v11"));
     assert.equal(enabledModeConfig.schemaVersion, 3);
     for (const mode of Object.values(enabledModeConfig.modes)) {
       assert.equal(mode.execution.harness, "pi");

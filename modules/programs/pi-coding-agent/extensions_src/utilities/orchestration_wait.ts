@@ -1,13 +1,16 @@
+import type { WakeOrigin } from "./orchestration_execution.ts";
+
 export type MeshWaitState = "disarmed" | "armed-running" | "armed-waiting";
 export type MeshWaitInspection = "queued" | "pending" | "drained" | "invalid";
 export type MeshWaitOutcome = "resumed" | "drained" | "aborted" | "invalid";
 
-/** Process-local, single-session latch used by the orchestration agent_end hook. */
+/** Process-local, single-session latch used by the orchestration auto-join agent_end hook. */
 export class MeshArmedWait {
     private state: MeshWaitState = "disarmed";
     private bindingKey: string | undefined;
     private generation = 0;
     private wake: (() => void) | undefined;
+    private queuedOrigin: WakeOrigin | undefined;
 
     get currentState(): MeshWaitState { return this.state; }
 
@@ -21,13 +24,29 @@ export class MeshArmedWait {
         return this.state !== "disarmed" && (bindingKey === undefined || bindingKey === this.bindingKey);
     }
 
-    notifyQueued(): void {
+    recordWakeOrigin(origin: WakeOrigin): void {
+        this.queuedOrigin ??= origin;
+    }
+
+    notifyQueued(origin: WakeOrigin = "mesh-event"): void {
         this.generation += 1;
+        this.recordWakeOrigin(origin);
         this.wake?.();
+    }
+
+    takeWakeOrigin(): WakeOrigin | undefined {
+        const origin = this.queuedOrigin;
+        this.queuedOrigin = undefined;
+        return origin;
+    }
+
+    peekWakeOrigin(): WakeOrigin | undefined {
+        return this.queuedOrigin;
     }
 
     resume(): void {
         if (this.state !== "disarmed") this.state = "armed-running";
+        this.queuedOrigin = undefined;
         this.wake = undefined;
     }
 
@@ -35,6 +54,7 @@ export class MeshArmedWait {
         this.state = "disarmed";
         this.bindingKey = undefined;
         this.generation += 1;
+        this.queuedOrigin = undefined;
         this.wake?.();
         this.wake = undefined;
     }

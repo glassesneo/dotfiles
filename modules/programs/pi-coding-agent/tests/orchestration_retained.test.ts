@@ -301,22 +301,19 @@ void test("palette delegates stop authority with mesh identity and preserves the
     const component = new MeshAgentsPaletteComponent({
         tui: { terminal: { rows: 24 }, requestRender() {} } as never,
         theme: { fg: (_role: string, text: string) => text, bg: (_role: string, text: string) => text, bold: (text: string) => text } as never,
-        ui: { input: async () => "  planned cleanup  ", confirm: async () => true }, keymap: resolvePaletteKeymap({ toggleTerminal: ["t"] }),
+        ui: { input: async () => { throw new Error("reason input is not required"); }, confirm: async () => true, select: async () => "Stop" }, keymap: resolvePaletteKeymap({ toggleTerminal: ["t"] }),
         deps: { meshId, exec: async () => ({ stdout: "", stderr: "", code: 0 }), tmux: "/tmux", historyViewerExtension: "/viewer", piCommand: "/pi", natureHandleWords: ["May"], discover: async identity => { discoveries.push(identity); return { agents: [live], malformedCount: 0 }; }, stopAgent: async request => { stopRequests.push(request); return stopped; }, setTimeout: (() => ({}) as NodeJS.Timeout) as unknown as typeof setTimeout, clearTimeout: (() => {}) as typeof clearTimeout },
         done() {},
     });
     component.replaceAgents([live]); await component.action("stop");
-    assert.deepEqual(stopRequests, [{ meshId, agentId: live.agent.agentId, reason: "planned cleanup" }]); assert.deepEqual(discoveries, [{ meshId }]); assert.equal(component.selected(), undefined); assert.equal(component.hiddenTerminalCount, 1); assert.match(component.render(80).join("\n"), /No live agents.*terminal history/su); component.dispose();
+    assert.deepEqual(stopRequests, [{ meshId, agentId: live.agent.agentId }]); assert.deepEqual(discoveries, [{ meshId }]); assert.equal(component.selected(), undefined); assert.equal(component.hiddenTerminalCount, 1); assert.match(component.render(80).join("\n"), /No live agents.*terminal history/su); component.dispose();
 });
 
-// Given cancelled, blank, or oversized Pi-native reason input, when it crosses the Palette action boundary, no stop occurs and the same Palette selection/focus is retained.
-void test("palette reason validation cancels safely and preserves focus and selection", async () => {
+void test("palette control cancellation preserves focus and selection", async () => {
     const live = snapshot("abababab-abab-4bab-8bab-abababababab", "idle");
-    for (const input of [undefined, "   ", "界".repeat(171)]) {
-        let stops = 0; let confirms = 0;
-        const component = new MeshAgentsPaletteComponent({ tui: { terminal: { rows: 24 }, requestRender() {} } as never, theme: { fg: (_role: string, text: string) => text, bg: (_role: string, text: string) => text, bold: (text: string) => text } as never, ui: { input: async () => input, confirm: async () => { confirms += 1; return true; } }, keymap: {} as never, deps: { meshId, exec: async () => ({ stdout: "", stderr: "", code: 0 }), tmux: "/tmux", historyViewerExtension: "/viewer", piCommand: "/pi", natureHandleWords: ["May"], discover: async () => ({ agents: [live], malformedCount: 0 }), stopAgent: async () => { stops += 1; return live; }, setTimeout: (() => ({}) as NodeJS.Timeout) as unknown as typeof setTimeout, clearTimeout: (() => {}) as typeof clearTimeout }, done() {} });
-        component.replaceAgents([live]); component.focused = true; const selected = component.selectedAgentId; await component.action("stop"); assert.equal(stops, 0); assert.equal(confirms, 0); assert.equal(component.selectedAgentId, selected); assert.equal(component.focused, true); component.dispose();
-    }
+    let stops = 0;
+    const component = new MeshAgentsPaletteComponent({ tui: { terminal: { rows: 24 }, requestRender() {} } as never, theme: { fg: (_role: string, text: string) => text, bg: (_role: string, text: string) => text, bold: (text: string) => text } as never, ui: { input: async () => { throw new Error("unused"); }, confirm: async () => false, select: async () => undefined as never }, keymap: {} as never, deps: { meshId, exec: async () => ({ stdout: "", stderr: "", code: 0 }), tmux: "/tmux", historyViewerExtension: "/viewer", piCommand: "/pi", natureHandleWords: ["May"], discover: async () => ({ agents: [live], malformedCount: 0 }), stopAgent: async () => { stops += 1; return live; }, setTimeout: (() => ({}) as NodeJS.Timeout) as unknown as typeof setTimeout, clearTimeout: (() => {}) as typeof clearTimeout }, done() {} });
+    component.replaceAgents([live]); component.focused = true; const selected = component.selectedAgentId; await component.action("stop"); assert.equal(stops, 0); assert.equal(component.selectedAgentId, selected); assert.equal(component.focused, true); component.dispose();
 });
 
 // Admission: stale heartbeats must not look idle-reusable; type checks cannot observe the usual-status projection.
@@ -347,7 +344,7 @@ void test("palette history key opens child history without stealing enter space 
     const create = (agents: AgentSnapshot[], historyKey: string) => new MeshAgentsPaletteComponent({
         tui: { terminal: { rows: 24 }, requestRender() {} } as never,
         theme: { fg: (_role: string, text: string) => text, bg: (_role: string, text: string) => text, bold: (text: string) => text } as never,
-        ui: { input: async () => "planned cleanup", confirm: async () => true },
+        ui: { input: async () => { throw new Error("reason input is not required"); }, confirm: async () => true, select: async () => "Stop" },
         keymap: resolvePaletteKeymap({ history: [historyKey], toggleTerminal: ["t"], confirm: ["enter"], preview: ["space"], stop: ["x"] }),
         deps: {
             meshId, exec: async () => tmuxProbe, tmux: "/tmux", historyViewerExtension: "/viewer", piCommand: "/pi", natureHandleWords: ["May"],
@@ -402,4 +399,75 @@ void test("palette history key opens child history without stealing enter space 
     rebound.handleInput("g"); await yieldToIO();
     assert.deepEqual(childHistory, [live.agent.agentId, stopped.agent.agentId, live.agent.agentId]);
     rebound.dispose();
+});
+
+// Admission: palette stop must keep pause/interrupt/resume/stop distinct; option lists are the operator contract and are not owned by keybinding validation.
+void test("palette control offers resume and applies it without requiring a stop reason", async () => {
+    const live = snapshot("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", "busy", { taskState: "running" });
+    const choices: string[][] = [];
+    const controls: Array<{ action: string }> = [];
+    let stops = 0;
+    const component = new MeshAgentsPaletteComponent({
+        tui: { terminal: { rows: 24 }, requestRender() {} } as never,
+        theme: { fg: (_role: string, text: string) => text, bg: (_role: string, text: string) => text, bold: (text: string) => text } as never,
+        ui: { input: async () => { throw new Error("reason input is not required"); }, confirm: async () => true, select: async (_title, options) => { choices.push(options); return "Resume"; } },
+        keymap: resolvePaletteKeymap({ toggleTerminal: ["t"] }),
+        deps: {
+            meshId, exec: async () => ({ stdout: "", stderr: "", code: 0 }), tmux: "/tmux", historyViewerExtension: "/viewer", piCommand: "/pi", natureHandleWords: ["May"],
+            discover: async () => ({ agents: [live], malformedCount: 0 }),
+            stopAgent: async () => { stops += 1; return live; },
+            controlAgent: async request => { controls.push({ action: request.action }); return { targets: [{ agentId: request.agentId, status: "acknowledged", phase: "paused" }] }; },
+            setTimeout: (() => ({}) as NodeJS.Timeout) as unknown as typeof setTimeout,
+            clearTimeout: (() => {}) as typeof clearTimeout,
+        },
+        done() {},
+    });
+    component.replaceAgents([live]);
+    await component.action("stop");
+    assert.deepEqual(choices[0], ["Pause", "Interrupt", "Resume", "Stop"]);
+    assert.deepEqual(controls, [{ action: "resume" }]);
+    assert.equal(stops, 0);
+    assert.match(component.render(120).join("\n"), /Child usage 0 tokens \(mesh, separate from Pi totals\)/u);
+    component.dispose();
+});
+
+// Admission: palette status is the operator-visible mesh usage surface; a latest-task snapshot would undercount completed sibling work.
+// Given two finished tasks on one child, discovery-driven status reports their combined mesh usage.
+void test("palette status usage aggregates every store task", async () => {
+    const live = snapshot("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", "idle");
+    const firstTask = {
+        ...live.task!,
+        result: {
+            ...live.task!.result!,
+            usage: { ...emptyUsage(), input: 11, totalTokens: 11, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
+        },
+    };
+    const secondTask = {
+        ...firstTask,
+        request: { ...firstTask.request, taskId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" },
+        status: { ...firstTask.status, taskId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" },
+        result: {
+            ...firstTask.result!,
+            taskId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            usage: { ...emptyUsage(), input: 7, totalTokens: 7, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
+        },
+    };
+    const component = new MeshAgentsPaletteComponent({
+        tui: { terminal: { rows: 24 }, requestRender() {} } as never,
+        theme: { fg: (_role: string, text: string) => text, bg: (_role: string, text: string) => text, bold: (text: string) => text } as never,
+        ui: { input: async () => "", confirm: async () => true, select: async () => undefined },
+        keymap: resolvePaletteKeymap({ toggleTerminal: ["t"] }),
+        deps: {
+            meshId, exec: async () => ({ stdout: "", stderr: "", code: 0 }), tmux: "/tmux", historyViewerExtension: "/viewer", piCommand: "/pi", natureHandleWords: ["May"],
+            discover: async () => ({ agents: [{ ...live, task: firstTask }], malformedCount: 0, tasks: [firstTask, secondTask] }),
+            stopAgent: async () => live,
+            setTimeout: (() => ({}) as NodeJS.Timeout) as unknown as typeof setTimeout,
+            clearTimeout: (() => {}) as typeof clearTimeout,
+        },
+        done() {},
+    });
+    component.start();
+    await component.refresh();
+    assert.match(component.render(120).join("\n"), /Child usage 18 tokens \(mesh, separate from Pi totals\)/u);
+    component.dispose();
 });

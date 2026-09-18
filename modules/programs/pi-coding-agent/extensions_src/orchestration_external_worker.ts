@@ -4,11 +4,14 @@ import { basename, dirname, resolve } from "node:path";
 import { launchEnvelopeDigest, validateLaunchEnvelope } from "./utilities/agent_types.ts";
 import { externalContext, publishAgentActivity, type AgentActivityPhase } from "./utilities/orchestration_activity.ts";
 import { bindAgentRuntime } from "./utilities/orchestration_runtime.ts";
-import { agentPaths, claimPendingTask, failAgent, finishTask, markBridgeReady, readAgentSnapshot, readAgentStatus, readTaskCancellation, requestAgentStop } from "./utilities/orchestration_store.ts";
+import { agentPaths, applyAgentControl, claimPendingTask, confirmAgentInterrupt, failAgent, finishTask, markBridgeReady, readAgentExecution, readAgentSnapshot, readAgentStatus, readTaskCancellation, requestAgentStop } from "./utilities/orchestration_store.ts";
 import { emptyUsage, isTerminalAgent } from "./utilities/orchestration_types.ts";
 import { displayIdentityForSnapshot, formatCompactAgentIdentity, type AgentDisplayIdentity } from "./utilities/orchestration_identity_core.ts";
-import { isUnconfirmedTermination, resolveExternalDriver, validateExternalWorkerConfig, type ExternalDriver, type ExternalWorkerConfig, type ExternalWorkerEvent } from "./utilities/orchestration_external_driver.ts";
+import { isConfirmedAcpCancellation, isUnconfirmedTermination, resolveExternalDriver, validateExternalWorkerConfig, type ExternalDriver, type ExternalWorkerConfig, type ExternalWorkerEvent } from "./utilities/orchestration_external_driver.ts";
 import { createDirectoryWake, workerTaskInboxDirectory, type DirectoryWake, type DirectoryWakeDependencies } from "./utilities/orchestration_wake.ts";
+import { classifyInvocationFailure } from "./utilities/orchestration_limit.ts";
+import { isAcpJsonRpcError } from "./utilities/orchestration_acp.ts";
+import { EXECUTION_RESUME_CONTENT } from "./utilities/orchestration_execution.ts";
 
 interface WorkerDependencies { claimPendingTask?: typeof claimPendingTask; readAgentStatus?: typeof readAgentStatus; readAgentSnapshot?: typeof readAgentSnapshot; readTaskCancellation?: typeof readTaskCancellation; createDriver?: (config: ExternalWorkerConfig, event: (event: ExternalWorkerEvent) => void) => ExternalDriver; publishAgentActivity?: typeof publishAgentActivity; activityHeartbeatMs?: number; idleClaimIntervalMs?: number; idleStopProbeMs?: number; activeCancellationIntervalMs?: number; now?: () => number; sleep?: (ms: number) => Promise<void>; wake?: DirectoryWakeDependencies }
 
@@ -185,6 +188,8 @@ export async function runExternalWorker(env: NodeJS.ProcessEnv = process.env, de
         await publishActivity("idle");
         taskWake = await createDirectoryWake({ directory: workerTaskInboxDirectory(stateRoot, meshId, agentId), run: signalWake, onError: error => view.event({ type: "state", text: `Task wake error: ${errorText(error)}` }), dependencies: dependencies.wake });
         let nextClaimAt = Number.NEGATIVE_INFINITY;
+        let heldPrompt: string | undefined;
+        let sessionReusable = true;
         while (!stopping) {
             await publishActivity(activityPhase, true).catch(() => {});
             const status = await (dependencies.readAgentStatus ?? readAgentStatus)(agentPaths(stateRoot, meshId, agentId), meshId);
@@ -193,11 +198,34 @@ export async function runExternalWorker(env: NodeJS.ProcessEnv = process.env, de
             const fatalBeforeClaim = driver.fatalError();
             if (fatalBeforeClaim) throw fatalBeforeClaim;
             const now = (dependencies.now ?? Date.now)();
+            const execution = await readAgentExecution(stateRoot, meshId, agentId).catch(() => undefined);
+            if (!sessionReusable) {
+                if (!execution?.unavailable) await applyAgentControl(stateRoot, meshId, agentId, { action: "pause", source: "system", issuer: "interrupt", expectedRuntimeId: runtimeId, expectedBindingId: runtimeId, unavailable: true }).catch(() => {});
+                const closed = await Promise.race([wait(Math.min(dependencies.idleStopProbeMs ?? 100, 50)).then(() => undefined), driverClosed, wakePromise.then(() => "wake" as const)]);
+                if (closed === "wake") { resetWake(); continue; }
+                if (closed) throw closed.driverError;
+                continue;
+            }
+            if (execution?.holds.length) {
+                const closed = await Promise.race([wait(Math.min(dependencies.idleStopProbeMs ?? 100, 50)).then(() => undefined), driverClosed, wakePromise.then(() => "wake" as const)]);
+                if (closed === "wake") { resetWake(); continue; }
+                if (closed) throw closed.driverError;
+                continue;
+            }
             const shouldClaim = wakePending || now >= nextClaimAt; wakePending = false;
-            const task = shouldClaim ? await (dependencies.claimPendingTask ?? claimPendingTask)(stateRoot, meshId, agentId, runtimeId) : undefined;
-            if (shouldClaim) nextClaimAt = now + (dependencies.idleClaimIntervalMs ?? 3000);
+            const retryPrompt = activeTaskId && heldPrompt ? heldPrompt : undefined;
+            if (retryPrompt && (driver.fatalError() || execution?.unavailable)) {
+                await applyAgentControl(stateRoot, meshId, agentId, { action: "pause", source: "system", issuer: "interrupt", expectedRuntimeId: runtimeId, expectedBindingId: runtimeId, unavailable: true }).catch(() => {});
+                heldPrompt = undefined;
+                const closed = await Promise.race([wait(Math.min(dependencies.idleStopProbeMs ?? 100, 50)).then(() => undefined), driverClosed, wakePromise.then(() => "wake" as const)]);
+                if (closed === "wake") { resetWake(); continue; }
+                if (closed) throw closed.driverError;
+                continue;
+            }
+            const task = retryPrompt ? undefined : shouldClaim ? await (dependencies.claimPendingTask ?? claimPendingTask)(stateRoot, meshId, agentId, runtimeId) : undefined;
+            if (shouldClaim && !retryPrompt) nextClaimAt = now + (dependencies.idleClaimIntervalMs ?? 3000);
             if (stopping) { await stopPromise; break; }
-            if (!task) {
+            if (!task && !retryPrompt) {
                 const closed = await Promise.race([wait(Math.min(dependencies.idleStopProbeMs ?? 100, Math.max(0, nextClaimAt - now))).then(() => undefined), driverClosed, wakePromise.then(() => "wake" as const)]);
                 if (closed === "wake") { resetWake(); continue; }
                 if (closed) throw closed.driverError;
@@ -205,14 +233,16 @@ export async function runExternalWorker(env: NodeJS.ProcessEnv = process.env, de
                 if (fatal) throw fatal;
                 continue;
             }
-            const taskId = task.request.taskId;
+            const taskId = task?.request.taskId ?? activeTaskId!;
+            const prompt = retryPrompt ?? externalTaskPrompt(launch.self.instructions, task!.request.prompt);
+            heldPrompt = undefined;
             activeTaskId = taskId;
             await publishActivity("running");
             if (stopping) { await stopPromise; break; }
-            const prompt = externalTaskPrompt(launch.self.instructions, task.request.prompt);
             let turnSettled = false;
             let taskCancelled = false;
             let driverFailed = false;
+            let interruptCancelIssued = false;
             const monitorStop = async (): Promise<void> => {
                 while (!turnSettled) {
                     await wait(dependencies.activeCancellationIntervalMs ?? 50);
@@ -230,11 +260,16 @@ export async function runExternalWorker(env: NodeJS.ProcessEnv = process.env, de
                         throw new Error(status.exitReason ?? "Stopped by parent");
                     }
                     const cancellation = await (dependencies.readTaskCancellation ?? readTaskCancellation)(stateRoot, meshId, taskId);
+                    const liveExecution = await readAgentExecution(stateRoot, meshId, agentId).catch(() => undefined);
                     if (turnSettled) return;
                     if (cancellation) {
                         taskCancelled = true;
                         await driver.cancel();
                         throw new Error("Task cancelled by parent");
+                    }
+                    if (liveExecution?.interrupting && !interruptCancelIssued) {
+                        interruptCancelIssued = true;
+                        await driver.cancel();
                     }
                     const fatal = driver.fatalError();
                     if (fatal && (driver.exitObserved() || !isUnconfirmedTermination(fatal))) { driverFailed = true; throw fatal; }
@@ -248,6 +283,19 @@ export async function runExternalWorker(env: NodeJS.ProcessEnv = process.env, de
                 if (stopping) continue;
                 if (!result) throw new Error("External task monitor settled without a task result");
                 if ("driverError" in result) { driverFailed = true; throw result.driverError; }
+                const liveExecution = await readAgentExecution(stateRoot, meshId, agentId).catch(() => undefined);
+                if (liveExecution?.interrupting) {
+                    if (isConfirmedAcpCancellation(result)) {
+                        await confirmAgentInterrupt(stateRoot, meshId, agentId, liveExecution.revision, runtimeId).catch(() => {});
+                        heldPrompt = EXECUTION_RESUME_CONTENT;
+                        view.event({ type: "state", text: "interrupted" });
+                    } else {
+                        sessionReusable = false;
+                        await applyAgentControl(stateRoot, meshId, agentId, { action: "pause", source: "system", issuer: "interrupt", expectedRuntimeId: runtimeId, expectedBindingId: runtimeId, unavailable: true }).catch(() => {});
+                        view.event({ type: "state", text: "unavailable" });
+                    }
+                    continue;
+                }
                 const fatalAfterTurn = driver.fatalError();
                 if (fatalAfterTurn) stopping = true;
                 await finishTask(stateRoot, meshId, taskId, { outcome: "succeeded", output: result.output, usage: emptyUsage(), turns: 1, ...(fatalAfterTurn ? { retireAgent: "failed" as const } : {}) }, runtimeId);
@@ -264,8 +312,30 @@ export async function runExternalWorker(env: NodeJS.ProcessEnv = process.env, de
                 const message = errorText(error);
                 let taskError: unknown;
                 if (taskCancelled) try { await taskPromise; } catch (rejected) { taskError = rejected; }
+                const liveExecution = await readAgentExecution(stateRoot, meshId, agentId).catch(() => undefined);
+                const rpc = isAcpJsonRpcError(error) ? error : undefined;
+                const classified = classifyInvocationFailure({ errorMessage: message, jsonRpcCode: rpc?.jsonRpcCode, jsonRpcData: rpc?.jsonRpcData });
                 const unconfirmed = isUnconfirmedTermination(error) || isUnconfirmedTermination(taskError) || isUnconfirmedTermination(driver.fatalError());
-                if (unconfirmed && !stopPromise && !parentTerminalOutcome) {
+                if (liveExecution?.interrupting) {
+                    let settledError: unknown = error;
+                    try { await taskPromise; } catch (rejected) { settledError = rejected; }
+                    if (!isUnconfirmedTermination(settledError) && !isUnconfirmedTermination(driver.fatalError()) && isConfirmedAcpCancellation(settledError)) {
+                        await confirmAgentInterrupt(stateRoot, meshId, agentId, liveExecution.revision, runtimeId).catch(() => {});
+                        heldPrompt = EXECUTION_RESUME_CONTENT;
+                        view.event({ type: "state", text: "interrupted" });
+                    } else {
+                        sessionReusable = false;
+                        await applyAgentControl(stateRoot, meshId, agentId, { action: "pause", source: "system", issuer: "interrupt", expectedRuntimeId: runtimeId, expectedBindingId: runtimeId, unavailable: true }).catch(() => {});
+                        view.event({ type: "state", text: "unavailable" });
+                    }
+                } else if (liveExecution?.holds.length) {
+                    heldPrompt = EXECUTION_RESUME_CONTENT;
+                    view.event({ type: "state", text: "held" });
+                } else if (classified.class === "limit" && classified.resumeEligible && sessionReusable && driver.fatalError() === undefined) {
+                    await applyAgentControl(stateRoot, meshId, agentId, { action: "pause", source: "system", issuer: "limit", expectedRuntimeId: runtimeId, expectedBindingId: runtimeId, limitHold: { holdId: randomUUID(), kind: "limit", requestId: randomUUID(), source: "system", targetRoot: agentId } }).catch(() => {});
+                    heldPrompt = EXECUTION_RESUME_CONTENT;
+                    view.event({ type: "state", text: "blocked-limit" });
+                } else if (unconfirmed && !stopPromise && !parentTerminalOutcome) {
                     await confirmUnconfirmedTermination(isUnconfirmedTermination(error) ? message : errorText(taskError ?? driver.fatalError() ?? error));
                 } else if (!stopPromise && !stopping && (driverFailed || driver.fatalError())) {
                     stopping = true;
@@ -277,7 +347,12 @@ export async function runExternalWorker(env: NodeJS.ProcessEnv = process.env, de
                     await finishTask(stateRoot, meshId, taskId, { outcome, output, usage: emptyUsage(), turns: 1, error: message }, runtimeId);
                     view.outcome(outcome, message);
                 }
-            } finally { turnSettled = true; if (activeTaskId === taskId) activeTaskId = undefined; if (!stopping) await publishActivity("idle").catch(() => {}); }
+            } finally {
+                turnSettled = true;
+                const liveExecution = await readAgentExecution(stateRoot, meshId, agentId).catch(() => undefined);
+                if (activeTaskId === taskId && !liveExecution?.holds.length && !heldPrompt) activeTaskId = undefined;
+                if (!stopping) await publishActivity(liveExecution?.holds.length ? "running" : "idle").catch(() => {});
+            }
         }
     } catch (error) {
         if (confirmationCompleted) return;

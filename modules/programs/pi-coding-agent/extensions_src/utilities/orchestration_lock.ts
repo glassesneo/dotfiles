@@ -207,6 +207,16 @@ export function withMeshAgentLock<T>(stateRoot: string, meshId: string, agentId:
     return withMeshLock(stateRoot, meshId, () => withAgentLock(stateRoot, meshId, agentId, operation));
 }
 
+/** Caller must already hold the mesh lock. Nested agent locks are acquired in lexicographic order. */
+export async function withOrderedAgentLocks<T>(stateRoot: string, meshId: string, agentIds: readonly string[], operation: () => Promise<T>): Promise<T> {
+    const ordered = [...new Set(agentIds)].sort((left, right) => left.localeCompare(right));
+    const run = async (index: number): Promise<T> => {
+        if (index >= ordered.length) return operation();
+        return withAgentLock(stateRoot, meshId, ordered[index]!, () => run(index + 1));
+    };
+    return run(0);
+}
+
 /** Serialize one agent's complete external termination attempt without holding store locks over tmux I/O. */
 export async function withAgentTerminationLock<T>(stateRoot: string, meshId: string, agentId: string, operation: () => Promise<T>): Promise<T> {
     assertUuid(agentId, "agent ID");

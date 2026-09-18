@@ -20,7 +20,8 @@ import {
 } from "./orchestration_display_tree.ts";
 import { openLivePreview, type LivePreviewDisposition } from "./orchestration_preview.ts";
 import { openAgentWindow, probeTmux, unlinkAgentWindow, type CommandExecutor } from "./orchestration_tmux.ts";
-import { isTerminalAgent, isTerminalTask, type AgentSnapshot, type TaskState } from "./orchestration_types.ts";
+import { isTerminalAgent, isTerminalTask, type AgentSnapshot, type TaskSnapshot, type TaskState } from "./orchestration_types.ts";
+import { formatMeshChildUsageLine, projectMeshChildUsage } from "./orchestration_usage.ts";
 
 export interface MeshIdentity {
     meshId: string;
@@ -37,8 +38,9 @@ export interface MeshPaletteDependencies extends MeshIdentity {
     setTimeout?: typeof setTimeout;
     clearTimeout?: typeof clearTimeout;
     /** Mesh-wide data and authority boundaries supplied by the orchestration owner. */
-    discover: (identity: MeshIdentity) => Promise<{ agents: AgentSnapshot[]; malformedCount: number }>;
-    stopAgent: (request: MeshIdentity & { agentId: string; reason: string }) => Promise<AgentSnapshot>;
+    discover: (identity: MeshIdentity) => Promise<{ agents: AgentSnapshot[]; malformedCount: number; tasks?: readonly TaskSnapshot[] }>;
+    stopAgent: (request: MeshIdentity & { agentId: string; reason?: string }) => Promise<AgentSnapshot>;
+    controlAgent?: (request: MeshIdentity & { agentId: string; action: "pause" | "interrupt" | "resume" }) => Promise<{ targets: Array<{ agentId: string; status: string; phase: string }> }>;
     openChildHistory?: (snapshot: AgentSnapshot) => Promise<void>;
     /** Optional test/harness overrides for open paths. */
     openHistory?: typeof openMeshHistory;
@@ -161,6 +163,7 @@ export function detailPaneModel(snapshot: AgentSnapshot | undefined, words?: rea
         `ID ${identity.agentId}`,
         ...(identity.attempts ?? []).map(attempt => `attempt #${attempt.index} ${attempt.model} ${attempt.category}${attempt.message ? `: ${attempt.message}` : ""}`),
         `thinking ${identity.thinkingLevel ?? "unavailable"} · harness ${identity.harness ?? "unavailable"} · model ${identity.model ?? "unavailable"} · fallback ${identity.fallbackCount ?? 0}`,
+        ...(snapshot.task?.result ? [snapshot.agent.capabilities.usage ? `Child usage ${snapshot.task.result.usage.totalTokens} tokens (mesh, separate from Pi totals)` : "Child usage unknown"] : []),
     ];
     const task = snapshot.task;
     if (!task) {
@@ -279,12 +282,13 @@ function agentRowId(agentId: string): string { return `agent:${agentId}`; }
 export class MeshAgentsPaletteComponent implements Component, Focusable {
     readonly #tui: TUI;
     readonly #theme: Theme;
-    readonly #ui: Pick<ExtensionUIContext, "input" | "confirm">;
+    readonly #ui: Pick<ExtensionUIContext, "input" | "confirm"> & Partial<Pick<ExtensionUIContext, "select">>;
     readonly #keymap: ResolvedPaletteKeymap;
     readonly #deps: MeshPaletteDependencies;
     readonly #done: (value: MeshPaletteResult) => void;
     #tree: MeshDisplayTree = { roots: [], byId: new Map(), handles: new Map() };
     #inventory: AgentSnapshot[] = [];
+    #tasks: TaskSnapshot[] = [];
     #showTerminal = false;
     #malformedCount = 0;
     #collapsed = new Set<string>();
@@ -309,7 +313,7 @@ export class MeshAgentsPaletteComponent implements Component, Focusable {
     constructor(options: {
         tui: TUI;
         theme: Theme;
-        ui: Pick<ExtensionUIContext, "input" | "confirm">;
+        ui: Pick<ExtensionUIContext, "input" | "confirm"> & Partial<Pick<ExtensionUIContext, "select">>;
         keymap: ResolvedPaletteKeymap;
         deps: MeshPaletteDependencies;
         done: (value: MeshPaletteResult) => void;
@@ -390,10 +394,11 @@ export class MeshAgentsPaletteComponent implements Component, Focusable {
         this.#tui.requestRender();
     }
 
-    #applySnapshots(agents: readonly AgentSnapshot[], malformedCount: number): void {
+    #applySnapshots(agents: readonly AgentSnapshot[], malformedCount: number, tasks?: readonly TaskSnapshot[]): void {
         const previousVisible = this.visibleNodes().map(node => node.agentId);
         this.#inventory = [...agents];
         this.#malformedCount = malformedCount;
+        if (tasks) this.#tasks = [...tasks];
         this.#rebuildProjection(previousVisible);
     }
 
@@ -408,8 +413,9 @@ export class MeshAgentsPaletteComponent implements Component, Focusable {
         this.#previousVisibleIds = visible.map(node => node.agentId);
         const liveCount = this.#inventory.length - this.hiddenTerminalCount;
         const history = this.#showTerminal ? "terminal history shown" : `${this.hiddenTerminalCount} terminal hidden`;
+        const usage = formatMeshChildUsageLine(projectMeshChildUsage(this.#inventory, this.#tasks));
         this.#statusKind = this.#malformedCount ? "warning" : "dim";
-        this.#status = this.#malformedCount ? `${this.#malformedCount} incomplete agent record(s) · ${liveCount} live · ${history}` : `${liveCount} live agent session(s) · ${history}`;
+        this.#status = this.#malformedCount ? `${this.#malformedCount} incomplete agent record(s) · ${liveCount} live · ${history} · ${usage}` : `${liveCount} live agent session(s) · ${history} · ${usage}`;
     }
 
     #toggleTerminal(): void {
@@ -449,7 +455,7 @@ export class MeshAgentsPaletteComponent implements Component, Focusable {
                 try {
                     const found = await this.#deps.discover({ meshId: this.#deps.meshId });
                     if (this.#disposed) return false;
-                    this.#applySnapshots(found.agents, found.malformedCount);
+                    this.#applySnapshots(found.agents, found.malformedCount, found.tasks ?? []);
                     this.#normalizeSelection();
                     this.#lastRefreshApplied = true;
                 } catch (error) {
@@ -536,26 +542,31 @@ export class MeshAgentsPaletteComponent implements Component, Focusable {
         try {
             if (kind === "stop") {
                 const selection = selected.agent.agentId;
-                const rawReason = await this.#ui.input(`Reason for stopping ${node.handle}`, "Required: 1–512 UTF-8 bytes");
+                const choice = this.#ui.select ? await this.#ui.select(`Control ${node.handle}`, ["Pause", "Interrupt", "Resume", "Stop"]) : "Stop";
                 if (this.#tree.byId.has(selection)) this.#selectAgent(selection);
-                const reason = rawReason?.trim();
-                if (!reason) {
+                if (!choice) {
                     if (this.#cancelRequested) { this.close("return"); return; }
-                    this.#setStatus("dim", `Stop cancelled for ${node.handle}`);
+                    this.#setStatus("dim", `Control cancelled for ${node.handle}`);
                     return;
                 }
-                if (Buffer.byteLength(reason, "utf8") > 512) {
-                    this.#setStatus("error", "Stop reason must be 1–512 UTF-8 bytes after trimming.");
+                if (choice === "Pause" || choice === "Interrupt" || choice === "Resume") {
+                    if (!this.#deps.controlAgent) { this.#setStatus("warning", "Execution control is unavailable."); return; }
+                    const result = await this.#deps.controlAgent({ meshId: this.#deps.meshId, agentId: selected.agent.agentId, action: choice.toLowerCase() as "pause" | "interrupt" | "resume" });
+                    const unsupported = result.targets.filter(target => target.status === "unsupported").length;
+                    const unconfirmed = result.targets.filter(target => target.status === "not_ready" || target.phase === "interrupting").length;
+                    this.#setStatus(unsupported || unconfirmed ? "warning" : "success", `${choice} ${node.handle}${unsupported ? `; ${unsupported} unsupported` : ""}${unconfirmed ? `; ${unconfirmed} not confirmed` : ""}`);
+                    await this.#reloadAfterMutation();
+                    if (this.#cancelRequested) this.close("return");
                     return;
                 }
-                const confirmed = await this.#ui.confirm(`Stop ${node.handle}?`, `Reason: ${reason}\n\nThis kills the agent window and every linked view. Use Unlink to close only this view.`);
+                const confirmed = await this.#ui.confirm(`Stop ${node.handle}?`, "This kills the agent window and every linked view. Use Unlink to close only this view.");
                 if (this.#tree.byId.has(selection)) this.#selectAgent(selection);
                 if (!confirmed) {
                     if (this.#cancelRequested) { this.close("return"); return; }
                     this.#setStatus("dim", `Stop cancelled for ${node.handle}`);
                     return;
                 }
-                const stopped = await this.#deps.stopAgent({ meshId: this.#deps.meshId, agentId: selected.agent.agentId, reason });
+                const stopped = await this.#deps.stopAgent({ meshId: this.#deps.meshId, agentId: selected.agent.agentId });
                 // Apply Stop immediately, then reload. Re-assert after reload so a raced stale poll cannot revive the node.
                 this.#upsertSnapshot(stopped);
                 const refreshed = await this.#reloadAfterMutation();

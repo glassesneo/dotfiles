@@ -2,24 +2,26 @@
 
 This directory owns the Pi peer-mesh configuration and extension runtime. The
 current configuration writes new meshes below
-`$XDG_STATE_HOME/pi/orchestration-v10` (normally
-`~/.local/state/pi/orchestration-v10`).
+`$XDG_STATE_HOME/pi/orchestration-v11` (normally
+`~/.local/state/pi/orchestration-v11`).
 
-## v10 cutover
+## v11 cutover
 
 Changed owned formats accept only the new version. There is no reader that
 infers, backfills, or resumes an old form. Old state is not deleted
-automatically; see `docs/compatibility-policy.md`.
+automatically; see `docs/compatibility-policy.md`. Crash or process
+replacement keeps recorded holds and task identity; it does not reconstruct
+the in-process run or replay work.
 
 1. In the old Pi session, finish or stop every old mesh task before activating
-   the v10 configuration.
+   the v11 configuration.
 2. Activate the configuration and start a new root Pi session and mesh.
-3. Do not resume an old Pi session or mix an old mesh with a v10 mesh.
+3. Do not resume an old Pi session or mix an old mesh with a v11 mesh.
 4. The old state directory and user-created artifacts remain until you archive
    or remove them after checking their contents.
 
 A generated `orchestration.json` whose `stateRoot` ends in
-`/pi/orchestration-v10` confirms the new state root. It does not migrate or
+`/pi/orchestration-v11` confirms the new state root. It does not migrate or
 validate an old session.
 
 ## Reading child work
@@ -54,25 +56,39 @@ original admission result. Do not combine the existing-agent form with `agent`
 or `access`. Internal child IDs and execution settings stay off the public
 call surface.
 
-`mesh_wait({})` arms automatic waiting for the caller's current work and returns
-immediately with `{ armed: true, behavior: "until-drained" }`. Call it once
-after delegating when results are required, continue useful independent work,
-and then finish the response. On a normal `agent_end`, orchestration waits while
-that caller still has delegated tasks or undelivered events. A queued completion,
-intervention, report, signal, or native user input resumes the same Pi
-`AgentSession` run; retrieve announced terminal results with `mesh_get`.
-Additional delegation remains covered until the work and queued messages drain.
-Root Pi sessions and Pi children with outbound edges expose this contract;
-prompt-only and leaf children do not.
+After `mesh_send`, continue useful independent work, then yield with a
+standalone `end_response({})`. That call ends the current model response; it
+is not a success claim and does not finish the mesh task. Orchestration then
+keeps the same Pi `AgentSession` run open while delegated tasks or queued
+notifications remain. Mixed batches that call `end_response` with other tools
+are rejected so the model can yield alone later. A normal `stop`, or a
+successful standalone `end_response`, is joinable; arbitrary `toolUse`,
+`error`, `length`, and abort are not rewritten as a clean end.
 
-The arm is process-local and is cleared by drain, abort, endpoint replacement,
+A completion notification that wakes a waiting or idle caller includes compact
+results for those tasks. User input that wins the same wake does not auto-include
+results; retrieve them with `mesh_get`. When a compact notification already
+included a result, skip the immediate `mesh_get` unless `fullOutputAvailable`
+is set. Child usage is counted once per task in mesh totals and is separate
+from Pi's own usage line. External children without usage capabilities show as
+unknown, not zero.
+
+`mesh_control({ agentId, action })` pauses, interrupts, or resumes a direct
+child and its descendants without finishing their tasks. `/mesh pause`,
+`/mesh interrupt`, and `/mesh resume` do the same from the user; omit the
+agent id to target the current Pi and its descendants. Palette stop no longer
+asks for a reason; pause, interrupt, resume, and stop remain distinct actions.
+External ACP children report pause as unsupported. Usage-limit holds on a
+child stay until an explicit user resume.
+
+The join is process-local and is cleared by drain, abort, endpoint replacement,
 or shutdown. Aborting the caller does not stop its delegates; unacknowledged
 notifications cleared from Pi's queue become eligible for normal asynchronous
 delivery after settlement. Stop delegates explicitly with `mesh_stop` if needed.
 Waiting uses the status line without replacing the editor or changing its draft,
 cursor, or focus. Enter and the configured follow-up binding (Ctrl+Enter in this
 repository) retain native steering and follow-up input.
-The arm is not restored after restart. Error and length recovery are not
+The join is not restored after restart. Error and length recovery are not
 blocked by the wait hook. Keeping the Pi session run active does not keep an HTTP
 request open and does not guarantee that a provider treats later requests as one
 billing or subscription turn.

@@ -73,7 +73,7 @@ in
           thinkingLevel = "medium";
           harness = "pi";
         };
-        tools = ["read" "grep" "find" "ls" "bash" "web_fetch" "mesh_send" "mesh_get" "mesh_wait" "mesh_stop" "save_agent_artifact"] ++ lib.optional piQuestion.enabled piQuestion.tool;
+        tools = ["read" "grep" "find" "ls" "bash" "web_fetch" "mesh_send" "mesh_get" "end_response" "mesh_control" "mesh_stop" "save_agent_artifact"] ++ lib.optional piQuestion.enabled piQuestion.tool;
         skillOptIns = ["prompt-interface-design" "agent-artifact"];
         instructions = ''
           ${judgmentContract}
@@ -106,7 +106,7 @@ in
           thinkingLevel = "medium";
           harness = "pi";
         };
-        tools = ["read" "grep" "find" "ls" "bash" "write" "edit" "web_fetch" "mesh_send" "mesh_get" "mesh_wait" "mesh_stop" "save_agent_artifact"] ++ lib.optional piQuestion.enabled piQuestion.tool;
+        tools = ["read" "grep" "find" "ls" "bash" "write" "edit" "web_fetch" "mesh_send" "mesh_get" "end_response" "mesh_control" "mesh_stop" "save_agent_artifact"] ++ lib.optional piQuestion.enabled piQuestion.tool;
         skillOptIns = ["prompt-interface-design" "agent-artifact"];
         instructions = ''
           ${judgmentContract}

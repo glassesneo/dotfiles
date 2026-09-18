@@ -5,8 +5,8 @@ import { canonicalJson } from "./agent_types.ts";
 import { bindCompletionTargetUnlocked, settleCompletionDeliveriesUnlocked } from "./orchestration_completion.ts";
 import { indexEventCreation, readEndpointEventReferences, readEndpointTaskReferences, removeOrchestrationIndexReference, type OrchestrationIndexReadObserver } from "./orchestration_index.ts";
 import { readOptionalJson as optional, writeAtomicJson } from "./orchestration_json.ts";
-import { withMeshAgentLock, withMeshLock } from "./orchestration_lock.ts";
-import { assertDispatchMutationAuthority, assertRootLeaseOwner, createTaskUnlocked, meshPaths, readAgentSnapshot, readMesh, readTask, releasePendingMeshReservationUnlocked, reserveExistingAgentTaskCapacityUnlocked, type DispatchMutationAuthority } from "./orchestration_store.ts";
+import { withMeshLock } from "./orchestration_lock.ts";
+import { assertAgentAcceptsDispatchUnlocked, assertDispatchMutationAuthority, assertRootLeaseOwner, createTaskUnlocked, meshPaths, readAgentSnapshot, readMesh, readTask, releasePendingMeshReservationUnlocked, reserveExistingAgentTaskCapacityUnlocked, withMeshLineageLock, type DispatchMutationAuthority } from "./orchestration_store.ts";
 import { assertExpectedEndpointBindingUnlocked, endpointRecordPath as endpointPath } from "./orchestration_binding.ts";
 import { isTerminalTask, optionalTaskPurpose, type CompletionTarget, type TaskState } from "./orchestration_types.ts";
 
@@ -69,7 +69,7 @@ function interventionSequence(events: readonly MeshEvent[], callerEndpointId: st
 export async function registerStateAwareMeshSend(stateRoot: string, meshId: string, input: { callerEndpointId: string; callerEndpointSessionFile: string; toolCallId: string; canonicalArguments: unknown; endpoint?: MeshEndpoint; agentId: string; message: string; purpose?: string; completion: CompletionTarget; authority?: DispatchMutationAuthority }): Promise<MeshSendResult> {
     if (!input.message.trim()) throw new Error("Mesh send message must not be empty");
     const suppliedPurpose = optionalTaskPurpose(input.purpose);
-    return withMeshAgentLock(stateRoot, meshId, input.agentId, async () => {
+    return withMeshLineageLock(stateRoot, meshId, input.agentId, async () => {
         await assertExpectedEndpointBindingUnlocked(stateRoot, meshId, { endpointId: input.callerEndpointId, endpointSessionFile: input.callerEndpointSessionFile });
         const targetSnapshot = await readAgentSnapshot(stateRoot, meshId, input.agentId);
         const requesterAgentId = input.authority?.requesterAgentId ?? (input.callerEndpointId.startsWith("agent:") ? input.callerEndpointId.slice("agent:".length) : undefined);
@@ -85,6 +85,7 @@ export async function registerStateAwareMeshSend(stateRoot: string, meshId: stri
         if (existing) result = existing.result;
         else {
             const status = targetSnapshot.status;
+            await assertAgentAcceptsDispatchUnlocked(stateRoot, meshId, input.agentId);
             if (status.state === "busy") { if (!status.activeTaskId) throw new Error(`Agent ${input.agentId} is busy without an active task`); const task = await readTask(stateRoot, meshId, status.activeTaskId); if (isTerminalTask(task.status.state)) throw new Error(`Agent ${input.agentId} is busy with a terminal active task`); if (!targetSnapshot.agent.capabilities.interactiveInterventions) throw new Error(`Agent ${input.agentId} does not support active-task intervention`); if (!input.endpoint || input.endpoint.kind !== "agent" || input.endpoint.agentId !== input.agentId || !input.endpoint.online) throw new Error("Mesh send target is not an online agent endpoint"); const targetRaw = await optional<unknown>(endpointPath(stateRoot, meshId, input.endpoint.endpointId)); const target = targetRaw === undefined ? undefined : validateEndpoint(targetRaw, meshId, input.endpoint.endpointId); if (!sameBinding(target, input.endpoint)) throw new Error("Mesh send target endpoint binding is stale or offline"); result = { disposition: "intervened", agentId: input.agentId, taskId: task.request.taskId, messageId: randomUUID(), sequence: interventionSequence((await records(meshPaths(stateRoot, meshId).events)).map(value => validateEvent(value, meshId)), input.callerEndpointId, input.callerEndpointSessionFile, input.agentId, task.request.taskId), deliveryState: "pending" }; }
             else if (status.state === "idle") {
                 if (!targetSnapshot.activity.acceptingTask) throw new Error(`Agent ${input.agentId} is not accepting tasks`);

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile, access } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -10,10 +10,11 @@ import { registerMeshChildBridge, type MeshChildBridgeDependencies } from "../ex
 import { buildLaunchEnvelope } from "../extensions_src/utilities/agent_types.ts";
 import { bindMeshEndpoint, materializeMeshCompletionEvents } from "../extensions_src/utilities/orchestration_events.ts";
 import { FALLBACK_CONTINUE_CUSTOM_TYPE, formatFallbackContinueContent } from "../extensions_src/utilities/orchestration_profile_fallback.ts";
+import { EXECUTION_RESUME_CONTENT, EXECUTION_RESUME_CUSTOM_TYPE } from "../extensions_src/utilities/orchestration_execution.ts";
 import { FakeMonotonicTimers, yieldToIO } from "./test_helpers.ts";
 import { availableContext, publishAgentActivity, readAgentActivity } from "../extensions_src/utilities/orchestration_activity.ts";
 import { bindAgentRuntime } from "../extensions_src/utilities/orchestration_runtime.ts";
-import { attachRootMesh, claimPendingTask, createTask, ensurePolicyEpoch, failAgent as persistAgentFailure, finishTask as persistTaskCompletion, initializeMesh, markAgentStopping, patchAgentStatus, prepareAgent, publishAgent, readAgentSnapshot, requestTaskCancellation, reserveMeshCapacity } from "../extensions_src/utilities/orchestration_store.ts";
+import { attachRootMesh, applyAgentControl, claimPendingTask, createTask, ensurePolicyEpoch, failAgent as persistAgentFailure, finishTask as persistTaskCompletion, initializeMesh, markAgentStopping, patchAgentStatus, prepareAgent, publishAgent, readAgentExecution, readAgentSnapshot, readTask, requestTaskCancellation, reserveMeshCapacity, taskPaths } from "../extensions_src/utilities/orchestration_store.ts";
 import { formatUsualIdentityLine, MESH_CHILD_IDENTITY_STATUS, NATURE_HANDLE_WORDS } from "../extensions_src/utilities/orchestration_identity.ts";
 
 const capabilities = { nativeScreen: true, taskDelivery: true, taskCompletion: true, taskCancellation: true, usage: true, interactiveInterventions: true, terminalHistory: true };
@@ -137,7 +138,6 @@ void test("child orchestration wait preserves the active parent task through int
     await clock.advance(3_000);
     assert.deepEqual(pi.delivered, ["coordinate grandchild"]); await invoke("before_agent_start", { prompt: "coordinate grandchild" }); await invoke("agent_start");
     const delegated = await pi.tools.get("mesh_send")!.execute("delegate-grandchild", { agentId: grandchild.agentId, purpose: "inspect dependency", message: "inspect dependency" }, undefined, undefined, ctx); const grandchildTaskId = JSON.parse(delegated.content[0].text).taskId as string;
-    await pi.tools.get("mesh_wait")!.execute("arm", {}, undefined, undefined, ctx);
     await invoke("message_end", { message: { role: "assistant", content: [{ type: "text", text: "waiting" }], stopReason: "stop" } });
     let firstEndResolved = false; const firstEnd = invoke("agent_end", { messages: [{ role: "assistant", stopReason: "stop" }] }).then(() => { firstEndResolved = true; }); await yieldToIO();
     assert.equal(firstEndResolved, false); assert.equal(finishes, 0); assert.equal((await readAgentSnapshot(root, mesh.meshId, child.agentId)).status.activeTaskId, parentTask.request.taskId);
@@ -863,4 +863,120 @@ void test("runtime exhaustion fails the active task and the agent", async () => 
     assert.match(failed.task?.result?.error ?? "", /fallback exhausted/u);
     assert.equal(failed.status.state, "failed");
     await assert.rejects(createTask(fixture.root, fixture.meshId, fixture.agentId, { prompt: "must not accept", purpose: "synthetic purpose" }, `root:${fixture.meshId}`), /not accepting|failed|idle/iu);
+});
+
+// Admission: recoverable limit exhaustion must not finish the task; a later explicit user resume starts a new attempt cycle without replaying the original prompt.
+void test("limit exhaustion holds the task and user resume continues with a new attempt cycle", async () => {
+    const profile = { models: ["provider/primary", "provider/fallback"], thinkingLevel: "medium" as const, harness: "pi" as const };
+    const fixture = await bridgeFixture({ profile, registry: registryWindows({ "provider/primary": 200, "provider/fallback": 200 }) });
+    fixture.activate();
+    await fixture.start();
+    const task = await claimAndStart(fixture, "keep this held");
+    await fixture.emit("message_end", { message: { role: "assistant", content: [{ type: "text", text: "limited" }], stopReason: "error", errorMessage: "You have hit your ChatGPT usage limit. Try again later." } });
+    await fixture.emit("agent_settled");
+    await fixture.emit("message_end", { message: { role: "assistant", content: [{ type: "text", text: "still limited" }], stopReason: "error", errorMessage: "You have hit your ChatGPT usage limit. Try again later." } });
+    await fixture.emit("agent_settled");
+    const held = await readAgentSnapshot(fixture.root, fixture.meshId, fixture.agentId, task.request.taskId);
+    assert.equal(held.task?.status.state, "running");
+    assert.equal(held.status.state, "busy");
+    const execution = await readAgentExecution(fixture.root, fixture.meshId, fixture.agentId);
+    assert.equal(execution?.holds.some(hold => hold.kind === "limit"), true);
+    assert.equal(execution?.limitHistory?.length, 2);
+    assert.equal(await claimPendingTask(fixture.root, fixture.meshId, fixture.agentId), null);
+    await applyAgentControl(fixture.root, fixture.meshId, fixture.agentId, { action: "resume", source: "user", issuer: "root", clearLimitHolds: true });
+    await fixture.tick();
+    assert.equal(fixture.sent.at(-1)?.message.customType, EXECUTION_RESUME_CUSTOM_TYPE);
+    assert.equal(fixture.sent.at(-1)?.message.content, EXECUTION_RESUME_CONTENT);
+    assert.deepEqual(fixture.delivered, ["keep this held"]);
+    const cycled = await readAgentExecution(fixture.root, fixture.meshId, fixture.agentId);
+    assert.equal(cycled?.limitCycle, 1);
+    assert.equal(cycled?.limitHistory?.length, 2);
+    assert.equal((await readTask(fixture.root, fixture.meshId, task.request.taskId)).status.state, "running");
+});
+
+// Admission: interrupt must abort the current run through execution control; leftover cancel.json would stop the same task after resume.
+void test("interrupt aborts the current Pi run without writing cancel.json", async () => {
+    const fixture = await bridgeFixture();
+    fixture.activate();
+    await fixture.start();
+    const task = await claimAndStart(fixture, "stay assigned");
+    await applyAgentControl(fixture.root, fixture.meshId, fixture.agentId, { action: "interrupt", source: "user", issuer: "root" });
+    await fixture.tick();
+    assert.equal(fixture.aborts, 1);
+    await assert.rejects(access(taskPaths(fixture.root, fixture.meshId, task.request.taskId).cancel), /ENOENT/u);
+    await fixture.emit("agent_settled");
+    assert.equal((await readTask(fixture.root, fixture.meshId, task.request.taskId)).status.state, "running");
+    await applyAgentControl(fixture.root, fixture.meshId, fixture.agentId, { action: "resume", source: "user", issuer: "root" });
+    await fixture.tick();
+    assert.equal(fixture.sent.at(-1)?.message.customType, EXECUTION_RESUME_CUSTOM_TYPE);
+    assert.deepEqual(fixture.delivered, ["stay assigned"]);
+    await assert.rejects(access(taskPaths(fixture.root, fixture.meshId, task.request.taskId).cancel), /ENOENT/u);
+});
+
+// Admission: child interactive input must not reopen a process gate still held by limit or a failed store resume.
+// Given a paused child, interactive input opens the gate only after a successful manual-hold release and leaves a limit hold closed.
+void test("child interactive input opens the gate only after store manual-hold release", async () => {
+    const fixture = await bridgeFixture();
+    fixture.activate();
+    await fixture.start();
+    await applyAgentControl(fixture.root, fixture.meshId, fixture.agentId, { action: "pause", source: "user", issuer: "root" });
+    await fixture.tick();
+    let admitted = false;
+    const waiting = fixture.emit("before_provider_request").then(() => { admitted = true; });
+    await yieldToIO();
+    assert.equal(admitted, false);
+    await fixture.emit("input", { text: "resume manual", source: "interactive", streamingBehavior: "steer" });
+    await waiting;
+    assert.equal(admitted, true);
+    assert.equal((await readAgentExecution(fixture.root, fixture.meshId, fixture.agentId))?.holds.length, 0);
+    await fixture.emit("after_provider_response");
+    await applyAgentControl(fixture.root, fixture.meshId, fixture.agentId, {
+        action: "pause",
+        source: "system",
+        issuer: "limit",
+        limitHold: { holdId: randomUUID(), kind: "limit", requestId: randomUUID(), source: "system", targetRoot: fixture.agentId },
+    });
+    await fixture.tick();
+    admitted = false;
+    const waitingLimit = fixture.emit("before_provider_request").then(() => { admitted = true; });
+    await yieldToIO();
+    assert.equal(admitted, false);
+    await fixture.emit("input", { text: "must not clear limit", source: "interactive", streamingBehavior: "steer" });
+    await yieldToIO();
+    assert.equal(admitted, false);
+    assert.equal((await readAgentExecution(fixture.root, fixture.meshId, fixture.agentId))?.holds.some(hold => hold.kind === "limit"), true);
+    await applyAgentControl(fixture.root, fixture.meshId, fixture.agentId, { action: "resume", source: "user", issuer: "root", clearLimitHolds: true });
+    await fixture.emit("input", { text: "operator resume", source: "interactive", streamingBehavior: "steer" });
+    await waitingLimit;
+});
+
+// Admission: a delivery timeout during pause would finish the task, and clearing awaitingDelivery on interrupt deadlocks resume; the bridge tick owns both.
+// Given a claimed task still awaiting Pi acceptance, pause keeps it nonterminal past the ack deadline, and interrupt confirms without finishing or aborting.
+void test("delivery pause skips timeout and interrupt confirms without clearing into deadlock", async () => {
+    let now = Date.now();
+    const fixture = await bridgeFixture({
+        dependencies: { now: () => now, deliveryAckTimeoutMs: 5, retryIntervalMs: 1, idleClaimIntervalMs: 0 },
+    });
+    fixture.activate();
+    await fixture.start();
+    const task = await createTask(fixture.root, fixture.meshId, fixture.agentId, { prompt: "await acceptance", purpose: "synthetic purpose" }, `root:${fixture.meshId}`);
+    await fixture.tick();
+    assert.deepEqual(fixture.delivered, ["await acceptance"]);
+    await applyAgentControl(fixture.root, fixture.meshId, fixture.agentId, { action: "pause", source: "user", issuer: "root" });
+    now += 50;
+    await fixture.tick();
+    assert.equal((await readTask(fixture.root, fixture.meshId, task.request.taskId)).status.state, "running");
+    assert.equal((await readTask(fixture.root, fixture.meshId, task.request.taskId)).result, null);
+    await applyAgentControl(fixture.root, fixture.meshId, fixture.agentId, { action: "interrupt", source: "user", issuer: "root" });
+    now += 50;
+    await fixture.tick();
+    const interrupted = await readAgentExecution(fixture.root, fixture.meshId, fixture.agentId);
+    assert.equal(interrupted?.interruptConfirmed, true);
+    assert.equal((await readTask(fixture.root, fixture.meshId, task.request.taskId)).status.state, "running");
+    assert.equal(fixture.aborts, 0);
+    await applyAgentControl(fixture.root, fixture.meshId, fixture.agentId, { action: "resume", source: "user", issuer: "root" });
+    now += 50;
+    await fixture.tick();
+    assert.equal((await readTask(fixture.root, fixture.meshId, task.request.taskId)).status.state, "running");
+    assert.equal((await readTask(fixture.root, fixture.meshId, task.request.taskId)).result, null);
 });

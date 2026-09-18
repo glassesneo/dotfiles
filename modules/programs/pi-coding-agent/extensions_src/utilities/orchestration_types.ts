@@ -23,9 +23,12 @@ export type TaskState = (typeof TASK_STATES)[number];
 export type TerminalTaskState = Extract<TaskState, "succeeded" | "failed" | "stopped">;
 export interface CompletionTarget { endpointId: string; endpointSessionFile: string; /** Present on every durable v6 task; optional only at pre-persistence call sites. */ bindingId?: string }
 export interface CompletionBatch { batchId: string; taskIds: string[]; settledAt: string; eventId: string }
-export type CompletionReceiptToolName = "mesh_get" | "mesh_wait";
-export interface CompletionReceipt { receiptId: string; claimantSessionFile: string; toolCallId: string; toolName: CompletionReceiptToolName; argumentsDigest: string; taskIds: string[]; receivedAt: string }
-export interface CompletionLedger { schemaVersion: 4; meshId: string; endpointId: string; endpointSessionFile: string; bindingId: string; batches: CompletionBatch[]; receipts: CompletionReceipt[]; updatedAt: string }
+export type CompletionReceiptSourceKind = "tool" | "notification";
+export type CompletionReceiptToolName = "mesh_get";
+export interface CompletionToolReceipt { receiptId: string; source: "tool"; claimantSessionFile: string; toolCallId: string; toolName: CompletionReceiptToolName; argumentsDigest: string; taskIds: string[]; receivedAt: string }
+export interface CompletionNotificationReceipt { receiptId: string; source: "notification"; claimantSessionFile: string; deliveryId: string; wakeId: string; eventIds: string[]; taskIds: string[]; receivedAt: string }
+export type CompletionReceipt = CompletionToolReceipt | CompletionNotificationReceipt;
+export interface CompletionLedger { schemaVersion: 5; meshId: string; endpointId: string; endpointSessionFile: string; bindingId: string; batches: CompletionBatch[]; receipts: CompletionReceipt[]; updatedAt: string }
 export type ReservationState = (typeof RESERVATION_STATES)[number];
 export type AgentStopState = (typeof AGENT_STOP_STATES)[number];
 export type AgentStopSource = (typeof AGENT_STOP_SOURCES)[number];
@@ -54,7 +57,7 @@ export interface TaskCancelRequest { schemaVersion: 1; meshId: string; agentId: 
 export interface Intervention { sequence: number; timestamp: string; taskId?: string; text: string; deliveryMode: "steer" | "followUp" | "idle"; images: string[] }
 export interface TaskStatus { schemaVersion: 1; meshId: string; agentId: string; taskId: string; state: TaskState; createdAt: string; startedAt?: string; finishedAt?: string; error?: string }
 export interface TaskResult { schemaVersion: 1; meshId: string; agentId: string; taskId: string; outcome: TerminalTaskState; output: string; usage: Usage; turns: number; interventions: Intervention[]; startedAt: string; finishedAt: string; error?: string }
-export interface UsageClaim { schemaVersion: 1; meshId: string; claimantSessionFile: string; toolCallId: string; toolName: "mesh_run" | "mesh_submit" | "mesh_get" | "mesh_wait" | "mesh_stop"; agentId: string; taskId: string; claimedAt: string }
+export interface UsageClaim { schemaVersion: 2; meshId: string; claimantSessionFile: string; source: CompletionReceiptSourceKind; toolCallId?: string; toolName?: CompletionReceiptToolName; deliveryId?: string; wakeId?: string; agentId: string; taskId: string; claimedAt: string }
 export interface AgentSnapshot { agent: AgentRecord; status: AgentStatus; activity: AgentActivityProjection; stop: AgentStopRequest | null; task?: TaskSnapshot }
 export interface TaskSnapshot { request: TaskRequest; status: TaskStatus; result: TaskResult | null; interventions: Intervention[]; claimed: boolean; directory: string }
 

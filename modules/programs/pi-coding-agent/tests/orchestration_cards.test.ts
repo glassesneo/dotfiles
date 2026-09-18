@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
-import { renderAgentToolResult, renderMeshEventMessage, renderReportCall, renderReportResult, renderSendCall, renderSendResult, renderStopCall, renderStopResult, renderWaitCall, renderWaitResult } from "../extensions_src/utilities/orchestration_cards.ts";
+import { renderAgentToolResult, renderControlCall, renderControlResult, renderEndResponseCall, renderEndResponseResult, renderMeshEventMessage, renderReportCall, renderReportResult, renderSendCall, renderSendResult, renderStopCall, renderStopResult } from "../extensions_src/utilities/orchestration_cards.ts";
 import type { ChildDefinition } from "../extensions_src/utilities/agent_types.ts";
 import { unknownAgentActivityProjection } from "../extensions_src/utilities/orchestration_activity.ts";
 import { assignNatureHandles, displayIdentityForAgentId, displayIdentityForSnapshot, handleForAgentId } from "../extensions_src/utilities/orchestration_identity.ts";
@@ -122,12 +122,18 @@ void test("mesh_stop cards avoid unresolved and disposition repetition after res
 
 // Admission: tool cards are the user's confirmation of an immediate arm, which schemas cannot make visible; retain the displayed state and lifetime, not decorative text.
 // Given a successful arm result, the card communicates the persistent wait behavior.
-void test("mesh_wait cards show immediate until-drained arming", () => {
-    const args = {};
-    const call = render(renderWaitCall(args, theme as never, { expanded: false, lastComponent: undefined }), 32);
-    const collapsed = render(renderWaitResult({ content: [], details: { armed: true, behavior: "until-drained" } } as never, { expanded: false } as never, theme as never, { args, lastComponent: undefined } as never), 32);
-    const expanded = render(renderWaitResult({ content: [], details: { armed: true, behavior: "until-drained" } } as never, { expanded: true } as never, theme as never, { args, lastComponent: undefined } as never), 32);
-    assert.match(call, /arm/u); assert.match(collapsed, /armed/u); assert.match(expanded, /until-drained/u);
+void test("end_response and mesh_control cards expose yield and control action", () => {
+    const yieldCall = render(renderEndResponseCall({}, theme as never, { expanded: false, lastComponent: undefined }), 32);
+    const yielded = render(renderEndResponseResult({ content: [], details: { kind: "end_response", ended: true } } as never, { expanded: false } as never, theme as never, { args: {}, lastComponent: undefined } as never), 32);
+    const mixed = render(renderEndResponseResult({ content: [], details: { kind: "end_response", error: "standalone_call_required" } } as never, { expanded: false } as never, theme as never, { args: {}, lastComponent: undefined } as never), 32);
+    assert.match(yieldCall, /end_response/u);
+    assert.match(yielded, /yielded/u);
+    assert.match(mixed, /standalone/u);
+    const controlCall = render(renderControlCall({ agentId, action: "pause" }, theme as never, { expanded: false, lastComponent: undefined }), 32);
+    const controlResult = render(renderControlResult({ content: [], details: { requestId: "req", action: "pause", targets: [{ agentId, status: "unsupported", phase: "running" }] } } as never, { expanded: true } as never, theme as never, { args: { agentId, action: "pause" }, lastComponent: undefined } as never), 80);
+    assert.match(controlCall, /mesh_control/u);
+    assert.match(controlCall, /pause/u);
+    assert.match(controlResult, /unsupported/u);
 });
 
 void test("mesh_report cards expose summary and queued state", () => {

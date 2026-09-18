@@ -8,10 +8,12 @@ import { indexTaskSubmission, indexTerminalTransition, readAgentTaskInboxReferen
 import { assertExpectedEndpointBindingUnlocked, type ExpectedEndpointBinding } from "./orchestration_binding.ts";
 import { projectAgentActivity, readAgentActivity, readProjectedAgentActivity } from "./orchestration_activity.ts";
 import { readOptionalJson as optionalJson, writeAtomicJson as atomicJson } from "./orchestration_json.ts";
-import { meshDirectory, withMeshAgentLock, withMeshLock } from "./orchestration_lock.ts";
+import { meshDirectory, withMeshAgentLock, withMeshLock, withOrderedAgentLocks } from "./orchestration_lock.ts";
 import { assertCurrentAgentRuntime, readAgentRuntimeBinding } from "./orchestration_runtime.ts";
-import { AGENT_RECORD_SCHEMA_VERSION, AGENT_STATES, AGENT_STATUS_SCHEMA_VERSION, AGENT_STOP_SOURCES, AGENT_STOP_STATES, MESH_STATES, POLICY_EPOCH_SCHEMA_VERSION, RESERVATION_STATES, TASK_REQUEST_SCHEMA_VERSION, TASK_STATES, addUsage, emptyUsage, isTerminalAgent, isTerminalTask, validateTaskPurpose, type AgentProvenance, type AgentRecord, type AgentSnapshot, type AgentState, type AgentStatus, type AgentStopRequest, type AgentStopSource, type BudgetReservation, type Intervention, type MeshBudgetUsage, type MeshRecord, type NativeCapabilities, type PolicyEpoch, type RootLease, type TaskCancelRequest, type CompletionTarget, type TaskRequest, type TaskResult, type TaskSnapshot, type TaskStatus, type TaskWork, type UsageClaim } from "./orchestration_types.ts";
+import { AGENT_RECORD_SCHEMA_VERSION, AGENT_STATES, AGENT_STATUS_SCHEMA_VERSION, AGENT_STOP_SOURCES, AGENT_STOP_STATES, MESH_STATES, POLICY_EPOCH_SCHEMA_VERSION, RESERVATION_STATES, TASK_REQUEST_SCHEMA_VERSION, TASK_STATES, addUsage, emptyUsage, isTerminalAgent, isTerminalTask, validateTaskPurpose, type AgentProvenance, type AgentRecord, type AgentSnapshot, type AgentState, type AgentStatus, type AgentStopRequest, type AgentStopSource, type BudgetReservation, type CompletionReceiptToolName, type Intervention, type MeshBudgetUsage, type MeshRecord, type NativeCapabilities, type PolicyEpoch, type RootLease, type TaskCancelRequest, type CompletionTarget, type TaskRequest, type TaskResult, type TaskSnapshot, type TaskStatus, type TaskWork, type UsageClaim } from "./orchestration_types.ts";
 import { validateModelRouteState, type ModelRouteState } from "./orchestration_profile_fallback.ts";
+import { canApplyControlRevision, type ControlAction, type ControlSource, type ExecutionHold } from "./orchestration_execution.ts";
+import { LIMIT_CLASS_VALUES, type LimitAttemptRecord } from "./orchestration_limit.ts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 const SHA256 = /^[0-9a-f]{64}$/u;
@@ -213,7 +215,7 @@ async function freshReusableIdleCountUnlocked(stateRoot: string, meshId: string,
     });
     return reusable.reduce<number>((sum, value) => sum + value, 0);
 }
-async function claimIdleAgentForStopUnlocked(stateRoot: string, meshId: string, agentId: string, input: IdleStopClaimInput): Promise<AgentStopRequest | undefined> { const paths = agentPaths(stateRoot, meshId, agentId); const status = await readAgentStatus(paths, meshId); if (status.state !== "idle" || status.activeTaskId) return undefined; const existingRaw = await optionalJson(paths.stop); const existing = existingRaw === undefined ? undefined : validateAgentStop(existingRaw, meshId, agentId); if (existing && ["requested", "terminating", "confirmed"].includes(existing.state)) return undefined; const [activity, runtime] = await Promise.all([readAgentActivity(stateRoot, meshId, agentId).catch(() => undefined), readAgentRuntimeBinding(stateRoot, meshId, agentId)]); if (!activity || !runtime || activity.runtimeId !== runtime.runtimeId || activity.sequence !== input.activitySequence || activity.phase !== "idle" || activity.pendingMessages) return undefined; const projected = projectAgentActivity(status, activity, { staleMs: input.staleMs, expectedRuntimeId: runtime.runtimeId }); const eligible = input.allowContextRetire ? projected.context.health === "retire" : projected.acceptingTask; if (!eligible) return undefined; if (input.childMinimum) { const childId = nonempty(input.childMinimum.childId, "child minimum childId"); if (input.childMinimum.tier !== "retain" && input.childMinimum.tier !== "pressureFloor") throw new Error("Child minimum tier is invalid"); const minimum = integer(input.childMinimum.minimum, `child minimum ${input.childMinimum.tier}`); const victim = await readAgentRecord(paths.agent, meshId, agentId); if (victim.childId !== childId) return undefined; if (await freshReusableIdleCountUnlocked(stateRoot, meshId, childId, input.staleMs) <= minimum) return undefined; } const now = new Date().toISOString(); if (existing) await appendEventUnlocked(paths, meshId, "stop_request_superseded", { stopRequestId: existing.stopRequestId, state: existing.state, source: existing.source, reason: existing.reason }).catch(() => {}); const request: AgentStopRequest = { schemaVersion: 1, meshId, agentId, stopRequestId: randomUUID(), state: "requested", source: input.source, reason: validateStopReason(input.reason), activitySequence: input.activitySequence, ...(input.gcPassId ? { gcPassId: id(input.gcPassId, "gcPassId") } : {}), previousAgentState: status.state, requestedAt: now, updatedAt: now }; await atomicJson(paths.stop, request); await input.afterRequestPersisted?.(); await atomicJson(paths.status, { ...status, state: "stopping", updatedAt: now }); await appendEventUnlocked(paths, meshId, "agent_stop_requested", { stopRequestId: request.stopRequestId, source: request.source, reason: request.reason }).catch(() => {}); return request; }
+async function claimIdleAgentForStopUnlocked(stateRoot: string, meshId: string, agentId: string, input: IdleStopClaimInput): Promise<AgentStopRequest | undefined> { const paths = agentPaths(stateRoot, meshId, agentId); const status = await readAgentStatus(paths, meshId); if (status.state !== "idle" || status.activeTaskId) return undefined; const held = await readAgentExecution(stateRoot, meshId, agentId); if (held?.holds.length) return undefined; const existingRaw = await optionalJson(paths.stop); const existing = existingRaw === undefined ? undefined : validateAgentStop(existingRaw, meshId, agentId); if (existing && ["requested", "terminating", "confirmed"].includes(existing.state)) return undefined; const [activity, runtime] = await Promise.all([readAgentActivity(stateRoot, meshId, agentId).catch(() => undefined), readAgentRuntimeBinding(stateRoot, meshId, agentId)]); if (!activity || !runtime || activity.runtimeId !== runtime.runtimeId || activity.sequence !== input.activitySequence || activity.phase !== "idle" || activity.pendingMessages) return undefined; const projected = projectAgentActivity(status, activity, { staleMs: input.staleMs, expectedRuntimeId: runtime.runtimeId }); const eligible = input.allowContextRetire ? projected.context.health === "retire" : projected.acceptingTask; if (!eligible) return undefined; if (input.childMinimum) { const childId = nonempty(input.childMinimum.childId, "child minimum childId"); if (input.childMinimum.tier !== "retain" && input.childMinimum.tier !== "pressureFloor") throw new Error("Child minimum tier is invalid"); const minimum = integer(input.childMinimum.minimum, `child minimum ${input.childMinimum.tier}`); const victim = await readAgentRecord(paths.agent, meshId, agentId); if (victim.childId !== childId) return undefined; if (await freshReusableIdleCountUnlocked(stateRoot, meshId, childId, input.staleMs) <= minimum) return undefined; } const now = new Date().toISOString(); if (existing) await appendEventUnlocked(paths, meshId, "stop_request_superseded", { stopRequestId: existing.stopRequestId, state: existing.state, source: existing.source, reason: existing.reason }).catch(() => {}); const request: AgentStopRequest = { schemaVersion: 1, meshId, agentId, stopRequestId: randomUUID(), state: "requested", source: input.source, reason: validateStopReason(input.reason), activitySequence: input.activitySequence, ...(input.gcPassId ? { gcPassId: id(input.gcPassId, "gcPassId") } : {}), previousAgentState: status.state, requestedAt: now, updatedAt: now }; await atomicJson(paths.stop, request); await input.afterRequestPersisted?.(); await atomicJson(paths.status, { ...status, state: "stopping", updatedAt: now }); await appendEventUnlocked(paths, meshId, "agent_stop_requested", { stopRequestId: request.stopRequestId, source: request.source, reason: request.reason }).catch(() => {}); return request; }
 export async function claimIdleAgentForStop(stateRoot: string, meshId: string, agentId: string, input: IdleStopClaimInput): Promise<AgentStopRequest | undefined> { return withMeshAgentLock(stateRoot, meshId, agentId, () => claimIdleAgentForStopUnlocked(stateRoot, meshId, agentId, input)); }
 
 export type PressureCapacityBoundary = { kind: "reserved"; reservation: BudgetReservation } | { kind: "claimed"; request: AgentStopRequest } | { kind: "stale-admission" } | { kind: "ineligible-victim" };
@@ -268,12 +270,28 @@ function validateTaskStatus(value: unknown, meshId: string, agentId: string, tas
 function intervention(value: unknown, taskId: string): Intervention { const raw = object(value, "task result intervention"); const required = ["sequence", "timestamp", "text", "deliveryMode", "images"]; const optional = ["taskId"]; if (Object.keys(raw).some(key => !required.includes(key) && !optional.includes(key)) || required.some(key => !(key in raw))) throw new Error("task result intervention has invalid keys"); integer(raw.sequence, "intervention.sequence"); timestamp(raw.timestamp, "intervention.timestamp"); if (raw.taskId !== undefined) id(raw.taskId, "intervention.taskId", taskId); if (raw.deliveryMode !== "steer" && raw.deliveryMode !== "followUp" && raw.deliveryMode !== "idle") throw new Error("intervention deliveryMode is invalid"); if (typeof raw.text !== "string" || !Array.isArray(raw.images) || raw.images.some(item => typeof item !== "string")) throw new Error("intervention payload is invalid"); return value as Intervention; }
 function validateTaskResult(value: unknown, meshId: string, agentId: string, taskId: string): TaskResult { const raw = record(value, ["meshId", "agentId", "taskId", "outcome", "output", "usage", "turns", "interventions", "startedAt", "finishedAt"], ["error"], "task result"); id(raw.meshId, "task result meshId", meshId); id(raw.agentId, "task result agentId", agentId); id(raw.taskId, "task result taskId", taskId); if (raw.outcome !== "succeeded" && raw.outcome !== "failed" && raw.outcome !== "stopped") throw new Error("task result outcome is invalid"); if (typeof raw.output !== "string") throw new Error("task result output must be a string"); usage(raw.usage, "task result usage"); integer(raw.turns, "task result turns"); if (!Array.isArray(raw.interventions)) throw new Error("task result interventions must be an array"); raw.interventions.forEach(item => intervention(item, taskId)); timestamp(raw.startedAt, "task result startedAt"); timestamp(raw.finishedAt, "task result finishedAt"); optionalText(raw.error, "task result error"); return value as TaskResult; }
 function validateTaskCancellation(value: unknown, meshId: string, agentId: string, taskId: string): TaskCancelRequest { const raw = record(value, ["meshId", "agentId", "taskId", "requestedAt", "reason"], ["requesterEndpointId"], "task cancellation"); id(raw.meshId, "task cancellation meshId", meshId); id(raw.agentId, "task cancellation agentId", agentId); id(raw.taskId, "task cancellation taskId", taskId); optionalText(raw.requesterEndpointId, "task cancellation requesterEndpointId"); timestamp(raw.requestedAt, "task cancellation requestedAt"); nonempty(raw.reason, "task cancellation reason"); return value as TaskCancelRequest; }
-function validateUsageClaim(value: unknown, meshId: string, agentId: string, taskId: string): UsageClaim { const raw = record(value, ["meshId", "claimantSessionFile", "toolCallId", "toolName", "agentId", "taskId", "claimedAt"], [], "usage claim"); id(raw.meshId, "usage claim meshId", meshId); nonempty(raw.claimantSessionFile, "usage claim claimantSessionFile"); nonempty(raw.toolCallId, "usage claim toolCallId"); if (!["mesh_run", "mesh_submit", "mesh_get", "mesh_wait", "mesh_stop"].includes(raw.toolName as string)) throw new Error("usage claim toolName is invalid"); id(raw.agentId, "usage claim agentId", agentId); id(raw.taskId, "usage claim taskId", taskId); timestamp(raw.claimedAt, "usage claim claimedAt"); return value as UsageClaim; }
+function validateUsageClaim(value: unknown, meshId: string, agentId: string, taskId: string): UsageClaim {
+    const raw = record(value, ["meshId", "claimantSessionFile", "source", "agentId", "taskId", "claimedAt"], ["toolCallId", "toolName", "deliveryId", "wakeId"], "usage claim", 2);
+    id(raw.meshId, "usage claim meshId", meshId);
+    nonempty(raw.claimantSessionFile, "usage claim claimantSessionFile");
+    if (raw.source !== "tool" && raw.source !== "notification") throw new Error("usage claim source is invalid");
+    if (raw.source === "tool") {
+        nonempty(raw.toolCallId, "usage claim toolCallId");
+        if (raw.toolName !== "mesh_get") throw new Error("usage claim toolName is invalid");
+    } else {
+        nonempty(raw.deliveryId, "usage claim deliveryId");
+        nonempty(raw.wakeId, "usage claim wakeId");
+    }
+    id(raw.agentId, "usage claim agentId", agentId);
+    id(raw.taskId, "usage claim taskId", taskId);
+    timestamp(raw.claimedAt, "usage claim claimedAt");
+    return value as UsageClaim;
+}
 
 async function readEvents(paths: AgentPaths): Promise<Array<Record<string, unknown>>> { const text = await readFile(paths.events, "utf8"); return text.split("\n").filter(Boolean).flatMap(line => { try { return [JSON.parse(line) as Record<string, unknown>]; } catch { return []; } }); }
 async function appendEventUnlocked(paths: AgentPaths, meshId: string, type: string, data: Record<string, unknown>): Promise<void> { const events = await readEvents(paths); await appendFile(paths.events, `${JSON.stringify({ schemaVersion: 1, meshId, sequence: events.length + 1, timestamp: new Date().toISOString(), type, ...data })}\n`, { mode: 0o600 }); }
 export async function readInterventions(paths: AgentPaths, taskId?: string): Promise<Intervention[]> { return (await readEvents(paths)).filter(event => event.type === "intervention" && (taskId === undefined ? event.taskId === undefined : event.taskId === taskId)).map(event => intervention(Object.fromEntries(Object.entries(event).filter(([key]) => !["schemaVersion", "meshId", "type"].includes(key))), taskId ?? (typeof event.taskId === "string" ? event.taskId : randomUUID()))); }
-export async function createTask(stateRoot: string, meshId: string, agentId: string, work: TaskWork, requesterInput: { requesterEndpointId: string; requesterAgentId?: string; completion?: CompletionTarget; afterIndexesPersisted?: () => void | Promise<void> } | string, reservationId?: string, requestedTaskId?: string, authority?: DispatchMutationAuthority): Promise<TaskSnapshot> { const prompt = work.prompt; const purpose = validateTaskPurpose(work.purpose); if (!prompt.trim()) throw new Error("Mesh task prompt must not be empty"); const requester = validateRequester(meshId, typeof requesterInput === "string" ? requesterInput : requesterInput.requesterEndpointId, typeof requesterInput === "string" ? undefined : requesterInput.requesterAgentId); const requestedCompletion = typeof requesterInput === "string" || requesterInput.completion === undefined ? undefined : validateCompletionTarget(requesterInput.completion, requester.requesterEndpointId); const initialReservation = reservationId ? validateReservation(await readJson<unknown>(reservationPath(stateRoot, meshId, reservationId)), meshId, reservationId) : await reserveMeshCapacity(stateRoot, meshId, "existing-agent-task", agentId); const ownedReservation = reservationId === undefined; try { const paths = agentPaths(stateRoot, meshId, agentId); return await withMeshAgentLock(stateRoot, meshId, agentId, async () => { await requireOpenMesh(stateRoot, meshId); const reservation = validateReservation(await readJson<unknown>(reservationPath(stateRoot, meshId, initialReservation.reservationId)), meshId, initialReservation.reservationId); if (reservation.state === "released" || (reservation.agentId && reservation.agentId !== agentId)) throw new Error("Task reservation does not match target agent"); const agent = await readAgentRecord(paths.agent, meshId, agentId); const status = await readAgentStatus(paths, meshId); const stop = await optionalJson(paths.stop).then(value => value === undefined ? undefined : validateAgentStop(value, meshId, agentId)); if (agent.agentId !== agentId) throw new Error("Agent metadata mismatch"); if (authority) { if (authority.targetChildId !== agent.childId) throw new Error("Dispatch authority does not match target agent"); await assertDispatchMutationAuthority(stateRoot, meshId, authority); } if (stop && (stop.state === "requested" || stop.state === "terminating" || stop.state === "confirmed")) throw new Error(`Agent ${agentId} has active stop request ${stop.stopRequestId}`); if (status.state !== "idle" && status.state !== "creating") throw new Error(`Agent ${agentId} is ${status.state}${status.activeTaskId ? `; active task ${status.activeTaskId}` : ""}`); if (reservation.kind === "existing-agent-task") { const runtime = await readAgentRuntimeBinding(stateRoot, meshId, agentId); if (!runtime) throw new Error(`Agent ${agentId} has no current runtime binding`); const activity = await readProjectedAgentActivity(stateRoot, status, { expectedRuntimeId: runtime.runtimeId, activeStop: false, allowUnsupportedContext: agent.harness !== "pi" }); if (!activity.acceptingTask) throw new Error(`Agent ${agentId} is not accepting tasks (lifecycle=${status.state}, activity=${activity.phase}, pending=${String(activity.pendingMessages)}, context=${activity.context.health})`); } const taskId = requestedTaskId ?? randomUUID(); assertId(taskId, "task ID"); const task = taskPaths(stateRoot, meshId, taskId); const createdAt = new Date().toISOString(); const completion = requestedCompletion ? await bindCompletionTargetUnlocked(stateRoot, meshId, requestedCompletion) : undefined; await indexTaskSubmission(stateRoot, meshId, { agentId, taskId, createdAt, ...(completion ? { completion } : {}) }); if (typeof requesterInput !== "string") await requesterInput.afterIndexesPersisted?.(); await mkdir(task.directory, { recursive: true, mode: 0o700 }); const request: TaskRequest = { schemaVersion: TASK_REQUEST_SCHEMA_VERSION, meshId, agentId, taskId, prompt, purpose, requesterEndpointId: requester.requesterEndpointId, ...(requester.requesterAgentId ? { requesterAgentId: requester.requesterAgentId } : {}), ...(completion ? { completion } : {}), createdAt }; const taskStatus: TaskStatus = { schemaVersion: 1, meshId, agentId, taskId, state: "created", createdAt }; await atomicJson(task.request, request); await atomicJson(task.status, taskStatus); await atomicJson(paths.status, { ...status, state: "busy", activeTaskId: taskId, latestTaskId: taskId, updatedAt: createdAt }); await appendEventUnlocked(paths, meshId, "task_created", { taskId }).catch(() => {}); await atomicJson(reservationPath(stateRoot, meshId, reservation.reservationId), { ...reservation, state: "committed", agentId, taskId, committedAt: reservation.committedAt ?? createdAt, updatedAt: createdAt }); await indexTaskSubmission(stateRoot, meshId, { agentId, taskId, createdAt, ...(completion ? { completion } : {}) }, true); return { request, status: taskStatus, result: null, interventions: [], claimed: false, directory: task.directory }; }); } catch (error) { if (ownedReservation) await releaseMeshReservation(stateRoot, meshId, initialReservation.reservationId, "task creation failed").catch(() => {}); throw error; } }
+export async function createTask(stateRoot: string, meshId: string, agentId: string, work: TaskWork, requesterInput: { requesterEndpointId: string; requesterAgentId?: string; completion?: CompletionTarget; afterIndexesPersisted?: () => void | Promise<void> } | string, reservationId?: string, requestedTaskId?: string, authority?: DispatchMutationAuthority): Promise<TaskSnapshot> { const prompt = work.prompt; const purpose = validateTaskPurpose(work.purpose); if (!prompt.trim()) throw new Error("Mesh task prompt must not be empty"); const requester = validateRequester(meshId, typeof requesterInput === "string" ? requesterInput : requesterInput.requesterEndpointId, typeof requesterInput === "string" ? undefined : requesterInput.requesterAgentId); const requestedCompletion = typeof requesterInput === "string" || requesterInput.completion === undefined ? undefined : validateCompletionTarget(requesterInput.completion, requester.requesterEndpointId); const initialReservation = reservationId ? validateReservation(await readJson<unknown>(reservationPath(stateRoot, meshId, reservationId)), meshId, reservationId) : await reserveMeshCapacity(stateRoot, meshId, "existing-agent-task", agentId); const ownedReservation = reservationId === undefined; try { const paths = agentPaths(stateRoot, meshId, agentId); return await withMeshLineageLock(stateRoot, meshId, agentId, async () => { await requireOpenMesh(stateRoot, meshId); const reservation = validateReservation(await readJson<unknown>(reservationPath(stateRoot, meshId, initialReservation.reservationId)), meshId, initialReservation.reservationId); if (reservation.state === "released" || (reservation.agentId && reservation.agentId !== agentId)) throw new Error("Task reservation does not match target agent"); const agent = await readAgentRecord(paths.agent, meshId, agentId); const status = await readAgentStatus(paths, meshId); const stop = await optionalJson(paths.stop).then(value => value === undefined ? undefined : validateAgentStop(value, meshId, agentId)); if (agent.agentId !== agentId) throw new Error("Agent metadata mismatch"); if (authority) { if (authority.targetChildId !== agent.childId) throw new Error("Dispatch authority does not match target agent"); await assertDispatchMutationAuthority(stateRoot, meshId, authority); } if (stop && (stop.state === "requested" || stop.state === "terminating" || stop.state === "confirmed")) throw new Error(`Agent ${agentId} has active stop request ${stop.stopRequestId}`); if (status.state !== "idle" && status.state !== "creating") throw new Error(`Agent ${agentId} is ${status.state}${status.activeTaskId ? `; active task ${status.activeTaskId}` : ""}`); if ((await readLineageHolds(stateRoot, meshId, agentId)).length) throw new Error(`Agent ${agentId} is held and cannot accept new work`); if (reservation.kind === "existing-agent-task") { const runtime = await readAgentRuntimeBinding(stateRoot, meshId, agentId); if (!runtime) throw new Error(`Agent ${agentId} has no current runtime binding`); const activity = await readProjectedAgentActivity(stateRoot, status, { expectedRuntimeId: runtime.runtimeId, activeStop: false, allowUnsupportedContext: agent.harness !== "pi" }); if (!activity.acceptingTask) throw new Error(`Agent ${agentId} is not accepting tasks (lifecycle=${status.state}, activity=${activity.phase}, pending=${String(activity.pendingMessages)}, context=${activity.context.health})`); } const taskId = requestedTaskId ?? randomUUID(); assertId(taskId, "task ID"); const task = taskPaths(stateRoot, meshId, taskId); const createdAt = new Date().toISOString(); const completion = requestedCompletion ? await bindCompletionTargetUnlocked(stateRoot, meshId, requestedCompletion) : undefined; await indexTaskSubmission(stateRoot, meshId, { agentId, taskId, createdAt, ...(completion ? { completion } : {}) }); if (typeof requesterInput !== "string") await requesterInput.afterIndexesPersisted?.(); if ((await readLineageHolds(stateRoot, meshId, agentId)).length) throw new Error(`Agent ${agentId} is held and cannot accept new work`); await mkdir(task.directory, { recursive: true, mode: 0o700 }); const request: TaskRequest = { schemaVersion: TASK_REQUEST_SCHEMA_VERSION, meshId, agentId, taskId, prompt, purpose, requesterEndpointId: requester.requesterEndpointId, ...(requester.requesterAgentId ? { requesterAgentId: requester.requesterAgentId } : {}), ...(completion ? { completion } : {}), createdAt }; const taskStatus: TaskStatus = { schemaVersion: 1, meshId, agentId, taskId, state: "created", createdAt }; await atomicJson(task.request, request); await atomicJson(task.status, taskStatus); await atomicJson(paths.status, { ...status, state: "busy", activeTaskId: taskId, latestTaskId: taskId, updatedAt: createdAt }); await appendEventUnlocked(paths, meshId, "task_created", { taskId }).catch(() => {}); await atomicJson(reservationPath(stateRoot, meshId, reservation.reservationId), { ...reservation, state: "committed", agentId, taskId, committedAt: reservation.committedAt ?? createdAt, updatedAt: createdAt }); await indexTaskSubmission(stateRoot, meshId, { agentId, taskId, createdAt, ...(completion ? { completion } : {}) }, true); return { request, status: taskStatus, result: null, interventions: [], claimed: false, directory: task.directory }; }); } catch (error) { if (ownedReservation) await releaseMeshReservation(stateRoot, meshId, initialReservation.reservationId, "task creation failed").catch(() => {}); throw error; } }
 /** Caller must already hold the mesh→agent lock order. */
 export async function reserveExistingAgentTaskCapacityUnlocked(stateRoot: string, meshId: string, agentId: string): Promise<BudgetReservation> {
     assertId(agentId, "agent ID");
@@ -289,7 +307,7 @@ export async function reserveExistingAgentTaskCapacityUnlocked(stateRoot: string
     return reservation;
 }
 
-/** Caller must already hold the mesh→agent lock order and own a live reservation. */
+/** Caller must already hold the mesh→lineage lock order and own a live reservation. */
 export async function createTaskUnlocked(stateRoot: string, meshId: string, agentId: string, work: TaskWork, requesterInput: { requesterEndpointId: string; requesterAgentId?: string; completion?: CompletionTarget; afterIndexesPersisted?: () => void | Promise<void> }, reservationId: string, requestedTaskId: string, authority?: DispatchMutationAuthority): Promise<TaskSnapshot> {
     const prompt = work.prompt; const purpose = validateTaskPurpose(work.purpose);
     if (!prompt.trim()) throw new Error("Mesh task prompt must not be empty");
@@ -313,6 +331,7 @@ export async function createTaskUnlocked(stateRoot: string, meshId: string, agen
     if (authority) { if (authority.targetChildId !== agent.childId) throw new Error("Dispatch authority does not match target agent"); await assertDispatchMutationAuthority(stateRoot, meshId, authority); }
     if (stop && (stop.state === "requested" || stop.state === "terminating" || stop.state === "confirmed")) throw new Error(`Agent ${agentId} has active stop request ${stop.stopRequestId}`);
     if (status.state !== "idle") throw new Error(`Agent ${agentId} is ${status.state}${status.activeTaskId ? `; active task ${status.activeTaskId}` : ""}`);
+    if ((await readLineageHolds(stateRoot, meshId, agentId)).length) throw new Error(`Agent ${agentId} is held and cannot accept new work`);
     const runtime = await readAgentRuntimeBinding(stateRoot, meshId, agentId);
     if (!runtime) throw new Error(`Agent ${agentId} has no current runtime binding`);
     const activity = await readProjectedAgentActivity(stateRoot, status, { expectedRuntimeId: runtime.runtimeId, activeStop: false, allowUnsupportedContext: agent.harness !== "pi" });
@@ -322,6 +341,7 @@ export async function createTaskUnlocked(stateRoot: string, meshId: string, agen
     const createdAt = new Date().toISOString();
     await indexTaskSubmission(stateRoot, meshId, { agentId, taskId: requestedTaskId, createdAt, ...(completion ? { completion } : {}) });
     await requesterInput.afterIndexesPersisted?.();
+    if ((await readLineageHolds(stateRoot, meshId, agentId)).length) throw new Error(`Agent ${agentId} is held and cannot accept new work`);
     await mkdir(task.directory, { recursive: true, mode: 0o700 });
     const request: TaskRequest = { schemaVersion: TASK_REQUEST_SCHEMA_VERSION, meshId, agentId, taskId: requestedTaskId, prompt, purpose, requesterEndpointId: requester.requesterEndpointId, ...(requester.requesterAgentId ? { requesterAgentId: requester.requesterAgentId } : {}), ...(completion ? { completion } : {}), createdAt };
     const taskStatus: TaskStatus = { schemaVersion: 1, meshId, agentId, taskId: requestedTaskId, state: "created", createdAt };
@@ -372,7 +392,7 @@ export async function reconcileMeshState(stateRoot: string, meshId: string): Pro
 
 export async function readTaskCancellation(stateRoot: string, meshId: string, taskId: string): Promise<TaskCancelRequest | undefined> { const task = await readTask(stateRoot, meshId, taskId); const raw = await optionalJson(taskPaths(stateRoot, meshId, taskId).cancel); return raw === undefined ? undefined : validateTaskCancellation(raw, meshId, task.request.agentId, taskId); }
 async function finishTaskUnlocked(stateRoot: string, meshId: string, paths: AgentPaths, agentId: string, taskId: string, input: { outcome: TaskResult["outcome"]; output?: string; usage?: TaskResult["usage"]; turns?: number; error?: string; afterCompletionIndexPersisted?: () => void | Promise<void>; retireAgent?: Extract<AgentState, "failed" | "stopped"> }): Promise<TaskResult> { const task = await readTask(stateRoot, meshId, taskId); if (task.request.agentId !== agentId) throw new Error("Task producer does not match locked agent"); const status = await readAgentStatus(paths, meshId); const taskTerminal = isTerminalTask(task.status.state); const cancellationRaw = taskTerminal ? undefined : await optionalJson(taskPaths(stateRoot, meshId, taskId).cancel); const cancellation = cancellationRaw === undefined ? undefined : validateTaskCancellation(cancellationRaw, meshId, agentId, taskId); const forcedOutcome = input.retireAgent ? input.outcome : (status.state === "stopping" || cancellation) && !taskTerminal ? "stopped" : input.outcome; const replaceProvisional = !taskTerminal && task.result !== null && task.result.outcome !== forcedOutcome; const now = new Date().toISOString(); const error = forcedOutcome === "stopped" && !taskTerminal ? input.error ?? cancellation?.reason ?? "Stopped while task completion was settling" : input.error; const base = task.result ?? { schemaVersion: 1 as const, meshId, agentId, taskId, outcome: forcedOutcome, output: input.output ?? "", usage: input.usage ?? emptyUsage(), turns: input.turns ?? 0, interventions: await readInterventions(paths, taskId), startedAt: task.status.startedAt ?? task.status.createdAt, finishedAt: now }; const result: TaskResult = replaceProvisional ? { ...base, outcome: forcedOutcome, finishedAt: now, ...(error ? { error } : {}) } : { ...base, ...(base.error || !error ? {} : { error }) }; if (!taskTerminal || replaceProvisional) { await indexTerminalTransition(stateRoot, meshId, { agentId, taskId, queuedAt: now, ...(task.request.completion ? { completion: task.request.completion } : {}) }); await input.afterCompletionIndexPersisted?.(); } if (!task.result || replaceProvisional) await atomicJson(taskPaths(stateRoot, meshId, taskId).result, result); const accountedTaskIds = [...status.accountedTaskIds]; const agentUsage = structuredClone(status.agentUsage); if (!accountedTaskIds.includes(taskId)) { addUsage(agentUsage, result.usage); accountedTaskIds.push(taskId); } if (!taskTerminal || task.status.state !== result.outcome) await atomicJson(taskPaths(stateRoot, meshId, taskId).status, { ...task.status, state: result.outcome, finishedAt: result.finishedAt, ...(result.error ? { error: result.error } : {}) }); if ((!taskTerminal || replaceProvisional) && task.request.completion?.bindingId) await indexTerminalTransition(stateRoot, meshId, { agentId, taskId, queuedAt: now, completion: task.request.completion }, true); if (task.request.completion?.bindingId) await removeOrchestrationIndexReference(stateRoot, meshId, "endpoint-tasks", { ...task.request.completion, taskId }); const completesActiveTask = status.activeTaskId === taskId; const state = input.retireAgent && completesActiveTask ? input.retireAgent : status.state === "stopping" ? "stopping" : isTerminalAgent(status.state) ? status.state : completesActiveTask ? "idle" : status.state; await atomicJson(paths.status, { ...status, state, activeTaskId: completesActiveTask ? undefined : status.activeTaskId, agentUsage, accountedTaskIds, updatedAt: now, ...(input.retireAgent && completesActiveTask && input.error ? { exitReason: input.error } : {}) }); if (!taskTerminal || replaceProvisional || !task.result) await appendEventUnlocked(paths, meshId, "task_finished", { taskId, outcome: result.outcome }).catch(() => {}); return result; }
-export async function claimPendingTask(stateRoot: string, meshId: string, agentId: string, expectedRuntimeId?: string, observer?: OrchestrationIndexReadObserver): Promise<TaskSnapshot | null> { const paths = agentPaths(stateRoot, meshId, agentId); const observed = await readAgentStatus(paths, meshId); if (!observed.activeTaskId || observed.state !== "busy") return null; return withMeshAgentLock(stateRoot, meshId, agentId, async () => { if (expectedRuntimeId) await assertCurrentAgentRuntime(stateRoot, meshId, agentId, expectedRuntimeId); const status = await readAgentStatus(paths, meshId); if (!status.activeTaskId || status.state !== "busy") return null; for (const reference of await readAgentTaskInboxReferences(stateRoot, meshId, agentId, observer)) { const task = await readTask(stateRoot, meshId, reference.taskId).catch(error => (error as NodeJS.ErrnoException).code === "ENOENT" ? undefined : Promise.reject(error)); if (!task) continue; if (task.request.agentId !== agentId) throw new Error("Task inbox reference does not belong to agent"); if (task.status.state !== "created") { await removeOrchestrationIndexReference(stateRoot, meshId, "agent-task-inbox", reference); continue; } if (task.request.taskId !== status.activeTaskId) continue; const cancellation = await optionalJson(taskPaths(stateRoot, meshId, task.request.taskId).cancel); if (cancellation) { await finishTaskUnlocked(stateRoot, meshId, paths, agentId, task.request.taskId, { outcome: "stopped", error: validateTaskCancellation(cancellation, meshId, agentId, task.request.taskId).reason }); await removeOrchestrationIndexReference(stateRoot, meshId, "agent-task-inbox", reference); return null; } const startedAt = new Date().toISOString(); const next = { ...task.status, state: "running" as const, startedAt }; await atomicJson(taskPaths(stateRoot, meshId, task.request.taskId).status, next); await removeOrchestrationIndexReference(stateRoot, meshId, "agent-task-inbox", reference); await appendEventUnlocked(paths, meshId, "task_started", { taskId: task.request.taskId }).catch(() => {}); return { ...task, status: next }; } return null; }); }
+export async function claimPendingTask(stateRoot: string, meshId: string, agentId: string, expectedRuntimeId?: string, observer?: OrchestrationIndexReadObserver): Promise<TaskSnapshot | null> { const paths = agentPaths(stateRoot, meshId, agentId); const observed = await readAgentStatus(paths, meshId); if (!observed.activeTaskId || observed.state !== "busy") return null; return withMeshAgentLock(stateRoot, meshId, agentId, async () => { if (expectedRuntimeId) await assertCurrentAgentRuntime(stateRoot, meshId, agentId, expectedRuntimeId); const status = await readAgentStatus(paths, meshId); if (!status.activeTaskId || status.state !== "busy") return null; const execution = await readAgentExecution(stateRoot, meshId, agentId); if (execution?.holds.length) return null; for (const reference of await readAgentTaskInboxReferences(stateRoot, meshId, agentId, observer)) { const task = await readTask(stateRoot, meshId, reference.taskId).catch(error => (error as NodeJS.ErrnoException).code === "ENOENT" ? undefined : Promise.reject(error)); if (!task) continue; if (task.request.agentId !== agentId) throw new Error("Task inbox reference does not belong to agent"); if (task.status.state !== "created") { await removeOrchestrationIndexReference(stateRoot, meshId, "agent-task-inbox", reference); continue; } if (task.request.taskId !== status.activeTaskId) continue; const cancellation = await optionalJson(taskPaths(stateRoot, meshId, task.request.taskId).cancel); if (cancellation) { await finishTaskUnlocked(stateRoot, meshId, paths, agentId, task.request.taskId, { outcome: "stopped", error: validateTaskCancellation(cancellation, meshId, agentId, task.request.taskId).reason }); await removeOrchestrationIndexReference(stateRoot, meshId, "agent-task-inbox", reference); return null; } const startedAt = new Date().toISOString(); const next = { ...task.status, state: "running" as const, startedAt }; await atomicJson(taskPaths(stateRoot, meshId, task.request.taskId).status, next); await removeOrchestrationIndexReference(stateRoot, meshId, "agent-task-inbox", reference); await appendEventUnlocked(paths, meshId, "task_started", { taskId: task.request.taskId }).catch(() => {}); return { ...task, status: next }; } return null; }); }
 export async function requestTaskCancellation(stateRoot: string, meshId: string, taskId: string, reason: string, requesterEndpointId?: string): Promise<{ request?: TaskCancelRequest; created: boolean; snapshot: AgentSnapshot }> { const task = await readTask(stateRoot, meshId, taskId); const agentId = task.request.agentId; const paths = agentPaths(stateRoot, meshId, agentId); return withMeshAgentLock(stateRoot, meshId, agentId, async () => { const current = await readTask(stateRoot, meshId, taskId); if (isTerminalTask(current.status.state)) return { created: false, snapshot: await readAgentSnapshot(stateRoot, meshId, agentId, taskId) }; let request = await optionalJson(taskPaths(stateRoot, meshId, taskId).cancel).then(value => value === undefined ? undefined : validateTaskCancellation(value, meshId, agentId, taskId)); const created = request === undefined; if (!request) { if (requesterEndpointId !== undefined && current.request.completion?.endpointId !== requesterEndpointId) throw new Error("Task cancellation requester must be the task completion endpoint"); request = { schemaVersion: 1, meshId, agentId, taskId, ...(requesterEndpointId ? { requesterEndpointId: nonempty(requesterEndpointId, "cancellation requesterEndpointId") } : {}), requestedAt: new Date().toISOString(), reason: nonempty(reason, "cancellation reason") }; await atomicJson(taskPaths(stateRoot, meshId, taskId).cancel, request); await appendEventUnlocked(paths, meshId, "task_cancel_requested", { taskId, reason }).catch(() => {}); } if (current.status.state === "created") await finishTaskUnlocked(stateRoot, meshId, paths, agentId, taskId, { outcome: "stopped", error: request.reason }); return { request, created, snapshot: await readAgentSnapshot(stateRoot, meshId, agentId, taskId) }; }); }
 export async function finishTask(stateRoot: string, meshId: string, taskId: string, input: { outcome: TaskResult["outcome"]; output?: string; usage?: TaskResult["usage"]; turns?: number; error?: string; afterCompletionIndexPersisted?: () => void | Promise<void>; retireAgent?: Extract<AgentState, "failed" | "stopped"> }, expectedRuntimeId?: string): Promise<TaskResult> { const agentId = await findTaskAgent(stateRoot, meshId, taskId); const paths = agentPaths(stateRoot, meshId, agentId); return withMeshAgentLock(stateRoot, meshId, agentId, async () => { if (expectedRuntimeId) await assertCurrentAgentRuntime(stateRoot, meshId, agentId, expectedRuntimeId); return finishTaskUnlocked(stateRoot, meshId, paths, agentId, taskId, input); }); }
 export async function failAgent(stateRoot: string, meshId: string, agentId: string, reason: string, stopped = false, options: { overrideTerminalReason?: boolean; expectedRuntimeId?: string } = {}): Promise<void> { const paths = agentPaths(stateRoot, meshId, agentId); await withMeshAgentLock(stateRoot, meshId, agentId, async () => { if (options.expectedRuntimeId) await assertCurrentAgentRuntime(stateRoot, meshId, agentId, options.expectedRuntimeId); const status = await readAgentStatus(paths, meshId); if (isTerminalAgent(status.state) && !options.overrideTerminalReason) return; if (status.activeTaskId) await finishTaskUnlocked(stateRoot, meshId, paths, agentId, status.activeTaskId, { outcome: stopped ? "stopped" : "failed", error: reason, retireAgent: stopped ? "stopped" : "failed" }); const current = await readAgentStatus(paths, meshId); if (isTerminalAgent(current.state) && !options.overrideTerminalReason) return; await atomicJson(paths.status, { ...current, state: stopped ? "stopped" : "failed", activeTaskId: undefined, exitReason: reason, updatedAt: new Date().toISOString() }); }); }
@@ -382,29 +402,300 @@ export async function appendAgentEvent(stateRoot: string, meshId: string, agentI
 export async function recordIdleUsage(stateRoot: string, meshId: string, agentId: string, value: TaskResult["usage"], expectedRuntimeId?: string): Promise<void> { const paths = agentPaths(stateRoot, meshId, agentId); await withMeshAgentLock(stateRoot, meshId, agentId, async () => { if (expectedRuntimeId) await assertCurrentAgentRuntime(stateRoot, meshId, agentId, expectedRuntimeId); const status = await readAgentStatus(paths, meshId); const agentUsage = structuredClone(status.agentUsage); addUsage(agentUsage, value); await atomicJson(paths.status, { ...status, agentUsage, updatedAt: new Date().toISOString() }); await appendEventUnlocked(paths, meshId, "idle_usage", { usage: value }); }); }
 
 function persistedClaimTaskIds(text: string): Set<string> { const ids = new Set<string>(); for (const line of text.split("\n")) { if (!line.trim()) continue; try { const entry = JSON.parse(line) as Record<string, unknown>; const message = entry.type === "message" && entry.message && typeof entry.message === "object" ? entry.message as Record<string, unknown> : undefined; const details = message?.role === "toolResult" && message.details && typeof message.details === "object" ? message.details as Record<string, unknown> : undefined; const accounting = details?.accounting && typeof details.accounting === "object" ? details.accounting as Record<string, unknown> : undefined; if (Array.isArray(accounting?.claimedTaskIds)) for (const item of accounting.claimedTaskIds) if (typeof item === "string") ids.add(item); } catch { /* tolerate a partially written final line */ } } return ids; }
-export interface PersistedCompletionReceiptEvidence { toolCallId: string; toolName: "mesh_get" | "mesh_wait"; receivedTaskIds: string[]; claimedTaskIds: string[] }
+export type PersistedCompletionReceiptEvidence =
+    | { source: "tool"; toolCallId: string; toolName: CompletionReceiptToolName; receivedTaskIds: string[]; claimedTaskIds: string[] }
+    | { source: "notification"; deliveryId: string; wakeId: string; eventIds: string[]; receivedTaskIds: string[] };
 export async function readPersistedCompletionReceiptEvidence(sessionFile: string): Promise<Map<string, PersistedCompletionReceiptEvidence[]>> {
     const content = await readFile(sessionFile, "utf8").catch(error => (error as NodeJS.ErrnoException).code === "ENOENT" ? "" : Promise.reject(error));
     const receipts = new Map<string, PersistedCompletionReceiptEvidence[]>(); const lines = content.split("\n");
+    const validIds = (value: unknown): value is string[] => Array.isArray(value) && value.every(item => typeof item === "string" && UUID.test(item)) && new Set(value).size === value.length;
     for (let index = 0; index < lines.length; index += 1) {
         const line = lines[index]!; if (!line.trim()) continue;
         let entry: Record<string, unknown>;
         try { entry = JSON.parse(line) as Record<string, unknown>; }
         catch (error) { if (index === lines.length - 1 && !content.endsWith("\n")) continue; throw new Error(`Malformed session JSONL while reconciling completion receipts at line ${index + 1}`, { cause: error }); }
         const message = entry.type === "message" && entry.message && typeof entry.message === "object" && !Array.isArray(entry.message) ? entry.message as Record<string, unknown> : undefined;
-        if (message?.role !== "toolResult" || !["mesh_get", "mesh_wait"].includes(String(message.toolName)) || !message.details || typeof message.details !== "object" || Array.isArray(message.details)) continue;
-        const accounting = (message.details as Record<string, unknown>).accounting;
-        if (accounting === undefined) continue;
-        if (!accounting || typeof accounting !== "object" || Array.isArray(accounting)) throw new Error("Malformed completion receipt accounting in persisted tool result");
-        const receiptIds = (accounting as Record<string, unknown>).receiptIds;
-        if (receiptIds === undefined) continue;
-        const receivedTaskIds = (accounting as Record<string, unknown>).receivedTaskIds; const claimedTaskIds = (accounting as Record<string, unknown>).claimedTaskIds;
-        const validIds = (value: unknown): value is string[] => Array.isArray(value) && value.every(item => typeof item === "string" && UUID.test(item)) && new Set(value).size === value.length;
-        if (!validIds(receiptIds) || !validIds(receivedTaskIds) || !validIds(claimedTaskIds) || typeof message.toolCallId !== "string" || !message.toolCallId.trim()) throw new Error("Malformed completion receipt accounting in persisted tool result");
-        const evidence: PersistedCompletionReceiptEvidence = { toolCallId: message.toolCallId, toolName: message.toolName as PersistedCompletionReceiptEvidence["toolName"], receivedTaskIds, claimedTaskIds };
-        for (const receiptId of receiptIds) { const values = receipts.get(receiptId) ?? []; values.push(evidence); receipts.set(receiptId, values); }
+        if (message?.role === "toolResult" && message.toolName === "mesh_get" && message.details && typeof message.details === "object" && !Array.isArray(message.details)) {
+            const accounting = (message.details as Record<string, unknown>).accounting;
+            if (accounting && typeof accounting === "object" && !Array.isArray(accounting)) {
+                const receiptIds = (accounting as Record<string, unknown>).receiptIds;
+                const receivedTaskIds = (accounting as Record<string, unknown>).receivedTaskIds;
+                const claimedTaskIds = (accounting as Record<string, unknown>).claimedTaskIds;
+                if (receiptIds !== undefined) {
+                    if (!validIds(receiptIds) || !validIds(receivedTaskIds) || !validIds(claimedTaskIds) || typeof message.toolCallId !== "string" || !message.toolCallId.trim()) throw new Error("Malformed completion receipt accounting in persisted tool result");
+                    const evidence: PersistedCompletionReceiptEvidence = { source: "tool", toolCallId: message.toolCallId, toolName: "mesh_get", receivedTaskIds, claimedTaskIds };
+                    for (const receiptId of receiptIds) { const values = receipts.get(receiptId) ?? []; values.push(evidence); receipts.set(receiptId, values); }
+                }
+            } else if (accounting !== undefined) throw new Error("Malformed completion receipt accounting in persisted tool result");
+        }
+        const custom = entry.type === "custom" && entry.customType === "mesh-event" && entry.details && typeof entry.details === "object" && !Array.isArray(entry.details)
+            ? entry
+            : message?.role === "custom" && message.customType === "mesh-event" && message.details && typeof message.details === "object" && !Array.isArray(message.details)
+                ? message
+                : undefined;
+        if (custom) {
+            const details = (custom.details as Record<string, unknown>);
+            if (details.kind === "completion") {
+                const accounting = details.accounting;
+                if (accounting && typeof accounting === "object" && !Array.isArray(accounting)) {
+                    const receiptIds = (accounting as Record<string, unknown>).receiptIds;
+                    const receivedTaskIds = (accounting as Record<string, unknown>).receivedTaskIds;
+                    const deliveryId = details.deliveryId;
+                    const wakeId = details.wakeId;
+                    const eventIds = Array.isArray(details.eventIds) ? details.eventIds : Array.isArray(details.sources) ? (details.sources as Array<Record<string, unknown>>).map(source => source.eventId) : [];
+                    if (receiptIds !== undefined && typeof deliveryId === "string" && typeof wakeId === "string") {
+                        if (!validIds(receiptIds) || !validIds(receivedTaskIds) || !eventIds.every(item => typeof item === "string")) throw new Error("Malformed completion receipt accounting in persisted notification");
+                        const evidence: PersistedCompletionReceiptEvidence = { source: "notification", deliveryId, wakeId, eventIds: eventIds.filter((item): item is string => typeof item === "string"), receivedTaskIds };
+                        for (const receiptId of receiptIds) { const values = receipts.get(receiptId) ?? []; values.push(evidence); receipts.set(receiptId, values); }
+                    }
+                }
+            }
+        }
     }
     return receipts;
 }
 export async function reconcileMeshUsageClaims(stateRoot: string, meshId: string, claimantSessionFile: string): Promise<number> { const persisted = persistedClaimTaskIds(await readFile(claimantSessionFile, "utf8").catch(error => (error as NodeJS.ErrnoException).code === "ENOENT" ? "" : Promise.reject(error))); let recovered = 0; for (const taskId of await listIds(meshPaths(stateRoot, meshId).tasks)) { if (persisted.has(taskId)) continue; const task = await readTask(stateRoot, meshId, taskId); const claimPath = taskPaths(stateRoot, meshId, taskId).usageClaim; const raw = await optionalJson(claimPath); if (raw !== undefined && validateUsageClaim(raw, meshId, task.request.agentId, taskId).claimantSessionFile === claimantSessionFile) { await unlink(claimPath); recovered += 1; } } return recovered; }
-export async function claimTaskUsage(stateRoot: string, meshId: string, taskId: string, claimantSessionFile: string, toolCallId: string, toolName: "mesh_get" | "mesh_wait"): Promise<{ created: boolean; claim: UsageClaim; result: TaskResult }> { const task = await readTask(stateRoot, meshId, taskId); if (!task.result || !isTerminalTask(task.status.state)) throw new Error(`Task ${taskId} is not terminal`); const claim: UsageClaim = { schemaVersion: 1, meshId, claimantSessionFile: nonempty(claimantSessionFile, "claimantSessionFile"), toolCallId: nonempty(toolCallId, "toolCallId"), toolName, agentId: task.request.agentId, taskId, claimedAt: new Date().toISOString() }; validateUsageClaim(claim, meshId, task.request.agentId, taskId); const path = taskPaths(stateRoot, meshId, taskId).usageClaim; const temporary = `${path}.${randomUUID()}.tmp`; const handle = await open(temporary, "wx", 0o600); await handle.writeFile(`${JSON.stringify(claim)}\n`); await handle.close(); try { await link(temporary, path); return { created: true, claim, result: task.result }; } catch (error) { if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error; return { created: false, claim: validateUsageClaim(await readJson<unknown>(path), meshId, task.request.agentId, taskId), result: task.result }; } finally { await unlink(temporary).catch(() => {}); } }
+export async function claimTaskUsage(stateRoot: string, meshId: string, taskId: string, claimantSessionFile: string, input: { source: "tool"; toolCallId: string; toolName: CompletionReceiptToolName } | { source: "notification"; deliveryId: string; wakeId: string }): Promise<{ created: boolean; claim: UsageClaim; result: TaskResult }> {
+    const task = await readTask(stateRoot, meshId, taskId);
+    if (!task.result || !isTerminalTask(task.status.state)) throw new Error(`Task ${taskId} is not terminal`);
+    const claim: UsageClaim = input.source === "tool"
+        ? { schemaVersion: 2, meshId, claimantSessionFile: nonempty(claimantSessionFile, "claimantSessionFile"), source: "tool", toolCallId: nonempty(input.toolCallId, "toolCallId"), toolName: input.toolName, agentId: task.request.agentId, taskId, claimedAt: new Date().toISOString() }
+        : { schemaVersion: 2, meshId, claimantSessionFile: nonempty(claimantSessionFile, "claimantSessionFile"), source: "notification", deliveryId: nonempty(input.deliveryId, "deliveryId"), wakeId: nonempty(input.wakeId, "wakeId"), agentId: task.request.agentId, taskId, claimedAt: new Date().toISOString() };
+    validateUsageClaim(claim, meshId, task.request.agentId, taskId);
+    const path = taskPaths(stateRoot, meshId, taskId).usageClaim;
+    const temporary = `${path}.${randomUUID()}.tmp`;
+    const handle = await open(temporary, "wx", 0o600);
+    await handle.writeFile(`${JSON.stringify(claim)}\n`);
+    await handle.close();
+    try {
+        await link(temporary, path);
+        return { created: true, claim, result: task.result };
+    } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+        return { created: false, claim: validateUsageClaim(await readJson<unknown>(path), meshId, task.request.agentId, taskId), result: task.result };
+    } finally { await unlink(temporary).catch(() => {}); }
+}
+
+export async function rollbackTaskUsageClaim(stateRoot: string, meshId: string, taskId: string, claimantSessionFile: string): Promise<boolean> {
+    const task = await readTask(stateRoot, meshId, taskId);
+    const path = taskPaths(stateRoot, meshId, taskId).usageClaim;
+    const raw = await optionalJson(path);
+    if (raw === undefined) return false;
+    const claim = validateUsageClaim(raw, meshId, task.request.agentId, taskId);
+    if (claim.claimantSessionFile !== claimantSessionFile) return false;
+    await unlink(path);
+    return true;
+}
+
+export interface AgentExecutionState {
+    schemaVersion: 1;
+    meshId: string;
+    agentId: string;
+    revision: number;
+    holds: ExecutionHold[];
+    interrupting: boolean;
+    interruptConfirmed: boolean;
+    lastRequestId?: string;
+    limitCycle?: number;
+    limitHistory?: LimitAttemptRecord[];
+    unavailable?: boolean;
+    updatedAt: string;
+}
+
+export function executionPath(stateRoot: string, meshId: string, agentId: string): string {
+    return join(agentPaths(stateRoot, meshId, agentId).directory, "execution.json");
+}
+
+function validateLimitHistory(value: unknown): LimitAttemptRecord[] {
+    if (!Array.isArray(value)) throw new Error("agent execution limitHistory must be an array");
+    return value.map((item, offset) => {
+        if (!item || typeof item !== "object" || Array.isArray(item)) throw new Error(`agent execution limitHistory[${offset}] must be an object`);
+        const raw = item as Record<string, unknown>;
+        integer(raw.cycle, `agent execution limitHistory[${offset}].cycle`);
+        integer(raw.candidateIndex, `agent execution limitHistory[${offset}].candidateIndex`);
+        nonempty(raw.model, `agent execution limitHistory[${offset}].model`);
+        if (!LIMIT_CLASS_VALUES.includes(raw.class as never)) throw new Error(`agent execution limitHistory[${offset}].class is invalid`);
+        boolean(raw.resumeEligible, `agent execution limitHistory[${offset}].resumeEligible`);
+        timestamp(raw.observedAt, `agent execution limitHistory[${offset}].observedAt`);
+        if (raw.code !== undefined) nonempty(raw.code, `agent execution limitHistory[${offset}].code`);
+        if (raw.resetAt !== undefined) timestamp(raw.resetAt, `agent execution limitHistory[${offset}].resetAt`);
+        return raw as unknown as LimitAttemptRecord;
+    });
+}
+
+function validateExecutionState(value: unknown, meshId: string, agentId: string): AgentExecutionState {
+    const raw = record(value, ["meshId", "agentId", "revision", "holds", "interrupting", "interruptConfirmed", "updatedAt"], ["lastRequestId", "limitCycle", "limitHistory", "unavailable"], "agent execution", 1);
+    id(raw.meshId, "agent execution meshId", meshId);
+    id(raw.agentId, "agent execution agentId", agentId);
+    integer(raw.revision, "agent execution revision");
+    boolean(raw.interrupting, "agent execution interrupting");
+    boolean(raw.interruptConfirmed, "agent execution interruptConfirmed");
+    timestamp(raw.updatedAt, "agent execution updatedAt");
+    if (!Array.isArray(raw.holds)) throw new Error("agent execution holds must be an array");
+    if (raw.limitCycle !== undefined) integer(raw.limitCycle, "agent execution limitCycle");
+    if (raw.limitHistory !== undefined) validateLimitHistory(raw.limitHistory);
+    if (raw.unavailable !== undefined) boolean(raw.unavailable, "agent execution unavailable");
+    return value as AgentExecutionState;
+}
+
+function emptyExecutionState(meshId: string, agentId: string): AgentExecutionState {
+    return { schemaVersion: 1, meshId, agentId, revision: 0, holds: [], interrupting: false, interruptConfirmed: false, updatedAt: new Date().toISOString() };
+}
+
+export async function readAgentExecution(stateRoot: string, meshId: string, agentId: string): Promise<AgentExecutionState | undefined> {
+    const raw = await optionalJson(executionPath(stateRoot, meshId, agentId));
+    return raw === undefined ? undefined : validateExecutionState(raw, meshId, agentId);
+}
+
+async function lineageAgentIdsUnlocked(stateRoot: string, meshId: string, agentId: string): Promise<string[]> {
+    const ids: string[] = [];
+    let current: string | undefined = agentId;
+    const seen = new Set<string>();
+    while (current && !seen.has(current)) {
+        seen.add(current);
+        ids.push(current);
+        const raw: unknown = await optionalJson(agentPaths(stateRoot, meshId, current).agent);
+        const record = raw && typeof raw === "object" ? raw as { parentAgentId?: unknown } : undefined;
+        current = typeof record?.parentAgentId === "string" ? record.parentAgentId : undefined;
+    }
+    return ids;
+}
+
+/** Mesh lock, then lineage agent locks in lexicographic order. */
+export async function withMeshLineageLock<T>(stateRoot: string, meshId: string, agentId: string, operation: () => Promise<T>): Promise<T> {
+    return withMeshLock(stateRoot, meshId, async () => withOrderedAgentLocks(stateRoot, meshId, await lineageAgentIdsUnlocked(stateRoot, meshId, agentId), operation));
+}
+
+export async function assertAgentAcceptsDispatchUnlocked(stateRoot: string, meshId: string, agentId: string): Promise<void> {
+    if ((await readLineageHolds(stateRoot, meshId, agentId)).length) throw new Error(`Agent ${agentId} is held and cannot accept new work`);
+}
+
+async function readLineageHolds(stateRoot: string, meshId: string, agentId: string): Promise<ExecutionHold[]> {
+    const holds: ExecutionHold[] = [];
+    for (const current of await lineageAgentIdsUnlocked(stateRoot, meshId, agentId)) {
+        const execution = await readAgentExecution(stateRoot, meshId, current);
+        if (execution?.holds.length) holds.push(...execution.holds);
+    }
+    return holds;
+}
+
+async function controlIdentityMismatch(stateRoot: string, meshId: string, agentId: string, current: AgentExecutionState, input: { expectedRuntimeId?: string; expectedBindingId?: string }): Promise<boolean> {
+    const runtime = await readAgentRuntimeBinding(stateRoot, meshId, agentId);
+    if (input.expectedRuntimeId && runtime?.runtimeId !== input.expectedRuntimeId) return true;
+    if (input.expectedBindingId && runtime?.runtimeId !== input.expectedBindingId) return true;
+    const stampedRuntime = current.holds.map(hold => hold.targetRuntimeId).find(value => value);
+    if (input.expectedRuntimeId && stampedRuntime && stampedRuntime !== input.expectedRuntimeId) return true;
+    const stampedBinding = current.holds.map(hold => hold.targetBindingId).find(value => value);
+    if (input.expectedBindingId && stampedBinding && stampedBinding !== input.expectedBindingId) return true;
+    return false;
+}
+
+export async function applyAgentControl(stateRoot: string, meshId: string, agentId: string, input: {
+    action: ControlAction;
+    source: ControlSource;
+    issuer: string;
+    expectedRevision?: number;
+    expectedRuntimeId?: string;
+    expectedBindingId?: string;
+    clearLimitHolds?: boolean;
+    limitHold?: Omit<ExecutionHold, "revision" | "createdAt">;
+    limitAttempts?: readonly LimitAttemptRecord[];
+    unavailable?: boolean;
+}): Promise<{ state: AgentExecutionState; applied: boolean; status: "acknowledged" | "not_ready" | "manual_resume_required" | "already-terminal" }> {
+    const paths = agentPaths(stateRoot, meshId, agentId);
+    return withMeshAgentLock(stateRoot, meshId, agentId, async () => {
+        const status = await readAgentStatus(paths, meshId);
+        if (isTerminalAgent(status.state)) {
+            const existing = await readAgentExecution(stateRoot, meshId, agentId);
+            return { state: existing ?? emptyExecutionState(meshId, agentId), applied: false, status: "already-terminal" };
+        }
+        const current = await readAgentExecution(stateRoot, meshId, agentId) ?? emptyExecutionState(meshId, agentId);
+        if (await controlIdentityMismatch(stateRoot, meshId, agentId, current, input)) return { state: current, applied: false, status: "not_ready" };
+        const nextRevision = current.revision + 1;
+        if (input.expectedRevision !== undefined && input.expectedRevision !== current.revision) return { state: current, applied: false, status: "not_ready" };
+        const runtime = await readAgentRuntimeBinding(stateRoot, meshId, agentId);
+        if (input.action === "resume") {
+            if (current.interrupting && !current.interruptConfirmed) return { state: current, applied: false, status: "not_ready" };
+            const limitHolds = current.holds.filter(hold => hold.kind === "limit");
+            if (limitHolds.length && input.source !== "user") return { state: current, applied: false, status: "manual_resume_required" };
+            const dropLimits = input.source === "user" && input.clearLimitHolds === true;
+            const drop = new Set(current.holds.filter(hold => hold.kind === "manual" || (dropLimits && hold.kind === "limit")).map(hold => hold.holdId));
+            const next: AgentExecutionState = {
+                ...current,
+                revision: nextRevision,
+                holds: current.holds.filter(hold => !drop.has(hold.holdId)),
+                interrupting: false,
+                interruptConfirmed: false,
+                unavailable: false,
+                lastRequestId: randomUUID(),
+                ...(dropLimits ? { limitCycle: (current.limitCycle ?? 0) + 1 } : {}),
+                updatedAt: new Date().toISOString(),
+            };
+            await atomicJson(executionPath(stateRoot, meshId, agentId), next);
+            return { state: next, applied: true, status: "acknowledged" };
+        }
+        const hold: ExecutionHold = input.limitHold
+            ? { ...input.limitHold, revision: nextRevision, createdAt: new Date().toISOString(), ...(runtime ? { targetRuntimeId: runtime.runtimeId, targetBindingId: runtime.runtimeId } : {}) }
+            : { holdId: randomUUID(), kind: "manual", revision: nextRevision, requestId: randomUUID(), source: input.source, targetRoot: agentId, createdAt: new Date().toISOString(), ...(runtime ? { targetRuntimeId: runtime.runtimeId, targetBindingId: runtime.runtimeId } : {}) };
+        const history = [...(current.limitHistory ?? []), ...(input.limitAttempts ?? [])];
+        const next: AgentExecutionState = {
+            ...current,
+            revision: nextRevision,
+            holds: [...current.holds.filter(existing => existing.kind !== hold.kind), hold],
+            interrupting: input.action === "interrupt" || current.interrupting,
+            interruptConfirmed: input.action === "interrupt" ? false : current.interruptConfirmed,
+            lastRequestId: hold.requestId,
+            ...(history.length ? { limitHistory: history } : {}),
+            ...(input.unavailable !== undefined ? { unavailable: input.unavailable } : {}),
+            updatedAt: new Date().toISOString(),
+        };
+        await atomicJson(executionPath(stateRoot, meshId, agentId), next);
+        return { state: next, applied: true, status: "acknowledged" };
+    });
+}
+
+export async function appendLimitHistory(stateRoot: string, meshId: string, agentId: string, attempts: readonly LimitAttemptRecord[]): Promise<AgentExecutionState> {
+    return withMeshAgentLock(stateRoot, meshId, agentId, async () => {
+        const current = await readAgentExecution(stateRoot, meshId, agentId) ?? emptyExecutionState(meshId, agentId);
+        const next: AgentExecutionState = { ...current, limitHistory: [...(current.limitHistory ?? []), ...attempts], updatedAt: new Date().toISOString() };
+        await atomicJson(executionPath(stateRoot, meshId, agentId), next);
+        return next;
+    });
+}
+
+export async function confirmAgentInterrupt(stateRoot: string, meshId: string, agentId: string, revision: number, expectedRuntimeId?: string): Promise<AgentExecutionState | undefined> {
+    return withMeshAgentLock(stateRoot, meshId, agentId, async () => {
+        const current = await readAgentExecution(stateRoot, meshId, agentId);
+        if (!current || !canApplyControlRevision(current.revision, revision) || current.revision !== revision) return current;
+        if (expectedRuntimeId) {
+            const runtime = await readAgentRuntimeBinding(stateRoot, meshId, agentId);
+            if (runtime?.runtimeId !== expectedRuntimeId) return current;
+        }
+        const next: AgentExecutionState = { ...current, interruptConfirmed: true, interrupting: false, updatedAt: new Date().toISOString() };
+        await atomicJson(executionPath(stateRoot, meshId, agentId), next);
+        return next;
+    });
+}
+
+export async function descendantAgentIds(stateRoot: string, meshId: string, rootAgentId: string): Promise<string[]> {
+    const agents = await listMeshAgents(stateRoot, meshId);
+    const children = new Map<string, string[]>();
+    for (const snapshot of agents) {
+        const parent = snapshot.agent.parentAgentId;
+        if (!parent) continue;
+        const list = children.get(parent) ?? [];
+        list.push(snapshot.agent.agentId);
+        children.set(parent, list);
+    }
+    const ordered: string[] = [];
+    const queue = [rootAgentId];
+    const seen = new Set<string>();
+    while (queue.length) {
+        const agentId = queue.shift()!;
+        if (seen.has(agentId)) continue;
+        seen.add(agentId);
+        ordered.push(agentId);
+        for (const child of children.get(agentId) ?? []) queue.push(child);
+    }
+    return ordered;
+}
