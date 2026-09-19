@@ -162,6 +162,7 @@
     small-read = {
       models = [
         "openrouter/cohere/north-mini-code:free"
+        "commandcode/deepseek/deepseek-v4-flash"
         "mistral/mistral-small-2603"
         "openai-codex/gpt-5.6-luna"
       ];
@@ -169,33 +170,28 @@
       harness = "pi";
     };
     small-write = {
-      models = ["openai-codex/gpt-5.6-luna"];
+      models = [
+        "openai-codex/gpt-5.6-luna"
+        "commandcode/deepseek/deepseek-v4-flash"
+      ];
       thinkingLevel = "high";
       harness = "pi";
     };
     standard-read = {
-      models = ["cursor/cursor-grok-4.6-high-fast"];
-      thinkingLevel = null;
-      harness = "cursor-agent";
-      harnessOptions = {
-        mode = "ask";
-        permissionPolicy = "reject";
-        sandbox = "disabled";
-        trustWorkspace = true;
-        worktree = false;
-      };
+      models = [
+        "commandcode/z-ai/glm-5.3-flash"
+        "openai/gpt-5.6-terra"
+      ];
+      thinkingLevel = "high";
+      harness = "pi";
     };
     standard-write = {
-      models = ["cursor/cursor-grok-4.6-high-fast"];
-      thinkingLevel = null;
-      harness = "cursor-agent";
-      harnessOptions = {
-        mode = "agent";
-        permissionPolicy = "allow-always";
-        sandbox = "disabled";
-        trustWorkspace = true;
-        worktree = false;
-      };
+      models = [
+        "commandcode/z-ai/glm-5.3-flash"
+        "openai/gpt-5.6-terra"
+      ];
+      thinkingLevel = "high";
+      harness = "pi";
     };
     advanced-read = {
       models = ["openai-codex/gpt-5.6-sol"];
@@ -214,6 +210,7 @@
     };
     perspective = {
       models = [
+        "commandcode/moonshotai/Kimi-K3"
         "openrouter/z-ai/glm-5.2:free"
         "cohere/command-a-plus-05-2026"
         "mistral/mistral-medium-3.5"

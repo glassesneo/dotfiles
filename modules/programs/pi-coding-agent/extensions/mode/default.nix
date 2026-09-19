@@ -102,7 +102,10 @@ in
       ops = {
         description = "Direct source work and flexible orchestration.";
         execution = {
-          models = ["openai-codex/gpt-5.6-sol"];
+          models = [
+            "commandcode/meta/muse-spark-1.3-contributor"
+            "openai-codex/gpt-5.6-sol"
+          ];
           thinkingLevel = "medium";
           harness = "pi";
         };

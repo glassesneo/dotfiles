@@ -20,17 +20,17 @@
   };
   hasSecret = secretName: builtins.hasAttr secretName homeConfig.sops.secrets;
   secretApiKeyCommand = secretName: "!${lib.getExe' pkgs.coreutils "cat"} ${lib.escapeShellArg homeConfig.sops.secrets.${secretName}.path}";
-  builtInProviderApiKeySecrets = {
+  providerApiKeySecrets = {
     openrouter = "openrouter-api-key";
     opencode = "opencode-api-key";
     mistral = "mistral-api-key";
     vercel-ai-gateway = "vercel-ai-gateway-api-key";
   };
-  builtInProviderApiKeyConfigs =
+  providerApiKeyConfigs =
     lib.mapAttrs (_: secretName: {
       apiKey = secretApiKeyCommand secretName;
     })
-    (lib.filterAttrs (_: hasSecret) builtInProviderApiKeySecrets);
+    (lib.filterAttrs (_: hasSecret) providerApiKeySecrets);
   zaiThinkingLevelMap = {
     off = null;
     minimal = null;
@@ -167,7 +167,7 @@
         ];
       };
     }
-    // builtInProviderApiKeyConfigs;
+    // providerApiKeyConfigs;
   codexCompactionConfig = {
     autoCompact = true;
     thresholdRatio = 0.9;
@@ -227,6 +227,7 @@ in
         };
         packageContributions = {
           codex-compaction.source = "npm:@ogulcancelik/pi-codex-compaction@0.1.3";
+          commandcode-provider.source = "npm:pi-commandcode-provider@0.7.1";
           decision-ui = {
             enabled = piQuestion.enabled || piArtifact.enabled || piOrchestration.enabled;
             source = "npm:@glassesneo/pi-decision-ui@0.1.1";
@@ -383,6 +384,15 @@ in
           };
       };
 
+      sops.templates = lib.optionalAttrs (hasSecret "command-code-api-key") {
+        "commandcode-auth.json" = {
+          path = "${homeConfig.home.homeDirectory}/.commandcode/auth.json";
+          mode = "0400";
+          content = builtins.toJSON {
+            apiKey = homeConfig.sops.placeholder."command-code-api-key";
+          };
+        };
+      };
       home.packages = lib.mkIf cfg.emergency.enable [
         emergencyLauncher
         emergencyFullLauncher

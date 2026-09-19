@@ -15,6 +15,7 @@
     "brave-free-api-key"
     "parallel-api-key"
     "exa-api-key"
+    "command-code-api-key"
     "opencode-api-key"
     "openrouter-api-key"
     "mistral-api-key"
