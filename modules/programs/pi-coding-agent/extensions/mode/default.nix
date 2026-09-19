@@ -103,7 +103,7 @@ in
         description = "Direct source work and flexible orchestration.";
         execution = {
           models = [
-            "commandcode/meta/muse-spark-1.3-contributor"
+            "commandcode/z-ai/glm-5.3-flash"
             "openai-codex/gpt-5.6-sol"
           ];
           thinkingLevel = "medium";

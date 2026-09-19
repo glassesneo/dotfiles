@@ -169,7 +169,7 @@
     };
     standard-read = {
       models = [
-        "commandcode/z-ai/glm-5.3-flash"
+        "commandcode/meta/muse-spark-1.3-contributor"
         "openai/gpt-5.6-terra"
       ];
       thinkingLevel = "high";
@@ -177,7 +177,7 @@
     };
     standard-write = {
       models = [
-        "commandcode/z-ai/glm-5.3-flash"
+        "commandcode/meta/muse-spark-1.3-contributor"
         "openai/gpt-5.6-terra"
       ];
       thinkingLevel = "high";
@@ -201,8 +201,8 @@
     perspective = {
       models = [
         "commandcode/moonshotai/Kimi-K3"
-        "openrouter/z-ai/glm-5.2:free"
         "cohere/command-a-plus-05-2026"
+        "openrouter/z-ai/glm-5.2:free"
         "mistral/mistral-medium-3.5"
       ];
       thinkingLevel = "high";
