@@ -204,11 +204,4 @@ export async function openAgentWindow(exec: CommandExecutor, tmux: string, conte
     const resized = await exec(tmux, at(target.socket, ["resize-window", "-A", "-t", target.windowId]));
     if (resized.code !== 0) throw new Error(resized.stderr.trim() || "Could not resize agent window to attached client");
 }
-export async function unlinkAgentWindow(exec: CommandExecutor, tmux: string, context: TmuxContext, target: TmuxAgentReference): Promise<void> {
-    assertSameServer(context, target);
-    if (!await serverMatches(exec, tmux, target)) throw new Error("Agent tmux server is no longer live");
-    const windows = await currentWindows(exec, tmux, context);
-    if (!windows.has(target.windowId)) return;
-    const result = await exec(tmux, at(target.socket, ["unlink-window", "-t", `${context.sessionId}:${target.windowId}`]));
-    if (result.code !== 0) throw new Error(result.stderr.trim() || "Could not unlink agent window");
-}
+

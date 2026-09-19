@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -7,7 +7,6 @@ import { visibleWidth } from "@earendil-works/pi-tui";
 import { unknownAgentActivityProjection } from "../extensions_src/utilities/orchestration_activity.ts";
 import { buildMeshDisplayTree } from "../extensions_src/utilities/orchestration_display_tree.ts";
 import { resolvePaletteKeymap } from "../extensions_src/utilities/command_palette_keymap.ts";
-import { openMeshHistory } from "../extensions_src/utilities/orchestration_history.ts";
 import { composeIdentityLine, MeshAgentsPaletteComponent } from "../extensions_src/utilities/orchestration_palette.ts";
 import { openLivePreview } from "../extensions_src/utilities/orchestration_preview.ts";
 import { displayIdentityForSnapshot, fitUsualIdentityLine, usualAgentStatusForSnapshot } from "../extensions_src/utilities/orchestration_identity.ts";
@@ -97,7 +96,7 @@ void test("palette toggles terminal history while retaining deterministic select
     const root = snapshot("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", "busy", { taskState: "running", createdAt: "2026-01-01T00:00:00Z" });
     const terminal = snapshot("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", "stopped", { parentAgentId: root.agent.agentId, createdAt: "2026-01-01T00:01:00Z" });
     const child = snapshot("cccccccc-cccc-4ccc-8ccc-cccccccccccc", "busy", { parentAgentId: terminal.agent.agentId, taskState: "running", createdAt: "2026-01-01T00:02:00Z" });
-    const component = new MeshAgentsPaletteComponent({ tui: { terminal: { rows: 24 }, requestRender() {} } as never, theme: { fg: (_role: string, text: string) => text, bg: (_role: string, text: string) => text, bold: (text: string) => text } as never, ui: { input: async () => undefined, confirm: async () => false }, keymap: resolvePaletteKeymap({ toggleTerminal: ["t"] }), deps: { meshId, exec: async () => ({ stdout: "", stderr: "", code: 0 }), tmux: "/tmux", historyViewerExtension: "/viewer", piCommand: "/pi", natureHandleWords: ["May"], discover: async () => ({ agents: [root, terminal, child], malformedCount: 0 }), stopAgent: async () => root }, done() {} });
+    const component = new MeshAgentsPaletteComponent({ tui: { terminal: { rows: 24 }, requestRender() {} } as never, theme: { fg: (_role: string, text: string) => text, bg: (_role: string, text: string) => text, bold: (text: string) => text } as never, ui: { input: async () => undefined, confirm: async () => false }, keymap: resolvePaletteKeymap({ toggleTerminal: ["t"] }), deps: { meshId, exec: async () => ({ stdout: "", stderr: "", code: 0 }), tmux: "/tmux", piCommand: "/pi", natureHandleWords: ["May"], discover: async () => ({ agents: [root, terminal, child], malformedCount: 0 }), stopAgent: async () => root }, done() {} });
     component.replaceAgents([root, terminal, child]); component.focused = true;
     assert.equal(component.showTerminal, false); assert.equal(component.hiddenTerminalCount, 1); assert.match(component.render(80).join("\n"), /1 terminal hidden/u);
     component.handleInput("t"); component.handleInput("\u000e");
@@ -119,7 +118,7 @@ void test("palette exposes usual identity at wide and narrow widths without role
         attempts: [{ index: 0, model: "provider/model", category: "unavailable", at: "2026-01-01T00:00:00Z", message: "auth missing" }],
     };
     const handle = displayIdentityForSnapshot(live, ["May"]).handle;
-    const createComponent = (rows: number) => new MeshAgentsPaletteComponent({ tui: { terminal: { rows }, requestRender() {} } as never, theme: { fg: (_role: string, text: string) => text, bg: (_role: string, text: string) => text, bold: (text: string) => text } as never, ui: { input: async () => undefined, confirm: async () => false }, keymap: resolvePaletteKeymap({ toggleTerminal: ["t"] }), deps: { meshId, exec: async () => ({ stdout: "", stderr: "", code: 0 }), tmux: "/tmux", historyViewerExtension: "/viewer", piCommand: "/pi", natureHandleWords: ["May"], discover: async () => ({ agents: [live], malformedCount: 0 }), stopAgent: async () => live }, done() {} });
+    const createComponent = (rows: number) => new MeshAgentsPaletteComponent({ tui: { terminal: { rows }, requestRender() {} } as never, theme: { fg: (_role: string, text: string) => text, bg: (_role: string, text: string) => text, bold: (text: string) => text } as never, ui: { input: async () => undefined, confirm: async () => false }, keymap: resolvePaletteKeymap({ toggleTerminal: ["t"] }), deps: { meshId, exec: async () => ({ stdout: "", stderr: "", code: 0 }), tmux: "/tmux", piCommand: "/pi", natureHandleWords: ["May"], discover: async () => ({ agents: [live], malformedCount: 0 }), stopAgent: async () => live }, done() {} });
     for (const [rows, width] of [[24, 80], [24, 120], [10, 60]] as const) {
         const component = createComponent(rows); component.replaceAgents([live]);
         const rendered = component.render(width);
@@ -286,11 +285,8 @@ void test("model-visible stop projection keeps one fixed nullable shape without 
     assert.equal("gcPassId" in (minimal ?? {}), false);
 });
 
-void test("history and preview reject unsafe identity before allocating tmux state", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "mesh-history-safety-")); const sessionFile = join(directory, "session.jsonl"); await writeFile(sessionFile, `${JSON.stringify({ type: "session", id: "canonical" })}\n`);
-    const historyCalls: string[][] = []; const historyExec = async (_command: string, args: string[]): Promise<CommandResult> => { historyCalls.push(args); return { stdout: "", stderr: "", code: 0 }; };
-    await assert.rejects(openMeshHistory(historyExec, { tmux: "/tmux", historyViewerExtension: "/viewer", piCommand: "/pi" }, { socket: "/tmp/tmux", serverPid: "10", sessionId: "$parent", sessionName: "main", windowId: "@parent", paneId: "%parent", clientName: "client" }, snapshot("eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee", "stopped", { sessionFile, sessionId: "different" })), /identity/u);
-    assert.deepEqual(historyCalls, []);
+void test("preview rejects unsafe identity before allocating tmux state", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "mesh-history-safety-"));
     let allocated = false;
     await assert.rejects(openLivePreview(async () => ({ stdout: "", stderr: "", code: 0 }), "/tmux", { socket: "/tmp/tmux", serverPid: "10", sessionId: "$parent", sessionName: "main", windowId: "@parent", paneId: "%parent" }, tmux, "preview", { makeTempDirectory: async () => { allocated = true; return directory; } }), /client/u);
     assert.equal(allocated, false);
@@ -302,7 +298,7 @@ void test("palette delegates stop authority with mesh identity and preserves the
         tui: { terminal: { rows: 24 }, requestRender() {} } as never,
         theme: { fg: (_role: string, text: string) => text, bg: (_role: string, text: string) => text, bold: (text: string) => text } as never,
         ui: { input: async () => { throw new Error("reason input is not required"); }, confirm: async () => true, select: async () => "Stop" }, keymap: resolvePaletteKeymap({ toggleTerminal: ["t"] }),
-        deps: { meshId, exec: async () => ({ stdout: "", stderr: "", code: 0 }), tmux: "/tmux", historyViewerExtension: "/viewer", piCommand: "/pi", natureHandleWords: ["May"], discover: async identity => { discoveries.push(identity); return { agents: [live], malformedCount: 0 }; }, stopAgent: async request => { stopRequests.push(request); return stopped; }, setTimeout: (() => ({}) as NodeJS.Timeout) as unknown as typeof setTimeout, clearTimeout: (() => {}) as typeof clearTimeout },
+        deps: { meshId, exec: async () => ({ stdout: "", stderr: "", code: 0 }), tmux: "/tmux", piCommand: "/pi", natureHandleWords: ["May"], discover: async identity => { discoveries.push(identity); return { agents: [live], malformedCount: 0 }; }, stopAgent: async request => { stopRequests.push(request); return stopped; }, setTimeout: (() => ({}) as NodeJS.Timeout) as unknown as typeof setTimeout, clearTimeout: (() => {}) as typeof clearTimeout },
         done() {},
     });
     component.replaceAgents([live]); await component.action("stop");
@@ -312,7 +308,7 @@ void test("palette delegates stop authority with mesh identity and preserves the
 void test("palette control cancellation preserves focus and selection", async () => {
     const live = snapshot("abababab-abab-4bab-8bab-abababababab", "idle");
     let stops = 0;
-    const component = new MeshAgentsPaletteComponent({ tui: { terminal: { rows: 24 }, requestRender() {} } as never, theme: { fg: (_role: string, text: string) => text, bg: (_role: string, text: string) => text, bold: (text: string) => text } as never, ui: { input: async () => { throw new Error("unused"); }, confirm: async () => false, select: async () => undefined as never }, keymap: {} as never, deps: { meshId, exec: async () => ({ stdout: "", stderr: "", code: 0 }), tmux: "/tmux", historyViewerExtension: "/viewer", piCommand: "/pi", natureHandleWords: ["May"], discover: async () => ({ agents: [live], malformedCount: 0 }), stopAgent: async () => { stops += 1; return live; }, setTimeout: (() => ({}) as NodeJS.Timeout) as unknown as typeof setTimeout, clearTimeout: (() => {}) as typeof clearTimeout }, done() {} });
+    const component = new MeshAgentsPaletteComponent({ tui: { terminal: { rows: 24 }, requestRender() {} } as never, theme: { fg: (_role: string, text: string) => text, bg: (_role: string, text: string) => text, bold: (text: string) => text } as never, ui: { input: async () => { throw new Error("unused"); }, confirm: async () => false, select: async () => undefined as never }, keymap: {} as never, deps: { meshId, exec: async () => ({ stdout: "", stderr: "", code: 0 }), tmux: "/tmux", piCommand: "/pi", natureHandleWords: ["May"], discover: async () => ({ agents: [live], malformedCount: 0 }), stopAgent: async () => { stops += 1; return live; }, setTimeout: (() => ({}) as NodeJS.Timeout) as unknown as typeof setTimeout, clearTimeout: (() => {}) as typeof clearTimeout }, done() {} });
     component.replaceAgents([live]); component.focused = true; const selected = component.selectedAgentId; await component.action("stop"); assert.equal(stops, 0); assert.equal(component.selectedAgentId, selected); assert.equal(component.focused, true); component.dispose();
 });
 
@@ -329,30 +325,25 @@ void test("usual agent status keeps stale idle distinct from reusable idle", () 
     assert.equal(usualAgentStatusForSnapshot(stopping), "confirming-stop");
 });
 
-// Admission: h is a distinct mesh action from Enter/Space/stop/session history; schemas cannot prove the configured key opens child history or that returning restores selection.
-// Given a selected child, the configured history key opens child history while Enter, Space, and stop keep their mesh actions, including terminal session history.
-void test("palette history key opens child history without stealing enter space or stop", async () => {
+// Admission: Enter/Space/stop keep distinct mesh actions now that the h history view is removed; schemas cannot prove selection stability.
+// Given a selected live child, Space previews, Enter opens live, and stop keeps selection; an unbound h key does nothing.
+void test("palette keeps enter space and stop distinct without a history key", async () => {
     const live = snapshot("abababab-abab-4bab-8bab-abababababab", "busy", { taskState: "running" });
-    const stopped = snapshot("cdcdcdcd-cdcd-4dcd-8dcd-cdcdcdcdcdcd", "stopped", { sessionFile: "/session.jsonl", sessionId: "sess" });
-    const childHistory: string[] = [];
-    const sessionHistory: string[] = [];
     const liveOpens: string[] = [];
     const previews: string[] = [];
     const stops: string[] = [];
     const keys = { enter: "\r", space: " ", stop: "x" };
     const tmuxProbe = { stdout: "10\t$session\tmain\t@1\t%1\tclient\n", stderr: "", code: 0 };
-    const create = (agents: AgentSnapshot[], historyKey: string) => new MeshAgentsPaletteComponent({
+    const create = (agents: AgentSnapshot[]) => new MeshAgentsPaletteComponent({
         tui: { terminal: { rows: 24 }, requestRender() {} } as never,
         theme: { fg: (_role: string, text: string) => text, bg: (_role: string, text: string) => text, bold: (text: string) => text } as never,
         ui: { input: async () => { throw new Error("reason input is not required"); }, confirm: async () => true, select: async () => "Stop" },
-        keymap: resolvePaletteKeymap({ history: [historyKey], toggleTerminal: ["t"], confirm: ["enter"], preview: ["space"], stop: ["x"] }),
+        keymap: resolvePaletteKeymap({ toggleTerminal: ["t"], confirm: ["enter"], preview: ["space"], stop: ["x"] }),
         deps: {
-            meshId, exec: async () => tmuxProbe, tmux: "/tmux", historyViewerExtension: "/viewer", piCommand: "/pi", natureHandleWords: ["May"],
+            meshId, exec: async () => tmuxProbe, tmux: "/tmux", piCommand: "/pi", natureHandleWords: ["May"],
             env: { TMUX: "/tmp/tmux,1,0" },
             discover: async () => ({ agents, malformedCount: 0 }),
             stopAgent: async request => { stops.push(request.agentId); return agents[0]!; },
-            openChildHistory: async snapshot => { childHistory.push(snapshot.agent.agentId); },
-            openHistory: (async () => { sessionHistory.push("session"); }) as never,
             openLiveWindow: async () => { liveOpens.push("live"); },
             previewLive: async () => { previews.push("preview"); return "dismissed"; },
             setTimeout: (() => ({}) as NodeJS.Timeout) as unknown as typeof setTimeout,
@@ -360,45 +351,23 @@ void test("palette history key opens child history without stealing enter space 
         },
         done() {},
     });
-    const livePalette = create([live], "h");
+    const livePalette = create([live]);
     livePalette.replaceAgents([live]); livePalette.focused = true;
     const selected = livePalette.selectedAgentId;
     livePalette.handleInput("h"); await yieldToIO();
-    assert.deepEqual(childHistory, [live.agent.agentId]);
     assert.equal(livePalette.selectedAgentId, selected);
     assert.equal(livePalette.focused, true);
     livePalette.handleInput(keys.space); await yieldToIO();
     livePalette.handleInput(keys.stop); await yieldToIO();
     assert.deepEqual(previews, ["preview"]);
     assert.deepEqual(stops, [live.agent.agentId]);
-    assert.deepEqual(childHistory, [live.agent.agentId]);
-    assert.equal(sessionHistory.length, 0);
     livePalette.dispose();
 
-    const liveOpen = create([live], "h");
+    const liveOpen = create([live]);
     liveOpen.replaceAgents([live]);
     liveOpen.handleInput(keys.enter); await yieldToIO();
     assert.deepEqual(liveOpens, ["live"]);
-    assert.deepEqual(childHistory, [live.agent.agentId]);
     liveOpen.dispose();
-
-    const terminalPalette = create([stopped], "h");
-    terminalPalette.replaceAgents([stopped]); terminalPalette.focused = true;
-    terminalPalette.handleInput("t");
-    assert.equal(terminalPalette.selectedAgentId, stopped.agent.agentId);
-    terminalPalette.handleInput("h"); await yieldToIO();
-    assert.deepEqual(childHistory, [live.agent.agentId, stopped.agent.agentId]);
-    terminalPalette.handleInput(keys.enter); await yieldToIO();
-    assert.deepEqual(sessionHistory, ["session"]);
-    assert.deepEqual(childHistory, [live.agent.agentId, stopped.agent.agentId]);
-    terminalPalette.dispose();
-
-    const rebound = create([live], "g");
-    rebound.replaceAgents([live]);
-    rebound.handleInput("h"); await yieldToIO();
-    rebound.handleInput("g"); await yieldToIO();
-    assert.deepEqual(childHistory, [live.agent.agentId, stopped.agent.agentId, live.agent.agentId]);
-    rebound.dispose();
 });
 
 // Admission: palette stop must keep pause/interrupt/resume/stop distinct; option lists are the operator contract and are not owned by keybinding validation.
@@ -413,7 +382,7 @@ void test("palette control offers resume and applies it without requiring a stop
         ui: { input: async () => { throw new Error("reason input is not required"); }, confirm: async () => true, select: async (_title, options) => { choices.push(options); return "Resume"; } },
         keymap: resolvePaletteKeymap({ toggleTerminal: ["t"] }),
         deps: {
-            meshId, exec: async () => ({ stdout: "", stderr: "", code: 0 }), tmux: "/tmux", historyViewerExtension: "/viewer", piCommand: "/pi", natureHandleWords: ["May"],
+            meshId, exec: async () => ({ stdout: "", stderr: "", code: 0 }), tmux: "/tmux", piCommand: "/pi", natureHandleWords: ["May"],
             discover: async () => ({ agents: [live], malformedCount: 0 }),
             stopAgent: async () => { stops += 1; return live; },
             controlAgent: async request => { controls.push({ action: request.action }); return { targets: [{ agentId: request.agentId, status: "acknowledged", phase: "paused" }] }; },
@@ -427,47 +396,5 @@ void test("palette control offers resume and applies it without requiring a stop
     assert.deepEqual(choices[0], ["Pause", "Interrupt", "Resume", "Stop"]);
     assert.deepEqual(controls, [{ action: "resume" }]);
     assert.equal(stops, 0);
-    assert.match(component.render(120).join("\n"), /Child usage 0 tokens \(mesh, separate from Pi totals\)/u);
-    component.dispose();
-});
-
-// Admission: palette status is the operator-visible mesh usage surface; a latest-task snapshot would undercount completed sibling work.
-// Given two finished tasks on one child, discovery-driven status reports their combined mesh usage.
-void test("palette status usage aggregates every store task", async () => {
-    const live = snapshot("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", "idle");
-    const firstTask = {
-        ...live.task!,
-        result: {
-            ...live.task!.result!,
-            usage: { ...emptyUsage(), input: 11, totalTokens: 11, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
-        },
-    };
-    const secondTask = {
-        ...firstTask,
-        request: { ...firstTask.request, taskId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" },
-        status: { ...firstTask.status, taskId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" },
-        result: {
-            ...firstTask.result!,
-            taskId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
-            usage: { ...emptyUsage(), input: 7, totalTokens: 7, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
-        },
-    };
-    const component = new MeshAgentsPaletteComponent({
-        tui: { terminal: { rows: 24 }, requestRender() {} } as never,
-        theme: { fg: (_role: string, text: string) => text, bg: (_role: string, text: string) => text, bold: (text: string) => text } as never,
-        ui: { input: async () => "", confirm: async () => true, select: async () => undefined },
-        keymap: resolvePaletteKeymap({ toggleTerminal: ["t"] }),
-        deps: {
-            meshId, exec: async () => ({ stdout: "", stderr: "", code: 0 }), tmux: "/tmux", historyViewerExtension: "/viewer", piCommand: "/pi", natureHandleWords: ["May"],
-            discover: async () => ({ agents: [{ ...live, task: firstTask }], malformedCount: 0, tasks: [firstTask, secondTask] }),
-            stopAgent: async () => live,
-            setTimeout: (() => ({}) as NodeJS.Timeout) as unknown as typeof setTimeout,
-            clearTimeout: (() => {}) as typeof clearTimeout,
-        },
-        done() {},
-    });
-    component.start();
-    await component.refresh();
-    assert.match(component.render(120).join("\n"), /Child usage 18 tokens \(mesh, separate from Pi totals\)/u);
     component.dispose();
 });

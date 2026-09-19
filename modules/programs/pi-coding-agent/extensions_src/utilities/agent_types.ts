@@ -5,7 +5,12 @@ export type AgentHarness = "pi" | "cursor-agent" | "codex";
 export type ContextPolicy = "project" | "prompt-only";
 export type CapabilityAccess = "read" | "write";
 export interface RoleSelector { agent: string; access: CapabilityAccess }
-export interface ChildGcPolicy { collectAt: number; retain: number; pressureFloor: number }
+export interface ChildGcPolicy { collectAt: number; retain: number; pressureFloor: number; retireOnContextPressure?: boolean }
+
+/** Omitted retireOnContextPressure permanently means true. Never normalize it into stored digests. */
+export function shouldRetireOnContextPressure(policy: ChildGcPolicy | undefined): boolean {
+    return policy?.retireOnContextPressure ?? true;
+}
 export interface ChildDefinition {
     selector: RoleSelector;
     description: string;
@@ -64,10 +69,11 @@ function nonnegative(value: unknown, label: string): number { if (!Number.isInte
 function uuid(value: unknown, label: string): string { const result = text(value, label); if (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(result)) throw new Error(`${label} must be a UUID`); return result; }
 
 export function validateChildGcPolicy(value: unknown, label: string): ChildGcPolicy {
-    const item = object(value, label); exact(item, ["collectAt", "retain", "pressureFloor"], [], label);
+    const item = object(value, label); exact(item, ["collectAt", "retain", "pressureFloor"], ["retireOnContextPressure"], label);
     const policy = { collectAt: positive(item.collectAt, `${label}.collectAt`), retain: nonnegative(item.retain, `${label}.retain`), pressureFloor: nonnegative(item.pressureFloor, `${label}.pressureFloor`) };
     if (policy.collectAt < policy.retain || policy.retain < policy.pressureFloor) throw new Error(`${label} hysteresis is invalid`);
-    return policy;
+    if (item.retireOnContextPressure !== undefined && typeof item.retireOnContextPressure !== "boolean") throw new Error(`${label}.retireOnContextPressure must be a boolean`);
+    return item.retireOnContextPressure === undefined ? policy : { ...policy, retireOnContextPressure: item.retireOnContextPressure };
 }
 
 export function validateChildDefinition(name: string, value: unknown, label = `children.${name}`): ChildDefinition {

@@ -6,8 +6,8 @@ import test from "node:test";
 import { buildLaunchEnvelope } from "../extensions_src/utilities/agent_types.ts";
 import { availableContext, publishAgentActivity } from "../extensions_src/utilities/orchestration_activity.ts";
 import { createCompletionReceipt, readCompletionLedger } from "../extensions_src/utilities/orchestration_completion.ts";
-import { acknowledgeMeshContextInterventions, acknowledgeMeshEvents, bindMeshEndpoint, markMeshEventsInjected, materializeMeshCompletionEvents, readEndpointDeliverySnapshot, registerMeshReport, registerStateAwareMeshSend, setMeshEndpointOffline } from "../extensions_src/utilities/orchestration_events.ts";
-import { indexEventCreation, orchestrationIndexPath } from "../extensions_src/utilities/orchestration_index.ts";
+import { acknowledgeMeshContextInterventions, acknowledgeMeshEvents, bindMeshEndpoint, markMeshEventsInjected, materializeMeshCompletionEvents, readEndpointDeliverySnapshot, registerMeshReport, registerStateAwareMeshSend, setMeshEndpointOffline, validateMeshEvent } from "../extensions_src/utilities/orchestration_events.ts";
+import { orchestrationIndexPath } from "../extensions_src/utilities/orchestration_index.ts";
 import { bindAgentRuntime } from "../extensions_src/utilities/orchestration_runtime.ts";
 import { attachRootMesh, applyAgentControl, claimPendingTask, createTask, ensurePolicyEpoch, finishTask, initializeMesh, meshPaths, patchAgentStatus, prepareAgent, publishAgent, readPolicyEpoch, reserveMeshCapacity } from "../extensions_src/utilities/orchestration_store.ts";
 import { DirectoryReadObserver, withTemporaryRoot as withRoot } from "./test_helpers.ts";
@@ -312,18 +312,14 @@ void test("reports route durably to the requested endpoint without duplicate ret
     await assert.rejects(registerMeshReport(root, fixture.mesh.meshId, { ...input, toolCallId: "stale-report-call", canonicalArguments: { taskId: task.request.taskId, summary: "Stale report" }, summary: "Stale report" }), /binding is stale or offline/u);
 }));
 
-// Mechanical protocol validation: manually persisted v6 completion and signal records are readable, while only intervention context inclusion may create delivery acknowledgments.
-void test("v6 completion and signal events remain readable without generating delivery acknowledgments", async () => withRoot("mesh-legacy-events-", async root => {
+// Mechanical protocol validation: legacy completion events without sender session identity are rejected instead of routed.
+void test("legacy events without sender session are rejected", async () => withRoot("mesh-legacy-events-", async root => {
     const fixture = await eventFixture(root);
-    const agentEndpoint = await bindEventAgentEndpoint(root, fixture.mesh.meshId, fixture.agentId);
     const completionId = randomUUID();
-    const signalId = randomUUID();
     const createdAt = new Date().toISOString();
-    await writeFile(join(meshPaths(root, fixture.mesh.meshId).events, `${completionId}.json`), JSON.stringify({ schemaVersion: 1, meshId: fixture.mesh.meshId, eventId: completionId, endpointId: agentEndpoint.endpointId, endpointSessionFile: agentEndpoint.sessionFile, endpointBindingId: agentEndpoint.bindingId, senderEndpointId: fixture.endpoint.endpointId, delivery: "steer", state: "pending", kind: "completion", payload: { eventId: completionId, batchId: randomUUID(), settledAt: createdAt, tasks: [{ taskId: randomUUID(), agentId: fixture.agentId, state: "succeeded" }] }, createdAt }));
-    await writeFile(join(meshPaths(root, fixture.mesh.meshId).events, `${signalId}.json`), JSON.stringify({ schemaVersion: 1, meshId: fixture.mesh.meshId, eventId: signalId, endpointId: agentEndpoint.endpointId, endpointSessionFile: agentEndpoint.sessionFile, endpointBindingId: agentEndpoint.bindingId, senderEndpointId: fixture.endpoint.endpointId, delivery: "followUp", state: "pending", kind: "signal", payload: { topic: "legacy", text: "readable" }, createdAt }));
-    await Promise.all([completionId, signalId].map(eventId => indexEventCreation(root, fixture.mesh.meshId, { endpointId: agentEndpoint.endpointId, endpointSessionFile: agentEndpoint.sessionFile, bindingId: agentEndpoint.bindingId, eventId, createdAt })));
-    assert.deepEqual((await readEndpointDeliverySnapshot(root, fixture.mesh.meshId, agentEndpoint)).events.map(event => event.kind).sort(), ["completion", "signal"]);
-    assert.deepEqual(await acknowledgeMeshContextInterventions(root, fixture.mesh.meshId, agentEndpoint, [completionId, signalId]), []);
+    await writeFile(join(meshPaths(root, fixture.mesh.meshId).events, `${completionId}.json`), JSON.stringify({ schemaVersion: 1, meshId: fixture.mesh.meshId, eventId: completionId, endpointId: fixture.endpoint.endpointId, endpointSessionFile: fixture.endpoint.sessionFile, endpointBindingId: fixture.endpoint.bindingId, senderEndpointId: fixture.endpoint.endpointId, delivery: "steer", state: "pending", kind: "completion", payload: { eventId: completionId, batchId: randomUUID(), settledAt: createdAt, tasks: [{ taskId: randomUUID(), agentId: fixture.agentId, state: "succeeded" }] }, createdAt }));
+    const persisted = JSON.parse(await readFile(join(meshPaths(root, fixture.mesh.meshId).events, `${completionId}.json`), "utf8"));
+    assert.throws(() => validateMeshEvent(persisted, fixture.mesh.meshId), /mesh event has invalid keys/u);
     assert.deepEqual((await readEndpointDeliverySnapshot(root, fixture.mesh.meshId, fixture.endpoint)).events, []);
 }));
 

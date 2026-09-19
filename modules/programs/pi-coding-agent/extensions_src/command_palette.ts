@@ -1,5 +1,5 @@
-import { copyToClipboard, getAgentDir, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { commandPaletteActionIds, extractLastAssistantText, formatContextUsage, summarizeSession, type CommandPaletteActionId, type PaletteAction, type PaletteListItem } from "./utilities/command_palette_core.ts";
+import { getAgentDir, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { commandPaletteActionIds, formatContextUsage, summarizeSession, type CommandPaletteActionId, type PaletteAction, type PaletteListItem } from "./utilities/command_palette_core.ts";
 import { COMMAND_PALETTE_DISCOVER_EVENT, COMMAND_PALETTE_REGISTER_EVENT, CommandPaletteContributionRegistry, contributionIdentity, type CommandPaletteDisposition } from "./utilities/command_palette_contributions.ts";
 import { loadPaletteKeymap, type ResolvedPaletteKeymap } from "./utilities/command_palette_keymap.ts";
 import { formatPaletteBreadcrumb, PaletteListComponent } from "./utilities/command_palette_tui.ts";
@@ -10,8 +10,6 @@ export function buildCommandPaletteActions(_pi: ExtensionAPI, ctx: Pick<Extensio
     return [
         { id: "tool-output", label: "/tool-output  Toggle tool output expansion", description: "Expand or collapse transcript tool results.", keywords: ["tools", "output", "display"], uiKind: "toggle", currentValue: ctx.ui.getToolsExpanded() ? "expanded" : "collapsed" },
         { id: "session-info", label: "/session  Show session information", description: "View session identity, counts, model, and context usage.", keywords: ["session", "stats", "context"], uiKind: "information" },
-        { id: "copy-last-response", label: "/copy  Copy last assistant response", description: "Copy the latest assistant text on the active branch.", keywords: ["clipboard", "copy", "response"], uiKind: "immediate" },
-        { id: "theme", label: "/theme  Select theme", description: "Switch the live TUI theme and persist it through Pi.", keywords: ["appearance", "color", "theme"], uiKind: "select", currentValue: ctx.ui.theme.name ?? "current" },
     ];
 }
 
@@ -40,26 +38,6 @@ async function showSessionInfo(pi: ExtensionAPI, ctx: ExtensionContext, keymap: 
     return undefined;
 }
 
-async function copyLastResponse(ctx: ExtensionContext): Promise<{ ok: boolean; message: string }> {
-    const text = extractLastAssistantText(ctx.sessionManager.getBranch());
-    if (!text) return { ok: false, message: "No assistant text on the active branch" };
-    try {
-        await copyToClipboard(text);
-        return { ok: true, message: "Copied last assistant response" };
-    } catch (error) {
-        return { ok: false, message: `Clipboard error: ${error instanceof Error ? error.message : String(error)}` };
-    }
-}
-
-async function selectTheme(pi: ExtensionAPI, ctx: ExtensionContext, keymap: ResolvedPaletteKeymap): Promise<string | undefined> {
-    const current = ctx.ui.theme.name;
-    const selected = await runHostedPaletteList(pi, ctx, { title: childTitle("Select Theme"), keymap, items: ctx.ui.getAllThemes().map(theme => ({ value: theme.name, label: theme.name, description: theme.path ?? "built-in", state: theme.name === current ? "Current" : undefined })) });
-    if (!selected) return undefined;
-    const result = ctx.ui.setTheme(selected);
-    if (!result.success) return `Theme error: ${result.error ?? "unknown error"}`;
-    return `Theme: ${selected}`;
-}
-
 export async function executePaletteAction(
     id: CommandPaletteActionId,
     pi: ExtensionAPI,
@@ -77,16 +55,6 @@ export async function executePaletteAction(
         }
         case "session-info": {
             await showSessionInfo(pi, ctx, keymap, activeModeName);
-            return "return";
-        }
-        case "copy-last-response": {
-            const result = await copyLastResponse(ctx);
-            root?.setStatus(result.ok ? "success" : "error", result.message);
-            return "return";
-        }
-        case "theme": {
-            const message = await selectTheme(pi, ctx, keymap);
-            if (message) root?.setStatus(message.includes("error") || message.includes("Error") ? "error" : "success", message);
             return "return";
         }
     }

@@ -76,19 +76,13 @@ void test("persisted roots reuse an open lease, close durably, and require a fre
     assert.notEqual(reopened.meshId, mesh.meshId);
 }));
 
-void test("root attach migrates only the exact legacy budget and rejects visible unexpected mismatches", async () => withRoot("mesh-budget-compatibility-", async root => {
+void test("root attach rejects budget mismatches without migration", async () => withRoot("mesh-budget-compatibility-", async root => {
     const generated = { maxLiveAgents: 20, maxConcurrentTasks: 20, maxTasksPerMesh: 256 };
     const legacy = await initializeMesh(root, { rootSessionId: "legacy", recoverable: true, budgets: { maxLiveAgents: 20, maxConcurrentTasks: 6, maxTasksPerMesh: 256 } });
-    await attachRootMesh(root, legacy.meshId, { rootSessionId: "legacy", budgets: generated });
-    const migrated = await readMesh(root, legacy.meshId);
-    assert.deepEqual(migrated.budgets, generated);
-    assert.deepEqual(migrated.budgetMigration && { type: migrated.budgetMigration.type, from: migrated.budgetMigration.from, to: migrated.budgetMigration.to }, { type: "mesh_budget_migrated", from: { maxLiveAgents: 20, maxConcurrentTasks: 6, maxTasksPerMesh: 256 }, to: generated });
-    await attachRootMesh(root, legacy.meshId, { rootSessionId: "legacy", budgets: generated });
-    assert.deepEqual((await readMesh(root, legacy.meshId)).budgetMigration, migrated.budgetMigration);
+    await assert.rejects(attachRootMesh(root, legacy.meshId, { rootSessionId: "legacy", budgets: generated }), /budget mismatch/u);
 
     const current = await initializeMesh(root, { rootSessionId: "current", recoverable: true, budgets: generated });
     await attachRootMesh(root, current.meshId, { rootSessionId: "current", budgets: generated });
-    assert.equal((await readMesh(root, current.meshId)).budgetMigration, undefined);
 
     const retiredLegacy = await initializeMesh(root, { rootSessionId: "retired", recoverable: true, budgets: { maxLiveAgents: 12, maxConcurrentTasks: 6, maxTasksPerMesh: 256 } });
     await assert.rejects(attachRootMesh(root, retiredLegacy.meshId, { rootSessionId: "retired", budgets: generated }), /budget mismatch/u);
@@ -217,6 +211,9 @@ void test("child protocol v1 captures required-access closure and rejects retire
     assert.throws(() => validateChildCatalog({ ...catalog, children: { ...catalog.children, invalid: { ...child("invalid"), selector: { agent: "small" } } } }), /missing required keys/u);
     assert.doesNotThrow(() => validateChildCatalog({ ...catalog, children: { ...catalog.children, research: { ...child("research"), selector: { agent: "research", access: "read" } } } }));
     assert.throws(() => validateChildCatalog({ ...catalog, children: { ...catalog.children, reviewer: { ...catalog.children.reviewer, defaultProfile: "review" } } }), /unknown keys/u);
+    assert.deepEqual(validateChildCatalog({ schemaVersion: 1, children: { kept: child("kept", { gc: { ...syntheticGc, retireOnContextPressure: false } }) } }).children.kept!.gc, { ...syntheticGc, retireOnContextPressure: false });
+    assert.deepEqual(validateChildCatalog({ schemaVersion: 1, children: { omitted: child("omitted") } }).children.omitted!.gc, syntheticGc);
+    assert.throws(() => validateChildCatalog({ schemaVersion: 1, children: { bad: child("bad", { gc: { ...syntheticGc, retireOnContextPressure: "yes" } }) } }), /retireOnContextPressure/u);
     const callPolicy = { modes: { ops: { targets: ["reviewer", "sibling"] } } };
     const epoch = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", catalog, callPolicy });
     assert.equal(epoch.schemaVersion, 7);

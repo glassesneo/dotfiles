@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
+import { visibleWidth } from "@earendil-works/pi-tui";
 import { renderAgentToolResult, renderControlCall, renderControlResult, renderEndResponseCall, renderEndResponseResult, renderMeshEventMessage, renderReportCall, renderReportResult, renderSendCall, renderSendResult, renderStopCall, renderStopResult } from "../extensions_src/utilities/orchestration_cards.ts";
 import type { ChildDefinition } from "../extensions_src/utilities/agent_types.ts";
 import { unknownAgentActivityProjection } from "../extensions_src/utilities/orchestration_activity.ts";
@@ -212,12 +212,13 @@ void test("mesh event cards render received, acknowledged, and report identities
     const report = render(renderMeshEventMessage({ customType: "mesh-event", content: "model payload", details: { eventId: messageId, kind: "report", payload: { agentId, taskId, reportId: messageId, summary: "bounded progress" }, identities: { [agentId]: identity } } }, { expanded: true }, theme as never), 34);
     assert.match(report, /report/u); assert.match(report, /bounded progress/u); assert.match(report.replace(/\s+/gu, ""), new RegExp(`${agentId}|${taskId}|${messageId}`, "u"));
 
-    const legacyContent = `[mesh-event ${messageId}] unknown\n${JSON.stringify({ agentId, taskId })}`;
+    const legacyContent = "model payload";
     const configuredWords = ["Configured"];
-    const legacyCollapsed = render(renderMeshEventMessage({ customType: "mesh-event", content: legacyContent }, { expanded: false }, theme as never, configuredWords), 34);
+    const legacyDetails = { kind: "unknown-kind", payload: { agentId } };
+    const legacyCollapsed = render(renderMeshEventMessage({ customType: "mesh-event", content: legacyContent, details: legacyDetails }, { expanded: false }, theme as never, configuredWords), 34);
     assert.match(legacyCollapsed, new RegExp(handleForAgentId(agentId, configuredWords), "u")); assert.doesNotMatch(legacyCollapsed, /role:|profile:/u); assert.doesNotMatch(legacyCollapsed, new RegExp(`${agentId}|${taskId}|${messageId}`, "u"));
-    const legacyExpanded = render(renderMeshEventMessage({ customType: "mesh-event", content: legacyContent }, { expanded: true }, theme as never, configuredWords), 34);
-    assert.match(legacyExpanded.replace(/\s+/gu, ""), new RegExp(`${agentId}|${taskId}|${messageId}`, "u"));
+    const legacyExpanded = render(renderMeshEventMessage({ customType: "mesh-event", content: legacyContent, details: legacyDetails }, { expanded: true }, theme as never, configuredWords), 34);
+    assert.match(legacyExpanded.replace(/\s+/gu, ""), new RegExp(handleForAgentId(agentId, configuredWords), "u"));
 });
 
 // Admission: nested directional cards are the user-visible from/to boundary; types cannot stop a missing endpoint from being labeled root or a sibling from borrowing the child's public identity.
@@ -279,19 +280,41 @@ void test("collapsed agent cards keep handle and textual status when purpose can
     assert.doesNotMatch(text, /Investigate Cursor termination/u);
 });
 
-// Admission: collapsed body overflow is a width-aware display contract; logical newlines cannot detect a giant CJK line overflowing two rendered rows.
-// Given one long Japanese follow-up at a narrow render width, the card keeps two display body lines and an overflow hint.
-void test("collapsed directional preview keeps two display body lines including giant Japanese", () => {
+// Admission: received follow-up/report bodies are a full-text display contract; truncation cannot be detected by type checks.
+// Given a long Japanese follow-up exceeding 40 lines and 4,000 chars, when it crosses the received renderer collapsed or expanded, the user reads through the end and distinguishes sender and kind.
+void test("received follow-up renders full text through the end in both modes", () => {
     const identity = displayIdentityForSnapshot(snapshot());
-    const body = "あ".repeat(80);
-    const width = 12;
-    const wrapped = wrapTextWithAnsi(body, width).filter(line => line.length > 0);
-    assert.ok(wrapped.length > 2);
-    const component = renderMeshEventMessage({ customType: "mesh-event", content: "model payload", details: { kind: "intervention", payload: { agentId, taskId, messageId: "77777777-7777-4777-8777-777777777777", sequence: 1, message: body }, identities: { [agentId]: identity }, fromEndpointId: "root:test", toEndpointId: `agent:${agentId}`, deliveryState: "injected" } }, { expanded: false }, theme as never);
-    const lines = component.render(width);
-    assert.ok(lines.every(line => visibleWidth(line) <= width));
-    assert.ok(lines.filter(line => line.includes("あ")).length <= 2);
-    assert.match(lines.join("\n"), /remainder/u);
+    const head = "日本語の受信本文です。";
+    const body = [`${head}`, ...Array.from({ length: 45 }, (_, index) => `段落${index + 1} ${"あ".repeat(60)}`), `${"x".repeat(100)}`, "END_OF_FOLLOW_UP"].join("\n");
+    assert.ok(body.split("\n").length > 40);
+    for (const expanded of [false, true]) {
+        const component = renderMeshEventMessage({ customType: "mesh-event", content: "model payload", details: { kind: "intervention", payload: { agentId, taskId, messageId: "77777777-7777-4777-8777-777777777777", sequence: 1, message: body }, identities: { [agentId]: identity }, fromEndpointId: "root:test", toEndpointId: `agent:${agentId}`, deliveryState: "injected" } }, { expanded }, theme as never);
+        const lines = component.render(60);
+        assert.ok(lines.every(line => visibleWidth(line) <= 60));
+        const text = lines.join("\n");
+        assert.match(text, /follow-up/u);
+        assert.match(text, new RegExp(identity.handle, "u"));
+        assert.match(text, new RegExp(head, "u"));
+        assert.match(text, /END_OF_FOLLOW_UP/u);
+    }
+});
+
+// Given a long Japanese report exceeding 40 lines and 4,000 chars, when it crosses the received renderer collapsed or expanded, the user reads through the end and distinguishes sender and kind.
+void test("received report renders full text through the end in both modes", () => {
+    const identity = displayIdentityForSnapshot(snapshot());
+    const head = "日本語の進捗報告です。";
+    const body = [`${head}`, ...Array.from({ length: 45 }, (_, index) => `段落${index + 1} ${"い".repeat(60)}`), `${"y".repeat(100)}`, "END_OF_REPORT"].join("\n");
+    assert.ok(body.split("\n").length > 40);
+    for (const expanded of [false, true]) {
+        const component = renderMeshEventMessage({ customType: "mesh-event", content: "model payload", details: { eventId: "77777777-7777-4777-8777-777777777777", kind: "report", payload: { agentId, taskId, reportId: "77777777-7777-4777-8777-777777777777", summary: body }, identities: { [agentId]: identity }, fromEndpointId: `agent:${agentId}`, toEndpointId: "root:test", deliveryState: "delivered" } }, { expanded }, theme as never);
+        const lines = component.render(60);
+        assert.ok(lines.every(line => visibleWidth(line) <= 60));
+        const text = lines.join("\n");
+        assert.match(text, /report/u);
+        assert.match(text, new RegExp(identity.handle, "u"));
+        assert.match(text, new RegExp(head, "u"));
+        assert.match(text, /END_OF_REPORT/u);
+    }
 });
 
 // Given one ID projected alone and alongside other IDs, when it crosses the pure identity helper, every consumer observes the same collection-independent handle.

@@ -13,7 +13,7 @@ import { buildLaunchEnvelope as buildLaunchEnvelopeV8, buildPolicySnapshot, vali
 import type { ExecutionConfig } from "../extensions_src/utilities/mode_types.ts";
 import { availableContext, publishAgentActivity } from "../extensions_src/utilities/orchestration_activity.ts";
 import { bindAgentRuntime, readAgentRuntimeBinding, unbindAgentRuntime } from "../extensions_src/utilities/orchestration_runtime.ts";
-import { bindMeshEndpoint, materializeMeshCompletionEvents, readEndpointDeliverySnapshot, readMeshEndpoint, registerMeshSignal, resolveRouteEndpoint, setMeshEndpointOffline } from "../extensions_src/utilities/orchestration_events.ts";
+import { bindMeshEndpoint, materializeMeshCompletionEvents, readEndpointDeliverySnapshot, readMeshEndpoint, registerMeshReport, resolveRouteEndpoint, setMeshEndpointOffline } from "../extensions_src/utilities/orchestration_events.ts";
 import { renderMeshEventMessage } from "../extensions_src/utilities/orchestration_cards.ts";
 import { handleForAgentId } from "../extensions_src/utilities/orchestration_identity.ts";
 import { createExplicitStopNotice, listPendingTuiNotices } from "../extensions_src/utilities/orchestration_notices.ts";
@@ -21,7 +21,6 @@ import { readPressureAdmission, requestPressureAdmission } from "../extensions_s
 import { completionLedgerPath, createCompletionReceipt, readCompletionLedger } from "../extensions_src/utilities/orchestration_completion.ts";
 import { indexEventCreation } from "../extensions_src/utilities/orchestration_index.ts";
 import { withMeshLock } from "../extensions_src/utilities/orchestration_lock.ts";
-import { emptyUsage } from "../extensions_src/utilities/orchestration_types.ts";
 import { MESH_PEER_TOOL_NAMES, piLaunchDescriptor } from "../extensions_src/utilities/orchestration_pi.ts";
 import { MAX_MODEL_VISIBLE_BYTES, MAX_MODEL_VISIBLE_LINES, packCompactCompletionDelivery, projectMeshCompletionContext, receiptIdsFromToolResults, serializeModelVisibleJson } from "../extensions_src/utilities/orchestration_projection.ts";
 import { attachRootMesh, applyAgentControl, claimTaskUsage, createTask as createTaskStore, ensurePolicyEpoch as ensurePolicyEpochStore, finishTask, initializeMesh, meshPaths, patchAgentStatus, prepareAgent, publishAgent, readAgentExecution, readAgentSnapshot, readMesh, readPolicyEpoch, readTask, reserveMeshCapacity, taskPaths } from "../extensions_src/utilities/orchestration_store.ts";
@@ -78,15 +77,15 @@ void test("completion context projection deduplicates sources across bundles and
     const second = { role: "custom", customType: "mesh-event", content: "newer", details: { kind: "completion", sources: [structuredClone(sourceOne), sourceTwo], frontier: { observedAt: "2026-01-01T00:00:02.000Z", pendingTasks: [{ taskId: firstTask, agentId: firstAgent, state: "running" as const }, { taskId: thirdTask, agentId: thirdAgent, state: "created" as const }] }, identities: { [secondAgent]: { handle: "May-22222222" } }, display: { tasks: [{ taskId: secondTask, preview: "secret preview" }] } } };
     const receiptId = "66666666-6666-4666-8666-666666666666"; const receipt = { role: "toolResult", toolName: "mesh_get", details: { accounting: { receiptIds: [receiptId], receivedTaskIds: [firstTask], claimedTaskIds: [] } } };
     const question = { role: "toolResult", toolName: "question", details: { answers: [{ id: "choice" }] } };
-    const signal = { role: "custom", customType: "mesh-event", content: "signal", details: { eventId: "77777777-7777-4777-8777-777777777777", kind: "signal", payload: { topic: "x" }, identities: { [secondAgent]: { role: "internal", profile: "secret", model: "provider/model" } } } };
+    const report = { role: "custom", customType: "mesh-event", content: "report", details: { eventId: "77777777-7777-4777-8777-777777777777", kind: "report", payload: { reportId: "77777777-7777-4777-8777-777777777777", agentId: secondAgent, taskId: secondTask, summary: "x" }, identities: { [secondAgent]: { role: "internal", profile: "secret", model: "provider/model" } } } };
     assert.deepEqual(receiptIdsFromToolResults([receipt]), [receiptId]);
-    const projected = projectMeshCompletionContext([first, question, receipt, second, signal], new Set([firstTask]));
+    const projected = projectMeshCompletionContext([first, question, receipt, second, report], new Set([firstTask]));
     assert.deepEqual(projected.eventIds, [firstEvent, secondEvent]);
     assert.deepEqual(projected.messages.slice(0, 2), [question, receipt]);
-    assert.deepEqual(projected.messages.at(-1), { ...signal, details: { eventId: signal.details.eventId, kind: signal.details.kind, payload: signal.details.payload } });
-    assert.equal("identities" in (projected.messages.at(-1) as typeof signal).details, false);
-    const standaloneSignal = projectMeshCompletionContext([signal], new Set()).messages[0] as typeof signal;
-    assert.equal("identities" in standaloneSignal.details, false);
+    assert.deepEqual(projected.messages.at(-1), { ...report, details: { eventId: report.details.eventId, kind: report.details.kind, payload: report.details.payload } });
+    assert.equal("identities" in (projected.messages.at(-1) as typeof report).details, false);
+    const standaloneReport = projectMeshCompletionContext([report], new Set()).messages[0] as typeof report;
+    assert.equal("identities" in standaloneReport.details, false);
     const canonical = projected.messages[2] as typeof second; const content = JSON.parse(canonical.content) as { tasks: Array<{ taskId: string }>; pendingTasks: Array<{ taskId: string }> };
     assert.deepEqual(content.tasks.map(task => task.taskId), [secondTask]); assert.deepEqual(content.pendingTasks.map(task => task.taskId), [thirdTask]); assert.equal("identities" in canonical.details, false); assert.equal("display" in canonical.details, false); assert.doesNotMatch(JSON.stringify(canonical.details), /secret preview|private output/u);
     const included = {
@@ -576,18 +575,22 @@ void test("armed continuation includes new sends but not unrelated peer work", a
 }));
 
 // Admission: queued-but-unseen events are lost when abort clears Pi queues unless runtime suppression is reconciled; types and receipt schemas cannot observe this race.
-// Given an acknowledged signal and a second signal queued concurrently with abort, settlement restores only the unseen event and leaves delegated work alive.
+// Given an acknowledged report and a second report queued concurrently with abort, settlement restores only the unseen event and leaves delegated work alive.
 void test("abort restores unseen delivery without replaying acknowledged events or stopping children", async () => withRoot("mesh-wait-abort-", async root => {
     const h = await waitRuntime(root);
     try {
-        const emit = (id: string) => registerMeshSignal(root, h.mesh.meshId, { callerEndpointId: h.endpoint.endpointId, toolCallId: id, endpoint: h.endpoint, delivery: "steer", topic: id, text: id, canonicalArguments: { id } });
-        await emit("accepted"); await h.clock.advance(2_000); await h.consume();
+        const reporter = await publishWorker(root, h.mesh.meshId, h.epoch.epochId);
+        const childSession = join(root, "abort-child.jsonl"); await writeFile(childSession, "");
+        const childEndpoint = await bindMeshEndpoint(root, h.mesh.meshId, { endpointId: `agent:${reporter.agentId}`, kind: "agent", agentId: reporter.agentId, harness: "pi", sessionId: "abort-child", sessionFile: childSession });
+        const childTask = await createTaskStore(root, h.mesh.meshId, reporter.agentId, { prompt: "abort child work", purpose: "synthetic purpose" }, { requesterEndpointId: h.endpoint.endpointId });
+        const emit = (id: string, summary: string) => registerMeshReport(root, h.mesh.meshId, { callerEndpointId: childEndpoint.endpointId, callerEndpointSessionFile: childEndpoint.sessionFile, toolCallId: id, endpoint: h.endpoint, agentId: reporter.agentId, taskId: childTask.request.taskId, summary, canonicalArguments: { id } });
+        await emit("accepted", "accepted"); await h.clock.advance(2_000); await h.consume();
         await h.arm(); await h.invoke("agent_start"); const ending = h.end(); await h.clock.advance(250);
         const send = h.pi.sendMessage.bind(h.pi); h.pi.sendMessage = (message, options) => { send(message, options); h.setQueued(false); h.signal.abort(); };
-        await emit("unseen"); await h.clock.advance(2_000); await bounded(ending);
+        await emit("unseen", "unseen"); await h.clock.advance(2_000); await bounded(ending);
         assert.equal(h.pi.messages.length, 1); h.pi.messages.length = 0; h.pi.sendMessage = send;
         await h.invoke("agent_settled"); await h.clock.advance(2_000);
-        assert.equal(h.pi.messages.length, 1); assert.equal((h.pi.messages[0]!.message as any).details.payload.topic, "unseen");
+        assert.equal(h.pi.messages.length, 1); assert.equal((h.pi.messages[0]!.message as any).details.payload.summary, "unseen");
         assert.equal((await readTask(root, h.mesh.meshId, h.task.request.taskId)).status.state, "created");
         await h.consume(); assert.equal((await readEndpointDeliverySnapshot(root, h.mesh.meshId, h.endpoint)).events.length, 0);
     } finally { await h.close(); }
@@ -722,23 +725,15 @@ void test("huge completion bundles keep identifiers and skip receipts for unacco
     } finally { await h.close(); }
 }));
 
-// Admission: wait status is the operator-visible mesh usage surface during auto-join; palette/projection tests cannot observe this live status key.
-void test("armed wait status includes mesh child usage separate from Pi totals", async () => withRoot("mesh-wait-usage-status-", async root => {
+// Admission: wait status is the operator-visible auto-join surface; palette/projection tests cannot observe this live status key.
+void test("armed wait status shows plain waiting text", async () => withRoot("mesh-wait-usage-status-", async root => {
     const h = await waitRuntime(root);
     try {
-        const firstUsage = { ...emptyUsage(), input: 11, totalTokens: 11, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } };
-        const secondUsage = { ...emptyUsage(), input: 7, totalTokens: 7, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } };
-        const other = await publishWorker(root, h.mesh.meshId, h.epoch.epochId);
-        const first = await createTaskStore(root, h.mesh.meshId, other.agentId, { prompt: "first", purpose: "synthetic purpose" }, { requesterEndpointId: h.endpoint.endpointId, completion: { endpointId: h.endpoint.endpointId, endpointSessionFile: h.endpoint.sessionFile, bindingId: h.endpoint.bindingId } });
-        await finishTask(root, h.mesh.meshId, first.request.taskId, { outcome: "succeeded", output: "first", usage: firstUsage });
-        const extra = await createTaskStore(root, h.mesh.meshId, other.agentId, { prompt: "second", purpose: "synthetic purpose" }, { requesterEndpointId: h.endpoint.endpointId, completion: { endpointId: h.endpoint.endpointId, endpointSessionFile: h.endpoint.sessionFile, bindingId: h.endpoint.bindingId } });
-        await finishTask(root, h.mesh.meshId, extra.request.taskId, { outcome: "succeeded", output: "second", usage: secondUsage });
         await h.arm();
         const ending = h.end();
         await awaitArmedWait(h);
-        const waitStatus = h.statuses.filter(item => item.key === "mesh-auto-join").map(item => item.value ?? "").find(value => value.includes("Child usage"));
-        assert.ok(waitStatus, JSON.stringify(h.statuses));
-        assert.match(waitStatus!, /Child usage 18 tokens \(mesh, separate from Pi totals\)/u);
+        const waitStatus = h.statuses.filter(item => item.key === "mesh-auto-join").map(item => item.value ?? "").at(-1);
+        assert.equal(waitStatus, "Mesh: waiting for delegated work");
         h.signal.abort();
         await bounded(ending);
     } finally { await h.close(); }
@@ -752,7 +747,11 @@ void test("context delivery errors release arming rather than strand suppressed 
         await h.arm(); await driveWait(h, (async () => {
             const ending = h.end();
             await yieldToIO();
-            await registerMeshSignal(root, h.mesh.meshId, { callerEndpointId: h.endpoint.endpointId, toolCallId: "context-error", endpoint: h.endpoint, delivery: "steer", topic: "synthetic", text: "synthetic", canonicalArguments: {} });
+            const errorChildSession = join(root, "context-error-child.jsonl"); await writeFile(errorChildSession, "");
+            const errorReporter = await publishWorker(root, h.mesh.meshId, h.epoch.epochId);
+            const errorChildEndpoint = await bindMeshEndpoint(root, h.mesh.meshId, { endpointId: `agent:${errorReporter.agentId}`, kind: "agent", agentId: errorReporter.agentId, harness: "pi", sessionId: "context-error-child", sessionFile: errorChildSession });
+            const errorChildTask = await createTaskStore(root, h.mesh.meshId, errorReporter.agentId, { prompt: "context error work", purpose: "synthetic purpose" }, { requesterEndpointId: h.endpoint.endpointId });
+            await registerMeshReport(root, h.mesh.meshId, { callerEndpointId: errorChildEndpoint.endpointId, callerEndpointSessionFile: errorChildEndpoint.sessionFile, toolCallId: "context-error", endpoint: h.endpoint, agentId: errorReporter.agentId, taskId: errorChildTask.request.taskId, summary: "synthetic", canonicalArguments: {} });
             await ending;
         })());
         assert.equal(h.pi.messages.length, 1);
@@ -1131,8 +1130,8 @@ void test("root registration materializes once per deadline and opens a fixed de
 }));
 
 // Admission: delivery-window state spans durable sources and Pi routing; schemas cannot observe a fixed deadline, source grouping, or whether an unrelated routed event waits behind completions.
-// Given completions before and after a fixed boundary plus a signal during the first window, the endpoint observes two completion bundles while the signal routes before the first deadline.
-void test("delivery pump coalesces a fixed completion window without delaying a signal", async () => withRoot("mesh-completion-bundle-", async root => {
+// Given completions before and after a fixed boundary plus a report during the first window, the endpoint observes two completion bundles while the report routes before the first deadline.
+void test("delivery pump coalesces a fixed completion window without delaying a report", async () => withRoot("mesh-completion-bundle-", async root => {
     const sessionFile = join(root, "root-bundle.jsonl"); await writeFile(sessionFile, "");
     const mesh = await initializeMesh(root, { rootSessionId: "root-bundle", rootSessionFile: sessionFile, recoverable: true, budgets: { ...budgets, maxConcurrentTasks: 8 } });
     const epoch = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", roleSet: ["worker"], roles: { worker: settledAgentDefinition("worker") } });
@@ -1145,8 +1144,11 @@ void test("delivery pump coalesces a fixed completion window without delaying a 
     await finishTask(root, mesh.meshId, first.request.taskId, { outcome: "succeeded", output: "private first output" }); await clock.advance(1000);
     await finishTask(root, mesh.meshId, second.request.taskId, { outcome: "failed", error: "private second error" }); await clock.advance(1000);
     const liveEndpoint = await readMeshEndpoint(root, mesh.meshId, endpointId); const pendingSources = (await readEndpointDeliverySnapshot(root, mesh.meshId, liveEndpoint)).events.filter(event => event.kind === "completion"); assert.equal(pendingSources.length, 2); assert.equal(pendingSources.every(event => event.state === "pending"), true);
-    await registerMeshSignal(root, mesh.meshId, { callerEndpointId: endpointId, toolCallId: "completion-window-signal", endpoint: liveEndpoint, delivery: "followUp", topic: "status", text: "unblocked", canonicalArguments: { topic: "status" } }); await clock.advance(2000);
-    const signalMessages = pi.messages.filter(item => (item.message as any).details?.kind === "signal"); assert.equal(signalMessages.length, 1); assert.deepEqual(signalMessages[0]!.options, { deliverAs: "followUp", triggerTurn: true }); assert.equal(pi.messages.filter(item => (item.message as any).details?.kind === "completion").length, 0);
+    const windowChildSession = join(root, "window-child.jsonl"); await writeFile(windowChildSession, "");
+    const windowChildEndpoint = await bindMeshEndpoint(root, mesh.meshId, { endpointId: `agent:${firstAgent.agentId}`, kind: "agent", agentId: firstAgent.agentId, harness: "pi", sessionId: "window-child", sessionFile: windowChildSession });
+    const windowChildTask = await createTaskStore(root, mesh.meshId, firstAgent.agentId, { prompt: "window child work", purpose: "synthetic purpose" }, { requesterEndpointId: endpointId });
+    await registerMeshReport(root, mesh.meshId, { callerEndpointId: windowChildEndpoint.endpointId, callerEndpointSessionFile: windowChildEndpoint.sessionFile, toolCallId: "completion-window-report", endpoint: liveEndpoint, agentId: firstAgent.agentId, taskId: windowChildTask.request.taskId, summary: "unblocked", canonicalArguments: { summary: "unblocked" } }); await clock.advance(2000);
+    const reportMessages = pi.messages.filter(item => (item.message as any).details?.kind === "report"); assert.equal(reportMessages.length, 1); assert.deepEqual(reportMessages[0]!.options, { deliverAs: "steer", triggerTurn: true }); assert.equal(pi.messages.filter(item => (item.message as any).details?.kind === "completion").length, 0);
     await clock.advance(2999); assert.equal(pi.messages.filter(item => (item.message as any).details?.kind === "completion").length, 0);
     await clock.advance(1);
     let completionMessages = pi.messages.filter(item => (item.message as any).details?.kind === "completion"); assert.equal(completionMessages.length, 1);

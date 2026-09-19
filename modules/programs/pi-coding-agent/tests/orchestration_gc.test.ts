@@ -238,3 +238,69 @@ void test("GC claim fences a stale non-terminal heartbeat", async () => withRoot
 }));
 
 void test("replaced runtimes cannot project activity, win GC admission, or claim external work", async () => withRoot(async root => { const f = await fixture(root); const target = await agent(root, f.mesh.meshId, f.epoch.epochId, "worker", new Date().toISOString()); const sequence = (await import("../extensions_src/utilities/orchestration_activity.ts")).readAgentActivity(root, f.mesh.meshId, target.agentId).then(value => value!.sequence); await bindAgentRuntime(root, f.mesh.meshId, target.agentId, { runtimeId: randomUUID(), kind: "external" }); assert.equal((await readAgentSnapshot(root, f.mesh.meshId, target.agentId)).activity.phase, "unknown"); await assert.rejects(createTask(root, f.mesh.meshId, target.agentId, { prompt: "stale admission", purpose: "synthetic purpose" }), /not accepting tasks/u); assert.equal(await claimIdleAgentForStop(root, f.mesh.meshId, target.agentId, { source: "gc-role", reason: "stale GC", activitySequence: await sequence, staleMs: 10_000 }), undefined); const worker = await agent(root, f.mesh.meshId, f.epoch.epochId, "worker", new Date().toISOString()); await createTask(root, f.mesh.meshId, worker.agentId, { prompt: "external work", purpose: "synthetic purpose" }); await bindAgentRuntime(root, f.mesh.meshId, worker.agentId, { runtimeId: randomUUID(), kind: "external" }); await assert.rejects(claimPendingTask(root, f.mesh.meshId, worker.agentId, worker.runtimeId), /stale or unbound/u); }));
+
+// Admission: per-child retireOnContextPressure owns whether context-threshold observation retires; the periodic pass must not conflate threshold observation with refusal.
+// Given one threshold-reached true child and one threshold-reached false child, periodic GC retires only the true child for context reasons, role-GC keeps the false child reusable, and the surviving false child accepts a new task.
+void test("periodic GC retires only enabled children for context while disabled children stay reusable", async () => withRoot(async root => {
+    const retirementCtx = (tokens: number) => availableContext(tokens, 1000, 100);
+    const trueDefinition: ChildDefinition = { ...childDefinition("worker"), gc: { collectAt: 6, retain: 3, pressureFloor: 1, retireOnContextPressure: true } };
+    const falseDefinition: ChildDefinition = { ...childDefinition("reviewer"), gc: { collectAt: 6, retain: 3, pressureFloor: 1, retireOnContextPressure: false } };
+    const mixedCatalog: ChildCatalog = { schemaVersion: 1, children: { worker: trueDefinition, reviewer: falseDefinition } };
+    const mixedPolicy: CallPolicy = { modes: { ops: { targets: ["worker", "reviewer"] } } };
+    const mesh = await initializeMesh(root, { rootSessionId: "root", recoverable: true, budgets: { maxLiveAgents: 20, maxConcurrentTasks: 20, maxTasksPerMesh: 100 } });
+    const lease = await attachRootMesh(root, mesh.meshId, { rootSessionId: "root", budgets: { maxLiveAgents: 20, maxConcurrentTasks: 20, maxTasksPerMesh: 100 } });
+    const epoch = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", catalog: mixedCatalog, callPolicy: mixedPolicy });
+    const gc = meshGcConfig({ contextHeadroomTokens: 32768, periodicIntervalMs: 5000, activityHeartbeatMs: 2000, activityStaleMs: 10000 }, mixedCatalog);
+    const publishMixed = async (role: "worker" | "reviewer", phaseSince: string, context: ReturnType<typeof availableContext>) => {
+        const definition = role === "worker" ? trueDefinition : falseDefinition;
+        const reservation = await reserveMeshCapacity(root, mesh.meshId, "new-agent-task");
+        const prepared = await prepareAgent(root, mesh.meshId, { reservationId: reservation.reservationId, childId: role, harness: "pi", cwd: root, definitionSnapshot: definition, launchEnvelope: "pending", epochId: epoch.epochId, provenance: { creatorSessionId: "root" }, capabilities });
+        const envelope = buildLaunchEnvelope({ meshId: mesh.meshId, agentId: prepared.agentId, epochId: epoch.epochId, childId: role, snapshot: epoch, childExtensions: { worker: [], reviewer: [] } });
+        const envelopePath = join(prepared.paths.directory, "launch-envelope.json"); await writeFile(envelopePath, JSON.stringify(envelope));
+        const paneId = `%${prepared.agentId}`;
+        await publishAgent(root, mesh.meshId, prepared.paths, { agentId: prepared.agentId, epochId: epoch.epochId, childId: role, harness: "pi", cwd: root, definitionSnapshot: definition, launchEnvelope: envelopePath, tmux: { socket: "/tmp/tmux", serverPid: "10", sessionId: "$1", sessionName: "mesh", windowId: `@${prepared.agentId}`, paneId, windowName: role }, capabilities, creatorSessionId: "root" });
+        await patchAgentStatus(root, mesh.meshId, prepared.agentId, { state: "idle", bridgeReady: true });
+        const runtimeId = randomUUID(); await bindAgentRuntime(root, mesh.meshId, prepared.agentId, { runtimeId, kind: "external" });
+        await publishAgentActivity(root, mesh.meshId, prepared.agentId, { runtimeId, phase: "idle", acceptingTask: true, pendingMessages: false, phaseSince, observedAt: new Date().toISOString(), heartbeatAt: new Date().toISOString(), context });
+        return { ...prepared, paneId, runtimeId };
+    };
+    // tokens=868 of window 1000 with reserve 100 leaves 32 headroom <= default 32768 -> retire observation.
+    const retired = await publishMixed("worker", "2026-08-09T11:00:00.000Z", retirementCtx(868));
+    const kept = await publishMixed("reviewer", "2026-08-09T12:00:00.000Z", retirementCtx(868));
+    const keptSnapshot = await readAgentSnapshot(root, mesh.meshId, kept.agentId);
+    assert.equal(keptSnapshot.activity.context.health, "retire");
+    assert.equal(keptSnapshot.activity.retirementReason, null);
+    assert.equal(keptSnapshot.activity.acceptingTask, true);
+    const alive = new Set([retired.paneId, kept.paneId]);
+    const result = await runPeriodicAgentGc({ stateRoot: root, meshId: mesh.meshId, leaseId: lease.leaseId, gc, exec: tmuxExec(alive), tmux: "tmux" });
+    assert.deepEqual(result.confirmed, [retired.agentId]);
+    assert.equal((await readAgentSnapshot(root, mesh.meshId, kept.agentId)).status.state, "idle");
+    await createStoreTask(root, mesh.meshId, kept.agentId, { prompt: "reuse after threshold", purpose: "synthetic purpose" }, { requesterEndpointId: `root:${mesh.meshId}` });
+    assert.equal((await readAgentSnapshot(root, mesh.meshId, kept.agentId)).status.state, "busy");
+}));
+
+// Admission: pressure capacity owns live-slot reclamation with a different selection boundary than periodic GC; a threshold-reached disabled child must still be reclaimable above its pressure floor.
+// Given a full live budget with a threshold-reached retire-disabled child above pressureFloor, pressure reservation reclaims it.
+void test("pressure GC reclaims threshold-reached disabled children above the pressure floor", async () => withRoot(async root => {
+    const falseDefinition: ChildDefinition = { ...childDefinition("worker"), gc: { collectAt: 6, retain: 3, pressureFloor: 0, retireOnContextPressure: false } };
+    const floorCatalog: ChildCatalog = { schemaVersion: 1, children: { worker: falseDefinition } };
+    const floorPolicy: CallPolicy = { modes: { ops: { targets: ["worker"] } } };
+    const budgets = { maxLiveAgents: 1, maxConcurrentTasks: 5, maxTasksPerMesh: 20 };
+    const mesh = await initializeMesh(root, { rootSessionId: "root", recoverable: true, budgets });
+    const lease = await attachRootMesh(root, mesh.meshId, { rootSessionId: "root", budgets });
+    const epoch = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", catalog: floorCatalog, callPolicy: floorPolicy });
+    const gc = meshGcConfig({ contextHeadroomTokens: 32768, periodicIntervalMs: 5000, activityHeartbeatMs: 2000, activityStaleMs: 10000 }, floorCatalog);
+    const reservation = await reserveMeshCapacity(root, mesh.meshId, "new-agent-task");
+    const prepared = await prepareAgent(root, mesh.meshId, { reservationId: reservation.reservationId, childId: "worker", harness: "pi", cwd: root, definitionSnapshot: falseDefinition, launchEnvelope: "pending", epochId: epoch.epochId, provenance: { creatorSessionId: "root" }, capabilities });
+    const envelope = buildLaunchEnvelope({ meshId: mesh.meshId, agentId: prepared.agentId, epochId: epoch.epochId, childId: "worker", snapshot: epoch, childExtensions: { worker: [] } });
+    const envelopePath = join(prepared.paths.directory, "launch-envelope.json"); await writeFile(envelopePath, JSON.stringify(envelope));
+    const paneId = `%${prepared.agentId}`;
+    await publishAgent(root, mesh.meshId, prepared.paths, { agentId: prepared.agentId, epochId: epoch.epochId, childId: "worker", harness: "pi", cwd: root, definitionSnapshot: falseDefinition, launchEnvelope: envelopePath, tmux: { socket: "/tmp/tmux", serverPid: "10", sessionId: "$1", sessionName: "mesh", windowId: `@${prepared.agentId}`, paneId, windowName: "worker" }, capabilities, creatorSessionId: "root" });
+    await patchAgentStatus(root, mesh.meshId, prepared.agentId, { state: "idle", bridgeReady: true });
+    const runtimeId = randomUUID(); await bindAgentRuntime(root, mesh.meshId, prepared.agentId, { runtimeId, kind: "external" });
+    await publishAgentActivity(root, mesh.meshId, prepared.agentId, { runtimeId, phase: "idle", acceptingTask: true, pendingMessages: false, phaseSince: "2026-08-09T12:00:00.000Z", observedAt: new Date().toISOString(), heartbeatAt: new Date().toISOString(), context: availableContext(868, 1000, 100) });
+    assert.equal((await readAgentSnapshot(root, mesh.meshId, prepared.agentId)).activity.acceptingTask, true);
+    const made = await reserveNewAgentCapacityWithPressure({ stateRoot: root, meshId: mesh.meshId, leaseId: lease.leaseId, gc, exec: tmuxExec(new Set([paneId])), tmux: "tmux" });
+    assert.equal(made.state, "pending");
+    assert.equal((await readAgentSnapshot(root, mesh.meshId, prepared.agentId)).status.state, "stopped");
+}));

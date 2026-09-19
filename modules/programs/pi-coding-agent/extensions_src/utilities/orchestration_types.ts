@@ -39,8 +39,7 @@ export interface NativeCapabilities { nativeScreen: boolean; taskDelivery: boole
 export type HarnessAdapterKind = HarnessRuntimeConfig["adapter"];
 export type SubagentRuntimeConfig = OrchestrationConfig;
 
-export interface MeshBudgetMigration { type: "mesh_budget_migrated"; from: MeshBudgets; to: MeshBudgets; migratedAt: string }
-export interface MeshRecord { schemaVersion: 1; meshId: string; state: MeshState; recoverable: boolean; rootSessionId: string; rootSessionFile?: string; budgets: MeshBudgets; createdAt: string; updatedAt: string; rootAttachedAt?: string; currentEpochId?: string; closedAt?: string; budgetMigration?: MeshBudgetMigration }
+export interface MeshRecord { schemaVersion: 1; meshId: string; state: MeshState; recoverable: boolean; rootSessionId: string; rootSessionFile?: string; budgets: MeshBudgets; createdAt: string; updatedAt: string; rootAttachedAt?: string; currentEpochId?: string; closedAt?: string }
 export interface RootLease { schemaVersion: 1; meshId: string; leaseId: string; rootSessionId: string; rootSessionFile?: string; pid: number; acquiredAt: string; heartbeatAt: string; tmuxServerPid?: string; tmuxSessionId?: string }
 export interface PolicyEpoch { schemaVersion: 7; meshId: string; epochId: string; mode: string; directTargets: string[]; children: Record<string, ChildDefinition>; policyDigest: string; createdAt: string; readonly childSet: string[] }
 export interface BudgetReservation { schemaVersion: 1; meshId: string; reservationId: string; kind: "new-agent-task" | "existing-agent-task"; state: ReservationState; agentId?: string; taskId?: string; liveSlots: 0 | 1; taskSlots: 1; lifetimeTasks: 1; createdAt: string; updatedAt: string; committedAt?: string; releasedAt?: string; releaseReason?: string }

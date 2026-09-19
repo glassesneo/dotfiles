@@ -30,18 +30,6 @@ delib.module {
           required = true;
           target = "extension";
         };
-        collapse = {
-          role = "collapse";
-          contexts = ["commandPalette"];
-          required = true;
-          target = "extension";
-        };
-        expand = {
-          role = "expand";
-          contexts = ["commandPalette"];
-          required = true;
-          target = "extension";
-        };
         confirm = {
           role = "confirm";
           contexts = ["commandPalette"];

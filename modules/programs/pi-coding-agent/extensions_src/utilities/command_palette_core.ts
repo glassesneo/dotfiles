@@ -1,6 +1,6 @@
 import type { ContextUsage } from "@earendil-works/pi-coding-agent";
 
-export const commandPaletteActionIds = ["tool-output", "session-info", "copy-last-response", "theme"] as const;
+export const commandPaletteActionIds = ["tool-output", "session-info"] as const;
 export type CommandPaletteActionId = (typeof commandPaletteActionIds)[number];
 export type PaletteUiKind = "select" | "toggle" | "information" | "immediate";
 
@@ -35,18 +35,6 @@ export function filterPaletteItems<T>(items: readonly PaletteListItem<T>[], quer
 export interface SessionEntryLike {
     type: string;
     message?: { role?: string; content?: unknown };
-}
-
-export function extractLastAssistantText(entries: readonly SessionEntryLike[]): string | undefined {
-    for (let index = entries.length - 1; index >= 0; index -= 1) {
-        const entry = entries[index];
-        if (entry?.type !== "message" || entry.message?.role !== "assistant" || !Array.isArray(entry.message.content)) continue;
-        const text = entry.message.content
-            .filter((block): block is { type: "text"; text: string } => block !== null && typeof block === "object" && (block as { type?: unknown }).type === "text" && typeof (block as { text?: unknown }).text === "string")
-            .map(block => block.text).join("\n");
-        if (text.length > 0) return text;
-    }
-    return undefined;
 }
 
 export interface SessionSummary {

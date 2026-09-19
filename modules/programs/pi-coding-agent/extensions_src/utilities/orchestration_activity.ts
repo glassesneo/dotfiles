@@ -158,17 +158,20 @@ export const unknownAgentActivityProjection = (): AgentActivityProjection => ({
     context: { state: "unknown", tokens: null, contextWindow: null, reserveTokens: null, compactionThreshold: null, tokensUntilCompaction: null, retirementHeadroomTokens: null, health: "unknown" }, retirementReason: null,
 });
 
-export function projectAgentActivity(status: AgentStatus, activity: AgentActivity | undefined, options: { now?: number; staleMs?: number; expectedRuntimeId?: string; activeStop?: boolean; allowUnsupportedContext?: boolean } = {}): AgentActivityProjection {
+export function projectAgentActivity(status: AgentStatus, activity: AgentActivity | undefined, options: { now?: number; staleMs?: number; expectedRuntimeId?: string; activeStop?: boolean; allowUnsupportedContext?: boolean; retireOnContextPressure?: boolean } = {}): AgentActivityProjection {
     if (!activity || activity.meshId !== status.meshId || activity.agentId !== status.agentId || options.expectedRuntimeId && activity.runtimeId !== options.expectedRuntimeId) return unknownAgentActivityProjection();
     const now = options.now ?? Date.now(); const age = now - Date.parse(activity.heartbeatAt);
     if (!Number.isFinite(age) || age < 0 || age > (options.staleMs ?? DEFAULT_ACTIVITY_STALE_MS) || activity.phase === "starting") return unknownAgentActivityProjection();
     const available = activity.context.state === "available";
     const externalAcceptable = activity.context.state === "unsupported" && options.allowUnsupportedContext !== false;
-    const acceptingTask = status.state === "idle" && !status.activeTaskId && activity.phase === "idle" && !activity.pendingMessages && !options.activeStop && (activity.context.health === "healthy" || externalAcceptable);
+    const retireOnContextPressure = options.retireOnContextPressure ?? true;
+    const thresholdRetired = available && activity.context.health === "retire";
+    const thresholdReusable = thresholdRetired && !retireOnContextPressure;
+    const acceptingTask = status.state === "idle" && !status.activeTaskId && activity.phase === "idle" && !activity.pendingMessages && !options.activeStop && (activity.context.health === "healthy" || thresholdReusable || externalAcceptable);
     return {
         phase: activity.phase, acceptingTask, pendingMessages: activity.pendingMessages, phaseSince: activity.phaseSince, lastHeartbeatAt: activity.heartbeatAt, compactionReason: activity.compactionReason ?? null,
         context: { state: activity.context.state, tokens: available ? activity.context.tokens! : null, contextWindow: available ? activity.context.contextWindow! : null, reserveTokens: available ? activity.context.reserveTokens! : null, compactionThreshold: available ? activity.context.compactionThreshold! : null, tokensUntilCompaction: available ? activity.context.tokensUntilCompaction! : null, retirementHeadroomTokens: available ? activity.context.retirementHeadroomTokens! : null, health: activity.context.health },
-        retirementReason: activity.context.health === "retire" ? "context-headroom" : null,
+        retirementReason: thresholdRetired && retireOnContextPressure ? "context-headroom" : null,
     };
 }
 

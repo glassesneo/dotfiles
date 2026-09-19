@@ -26,16 +26,22 @@ validate an old session.
 
 ## Reading child work
 
-In `/mesh`, select a child and press the configured `meshPalette.history` key
-(default `h`) to browse its tasks and messages, including acknowledged messages.
-Enter opens the selected record's full body; arrows and Page Up/Down scroll it.
-Escape returns one view at a time, preserving the selection. The mesh list's
-existing Enter session-opening, Space preview, and stop actions are unchanged.
+Follow-ups and reports arrive in the receiving Pi conversation as full text:
+the sender, direction, and kind stay on a short header line and the body below
+uses the same message component as a user prompt with no truncation. Scroll a
+long body normally; there is no separate history screen, `h` key, collapse
+control, or remainder pointer. Sending, delivery acknowledgment, and completion
+cards keep their existing summaries.
 
-History is read-only: opening it does not acknowledge messages, retrieve task
-results for the model, or change task state. An intake acknowledgment means a
-follow-up entered model context, not agreement or task completion. Missing or
-malformed records are reported while readable records remain available.
+Enter still opens the selected live child window, Space still previews it, and
+stop/pause/interrupt/resume still act on it. Finished Pi sessions remain
+readable through the existing session file in a terminal Pi run. There is no
+Unlink action; every linked view closes with the agent window.
+
+Child usage is counted once per task in mesh totals and is separate
+from Pi's own usage line. External children without usage capabilities show as
+unknown, not zero. The mesh list no longer shows a combined child-token total;
+per-task and per-agent usage stay on the detail pane, receipts, and results.
 
 ## Public delegation contract
 
@@ -69,9 +75,7 @@ A completion notification that wakes a waiting or idle caller includes compact
 results for those tasks. User input that wins the same wake does not auto-include
 results; retrieve them with `mesh_get`. When a compact notification already
 included a result, skip the immediate `mesh_get` unless `fullOutputAvailable`
-is set. Child usage is counted once per task in mesh totals and is separate
-from Pi's own usage line. External children without usage capabilities show as
-unknown, not zero.
+is set.
 
 `mesh_control({ agentId, action })` pauses, interrupts, or resumes a direct
 child and its descendants without finishing their tasks. `/mesh pause`,
@@ -165,19 +169,37 @@ next mode apply. There is no parent `/profile` command.
 `disable-model-invocation`. It is not an allowlist that hides ordinary
 Skills.
 
-## Performance threshold
+## Per-child context retirement
 
-The displayed compaction threshold is computed from file-backed Pi settings
-and the observed context window, not from a live compaction measurement. The
-extension reads reserve tokens through Pi's public `SettingsManager` using
-the current working directory, agent directory, and project-trust flag.
-Trusted project settings follow that manager's merge. An official
-`SettingsManager` default is a valid settings value; a missing settings file
-is not unknown when that default is returned. Fetch exceptions, reported
-read errors, and values that are not finite and non-negative make that
-observation unknown; the known window and peak tokens remain, and a previous
-threshold is not carried forward. Do not substitute a repository `16384`
-constant.
+`programs.pi-coding-agent.orchestration.children.<childId>.gc.retireOnContextPressure`
+is a boolean (default true) that decides whether reaching the context-headroom
+threshold retires that child. `false` keeps a threshold-reached child reusable:
+it still accepts the next task when ordinary idle conditions hold, while
+unknown or stale observations, running state, pending messages, stops, holds,
+and count- or pressure-based GC still apply. Observed context values are not
+rewritten and `retirementReason` is set only for an effective retirement.
+
+Initial values:
+
+| child | retireOnContextPressure |
+|---|---|
+| small-write, advanced-read, advanced-write, research | false |
+| small-read, perspective, standard-read, standard-write, search | true |
+
+Host files may override any child at normal priority; no separate host policy
+module is needed. An explicit boolean changes the child definition digest, so
+a new epoch or child may be selected; omission always means true and is never
+normalized into stored digests.
+
+## Applying this configuration
+
+Finish or stop every old mesh task before activating the new configuration,
+then start a new parent Pi session and a new mesh. Do not resume an old Pi
+session or an old mesh. Existing events without sender session identity,
+removed signal records, and meshes carrying the old budget-migration marker
+are not completed, converted, or deleted automatically, and no new state root
+splits them: they stay unreadable until archived or removed after checking
+their contents.
 
 ## Operational limits
 

@@ -18,11 +18,11 @@ import { configuredModelDiagnosticNames, exceedsModelVisibleLimit, packCompactCo
 import { acknowledgeMeshContextInterventions, acknowledgeMeshEvents, bindMeshEndpoint, isLiveMeshEndpointBinding, markMeshEventsInjected, materializeMeshCompletionEvents, readEndpointDeliverySnapshot, registerMeshReport, registerStateAwareMeshSend, reserveNewAgentMeshSendSubmission, resolveRouteEndpoint, setMeshEndpointOffline, validateMeshEvent, type FrozenTask, type MeshDelivery, type MeshEndpoint, type MeshEvent, type MeshSendResult } from "./utilities/orchestration_events.ts";
 import { OrchestrationDeadlineScheduler } from "./utilities/orchestration_cadence.ts";
 import { createCompletionReceipt, createNotificationCompletionReceipt, readCompletionLedger, reconcileCompletionReceipts, rollbackCompletionReceipt, type CompletionReceiptCreationResult } from "./utilities/orchestration_completion.ts";
-import { attachRootMesh, applyAgentControl, beginMeshClose, claimTaskUsage, completeMeshClose, createTask, descendantAgentIds, ensurePolicyEpoch, heartbeatRootLease, initializeMesh, listMeshAgents, listMeshTasks, meshPaths, prepareAgent, publishAgent, readAgentExecution, readAgentSnapshot, readMesh, readPersistedCompletionReceiptEvidence, readPolicyEpoch, readTask, reconcileMeshReservations, reconcileMeshState, reconcileMeshUsageClaims, releaseMeshReservation, removePreparedAgent, rollbackTaskUsageClaim, taskPaths, validateStopReason } from "./utilities/orchestration_store.ts";
+import { attachRootMesh, applyAgentControl, beginMeshClose, claimTaskUsage, completeMeshClose, createTask, descendantAgentIds, ensurePolicyEpoch, heartbeatRootLease, initializeMesh, listMeshAgents, meshPaths, prepareAgent, publishAgent, readAgentExecution, readAgentSnapshot, readMesh, readPersistedCompletionReceiptEvidence, readPolicyEpoch, readTask, reconcileMeshReservations, reconcileMeshState, reconcileMeshUsageClaims, releaseMeshReservation, removePreparedAgent, rollbackTaskUsageClaim, taskPaths, validateStopReason } from "./utilities/orchestration_store.ts";
 import { AgentLaunchCleanupError, inspectAgentTmux, inspectMeshAgentWindow, launchAgentSession, probeTmux, stopAgentSession, type CommandExecutor } from "./utilities/orchestration_tmux.ts";
 import { isTerminalAgent, isTerminalTask, optionalTaskPurpose, POLICY_EPOCH_SCHEMA_VERSION, type AgentSnapshot, type CompletionTarget, type PolicyEpoch, type SubagentRuntimeConfig } from "./utilities/orchestration_types.ts";
 import { MeshAgentsPaletteComponent, type MeshPaletteDependencies } from "./utilities/orchestration_palette.ts";
-import { ChildHistoryBodyComponent, ChildHistoryListComponent } from "./utilities/orchestration_history_views.ts";
+
 import { MESH_PEER_TOOL_NAMES, MESH_REPORT_TOOL_NAME } from "./utilities/orchestration_pi.ts";
 import { renderAgentToolResult, renderControlCall, renderControlResult, renderEndResponseCall, renderEndResponseResult, renderGetCall, renderMeshEventMessage, renderReportCall, renderReportResult, renderSendCall, renderSendResult, renderStopCall, renderStopResult } from "./utilities/orchestration_cards.ts";
 import { openPopupView, providePopupView } from "./popup.ts";
@@ -36,7 +36,7 @@ import { collectEndpointAgentIds, displayIdentityForAgentId, displayIdentityForS
 import { createDirectoryWake, endpointBindingInboxDirectory, rootCompletionQueueDirectory, type DirectoryWake, type DirectoryWakeDependencies } from "./utilities/orchestration_wake.ts";
 import { END_RESPONSE_ERROR_STANDALONE, END_RESPONSE_TOOL_NAME, MESH_CONTROL_TOOL_NAME, ProcessExecutionGate, isJoinableAgentEnd, meshYieldNextAction, projectExecutionPhase, shouldOpenExecutionGate, type ControlAction, type ControlSource, type ControlTargetStatus } from "./utilities/orchestration_execution.ts";
 import { MeshArmedWait, type MeshWaitInspection } from "./utilities/orchestration_wait.ts";
-import { formatMeshChildUsageLine, projectMeshChildUsage } from "./utilities/orchestration_usage.ts";
+
 
 const CONFIG = join(getAgentDir(), "orchestration.json"); const CATALOG = join(getAgentDir(), "child-catalog.json"); const MODES = join(getAgentDir(), "agent-modes.json");
 const ROOT_BINDING = "mesh-root-binding-v11"; const POLICY_BINDING = "mesh-policy-epoch-v11"; const PARENT_STATUS = "mesh-parent-navigation"; const PUMP_STATUS = "mesh-event-pump"; const WAIT_STATUS = "mesh-auto-join"; const NOTICE_PUMP_STATUS = "mesh-notice-pump"; const NOTICE_ENTRY = "mesh-tui-notice"; const COMPLETION_DELIVERY_WINDOW_MS = 5_000;
@@ -336,14 +336,7 @@ export async function registerOrchestration(pi: ExtensionAPI, options: Orchestra
     const clearWaitSession = () => { armedWait.disarm(); armedEndpoint = undefined; armedTaskId = undefined; trackedWaitTasks.clear(); cadence?.setEnabled("wait-input", false); try { sessionContext?.ui.setStatus(WAIT_STATUS, undefined); } catch {} };
     const failWait = (error: unknown) => { if (!armedWait.isArmed()) return; clearWaitSession(); const diagnostic = `Mesh wait ended: ${errorText(error)}`; try { sessionContext?.ui.setStatus(PUMP_STATUS, diagnostic); sessionContext?.ui.notify(diagnostic, "error"); } catch {} };
     const setWaitStatus = async (ctx: ExtensionContext) => {
-        if (!current) { ctx.ui.setStatus(WAIT_STATUS, "Mesh: waiting for delegated work"); return; }
-        try {
-            const snapshots = await listMeshAgents(runtime.stateRoot, current.meshId);
-            const tasks = await listMeshTasks(runtime.stateRoot, current.meshId);
-            ctx.ui.setStatus(WAIT_STATUS, `Mesh: waiting for delegated work · ${formatMeshChildUsageLine(projectMeshChildUsage(snapshots, tasks))}`);
-        } catch {
-            ctx.ui.setStatus(WAIT_STATUS, "Mesh: waiting for delegated work");
-        }
+        ctx.ui.setStatus(WAIT_STATUS, "Mesh: waiting for delegated work");
     };
     const noteAbort = () => { recoverInjectedAfterSettle = true; deliveryGeneration += 1; awaitingContextEvents.clear(); deliveredCompletionTaskIds.clear(); clearWaitSession(); };
     // Pi's hasPendingMessages counts native user queues, not sendMessage's custom Agent queue.
@@ -777,7 +770,7 @@ export async function registerOrchestration(pi: ExtensionAPI, options: Orchestra
                 if (raw.customType !== "mesh-event" || !details) continue;
                 if (details.kind === "completion" && Array.isArray(details.sources)) for (const source of details.sources as Array<{ tasks: FrozenTask[] }>) for (const task of source.tasks) trackedWaitTasks.delete(task.taskId);
                 if (details.kind === "intervention" && typeof details.eventId === "string") interventionIds.push(details.eventId);
-                else if (["signal", "report"].includes(String(details.kind)) && typeof details.eventId === "string") normalEventIds.push(details.eventId);
+                else if (details.kind === "report" && typeof details.eventId === "string") normalEventIds.push(details.eventId);
                 else if (details.kind === "delivery-ack" && Array.isArray(details.eventIds)) for (const eventId of details.eventIds) if (typeof eventId === "string") normalEventIds.push(eventId);
             }
             if (endpoint) {
@@ -845,10 +838,9 @@ export async function registerOrchestration(pi: ExtensionAPI, options: Orchestra
     if (resolvedEnvelope) pi.on("before_agent_start", event => { const instructions = resolvedEnvelope!.self.instructions; return { systemPrompt: `${event.systemPrompt}\n\n${instructions}` }; });
     const paletteDeps = (): MeshPaletteDependencies => {
         const caller = active(deps);
-        const historyDeps = { stateRoot: runtime.stateRoot, meshId: caller.meshId, natureHandleWords: runtime.natureHandleWords };
         return {
-            meshId: caller.meshId, exec, tmux: runtime.tmux, historyViewerExtension: runtime.historyViewerExtension, piCommand: runtime.harnesses.pi!.command, natureHandleWords: runtime.natureHandleWords, tmuxPreviewActions: loadFeatureKeybindings("tmuxPreview").actions,
-            discover: async identity => { const store = await import("./utilities/orchestration_store.ts"); const allItems = await store.listMeshAgents(runtime.stateRoot, identity.meshId); const items = caller.agentId ? allItems.filter(item => item.agent.parentAgentId === caller.agentId) : allItems; const values = await Promise.all(items.map(item => readReconciledAgentSnapshot(exec, runtime.tmux, runtime.stateRoot, identity.meshId, item.agent.agentId).then(value => ({ ok: true as const, value })).catch(() => ({ ok: false as const })))); const tasks = await store.listMeshTasks(runtime.stateRoot, identity.meshId); return { agents: values.flatMap(item => item.ok ? [item.value] : []), malformedCount: values.filter(item => !item.ok).length, tasks }; },
+            meshId: caller.meshId, exec, tmux: runtime.tmux, piCommand: runtime.harnesses.pi!.command, natureHandleWords: runtime.natureHandleWords, tmuxPreviewActions: loadFeatureKeybindings("tmuxPreview").actions,
+            discover: async identity => { const store = await import("./utilities/orchestration_store.ts"); const allItems = await store.listMeshAgents(runtime.stateRoot, identity.meshId); const items = caller.agentId ? allItems.filter(item => item.agent.parentAgentId === caller.agentId) : allItems; const values = await Promise.all(items.map(item => readReconciledAgentSnapshot(exec, runtime.tmux, runtime.stateRoot, identity.meshId, item.agent.agentId).then(value => ({ ok: true as const, value })).catch(() => ({ ok: false as const })))); return { agents: values.flatMap(item => item.ok ? [item.value] : []), malformedCount: values.filter(item => !item.ok).length }; },
             stopAgent: request => stopPaletteMeshAgent(deps, runtime, request),
             controlAgent: async request => {
                 const caller = await authorized(deps);
@@ -856,43 +848,6 @@ export async function registerOrchestration(pi: ExtensionAPI, options: Orchestra
                 const stored = await readAgentSnapshot(runtime.stateRoot, request.meshId, request.agentId);
                 authorizeAgent(caller, stored, "control");
                 return applySubtreeControl(caller, request.agentId, request.action, "user");
-            },
-            openChildHistory: async snapshot => {
-                const ctx = sessionContext;
-                if (!ctx || shuttingDown || current?.meshId !== caller.meshId || current.endpointId !== caller.endpointId || current.sessionFile !== caller.sessionFile) throw new Error("Child history requires the original active TUI session");
-                authorizeAgent(caller, snapshot, "view history of");
-                const keymap = loadPaletteKeymap(undefined, "meshPalette").keymap;
-                providePopupView(pi, {
-                    id: "child-history",
-                    title: "Child history",
-                    create(view) {
-                        const component = new ChildHistoryListComponent({
-                            tui: view.tui,
-                            theme: view.theme,
-                            keymap,
-                            snapshot,
-                            deps: {
-                                ...historyDeps,
-                                openBody: async item => {
-                                    providePopupView(pi, {
-                                        id: "child-history-body",
-                                        title: "Body",
-                                        create(bodyView) {
-                                            const body = new ChildHistoryBodyComponent({ tui: bodyView.tui, theme: bodyView.theme, keymap, item, deps: historyDeps, done: disposition => bodyView.done(disposition) });
-                                            body.start();
-                                            return body;
-                                        },
-                                    });
-                                    await openPopupView(pi, "child-history-body", view.extensionContext, "push");
-                                },
-                            },
-                            done: disposition => view.done(disposition),
-                        });
-                        component.start();
-                        return component;
-                    },
-                });
-                await openPopupView(pi, "child-history", ctx, "push");
             },
         };
     };

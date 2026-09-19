@@ -1,4 +1,4 @@
-import type { AgentToolResult, Theme, ThemeColor, ToolRenderResultOptions } from "@earendil-works/pi-coding-agent";
+import { UserMessageComponent, type AgentToolResult, type Theme, type ThemeColor, type ToolRenderResultOptions } from "@earendil-works/pi-coding-agent";
 import { truncateToWidth, visibleWidth, wrapTextWithAnsi, type Component } from "@earendil-works/pi-tui";
 import {
     AGENT_STATE_BADGES,
@@ -155,14 +155,45 @@ function compactAgentCard(last: Component | undefined, snapshot: AgentSnapshot, 
 
 type DirectionalBlock = { header: string; body?: string; extra?: string[] };
 
-class EventCard implements Component {
+/** Received follow-up/report rendering: short header lines plus Pi-owned full bodies. */
+class ReceivedFullTextCard implements Component {
     #blocks: DirectionalBlock[];
-    #remainderHint: string;
     #expanded: boolean;
     #pad: number;
-    constructor(blocks: DirectionalBlock[], remainderHint: string, expanded: boolean, pad = 0) {
+    constructor(blocks: DirectionalBlock[], expanded: boolean, pad = 0) {
         this.#blocks = blocks;
-        this.#remainderHint = remainderHint;
+        this.#expanded = expanded;
+        this.#pad = pad;
+    }
+    invalidate(): void {}
+    render(width: number): string[] {
+        const outer = Math.max(1, width);
+        const pad = " ".repeat(Math.min(this.#pad, Math.max(0, outer - 1)));
+        const inner = Math.max(1, outer - pad.length);
+        const lines: string[] = [];
+        for (const block of this.#blocks) {
+            lines.push(...wrapTextWithAnsi(block.header, inner).map(line => truncateToWidth(`${pad}${line}`, outer, "")));
+            if (block.body !== undefined) {
+                try {
+                    lines.push(...new UserMessageComponent(block.body, undefined, this.#pad).render(outer));
+                } catch {
+                    // Pi theme is unavailable outside a live session (e.g. unit tests):
+                    // keep the full-text contract with plain wrapping instead of crashing.
+                    lines.push(...block.body.replace(/\r\n|\r/gu, "\n").split("\n").flatMap(line => line.length ? wrapTextWithAnsi(line, inner) : [""]).map(line => truncateToWidth(`${pad}${line}`, outer, "")));
+                }
+            }
+            if (this.#expanded) for (const extra of block.extra ?? []) lines.push(...wrapTextWithAnsi(extra, inner).map(line => truncateToWidth(`${pad}${line}`, outer, "")));
+        }
+        return lines.length ? lines : [""];
+    }
+}
+
+class EventCard implements Component {
+    #blocks: DirectionalBlock[];
+    #expanded: boolean;
+    #pad: number;
+    constructor(blocks: DirectionalBlock[], _remainderHint: string, expanded: boolean, pad = 0) {
+        this.#blocks = blocks;
         this.#expanded = expanded;
         this.#pad = pad;
     }
@@ -179,7 +210,6 @@ class EventCard implements Component {
                 else {
                     const wrapped = block.body.replace(/\r\n|\r/gu, "\n").split("\n").flatMap(line => line.length ? wrapTextWithAnsi(line, inner) : [""]).filter(line => line.length > 0);
                     lines.push(...wrapped.slice(0, 2));
-                    if (wrapped.length > 2) lines.push(...wrapTextWithAnsi(this.#remainderHint, inner));
                 }
             }
             if (this.#expanded) for (const extra of block.extra ?? []) lines.push(...wrapTextWithAnsi(extra, inner));
@@ -193,12 +223,8 @@ function directionalBlock(from: string | undefined, to: string | undefined, kind
     return { header: joinParts([arrow, kind, delivery]), ...(body ? { body } : {}), extra };
 }
 
-function remainderHint(theme: Theme): string {
-    return theme.fg("muted", "remainder via mesh → child → h");
-}
-
-function eventCard(blocks: DirectionalBlock[], theme: Theme, expanded: boolean, pad = 0): Component {
-    return new EventCard(blocks, remainderHint(theme), expanded, pad);
+function eventCard(blocks: DirectionalBlock[], _theme: Theme, expanded: boolean, pad = 0): Component {
+    return new EventCard(blocks, "", expanded, pad);
 }
 
 function attemptLines(theme: Theme, attempts: NonNullable<AgentDisplayIdentity["attempts"]>): string[] {
@@ -573,11 +599,7 @@ function agentIdFromEventValue(value: unknown, depth = 0): string | undefined {
 }
 
 function fallbackEventAgentId(message: CompletionMessage): string | undefined {
-    const fromDetails = agentIdFromEventValue(message.details);
-    if (fromDetails || typeof message.content !== "string") return fromDetails;
-    const jsonText = message.content.includes("\n") ? message.content.slice(message.content.indexOf("\n") + 1) : message.content;
-    try { return agentIdFromEventValue(JSON.parse(jsonText)); }
-    catch { return undefined; }
+    return agentIdFromEventValue(message.details);
 }
 
 export function renderMeshEventMessage(message: CompletionMessage, options: { expanded: boolean; outputPad?: number }, theme: Theme, words?: readonly string[]): Component {
@@ -588,7 +610,11 @@ export function renderMeshEventMessage(message: CompletionMessage, options: { ex
         blocks.push(...payload.pendingTasks.map(task => completionTaskBlock(task, "pending", payload, theme, options.expanded, words)));
         return eventCard(blocks, theme, options.expanded, options.outputPad ?? 0);
     }
-    const event = renderInterventionEvent(message, options, theme, words) ?? renderAcknowledgmentEvent(message, options, theme, words) ?? renderReportEvent(message, options, theme, words);
+    const intervention = renderInterventionEvent(message, options, theme, words);
+    if (intervention) return new ReceivedFullTextCard(intervention, options.expanded, options.outputPad ?? 0);
+    const report = renderReportEvent(message, options, theme, words);
+    if (report) return new ReceivedFullTextCard(report, options.expanded, options.outputPad ?? 0);
+    const event = renderAcknowledgmentEvent(message, options, theme, words);
     if (event) return eventCard(event, theme, options.expanded, options.outputPad ?? 0);
     const agentId = fallbackEventAgentId(message);
     const identity = agentId ? formatCompactAgentIdentity(displayIdentityForAgentId(agentId, words)) : undefined;

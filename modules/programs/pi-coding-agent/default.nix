@@ -214,7 +214,6 @@ in
           "orchestration"
           "command_palette"
           "web_retrieval"
-          "performance"
         ]);
       };
 

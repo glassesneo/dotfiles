@@ -2,14 +2,14 @@ import { matchesKey, type KeyId } from "@earendil-works/pi-tui";
 import { canonicalKeyId, isValidKeyId } from "./private_key_id.ts";
 import { keyLabel, loadFeatureKeybindings } from "./extension_keybindings.ts";
 
-export const paletteActions = ["open", "moveUp", "moveDown", "collapse", "expand", "confirm", "cancel", "refresh", "stop", "preview", "unlink", "history", "toggleTerminal"] as const;
+export const paletteActions = ["open", "moveUp", "moveDown", "confirm", "cancel", "refresh", "stop", "preview", "toggleTerminal"] as const;
 export type PaletteKeyAction = (typeof paletteActions)[number];
 export type PaletteKeymapConfig = Partial<Record<PaletteKeyAction, string[]>>;
 export type ResolvedPaletteKeymap = Record<PaletteKeyAction, KeyId[]>;
 
 export const defaultPaletteKeymap: ResolvedPaletteKeymap = {
-    open: ["ctrl+shift+p"], moveUp: ["ctrl+p"], moveDown: ["ctrl+n"], collapse: ["left"], expand: ["right"],
-    confirm: ["enter"], cancel: ["escape", "ctrl+c"], refresh: [], stop: ["x"], preview: ["space"], unlink: [], history: ["h"], toggleTerminal: [],
+    open: ["ctrl+shift+p"], moveUp: ["ctrl+p"], moveDown: ["ctrl+n"],
+    confirm: ["enter"], cancel: ["escape", "ctrl+c"], refresh: [], stop: ["x"], preview: ["space"], toggleTerminal: [],
 };
 
 export function validatePaletteKeymapConfig(value: unknown, path = "extension-keybindings.json"): PaletteKeymapConfig {
@@ -39,8 +39,8 @@ export function loadPaletteKeymap(agentDir?: string, feature = "commandPalette")
     const loaded = loadFeatureKeybindings(feature, agentDir);
     const config = Object.fromEntries(paletteActions.map(action => [action, loaded.actions[action] ?? []])) as PaletteKeymapConfig;
     const required: PaletteKeyAction[] = feature === "commandPalette"
-        ? ["open", "moveUp", "moveDown", "collapse", "expand", "confirm", "cancel"]
-        : ["moveUp", "moveDown", "collapse", "expand", "confirm", "cancel"];
+        ? ["open", "moveUp", "moveDown", "confirm", "cancel"]
+        : ["moveUp", "moveDown", "confirm", "cancel"];
     return { keymap: resolvePaletteKeymap(config, loaded.path, required), path: loaded.path };
 }
 
@@ -50,8 +50,8 @@ export function paletteKeyAction(data: string, keymap: ResolvedPaletteKeymap): P
 }
 
 const labels: Record<PaletteKeyAction, string> = {
-    open: "open", moveUp: "up", moveDown: "down", collapse: "collapse", expand: "expand", confirm: "select",
-    cancel: "cancel", refresh: "refresh", stop: "stop", preview: "preview", unlink: "unlink", history: "history", toggleTerminal: "terminal history",
+    open: "open", moveUp: "up", moveDown: "down", confirm: "select",
+    cancel: "cancel", refresh: "refresh", stop: "stop", preview: "preview", toggleTerminal: "terminal history",
 };
 export function paletteHelp(keymap: ResolvedPaletteKeymap, actions: readonly PaletteKeyAction[] = ["moveUp", "moveDown", "confirm", "cancel"]): string {
     return actions.filter(action => keymap[action].length > 0).map(action => `${keyLabel(keymap[action][0]!)} ${labels[action]}`).join(" • ");

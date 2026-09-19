@@ -205,12 +205,13 @@ export function buildMeshDisplayTree(
     return { roots, byId: nodes, handles };
 }
 
-export function flattenVisibleDisplayNodes(roots: readonly MeshDisplayNode[], collapsed: ReadonlySet<string>): MeshDisplayNode[] {
+/** Mesh tree is always expanded: preorder enumeration of every display node. */
+export function flattenVisibleDisplayNodes(roots: readonly MeshDisplayNode[]): MeshDisplayNode[] {
     const visible: MeshDisplayNode[] = [];
     const walk = (nodes: readonly MeshDisplayNode[]): void => {
         for (const node of nodes) {
             visible.push(node);
-            if (node.children.length > 0 && !collapsed.has(node.agentId)) walk(node.children);
+            if (node.children.length > 0) walk(node.children);
         }
     };
     walk(roots);

@@ -32,6 +32,7 @@
       collectAt = intOption 1;
       retain = intOption 1;
       pressureFloor = intOption 0;
+      retireOnContextPressure = boolOption true;
     };
   };
   executionModule = {
@@ -245,46 +246,55 @@
       collectAt = 6;
       retain = 4;
       pressureFloor = 1;
+      retireOnContextPressure = true;
     };
     small-write = {
       collectAt = 8;
       retain = 4;
       pressureFloor = 1;
+      retireOnContextPressure = false;
     };
     standard-read = {
       collectAt = 8;
       retain = 4;
       pressureFloor = 1;
+      retireOnContextPressure = true;
     };
     standard-write = {
       collectAt = 8;
       retain = 4;
       pressureFloor = 1;
+      retireOnContextPressure = true;
     };
     advanced-read = {
       collectAt = 4;
       retain = 3;
       pressureFloor = 1;
+      retireOnContextPressure = false;
     };
     advanced-write = {
       collectAt = 4;
       retain = 3;
       pressureFloor = 1;
+      retireOnContextPressure = false;
     };
     research = {
       collectAt = 3;
       retain = 2;
       pressureFloor = 1;
+      retireOnContextPressure = false;
     };
     perspective = {
       collectAt = 2;
       retain = 1;
       pressureFloor = 0;
+      retireOnContextPressure = true;
     };
     search = {
       collectAt = 3;
       retain = 2;
       pressureFloor = 0;
+      retireOnContextPressure = true;
     };
   };
   settledChildren = lib.mapAttrs (name: role:
@@ -346,18 +356,6 @@ in
               required = true;
               target = "extension";
             };
-            collapse = {
-              role = "collapse";
-              contexts = ["meshPalette"];
-              required = true;
-              target = "extension";
-            };
-            expand = {
-              role = "expand";
-              contexts = ["meshPalette"];
-              required = true;
-              target = "extension";
-            };
             confirm = {
               role = "confirm";
               contexts = ["meshPalette"];
@@ -384,18 +382,6 @@ in
             };
             preview = {
               defaultKeys = ["space"];
-              contexts = ["meshPalette"];
-              required = false;
-              target = "extension";
-            };
-            unlink = {
-              defaultKeys = [];
-              contexts = ["meshPalette"];
-              required = false;
-              target = "extension";
-            };
-            history = {
-              defaultKeys = ["h"];
               contexts = ["meshPalette"];
               required = false;
               target = "extension";

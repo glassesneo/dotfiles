@@ -12,7 +12,7 @@ const theme = {
 } as Theme;
 const keys = { up: "\u0010", down: "\u000e", enter: "\r", escape: "\u001b", ctrlC: "\u0003", left: "\u001b[D", right: "\u001b[C" };
 const testKeymapConfig = {
-    open: ["ctrl+shift+p"], moveUp: ["ctrl+p"], moveDown: ["ctrl+n"], collapse: ["left"], expand: ["right"],
+    open: ["ctrl+shift+p"], moveUp: ["ctrl+p"], moveDown: ["ctrl+n"],
     confirm: ["enter"], cancel: ["escape", "ctrl+c"], refresh: ["ctrl+r"], stop: ["ctrl+s"],
 };
 const testKeymap = () => resolvePaletteKeymap(testKeymapConfig);

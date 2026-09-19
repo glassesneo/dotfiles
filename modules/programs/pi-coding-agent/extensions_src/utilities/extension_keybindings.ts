@@ -11,8 +11,8 @@ export interface ExtensionKeybindings {
 
 const FEATURE_ACTIONS: Record<string, { actions: readonly string[]; required: readonly string[] }> = {
     commandPalette: {
-        actions: ["open", "moveUp", "moveDown", "collapse", "expand", "confirm", "cancel", "refresh", "stop"],
-        required: ["open", "moveUp", "moveDown", "collapse", "expand", "confirm", "cancel"],
+        actions: ["open", "moveUp", "moveDown", "confirm", "cancel", "refresh", "stop"],
+        required: ["open", "moveUp", "moveDown", "confirm", "cancel"],
     },
     question: {
         actions: ["common.next-question", "common.previous-question", "common.back", "common.cancel", "choice.accept", "choice.move-up", "choice.move-down", "choice.toggle", "choice.select-and-note", "choice.write-in", "editor.clear", "review.accept", "review.move-up", "review.move-down", "text.accept", "text.newline"],
@@ -20,8 +20,8 @@ const FEATURE_ACTIONS: Record<string, { actions: readonly string[]; required: re
     },
     interactionPolicy: { actions: ["clear", "interrupt"], required: ["clear", "interrupt"] },
     meshPalette: {
-        actions: ["moveUp", "moveDown", "collapse", "expand", "confirm", "cancel", "refresh", "stop", "preview", "unlink", "history", "toggleTerminal"],
-        required: ["moveUp", "moveDown", "collapse", "expand", "confirm", "cancel"],
+        actions: ["moveUp", "moveDown", "confirm", "cancel", "refresh", "stop", "preview", "toggleTerminal"],
+        required: ["moveUp", "moveDown", "confirm", "cancel"],
     },
     historyViewer: { actions: ["exit"], required: ["exit"] },
     meshNavigation: { actions: ["parent"], required: ["parent"] },

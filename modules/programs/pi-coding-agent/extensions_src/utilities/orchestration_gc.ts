@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { MeshGcConfig } from "./agent_types.ts";
+import { shouldRetireOnContextPressure, type MeshGcConfig } from "./agent_types.ts";
 import { projectAgentActivity, readAgentActivity } from "./orchestration_activity.ts";
 import { readAgentRuntimeBinding } from "./orchestration_runtime.ts";
 import { stopMeshAgentWithDisposition } from "./orchestration_management.ts";
@@ -28,8 +28,8 @@ async function candidates(options: GcOptions): Promise<Candidate[]> {
         if ((await readAgentExecution(options.stateRoot, options.meshId, snapshot.agent.agentId))?.holds.length) continue;
         const [activity, runtime] = await Promise.all([readAgentActivity(options.stateRoot, options.meshId, snapshot.agent.agentId).catch(() => undefined), readAgentRuntimeBinding(options.stateRoot, options.meshId, snapshot.agent.agentId)]);
         if (!activity || !runtime || activity.runtimeId !== runtime.runtimeId || activity.sequence < 1) continue;
-        const observed = projectAgentActivity(snapshot.status, activity, { staleMs: options.gc.activityStaleMs, expectedRuntimeId: runtime.runtimeId, allowUnsupportedContext: snapshot.agent.harness !== "pi" });
-        if (observed.context.health === "retire") values.push({ snapshot: { ...snapshot, activity: observed }, sequence: activity.sequence, kind: "context" });
+        const observed = projectAgentActivity(snapshot.status, activity, { staleMs: options.gc.activityStaleMs, expectedRuntimeId: runtime.runtimeId, allowUnsupportedContext: snapshot.agent.harness !== "pi", retireOnContextPressure: shouldRetireOnContextPressure(snapshot.agent.definitionSnapshot.gc) });
+        if (observed.context.health === "retire" && observed.retirementReason === "context-headroom") values.push({ snapshot: { ...snapshot, activity: observed }, sequence: activity.sequence, kind: "context" });
         else if (observed.acceptingTask) values.push({ snapshot: { ...snapshot, activity: observed }, sequence: activity.sequence, kind: "reusable" });
     }
     return values.sort(oldest);
