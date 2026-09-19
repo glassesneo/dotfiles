@@ -175,6 +175,28 @@ in
           );
       };
       pi = {
+        # Synthetic override/aggregation contract for commonChildExtensionContributions.
+        # Base `search` already executes through an external harness, so it serves
+        # as the non-Pi witness without further overrides. Real provider paths and
+        # versions are intentionally not asserted here; AC6 remains a one-time diff.
+        childExtensionComposition = let
+          composed = base.extendModules {
+            modules = [
+              {
+                myconfig.programs.pi-coding-agent.orchestration.commonChildExtensionContributions = lib.mkForce ["/synthetic/common.ts" "/synthetic/shared-provider"];
+                myconfig.programs.pi-coding-agent.orchestration.children.small-read.childExtensionContributions = lib.mkForce ["/synthetic/shared-provider" "/synthetic/small-role.ts"];
+                myconfig.programs.pi-coding-agent.orchestration.children.perspective.childExtensionContributions = lib.mkForce ["/synthetic/shared-provider" "/synthetic/perspective-role.ts"];
+              }
+            ];
+          };
+          catalog = builtins.fromJSON (builtins.unsafeDiscardStringContext composed.config.home.file."${composed.config.home.homeDirectory}/.pi/agent/child-catalog.json".text);
+        in {
+          smallRead = catalog.children.small-read.childExtensionContributions;
+          perspective = catalog.children.perspective.childExtensionContributions;
+          worker = catalog.children.standard-write.childExtensionContributions;
+          search = catalog.children.search.childExtensionContributions;
+          searchHarness = catalog.children.search.execution.harness;
+        };
         decisionUiContributionSource = base.config.myconfig.programs.pi-coding-agent.packageContributions.decision-ui.source;
         enabledQuestion = {
           packageSources = questionEnabled.config.programs.pi-coding-agent.settings.packages;

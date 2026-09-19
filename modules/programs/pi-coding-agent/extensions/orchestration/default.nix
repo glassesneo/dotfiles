@@ -79,17 +79,6 @@
     contextPolicy = "project";
     childExtensionContributions = contributions;
   };
-  mkStandardRole = access: description: instructions: {
-    selector = {
-      agent = "standard";
-      inherit access;
-    };
-    inherit description;
-    tools = [];
-    instructions = "${instructions}${resultContract}";
-    contextPolicy = "project";
-    childExtensionContributions = [];
-  };
   settledRoles = {
     small-read = mkRepositoryRole "small" "read" "Handle a small, low-judgment read-only repository task or command-result check." ''
       Investigate only what the bounded assignment requires. Keep source and configuration unchanged.
@@ -97,12 +86,12 @@
     small-write = mkRepositoryRole "small" "write" "Handle a small, low-judgment repository change." ''
       Confirm the bounded target from the assignment, make the smallest authorized change, inspect the diff, and run proportionate focused checks. Ask the caller only if missing information blocks the assigned result.
     '' [] [];
-    standard-read = mkStandardRole "read" "Own a normal repository investigation without changing source or configuration." ''
-      Investigate the assignment without changing source or configuration, using the tools provided by this harness. Report missing operations to the caller rather than assuming Pi shell or validation access.
-    '';
-    standard-write = mkStandardRole "write" "Own a normal repository implementation, repair, and self-verification." ''
+    standard-read = mkRepositoryRole "standard" "read" "Own a normal repository investigation without changing source or configuration." ''
+      Investigate the assignment without changing source or configuration, using the tools provided by this harness.
+    '' [] [];
+    standard-write = mkRepositoryRole "standard" "write" "Own a normal repository implementation, repair, and self-verification." ''
       Own the assigned repository change: investigate, implement, verify, and recover from mistakes within scope. Use this harness's available tools and return an integrable result.
-    '';
+    '' [] [];
     advanced-read = mkRepositoryRole "advanced" "read" "Handle difficult read-only judgment across multiple repository invariants." ''
       Evaluate the bounded problem across its relevant invariants without changing source or configuration. Consider permitted delegation first for independent evidence that materially improves the conclusion; integrate the evidence yourself.
     '' [artifactExtension] ["save_agent_artifact"];
@@ -313,6 +302,7 @@ in
         enable = readOnly (boolOption (parent.enable && builtins.elem "orchestration" parent.defaultExtensions));
         extensionPaths = readOnly (listOfOption str [orchestrationExtension]);
         natureHandleWords = listOfOption str ["Coulson" "May" "Daisy" "Fitz" "Simmons" "Mack" "Elena" "Hunter" "Bobbi" "Deke" "Sousa" "Enoch"];
+        commonChildExtensionContributions = listOfOption str [];
         children = attrsOfOption childType {};
         callPolicy = submoduleOption {
           options = with delib; {
@@ -540,10 +530,22 @@ in
             else !hasSingletonModel || !(lib.hasPrefix "codex/" model) || execution.thinkingLevel == null || execution.harnessOptions != codexHarnessOptions
         )
         childNames;
+      isAbsoluteChildExtension = path: lib.hasPrefix "/" path;
+      invalidCommonChildExtensions = builtins.filter (path: path == "" || !isAbsoluteChildExtension path) cfg.commonChildExtensionContributions;
+      invalidPiChildExtensionContributions = lib.concatMap (name: let
+        child = cfg.children.${name};
+      in
+        map (path: "${name}: ${path}") (builtins.filter (path: path == "" || !isAbsoluteChildExtension path) child.childExtensionContributions))
+      (builtins.filter (name: cfg.children.${name}.execution.harness == "pi") childNames);
+      effectiveChildExtensionContributions = child:
+        if child.execution.harness == "pi"
+        then lib.unique (cfg.commonChildExtensionContributions ++ child.childExtensionContributions)
+        else child.childExtensionContributions;
       generatedChildren = lib.mapAttrs (_: child:
         child
         // {
           execution = cleanExecution child.execution;
+          childExtensionContributions = effectiveChildExtensionContributions child;
         })
       cfg.children;
       names = values: lib.concatStringsSep ", " values;
@@ -604,6 +606,14 @@ in
         {
           assertion = searchFromNonResearch == [];
           message = "Pi orchestration search must be reachable only from research: ${names searchFromNonResearch}.";
+        }
+        {
+          assertion = invalidCommonChildExtensions == [];
+          message = "Pi orchestration commonChildExtensionContributions must be non-empty absolute paths: ${names invalidCommonChildExtensions}.";
+        }
+        {
+          assertion = invalidPiChildExtensionContributions == [];
+          message = "Pi orchestration Pi childExtensionContributions must be non-empty absolute paths: ${names invalidPiChildExtensionContributions}.";
         }
       ];
       home.file = {

@@ -23,7 +23,7 @@ import { AgentLaunchCleanupError, inspectAgentTmux, inspectMeshAgentWindow, laun
 import { isTerminalAgent, isTerminalTask, optionalTaskPurpose, POLICY_EPOCH_SCHEMA_VERSION, type AgentSnapshot, type CompletionTarget, type PolicyEpoch, type SubagentRuntimeConfig } from "./utilities/orchestration_types.ts";
 import { MeshAgentsPaletteComponent, type MeshPaletteDependencies } from "./utilities/orchestration_palette.ts";
 
-import { MESH_PEER_TOOL_NAMES, MESH_REPORT_TOOL_NAME } from "./utilities/orchestration_pi.ts";
+import { buildChildExtensionManifest, MESH_PEER_TOOL_NAMES, MESH_REPORT_TOOL_NAME } from "./utilities/orchestration_pi.ts";
 import { renderAgentToolResult, renderControlCall, renderControlResult, renderEndResponseCall, renderEndResponseResult, renderGetCall, renderMeshEventMessage, renderReportCall, renderReportResult, renderSendCall, renderSendResult, renderStopCall, renderStopResult } from "./utilities/orchestration_cards.ts";
 import { openPopupView, providePopupView } from "./popup.ts";
 import { loadPaletteKeymap } from "./utilities/command_palette_keymap.ts";
@@ -207,7 +207,7 @@ async function startAgentSubmission(deps: OrchestrationDependencies, config: Sub
         modelRoute = initialModelRoute(profile, 0);
         initialCandidateIndex = 0;
     }
-    const children = callerChildren(caller); const childExtensions = Object.fromEntries(Object.keys(children).map(name => [name, caller.envelope?.childExtensions[name] ?? [config.popupExtension, config.orchestrationExtension, ...(children[name]?.childExtensionContributions ?? []), config.childBridgeExtension]]));
+    const children = callerChildren(caller); const childExtensions = Object.fromEntries(Object.keys(children).map(name => [name, caller.envelope?.childExtensions[name] ?? buildChildExtensionManifest(config, children[name]?.contextPolicy ?? "project", children[name]?.childExtensionContributions ?? [])]));
     const envelope = caller.envelope
         ? projectLaunchEnvelope(params.childId, agentId, caller.envelope, initialCandidateIndex)
         : buildLaunchEnvelope({ meshId: caller.meshId, agentId, epochId: caller.epoch.epochId, childId: params.childId, snapshot: caller.epoch, childExtensions, initialCandidateIndex });

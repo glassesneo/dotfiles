@@ -21,7 +21,7 @@ import { readPressureAdmission, requestPressureAdmission } from "../extensions_s
 import { completionLedgerPath, createCompletionReceipt, readCompletionLedger } from "../extensions_src/utilities/orchestration_completion.ts";
 import { indexEventCreation } from "../extensions_src/utilities/orchestration_index.ts";
 import { withMeshLock } from "../extensions_src/utilities/orchestration_lock.ts";
-import { MESH_PEER_TOOL_NAMES, piLaunchDescriptor } from "../extensions_src/utilities/orchestration_pi.ts";
+import { buildChildExtensionManifest, MESH_PEER_TOOL_NAMES, piLaunchDescriptor } from "../extensions_src/utilities/orchestration_pi.ts";
 import { MAX_MODEL_VISIBLE_BYTES, MAX_MODEL_VISIBLE_LINES, packCompactCompletionDelivery, projectMeshCompletionContext, receiptIdsFromToolResults, serializeModelVisibleJson } from "../extensions_src/utilities/orchestration_projection.ts";
 import { attachRootMesh, applyAgentControl, claimTaskUsage, createTask as createTaskStore, ensurePolicyEpoch as ensurePolicyEpochStore, finishTask, initializeMesh, meshPaths, patchAgentStatus, prepareAgent, publishAgent, readAgentExecution, readAgentSnapshot, readMesh, readPolicyEpoch, readTask, reserveMeshCapacity, taskPaths } from "../extensions_src/utilities/orchestration_store.ts";
 import { FakeMonotonicTimers, withTemporaryRoot as withRoot, yieldToIO } from "./test_helpers.ts";
@@ -1282,8 +1282,15 @@ void test("native child launch manifests order popup, orchestration, role contri
     const epochId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
     const roleSet = ["reviewer"];
     const manifest = ["/popup.ts", "/orchestration.ts", AGENT_ARTIFACT_EXTENSION, "/bridge.ts"];
+    const config = runtimeConfig("/state");
+    const settledManifest = buildChildExtensionManifest(config, catalog.children.reviewer!.contextPolicy, catalog.children.reviewer!.childExtensionContributions);
+    assert.deepEqual(settledManifest, manifest);
+    const providerManifest = buildChildExtensionManifest(config, catalog.children.reviewer!.contextPolicy, ["/provider.ts"]);
+    assert.deepEqual(providerManifest, ["/popup.ts", "/orchestration.ts", "/provider.ts", "/bridge.ts"]);
+    const promptOnlyManifest = buildChildExtensionManifest(config, "prompt-only", ["/provider.ts", "/orchestration.ts", "/popup.ts", "/bridge.ts"]);
+    assert.deepEqual(promptOnlyManifest, ["/orchestration.ts", "/provider.ts", "/bridge.ts"]);
     const envelope: AgentLaunchEnvelope = buildLaunchEnvelope({ meshId, agentId, epochId, agent: "reviewer", mode: "ops", roleSet, catalog, childExtensions: { reviewer: manifest } });
-    const launchFor = (tools: string[]) => piLaunchDescriptor(runtimeConfig("/state"), { meshId, agentId, agentDirectory: `/state/meshes/${meshId}/agents/${agentId}`, childId: "reviewer", taskPath: "/task", launchEnvelope: "/envelope.json", epochSnapshot: { ...envelope, self: { ...envelope.self, tools } } });
+    const launchFor = (tools: string[]) => piLaunchDescriptor(config, { meshId, agentId, agentDirectory: `/state/meshes/${meshId}/agents/${agentId}`, childId: "reviewer", taskPath: "/task", launchEnvelope: "/envelope.json", epochSnapshot: { ...envelope, self: { ...envelope.self, tools } } });
     const launch = launchFor([]);
     assert.deepEqual(launch.args.filter((value, index) => launch.args[index - 1] === "-e"), manifest);
     assert.equal(launch.args.includes("--no-extensions"), true);
@@ -1316,6 +1323,25 @@ void test("native launch selects only the target role's extension contributions"
 
     assert.deepEqual(launchExtensions("reviewer"), childExtensions.reviewer);
     assert.deepEqual(launchExtensions("worker"), childExtensions.worker);
+});
+
+// Admission: TypeBox schemas cannot observe the final Pi argv, and the previous basename filter dropped every added prompt-only provider before launch.
+// Given a prompt-only envelope carrying a provider-equivalent contribution, when it crosses the native launch-descriptor boundary, Pi observes that path alongside the orchestration bridges with isolation flags intact.
+void test("native launch preserves prompt-only contributions through the launch descriptor", () => {
+    const meshId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    const agentId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+    const epochId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+    const roleSet = ["prompt-only"];
+    const childExtensions = { "prompt-only": ["/orchestration.ts", "/provider.ts", "/bridge.ts"] };
+    const config = runtimeConfig("/state");
+    const built = buildChildExtensionManifest(config, "prompt-only", ["/provider.ts"]);
+    assert.deepEqual(built, childExtensions["prompt-only"]);
+    const envelope = buildLaunchEnvelope({ meshId, agentId, epochId, agent: "prompt-only", mode: "ops", roleSet, catalog, childExtensions });
+    const launch = piLaunchDescriptor(config, { meshId, agentId, agentDirectory: `/state/meshes/${meshId}/agents/${agentId}`, childId: "prompt-only", taskPath: "/task", launchEnvelope: "/envelope.json", epochSnapshot: envelope });
+    assert.equal(launch.args.includes("--no-extensions"), true);
+    assert.deepEqual(launch.args.filter((value, index) => launch.args[index - 1] === "-e"), childExtensions["prompt-only"]);
+    for (const flag of ["--no-context-files", "--no-skills", "--no-prompt-templates", "--no-tools"]) assert.equal(launch.args.includes(flag), true, flag);
+    assert.equal(launch.args.includes("--tools"), false);
 });
 
 // Admission: configuration validation proves mapping coverage at startup, but not that dispatch resolves the selected mapping before consuming capacity.

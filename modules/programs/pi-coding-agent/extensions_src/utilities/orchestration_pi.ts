@@ -11,11 +11,27 @@ export function meshPiLaunchTools(roleTools: readonly string[], targets: readonl
     return [...new Set([...roleTools, END_RESPONSE_TOOL_NAME, ...(canDispatch ? MESH_PEER_TOOL_NAMES : [MESH_REPORT_TOOL_NAME])])];
 }
 
+export function coreChildExtensionPaths(config: SubagentRuntimeConfig): string[] {
+    return [config.popupExtension, config.orchestrationExtension, config.childBridgeExtension];
+}
+
+export function buildChildExtensionManifest(config: SubagentRuntimeConfig, contextPolicy: string, contributions: readonly string[]): string[] {
+    const core = coreChildExtensionPaths(config);
+    const coreSet = new Set(core);
+    const manifest: string[] = [];
+    if (contextPolicy === "project") manifest.push(core[0]!);
+    manifest.push(core[1]!);
+    for (const contribution of contributions) {
+        if (!coreSet.has(contribution) && !manifest.includes(contribution)) manifest.push(contribution);
+    }
+    manifest.push(core[2]!);
+    return manifest;
+}
+
 function runtimeExtensions(envelope: AgentLaunchEnvelope): string[] {
     const extensions = envelope.childExtensions[envelope.childId];
     if (!extensions) throw new Error(`Immutable launch envelope has no child manifest for ${envelope.childId}`);
-    if (envelope.self.contextPolicy !== "prompt-only") return extensions;
-    return extensions.filter(path => /(?:^|\/)(?:orchestration|orchestration_child_bridge)\.ts$/u.test(path));
+    return extensions;
 }
 
 export function piLaunchDescriptor(config: SubagentRuntimeConfig, input: { meshId: string; agentId: string; agentDirectory: string; childId: string; taskPath: string; launchEnvelope: string; epochSnapshot: AgentLaunchEnvelope }): NativeLaunchDescriptor {

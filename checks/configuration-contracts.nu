@@ -178,6 +178,22 @@ def main [] {
   command-ok $validator "generated-runtime-validators"
   pass "generated-runtime-validators"
 
+  # Override/aggregation contract for commonChildExtensionContributions. Type and
+  # schema checks cannot observe a dropped common list, cross-child leakage, or
+  # external-harness application, so the synthetic generated catalog is asserted
+  # here. Real provider paths and versions stay a one-time diff, not a contract.
+  let composition = $pi.childExtensionComposition
+  assert-contract ($composition.smallRead.0 == "/synthetic/common.ts") "common-child-extension-first"
+  assert-contract (($composition.smallRead | where {|path| $path == "/synthetic/shared-provider" } | length) == 1) "common-child-extension-deduplicated"
+  assert-contract ($composition.smallRead.1 == "/synthetic/shared-provider" and $composition.smallRead.2 == "/synthetic/small-role.ts") "role-extension-order-after-common"
+  assert-contract ($composition.perspective.0 == "/synthetic/common.ts") "prompt-only-common-child-extension"
+  assert-contract (($composition.perspective | where {|path| $path == "/synthetic/shared-provider" } | length) == 1) "prompt-only-child-extension-deduplicated"
+  assert-contract ($composition.worker.0 == "/synthetic/common.ts") "common-child-extension-applies-to-unoverridden-pi-child"
+  assert-contract (not ($composition.worker | any {|path| $path == "/synthetic/small-role.ts" })) "role-extension-not-shared"
+  assert-contract ($composition.searchHarness != "pi") "composition-external-witness-harness"
+  assert-contract ($composition.search | is-empty) "common-extension-not-applied-to-external"
+  pass "common-child-extension-composition"
+
   let emergency = $result.generated.emergency
   assert-contract (($emergency.enabled.links | columns | is-not-empty)) "emergency-shared-links"
   assert-contract ("child-catalog.json" in ($emergency.enabled.links | columns)) "emergency-child-catalog-link"

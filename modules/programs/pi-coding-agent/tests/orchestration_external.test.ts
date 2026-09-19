@@ -197,7 +197,7 @@ void test("Pi launch descriptors isolate prompt-only roles and expose outbound o
     assert.equal(option(isolated.args, "--model"), piExecution.models[0]);
     assert.equal(option(isolated.args, "--thinking"), piExecution.thinkingLevel);
     assert.equal(isolated.args.includes("--no-extensions"), true);
-    assert.deepEqual(extensions(isolated.args), ["/orchestration.ts", "/orchestration_child_bridge.ts"]);
+    assert.deepEqual(extensions(isolated.args), ["/popup.ts", "/orchestration.ts", "/role-contribution.ts", "/orchestration_child_bridge.ts"]);
     for (const flag of ["--no-context-files", "--no-skills", "--no-prompt-templates", "--no-tools"]) assert.equal(isolated.args.includes(flag), true, flag);
     assert.equal(isolated.args.includes("--tools"), false);
 

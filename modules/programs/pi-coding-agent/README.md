@@ -103,8 +103,7 @@ configuration.
 
 - `small` is for low-judgment bounded work.
 - `standard` is for normal repository investigation or implementation through
-  the external Cursor ACP harness. Read and write use separate ACP permission
-  contracts.
+  the Pi harness with the repository read (and, for write, edit) tools.
 - `advanced` is for difficult judgment across multiple invariants and may
   delegate an authorized bounded subtask.
 - `research` collects repository and Web evidence and may request the
@@ -169,6 +168,34 @@ next mode apply. There is no parent `/profile` command.
 `disable-model-invocation`. It is not an allowlist that hides ordinary
 Skills.
 
+## Child extension composition
+
+`programs.pi-coding-agent.orchestration.commonChildExtensionContributions`
+carries trusted Pi child package paths shared by every Pi child;
+`children.<childId>.childExtensionContributions` carries role-specific paths.
+Generation composes `common ++ role` with duplicates removed, common first, for
+`execution.harness == "pi"` children only. External-harness children keep
+only their role list.
+
+Set installed absolute package paths (for example the local Command Code
+package root contributed by `programs.pi-coding-agent` when the existing
+`commandcode-provider` package contribution is enabled), never npm sources or
+versions. The package source/version pin stays owned by
+`programs.pi-coding-agent.packageContributions`. Narrow Nix assertions reject
+empty or non-absolute entries on both lists; runtime paths are not checked
+during evaluation.
+
+The composed list becomes the stored `childExtensionContributions`, so policy
+digest and epoch selection already observe common-set changes. The launcher
+passes the resulting manifest to Pi as ordered `-e` arguments under
+`--no-extensions`; `prompt-only` keeps its manifest and still launches with
+`--no-context-files --no-skills --no-prompt-templates --no-tools`. Added
+extensions never widen role `tools`, and a `mesh_send` caller must also load
+the provider that registers the selected model. Only add extensions whose
+hooks and tool behavior stay compatible with the child's context and tool
+policy. Apply the configuration, reconcile packages in a fresh parent Pi
+session and mesh, and verify launch arguments there.
+
 ## Per-child context retirement
 
 `programs.pi-coding-agent.orchestration.children.<childId>.gc.retireOnContextPressure`
@@ -207,13 +234,6 @@ A `read` capability is a work contract, not an operating-system sandbox. Pi
 read roles can run their permitted shell tools, and builds, caches, or
 external commands may still write outside the intended source/configuration
 change. Use stronger isolation only as a separately scoped feature.
-
-The standard external child uses Cursor's advertised ACP tools, not Pi's
-`read`, `grep`, `find`, `ls`, or `bash` tools. Do not promise arbitrary shell
-access or local validation from `standard/read`; return the missing operation
-to the parent so it can use another authorized capability. A requested ACP
-permission or mode that the endpoint does not advertise is a route failure; it
-must not silently become a write operation or cross-harness fallback.
 
 The Codex ACP `search` child is Web-search-only. Reachability follows the
 internal-ID restriction above. External service availability and

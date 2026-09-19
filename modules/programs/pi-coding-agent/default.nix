@@ -217,9 +217,13 @@ in
         ]);
       };
 
-    myconfig.always = {
+    myconfig.always = {cfg, ...}: {
       args.shared.piArtifactRuntime.extensionPath = artifactExtensionPath;
       programs.pi-coding-agent = {
+        orchestration.commonChildExtensionContributions =
+          if !(cfg.packageContributions ? "commandcode-provider")
+          then []
+          else lib.optional cfg.packageContributions."commandcode-provider".enabled "${configDir}/npm/node_modules/pi-commandcode-provider";
         cursorAcpModelIds = lib.mapAttrs (_: lib.mkDefault) {
           "cursor-grok-4.5-high-fast" = "grok-4.5[effort=high,fast=true]";
           "cursor-grok-4.6-high-fast" = "grok-4.6[effort=high,fast=true]";
