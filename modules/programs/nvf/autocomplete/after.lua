@@ -20,10 +20,7 @@ if not fuzzy._nvf_deduplicates_labels then
       local rank = rank_by_source[item.source_id] or unknown_rank
       local winner = winner_by_label[item.label]
       if not winner or rank < winner.rank then
-        winner_by_label[item.label] = {
-          index = index,
-          rank = rank,
-        }
+        winner_by_label[item.label] = { index = index, rank = rank }
       end
     end
 
