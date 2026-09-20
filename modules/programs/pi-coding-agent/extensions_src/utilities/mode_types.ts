@@ -1,4 +1,4 @@
-export const MODE_SCHEMA_VERSION = 3 as const;
+export const MODE_SCHEMA_VERSION = 4 as const;
 export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
 export type ExecutionHarness = "pi" | "cursor-agent" | "codex";
 
@@ -10,12 +10,11 @@ export interface ExecutionConfig {
 }
 export interface AgentMode {
     description: string;
-    execution: ExecutionConfig;
     tools: string[];
     skillOptIns: string[];
     instructions: string;
 }
-export interface AgentModeConfig { schemaVersion: 3; defaultMode: string; modes: Record<string, AgentMode> }
+export interface AgentModeConfig { schemaVersion: 4; defaultMode: string; execution: ExecutionConfig; modes: Record<string, AgentMode> }
 
 const cursorCommonHarnessOptions = { sandbox: "disabled", trustWorkspace: true, worktree: false } as const;
 export const CURSOR_READ_HARNESS_OPTIONS = Object.freeze({ mode: "ask", permissionPolicy: "reject", ...cursorCommonHarnessOptions });
@@ -75,25 +74,20 @@ export function validateExecutionConfig(value: unknown, label = "execution"): Ex
     return { models: resolvedModels, ...(resolvedThinking === undefined ? {} : { thinkingLevel: resolvedThinking }), harness, ...(harnessOptions === undefined ? {} : { harnessOptions }) };
 }
 
-export function validateModeExecution(value: unknown, label = "execution"): ExecutionConfig {
-    const execution = validateExecutionConfig(value, label);
-    if (execution.harness !== "pi") throw new Error(`${label} must use the pi harness`);
-    return execution;
-}
-
 export function validateModeConfig(value: unknown): AgentModeConfig {
     const root = object(value, "agent mode config");
-    exact(root, ["schemaVersion", "defaultMode", "modes"], "agent mode config");
+    exact(root, ["schemaVersion", "defaultMode", "execution", "modes"], "agent mode config");
     if (root.schemaVersion !== MODE_SCHEMA_VERSION) throw new Error("Unsupported agent mode config schemaVersion");
+    const execution = validateExecutionConfig(root.execution, "execution");
+    if (execution.harness !== "pi") throw new Error("execution must use the pi harness");
     const rawModes = object(root.modes, "modes");
     const modes: Record<string, AgentMode> = {};
     for (const [name, raw] of Object.entries(rawModes)) {
         text(name, "mode name");
         const mode = object(raw, `modes.${name}`);
-        exact(mode, ["description", "execution", "tools", "skillOptIns", "instructions"], `modes.${name}`);
+        exact(mode, ["description", "tools", "skillOptIns", "instructions"], `modes.${name}`);
         modes[name] = {
             description: text(mode.description, `modes.${name}.description`),
-            execution: validateModeExecution(mode.execution, `modes.${name}.execution`),
             tools: strings(mode.tools, `modes.${name}.tools`),
             skillOptIns: strings(mode.skillOptIns, `modes.${name}.skillOptIns`),
             instructions: text(mode.instructions, `modes.${name}.instructions`),
@@ -101,5 +95,5 @@ export function validateModeConfig(value: unknown): AgentModeConfig {
     }
     const defaultMode = text(root.defaultMode, "defaultMode");
     if (!modes[defaultMode]) throw new Error(`defaultMode references unknown mode: ${defaultMode}`);
-    return { schemaVersion: MODE_SCHEMA_VERSION, defaultMode, modes };
+    return { schemaVersion: MODE_SCHEMA_VERSION, defaultMode, execution, modes };
 }

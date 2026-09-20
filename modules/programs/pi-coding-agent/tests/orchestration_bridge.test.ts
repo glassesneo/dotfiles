@@ -114,7 +114,7 @@ void test("child orchestration wait preserves the active parent task through int
     let parentTask!: Awaited<ReturnType<typeof createTask>>;
     const configPath = join(root, "orchestration.json"); const catalogPath = join(root, "catalog.json"); const modePath = join(root, "modes.json");
     await writeFile(configPath, JSON.stringify({ schemaVersion: 6, stateRoot: root, tmux: "/tmux", returnParentCommand: "/parent", parentNavigationHint: "parent", historyViewerExtension: "/history", popupExtension: "/popup", orchestrationExtension: "/orchestration", childBridgeExtension: "/bridge", harnesses: { pi: { adapter: "pi-native", command: "/pi" } }, natureHandleWords: ["May"], callPolicy: { modes: { ops: { targets: ["worker"] } } }, budgets, gc: { contextHeadroomTokens: 32, periodicIntervalMs: 5000, activityHeartbeatMs: 2000, activityStaleMs: 10000 } }));
-    await writeFile(catalogPath, JSON.stringify(syntheticCatalog(children))); await writeFile(modePath, JSON.stringify({ schemaVersion: 3, defaultMode: "ops", modes: { ops: { description: "ops", execution: syntheticExecution, tools: [], skillOptIns: [], instructions: "Use ops." } } }));
+    await writeFile(catalogPath, JSON.stringify(syntheticCatalog(children))); await writeFile(modePath, JSON.stringify({ schemaVersion: 4, defaultMode: "ops", execution: syntheticExecution, modes: { ops: { description: "ops", tools: [], skillOptIns: [], instructions: "Use ops." } } }));
 
     class IntegratedPi {
         readonly tools = new Map<string, any>(); readonly handlers = new Map<string, Array<(...args: any[]) => unknown>>(); readonly eventHandlers = new Map<string, Array<(value: unknown) => unknown>>();

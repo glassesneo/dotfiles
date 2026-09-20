@@ -227,6 +227,7 @@
   settledCallPolicy = {
     modes = {
       recon.targets = ["small-read" "standard-read" "advanced-read" "research" "perspective"];
+      leader.targets = ["small-read" "small-write" "standard-read" "standard-write" "advanced-read" "advanced-write" "research" "perspective"];
       ops.targets = ["small-read" "small-write" "standard-read" "standard-write" "advanced-read" "advanced-write" "research" "perspective"];
     };
   };

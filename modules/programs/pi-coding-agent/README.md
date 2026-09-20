@@ -158,15 +158,64 @@ Tune Web routing weights, search/fetch deadlines, and retry wait through
 `programs.pi-coding-agent.web_retrieval`. Providers, endpoints, credential
 paths, and the single retry remain fixed. Retry count is not an option.
 
-## Parent execution and skills
+## Parent modes, execution, and skills
 
-Mode apply uses that mode's inline Pi execution. `/model` and `/thinking`
-remain available; an explicit override suspends automatic fallback until the
-next mode apply. There is no parent `/profile` command.
+The parent has one Pi execution shared by `recon`, `leader`, and `ops`.
+`recon` investigates without source edits, `leader` keeps the parent read-only
+while delegating implementation and reviewing its evidence, and `ops` permits
+direct implementation. Mode switching changes authority, tools, and
+instructions only; it does not change the model or thinking level, reset the
+route, or restart suspended fallback.
+
+`/model` and `/thinking` remain available. Either explicit override stops
+automatic parent fallback for the rest of the current session branch. Reload,
+resume, tree navigation, and mode changes preserve that stopped state; a new
+session initializes fallback from the common execution again. There is no
+parent `/profile` command.
 
 `skillOptIns` additionally publishes discovered Skills that set
 `disable-model-invocation`. It is not an allowlist that hides ordinary
 Skills.
+
+### Parent transitions: `switch_mode` and `session_handoff`
+
+`recon`, `leader`, and `ops` also decide whether the parent may become an
+implementer at all, so switching to or from `ops` changes what the delegated
+work may assume. Both `switch_mode` and `session_handoff` therefore run one
+shared, serialized transition with the mesh instead of flipping state in
+place:
+
+1. The caller prepares a transition. The mesh must be quiescent (no
+   non-terminal agents, tasks, reservations, pressure admissions, or
+   unacknowledged completion deliveries), and a transition fence is written
+   under the mesh lock. While the fence exists, new tasks, agent
+   preparation, mesh-send submissions, and pressure claims are refused; lease
+   heartbeats and release paths stay available.
+2. The parent side applies its half (tools, identity, session entry; for a
+   handoff, the new session and its kickoff). The mesh side applies the target
+   policy epoch for a mode switch. Results correlate by request ID, and only
+   success releases the fence.
+3. Failure rolls back the parent side and leaves the fence in place, keeping
+   mesh mutations suspended until the user resolves the failure. A session
+   handoff keeps its fence until the old session's mesh close, and a fence
+   never auto-deletes crash residue.
+
+`switch_mode` and `session_handoff` must each be the only tool call in their
+batch. Both tools only schedule: they reserve a pending request, end the
+current model response, and defer the actual transition to the internal
+`/mode-switch` or `/mesh-handoff` command, which revalidates at the command
+boundary (idle, same session) after the turn settles. Manual `/mode` and the
+command palette share the same serialized coordinator, whose parent-side
+failure path rolls the mode back while the mesh fence stays in place. The
+`session_handoff` tool validates the prompt and the core editor draft, opens
+the native editor with the prompt prefilled, and the command starts a fresh
+session in `ops` mode with the confirmed text as an unsubmitted draft, linked
+to the old session as its parent; the old root closes its own mesh during
+shutdown. Pending requests expire, and tree navigation, reload, replacement,
+or shutdown invalidate them. Tree operations are rejected while a fence exists
+or while mesh work is not quiescent.
+`leader` is the delegation boundary where the parent must not become an
+implementer; `ops` is the only mode that lets the parent implement directly.
 
 ## Child extension composition
 

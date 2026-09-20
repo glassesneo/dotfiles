@@ -4,7 +4,7 @@
 
 - `prompts/` owns thin explicit Pi entrypoints. Prompt templates never change the active mode.
 - Mode instructions own the parent's delegation preference, integration, and final verification. Child definitions own mandatory child behavior and child-specific use of Pi resources. Reusable Skills own optional harness-independent methods. Active mesh tool guidance owns wait, yield, retrieval, and report mechanics. Extensions own remaining Pi process, task, tmux, ACP, popup, event, and tool-schema mechanics.
-- `extensions/mode/` and `extensions_src/mode.ts` own mutable top-level `recon`/`ops` state. Child processes never load mode controls.
+- `extensions/mode/` and `extensions_src/mode.ts` own the parent's common execution and mutable top-level `recon`/`leader`/`ops` authority state. Mode changes never reset model, thinking, route, or fallback suspension. Child processes never load mode controls. Mode switches and session handoffs run as one serialized parent transition: the mode controller correlates `prepare`/`apply`/`cancel` with the mesh responder, and the `orchestration_transition.ts` fence suspends mesh mutations until release or failure.
 - `extensions/orchestration/` owns peer-mesh mechanics: root-owned epochs, task and event state, harness adapters, and the agent popup view.
 - `extensions/popup/` owns the single overlay lifecycle and registered view stack; consumers provide views but do not open competing root overlays.
 - `default.nix` is the sole ordered default-extension aggregator. The supported core order is popup, mode, orchestration, command palette.

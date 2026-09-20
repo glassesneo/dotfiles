@@ -6,10 +6,12 @@ import { writeAtomicJson } from "./orchestration_json.ts";
 import { assertExpectedEndpointBindingUnlocked, type ExpectedEndpointBinding } from "./orchestration_binding.ts";
 import { meshDirectory, withMeshLock } from "./orchestration_lock.ts";
 import { assertCurrentAgentRuntime, readAgentRuntimeBinding } from "./orchestration_runtime.ts";
+import { assertNoParentTransitionUnlocked } from "./orchestration_transition.ts";
 import { stopMeshAgentWithDisposition } from "./orchestration_management.ts";
 import { agentPaths, assertRootLeaseOwner, observeAgentLifecycle, readAgentSnapshot, readAgentStatus, readMesh, readMeshReservation, readTask, releaseMeshReservation, releasePendingMeshReservation, releaseUnconsumedMeshReservation, removePreparedAgent, reservationPath } from "./orchestration_store.ts";
 import { inspectAgentTmux, type CommandExecutor } from "./orchestration_tmux.ts";
 import { isTerminalAgent, type BudgetReservation } from "./orchestration_types.ts";
+import { hasParentTransitionUnlocked } from "./orchestration_transition.ts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 const STATES = ["requested", "processing", "succeeded", "failed", "cancelled"] as const;
@@ -55,6 +57,7 @@ function staleEndpointBinding(error: unknown): error is Error { return error ins
 
 export async function requestPressureAdmission(stateRoot: string, meshId: string, input: { requestId: string; requesterAgentId: string; requesterRuntimeId: string; expectedBinding?: ExpectedEndpointBinding }): Promise<PressureAdmission> {
     return withMeshLock(stateRoot, meshId, async () => {
+        await assertNoParentTransitionUnlocked(stateRoot, meshId);
         if (input.expectedBinding) await assertExpectedEndpointBindingUnlocked(stateRoot, meshId, input.expectedBinding);
         await assertCurrentAgentRuntime(stateRoot, meshId, input.requesterAgentId, input.requesterRuntimeId);
         const existing = await optional(stateRoot, meshId, input.requestId);
@@ -68,6 +71,7 @@ export async function requestPressureAdmission(stateRoot: string, meshId: string
     });
 }
 export async function readPressureAdmission(stateRoot: string, meshId: string, requestId: string): Promise<PressureAdmission> { const value = await optional(stateRoot, meshId, requestId); if (!value) throw new Error(`Pressure admission ${requestId} was not found`); return value; }
+export async function listPressureAdmissions(stateRoot: string, meshId: string): Promise<PressureAdmission[]> { const names = await readdir(directory(stateRoot, meshId)).catch(error => (error as NodeJS.ErrnoException).code === "ENOENT" ? [] : Promise.reject(error)); return Promise.all(names.filter(name => name.endsWith(".json") && UUID.test(name.slice(0, -5))).sort().map(name => readPressureAdmission(stateRoot, meshId, name.slice(0, -5)))); }
 async function settle(stateRoot: string, meshId: string, requestId: string, outcome: { reservation?: BudgetReservation; error?: string }, guard?: () => Promise<void>): Promise<boolean> {
     return withMeshLock(stateRoot, meshId, async () => {
         await guard?.(); const current = await readPressureAdmission(stateRoot, meshId, requestId); if (current.state === "cancelled" || current.state === "failed" || current.state === "succeeded") return false;
@@ -169,7 +173,7 @@ export async function processPressureAdmissions(options: PressureOptions, limit 
         if (evidence.state === "unavailable") continue;
         if (evidence.state === "dead") { await cancelPressureAdmission(options.stateRoot, options.meshId, requestId, evidence.reason ?? "Pressure admission requester is not live"); processed += 1; continue; }
         let claimed: PressureAdmission | undefined;
-        try { claimed = await withMeshLock(options.stateRoot, options.meshId, async () => { if (options.signal?.aborted) throw options.signal.reason; if (request.requesterEndpointId && request.requesterEndpointSessionFile) await assertExpectedEndpointBindingUnlocked(options.stateRoot, options.meshId, { endpointId: request.requesterEndpointId, endpointSessionFile: request.requesterEndpointSessionFile }); const current = await readPressureAdmission(options.stateRoot, options.meshId, requestId); if (current.state !== "requested" && current.state !== "processing") return undefined; if (current.state === "processing") return current; const next = { ...current, state: "processing" as const, updatedAt: new Date().toISOString() }; await writeAtomicJson(pathFor(options.stateRoot, options.meshId, requestId), next); return next; }); }
+        try { claimed = await withMeshLock(options.stateRoot, options.meshId, async () => { if (options.signal?.aborted) throw options.signal.reason; if (await hasParentTransitionUnlocked(options.stateRoot, options.meshId)) return undefined; if (request.requesterEndpointId && request.requesterEndpointSessionFile) await assertExpectedEndpointBindingUnlocked(options.stateRoot, options.meshId, { endpointId: request.requesterEndpointId, endpointSessionFile: request.requesterEndpointSessionFile }); const current = await readPressureAdmission(options.stateRoot, options.meshId, requestId); if (current.state !== "requested" && current.state !== "processing") return undefined; if (current.state === "processing") return current; const next = { ...current, state: "processing" as const, updatedAt: new Date().toISOString() }; await writeAtomicJson(pathFor(options.stateRoot, options.meshId, requestId), next); return next; }); }
         catch (error) { if (!staleEndpointBinding(error)) throw error; await cancelPressureAdmission(options.stateRoot, options.meshId, requestId, error.message); processed += 1; continue; }
         if (!claimed) continue; request = claimed;
         const destructiveEvidence = await inspectRequesterTmux(options, request);
