@@ -3,42 +3,11 @@
 
 * About This Repository
 
-These are my personal dotfiles for the machines and environments I use.
-I manage them declaratively with [[https://github.com/yunfachi/denix][Denix]], [[https://github.com/nix-darwin/nix-darwin][nix-darwin]], and [[https://github.com/nix-community/home-manager][Home Manager]].
-
-The repository is intentionally tailored to my hosts, accounts, preferred tools, and desktop setup.
-It is not a general-purpose Nix configuration, framework, or starter template, and I do not try to preserve compatibility for other users.
-The source may still be useful as a reference or a starting point for a fork.
+My personal dotfiles, managed declaratively with [[https://github.com/yunfachi/denix][Denix]], [[https://github.com/nix-darwin/nix-darwin][nix-darwin]], and [[https://github.com/nix-community/home-manager][Home Manager]].
+They are tailored to my own machines and accounts, not maintained as a reusable template.
 
 Denix discovers =.nix= files under =hosts/=, =modules/=, and =rices/=.
-The repository's ownership rules and change checklist are in =docs/denix-architecture.md=.
-
-* Deploying the =seiran-vm1= Tart VM
-
-On a Nix-equipped VM without =darwin-rebuild=, bootstrap it with one switch:
-
-#+begin_src sh
-sudo nix run nix-darwin/master#darwin-rebuild -- switch --flake .#seiran-vm1
-#+end_src
-
-Use the installed command for subsequent switches:
-
-#+begin_src sh
-sudo darwin-rebuild switch --flake .#seiran-vm1
-#+end_src
-
-Both commands activate the nix-darwin system and its integrated Home Manager configuration.
-
-* Installing Standalone Linux Server Packages
-
-Install the repository's wrapped Neovim and selected command-line tools without activating Home Manager:
-
-#+begin_src sh
-nix profile install .#nvim .#server-tools
-#+end_src
-
-The =nvim= package currently targets =x86_64-linux= and is assembled from the Cloud9 NVF profile.
-The =server-tools= bundle is available on both =x86_64-linux= and =aarch64-linux= and contains binaries only; it does not install shell configuration, aliases, or integrations.
+Ownership rules and the change checklist live in =docs/denix-architecture.md=.
 
 * Repository Layout
 
@@ -47,11 +16,6 @@ The =server-tools= bundle is available on both =x86_64-linux= and =aarch64-linux
 - =rices/= contains desktop-experience policy selected through repository-owned interfaces.
 - =docs/= contains stable cross-cutting policy and runbooks.
 - =packages/= contains repository-owned package derivations.
-
-* Validation
-
-Use =nix flake check --no-build --no-update-lock-file= for fast evaluation, build a named =checks.<system>.<name>= output for focused validation, and run =nix run .#check-full= before completion.
-The staging rule, system-specific behavior, and check ownership map are in =docs/nix-validation.md=.
 
 * Notes and Runbooks
 
@@ -62,9 +26,6 @@ The staging rule, system-specific behavior, and check ownership map are in =docs
 - SOPS key rotation: =docs/secrets-key-rotation.md=
 - AquaSKK setup and recovery: =modules/programs/aquaskk/README.md=
 - Coding-agent entry guidance: =AGENTS.md=
-
-Secrets are declared by =modules/toplevel/secrets.nix= and consumed through =config.sops.secrets.<key>.path=.
-Plaintext credentials do not belong in the repository.
 
 * License
 
