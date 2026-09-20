@@ -30,11 +30,10 @@
     src = inputs.rift;
     cargoLock = {
       lockFile = "${inputs.rift}/Cargo.lock";
-      # Hashes for upstream git-sourced crates. If the rift flake input is
-      # bumped to a revision whose Cargo.lock rewrites either of these, the
-      # build will fail fast with the expected hash; update accordingly.
+      # Hash for the upstream git-sourced crate. If the rift flake input is
+      # bumped to a revision whose Cargo.lock rewrites this dependency, the
+      # build will fail fast; update the hash (or drop the entry) accordingly.
       outputHashes = {
-        "continue-0.1.1" = "sha256-8S+gPfz6CtzIKsGh9wg3CevMdNA9V+KOyHR9F9DlVcw=";
         "dispatchr-1.0.0" = "sha256-Df6PdDA5bpmy2P30vGdad+EiHJiANmHrRF2q75Uegik=";
       };
     };
