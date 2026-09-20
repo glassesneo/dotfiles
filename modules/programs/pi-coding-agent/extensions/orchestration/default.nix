@@ -152,8 +152,8 @@
     small-read = {
       models = [
         "openrouter/cohere/north-mini-code:free"
-        "commandcode/deepseek/deepseek-v4-flash"
         "mistral/mistral-small-2603"
+        "commandcode/deepseek/deepseek-v4.1-flash"
         "openai-codex/gpt-5.6-luna"
       ];
       thinkingLevel = "high";
@@ -162,34 +162,41 @@
     small-write = {
       models = [
         "openai-codex/gpt-5.6-luna"
-        "commandcode/deepseek/deepseek-v4-flash"
       ];
       thinkingLevel = "high";
       harness = "pi";
     };
     standard-read = {
       models = [
+        "commandcode/deepseek/deepseek-v4.1-flash"
         "commandcode/meta/muse-spark-1.3-contributor"
         "openai/gpt-5.6-terra"
       ];
-      thinkingLevel = "high";
+      thinkingLevel = "medium";
       harness = "pi";
     };
     standard-write = {
       models = [
+        "commandcode/deepseek/deepseek-v4.1-flash"
         "commandcode/meta/muse-spark-1.3-contributor"
         "openai/gpt-5.6-terra"
       ];
-      thinkingLevel = "high";
+      thinkingLevel = "medium";
       harness = "pi";
     };
     advanced-read = {
-      models = ["openai-codex/gpt-5.6-sol"];
+      models = [
+        "openai-codex/gpt-5.6-sol"
+        "commandcode/gpt-5.6-sol"
+      ];
       thinkingLevel = "medium";
       harness = "pi";
     };
     advanced-write = {
-      models = ["openai-codex/gpt-5.6-sol"];
+      models = [
+        "openai-codex/gpt-5.6-sol"
+        "commandcode/gpt-5.6-sol"
+      ];
       thinkingLevel = "medium";
       harness = "pi";
     };

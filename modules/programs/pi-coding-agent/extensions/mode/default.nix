@@ -80,7 +80,7 @@ in
     myconfig.always.programs.pi-coding-agent.mode = {
       execution = lib.mapAttrs (_: lib.mkDefault) {
         models = [
-          "commandcode/z-ai/glm-5.3-flash"
+          "commandcode/Qwen/Qwen3.8-27B"
           "openai-codex/gpt-5.6-sol"
         ];
         thinkingLevel = "medium";
