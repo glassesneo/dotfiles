@@ -231,6 +231,7 @@ in
         packageContributions = {
           codex-compaction.source = "npm:@ogulcancelik/pi-codex-compaction@0.1.3";
           commandcode-provider.source = "npm:pi-commandcode-provider@0.7.1";
+          ponytail.source = "npm:@dietrichgebert/ponytail@4.9.0";
           decision-ui = {
             enabled = piQuestion.enabled || piArtifact.enabled || piOrchestration.enabled;
             source = "npm:@glassesneo/pi-decision-ui@0.1.1";
@@ -404,6 +405,10 @@ in
         {
           "${cfg.configDir}/models.json".text = builtins.toJSON modelOverrides;
           "${cfg.configDir}/pi-codex-compaction.json".text = builtins.toJSON codexCompactionConfig;
+          "${homeConfig.home.homeDirectory}/.config/ponytail/config.json".text = builtins.toJSON {
+            defaultMode = "off";
+            quietStartup = true;
+          };
         }
         // lib.optionalAttrs artifactRuntimeRequired {
           "${artifactRuntimeDir}/extensions_src".source = homeConfig.lib.file.mkOutOfStoreSymlink "${./extensions_src}";
