@@ -12,7 +12,7 @@ import { bindAgentRuntime, readCurrentPiRuntimeGeneration, unbindAgentRuntime } 
 import { applyAgentControl, appendLimitHistory, claimPendingTask, confirmAgentInterrupt, failAgent, finishTask, markBridgeReady, patchAgentStatus, readAgentExecution, readAgentSnapshot, readAgentStatus, readTaskCancellation, recordChildSessionIdentity, recordIdleUsage, recordIntervention } from "./utilities/orchestration_store.ts";
 import { classifyInvocationFailure, limitAttemptRecord, recoverableLimitInCycle } from "./utilities/orchestration_limit.ts";
 import { EXECUTION_RESUME_CONTENT, EXECUTION_RESUME_CUSTOM_TYPE, ProcessExecutionGate, shouldOpenExecutionGate, successfulEndResponseMarker } from "./utilities/orchestration_execution.ts";
-import { FALLBACK_CONTINUE_CUSTOM_TYPE, NATIVE_COMPACTION_RESERVE_TOKENS, beginLimitRetryCycle, formatFallbackContinueContent, initialModelRoute, preflightProfileCandidates, reconcileForwardIndex, recordModelRouteAttempt, restoreCompatibleRoute, sanitizeDiagnostic, selectRuntimePromotion, type ModelRouteState } from "./utilities/orchestration_profile_fallback.ts";
+import { FALLBACK_CONTINUE_CUSTOM_TYPE, NATIVE_COMPACTION_RESERVE_TOKENS, beginLimitRetryCycle, formatFallbackContinueContent, initialModelRoute, preflightProfileCandidates, reconcileForwardIndex, recordModelRouteAttempt, restoreCompatibleRoute, sanitizeDiagnostic, selectedProfileThinkingLevel, selectRuntimePromotion, type ModelRouteState } from "./utilities/orchestration_profile_fallback.ts";
 import { createDirectoryWake, workerTaskInboxDirectory, type DirectoryWake, type DirectoryWakeDependencies } from "./utilities/orchestration_wake.ts";
 
 function record(value: unknown): Record<string, unknown> { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {}; }
@@ -124,7 +124,7 @@ export function registerMeshChildBridge(pi: ExtensionAPI, env: NodeJS.ProcessEnv
                     continue;
                 }
                 if (await queueStoppedPromotion()) return "stopped";
-                if (profile.thinkingLevel) pi.setThinkingLevel(profile.thinkingLevel);
+                pi.setThinkingLevel(selectedProfileThinkingLevel(profile, decision.route.activeIndex));
             } catch (error) {
                 currentRoute = recordModelRouteAttempt(decision.route, { index: decision.route.activeIndex, model: decision.route.activeModel, category: "unavailable", at: new Date().toISOString(), message: sanitizeDiagnostic(error) });
                 continue;
@@ -232,7 +232,7 @@ export function registerMeshChildBridge(pi: ExtensionAPI, env: NodeJS.ProcessEnv
                 try {
                     const [provider, modelId] = route.activeModel.split("/") as [string, string];
                     if (typeof pi.setModel === "function") await pi.setModel({ provider, id: modelId } as never);
-                    if (profile.thinkingLevel) pi.setThinkingLevel(profile.thinkingLevel);
+                    pi.setThinkingLevel(selectedProfileThinkingLevel(profile, route.activeIndex));
                     await persistRouteStatus(route).catch(() => {});
                 } catch {
                     settled = true;
@@ -272,7 +272,7 @@ export function registerMeshChildBridge(pi: ExtensionAPI, env: NodeJS.ProcessEnv
                 const status = await readAgentStatus({ directory, agent: `${directory}/agent.json`, status: `${directory}/status.json`, stop: `${directory}/stop.json`, events: `${directory}/events.jsonl`, session: `${directory}/session` }, meshId);
                 const profile = expectedEnvelope.self.execution;
                 const initialRoute = initialModelRoute(profile, expectedEnvelope.initialCandidateIndex);
-                const persisted = restoreCompatibleRoute(profile, expectedEnvelope.childId, status.modelRoute ? { profile: expectedEnvelope.childId, candidates: profile.models, route: status.modelRoute } : undefined);
+                const persisted = restoreCompatibleRoute(profile, expectedEnvelope.childId, status.modelRoute ? { profile: expectedEnvelope.childId, candidates: profile.models.map(entry => entry.model), route: status.modelRoute } : undefined);
                 route = initialRoute;
                 if (persisted) {
                     applyingSetModel = true;
@@ -288,7 +288,7 @@ export function registerMeshChildBridge(pi: ExtensionAPI, env: NodeJS.ProcessEnv
                     } finally { applyingSetModel = false; }
                     if (!restored.ok) throw new Error(restored.error);
                     route = restored.route;
-                    if (profile.thinkingLevel) pi.setThinkingLevel(profile.thinkingLevel);
+                    pi.setThinkingLevel(selectedProfileThinkingLevel(profile, route.activeIndex));
                 }
                 if (!status.modelRoute || status.modelRoute.activeIndex !== route.activeIndex || status.modelRoute.activeModel !== route.activeModel || status.modelRoute.attempts.length !== route.attempts.length) await persistRouteStatus(route);
             }

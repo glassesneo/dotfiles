@@ -99,9 +99,10 @@ export function publicCapabilityFields(snapshot: AgentSnapshot): { agent: string
 }
 
 /** Exact configured model spellings emitted by Cursor and Codex adapters. */
-export function configuredModelDiagnosticNames(models: readonly string[], cursorAcpModelId?: string): string[] {
+export function configuredModelDiagnosticNames(models: readonly { model: string }[], cursorAcpModelId?: string): string[] {
     const names = new Set<string>();
-    for (const model of models) {
+    for (const entry of models) {
+        const model = entry.model;
         names.add(model);
         if (model.startsWith("cursor/")) {
             const alias = model.slice("cursor/".length);

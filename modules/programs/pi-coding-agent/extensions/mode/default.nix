@@ -4,10 +4,15 @@
   piQuestion,
   ...
 }: let
+  modelEntryType = delib.submodule {
+    options = with delib; {
+      model = noDefault (strOption null);
+      thinkingLevel = allowNull (enumOption ["off" "minimal" "low" "medium" "high" "xhigh" "max"] null);
+    };
+  };
   executionModule = {
     options = with delib; {
-      models = noDefault (listOfOption str []);
-      thinkingLevel = allowNull (enumOption ["off" "minimal" "low" "medium" "high" "xhigh" "max"] null);
+      models = noDefault (listOfOption modelEntryType []);
       harness = enumOption ["pi" "cursor-agent" "codex"] "pi";
       harnessOptions = attrsOfOption lib.types.anything {};
     };
@@ -20,7 +25,8 @@
       instructions = noDefault (strOption null);
     };
   };
-  cleanExecution = execution: lib.filterAttrs (_name: value: value != null && value != {}) execution;
+  cleanModelEntry = entry: lib.filterAttrs (_name: value: value != null) entry;
+  cleanExecution = execution: (lib.filterAttrs (_name: value: value != null && value != {}) execution) // {models = map cleanModelEntry execution.models;};
   judgmentContract = ''
     Own the requester's outcome as orchestrator and integrator.
 
@@ -80,10 +86,15 @@ in
     myconfig.always.programs.pi-coding-agent.mode = {
       execution = lib.mapAttrs (_: lib.mkDefault) {
         models = [
-          "commandcode/Qwen/Qwen3.8-27B"
-          "openai-codex/gpt-5.6-sol"
+          {
+            model = "commandcode/Qwen/Qwen3.8-27B";
+            thinkingLevel = "medium";
+          }
+          {
+            model = "openai-codex/gpt-5.6-sol";
+            thinkingLevel = "medium";
+          }
         ];
-        thinkingLevel = "medium";
         harness = "pi";
       };
       modes = lib.mapAttrs (_: mode: lib.mapAttrs (_: lib.mkDefault) mode) {
@@ -158,12 +169,12 @@ in
     in {
       assertions = [
         {
-          assertion = cfg.execution.harness == "pi" && cfg.execution.thinkingLevel != null && cfg.execution.harnessOptions == {};
-          message = "Pi parent execution must use the pi harness with thinkingLevel and no harnessOptions.";
+          assertion = cfg.execution.harness == "pi" && lib.all (entry: entry.thinkingLevel != null) cfg.execution.models && cfg.execution.harnessOptions == {};
+          message = "Pi parent execution must use the pi harness with a thinkingLevel on every model and no harnessOptions.";
         }
       ];
       home.file."${myconfig.programs.pi-coding-agent.configDir}/agent-modes.json".text = builtins.toJSON {
-        schemaVersion = 4;
+        schemaVersion = 5;
         inherit (cfg) defaultMode modes;
         execution = generatedExecution;
       };

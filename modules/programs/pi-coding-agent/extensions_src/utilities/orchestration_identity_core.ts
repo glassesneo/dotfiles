@@ -90,6 +90,8 @@ export function displayIdentityForSnapshot(snapshot: AgentSnapshot, words: reado
     const route = snapshot.status.modelRoute;
     const selector = snapshot.agent.definitionSnapshot.selector;
     const purpose = snapshot.task?.request.purpose;
+    const execution = snapshot.agent.definitionSnapshot.execution;
+    const activeIndex = route?.activeIndex ?? 0;
     return {
         agentId: snapshot.agent.agentId,
         handle: handleForAgentId(snapshot.agent.agentId, words),
@@ -99,11 +101,11 @@ export function displayIdentityForSnapshot(snapshot: AgentSnapshot, words: reado
         status: usualAgentStatusForSnapshot(snapshot),
         ...(snapshot.task ? { taskState: snapshot.task.status.state } : {}),
         description: snapshot.agent.definitionSnapshot.description,
-        model: route?.activeModel ?? snapshot.agent.definitionSnapshot.execution.models[0],
+        model: route?.activeModel ?? execution.models[0]?.model,
         fallbackCount: route?.attempts.length ?? 0,
         ...(route?.attempts.length ? { attempts: route.attempts } : {}),
-        ...(snapshot.agent.definitionSnapshot.execution.thinkingLevel ? { thinkingLevel: snapshot.agent.definitionSnapshot.execution.thinkingLevel } : {}),
-        harness: snapshot.agent.definitionSnapshot.execution.harness,
+        ...(execution.models[activeIndex]?.thinkingLevel ? { thinkingLevel: execution.models[activeIndex]!.thinkingLevel } : {}),
+        harness: execution.harness,
     };
 }
 

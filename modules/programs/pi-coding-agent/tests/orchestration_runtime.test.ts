@@ -34,12 +34,12 @@ const AGENT_ARTIFACT_EXTENSION = "/agent_artifact.ts";
 const budgets = { maxLiveAgents: 4, maxConcurrentTasks: 4, maxTasksPerMesh: 16 };
 const capabilities = { nativeScreen: true, taskDelivery: true, taskCompletion: true, taskCancellation: true, usage: true, interactiveInterventions: true, terminalHistory: true };
 const tmux = { socket: "/tmp/tmux", serverPid: "10", sessionId: "$1", sessionName: "mesh", windowId: "@1", paneId: "%1", windowName: "worker" };
-const piExecution: ExecutionConfig = { models: ["openai/test"], thinkingLevel: "medium", harness: "pi" };
-const cursorExecution: ExecutionConfig = { models: ["cursor/test"], harness: "cursor-agent", harnessOptions: { mode: "agent", permissionPolicy: "allow-always", sandbox: "disabled", trustWorkspace: true, worktree: false } };
+const piExecution: ExecutionConfig = { models: [{ model: "openai/test", thinkingLevel: "medium" }], harness: "pi" };
+const cursorExecution: ExecutionConfig = { models: [{ model: "cursor/test" }], harness: "cursor-agent", harnessOptions: { mode: "agent", permissionPolicy: "allow-always", sandbox: "disabled", trustWorkspace: true, worktree: false } };
 const childGc = { collectAt: 2, retain: 1, pressureFloor: 0 };
 const outbound: Record<string, string[]> = { reviewer: ["review-lens", "validator"], researcher: ["searcher"] };
 const child = (name: string): ChildDefinition => ({ selector: { agent: name, access: "read" as const }, description: `Synthetic ${name}`, tools: ["read"], instructions: `Perform ${name}.`, contextPolicy: name === "prompt-only" ? "prompt-only" : "project", childExtensionContributions: name === "reviewer" ? [AGENT_ARTIFACT_EXTENSION] : [], execution: piExecution, targets: outbound[name] ?? [], gc: childGc });
-const catalog: ChildCatalog = { schemaVersion: 1, children: Object.fromEntries(["explorer", "worker", "validator", "reviewer", "review-lens", "researcher", "searcher", "prompt-only"].map(name => [name, child(name)])) };
+const catalog: ChildCatalog = { schemaVersion: 2, children: Object.fromEntries(["explorer", "worker", "validator", "reviewer", "review-lens", "researcher", "searcher", "prompt-only"].map(name => [name, child(name)])) };
 const callPolicy: CallPolicy = {
     modes: {
         ops: { targets: ["worker", "reviewer", "researcher"] },
@@ -49,7 +49,7 @@ const callPolicy: CallPolicy = {
 function settledAgentCatalog(): ChildCatalog { return structuredClone(catalog); }
 function settledAgentDefinition(name: string): ChildDefinition { return structuredClone(catalog.children[name] ?? child(name)); }
 function settledMeshGcTiming() { return { contextHeadroomTokens: 32768, periodicIntervalMs: 5000, activityHeartbeatMs: 2000, activityStaleMs: 10000 }; }
-async function ensurePolicyEpoch(stateRoot: string, meshId: string, input: { mode: string; roleSet: string[]; roles: Record<string, ChildDefinition> }) { const localCatalog = { schemaVersion: 1 as const, children: input.roles }; const localPolicy: CallPolicy = { modes: { [input.mode]: { targets: [...input.roleSet] } } }; return ensurePolicyEpochStore(stateRoot, meshId, { mode: input.mode, catalog: localCatalog, callPolicy: localPolicy }); }
+async function ensurePolicyEpoch(stateRoot: string, meshId: string, input: { mode: string; roleSet: string[]; roles: Record<string, ChildDefinition> }) { const localCatalog = { schemaVersion: 2 as const, children: input.roles }; const localPolicy: CallPolicy = { modes: { [input.mode]: { targets: [...input.roleSet] } } }; return ensurePolicyEpochStore(stateRoot, meshId, { mode: input.mode, catalog: localCatalog, callPolicy: localPolicy }); }
 function createTask(stateRoot: string, meshId: string, agentId: string, work: { prompt: string; purpose: string }) { return createTaskStore(stateRoot, meshId, agentId, work, `root:${meshId}`); }
 function buildLaunchEnvelope(input: { meshId: string; agentId: string; epochId: string; agent: string; mode: string; roleSet: string[]; catalog: ChildCatalog; childExtensions: Record<string, string[]> }): AgentLaunchEnvelope { const policy: CallPolicy = { modes: { [input.mode]: { targets: [...input.roleSet] } } }; const snapshot = buildPolicySnapshot({ mode: input.mode, catalog: input.catalog, callPolicy: policy }); const childExtensions = Object.fromEntries(Object.keys(snapshot.children).map(name => [name, input.childExtensions[name] ?? []])); return buildLaunchEnvelopeV8({ meshId: input.meshId, agentId: input.agentId, epochId: input.epochId, childId: input.agent, snapshot, childExtensions }); }
 
@@ -62,7 +62,7 @@ void test("schema-v6 orchestration timing is separate from child GC hysteresis",
     assert.deepEqual(validateOrchestrationConfig(config).gc, config.gc);
     const unsafe = structuredClone(settledAgentDefinition("worker"));
     unsafe.gc.pressureFloor = unsafe.gc.retain + 1;
-    assert.throws(() => validateChildCatalog({ schemaVersion: 1, children: { worker: unsafe } }), /hysteresis/u);
+    assert.throws(() => validateChildCatalog({ schemaVersion: 2, children: { worker: unsafe } }), /hysteresis/u);
     assert.throws(() => validateOrchestrationConfig({ ...config, schemaVersion: 5 }), /schemaVersion/u);
 });
 
@@ -152,7 +152,7 @@ async function writeRuntimeFiles(root: string) {
     const modePath = join(root, "agent-modes.json");
     await writeFile(configPath, JSON.stringify(runtimeConfig(root)));
     await writeFile(catalogPath, JSON.stringify(settledAgentCatalog()));
-    await writeFile(modePath, JSON.stringify({ schemaVersion: 4, defaultMode: "recon", execution: piExecution, modes: Object.fromEntries(["recon", "ops"].map(name => [name, { description: name, tools: ["read"], skillOptIns: [], instructions: `Use ${name}.` }])) }));
+    await writeFile(modePath, JSON.stringify({ schemaVersion: 5, defaultMode: "recon", execution: piExecution, modes: Object.fromEntries(["recon", "ops"].map(name => [name, { description: name, tools: ["read"], skillOptIns: [], instructions: `Use ${name}.` }])) }));
     return { configPath, catalogPath, modePath };
 }
 
@@ -880,7 +880,7 @@ void test("waiting releases on endpoint loss, store errors, and shutdown while r
 // Admission: schemas cannot observe native Pi prompt composition; a stale role Skill injection would reintroduce optional ownership while a missing addition would drop mandatory instructions.
 // Given a prompt-only Pi child and a discovered disabled Skill, session startup appends only the synthetic role instructions, creates no route endpoint or management surface, and root routing cannot deliver a message.
 void test("prompt-only child receives only role instructions and remains isolated from routed management", async () => withRoot("mesh-prompt-only-runtime-", async root => {
-    const mesh = await initializeMesh(root, { rootSessionId: "root", recoverable: true, budgets }); const promptOnlyCatalog: ChildCatalog = { schemaVersion: 1, children: { "prompt-only": settledAgentDefinition("prompt-only") } }; const promptOnlyPolicy: CallPolicy = { modes: { ops: { targets: ["prompt-only"] } } }; const epoch = await ensurePolicyEpochStore(root, mesh.meshId, { mode: "ops", catalog: promptOnlyCatalog, callPolicy: promptOnlyPolicy }); const promptOnly = await publishWorker(root, mesh.meshId, epoch.epochId, { role: "prompt-only" }); const files = await writeRuntimeFiles(root); const sessionFile = join(root, "prompt-only.jsonl"); await writeFile(sessionFile, ""); const env = { PI_MESH_ID: mesh.meshId, PI_MESH_AGENT_ID: promptOnly.agentId, PI_AGENT_RESOLVED_AGENT: promptOnly.envelopePath }; let tick!: () => Promise<void>; const pi = new PiMock(); const ctx = { sessionManager: { getSessionId: () => "prompt-only", getSessionFile: () => sessionFile, getBranch: () => [] }, ui: { setStatus() {}, notify() {} }, isIdle: () => true } as never; await registerOrchestration(pi as never, { ...files, env, setInterval(callback) { tick = async () => { await callback(); }; return "timer"; }, clearInterval() {} }); await pi.handlers.get("session_start")![0]!({}, ctx);
+    const mesh = await initializeMesh(root, { rootSessionId: "root", recoverable: true, budgets }); const promptOnlyCatalog: ChildCatalog = { schemaVersion: 2, children: { "prompt-only": settledAgentDefinition("prompt-only") } }; const promptOnlyPolicy: CallPolicy = { modes: { ops: { targets: ["prompt-only"] } } }; const epoch = await ensurePolicyEpochStore(root, mesh.meshId, { mode: "ops", catalog: promptOnlyCatalog, callPolicy: promptOnlyPolicy }); const promptOnly = await publishWorker(root, mesh.meshId, epoch.epochId, { role: "prompt-only" }); const files = await writeRuntimeFiles(root); const sessionFile = join(root, "prompt-only.jsonl"); await writeFile(sessionFile, ""); const env = { PI_MESH_ID: mesh.meshId, PI_MESH_AGENT_ID: promptOnly.agentId, PI_AGENT_RESOLVED_AGENT: promptOnly.envelopePath }; let tick!: () => Promise<void>; const pi = new PiMock(); const ctx = { sessionManager: { getSessionId: () => "prompt-only", getSessionFile: () => sessionFile, getBranch: () => [] }, ui: { setStatus() {}, notify() {} }, isIdle: () => true } as never; await registerOrchestration(pi as never, { ...files, env, setInterval(callback) { tick = async () => { await callback(); }; return "timer"; }, clearInterval() {} }); await pi.handlers.get("session_start")![0]!({}, ctx);
     const prompt = await pi.handlers.get("before_agent_start")![0]!({ systemPrompt: "base", systemPromptOptions: { skills: [{ name: "retired-role-method", description: "legacy", filePath: "/legacy/SKILL.md", disableModelInvocation: true }] } }, ctx);
     assert.deepEqual(prompt, { systemPrompt: "base\n\nPerform prompt-only." });
     assert.deepEqual(pi.active, []); assert.equal(pi.tools.has("mesh_enable"), false); assert.equal(pi.handlers.has("context"), false); assert.equal(pi.eventHandlers.get("command-palette:contribution")?.length ?? 0, 0);
@@ -897,7 +897,7 @@ void test("mesh_send exposes a provider-compatible object schema with authorized
 // Given malformed dependent selectors passed directly to execute, authorization rejects before endpoint lookup or any lifecycle persistence.
 void test("mesh_send rejects omitted, forged, extra, and unauthorized selectors before mutation", async () => withRoot("mesh-profile-premutation-", async root => {
     const mesh = await initializeMesh(root, { rootSessionId: "root", recoverable: true, budgets });
-    const localCatalog: ChildCatalog = { schemaVersion: 1, children: { worker: settledAgentDefinition("worker"), explorer: settledAgentDefinition("explorer") } };
+    const localCatalog: ChildCatalog = { schemaVersion: 2, children: { worker: settledAgentDefinition("worker"), explorer: settledAgentDefinition("explorer") } };
     const localPolicy: CallPolicy = { modes: { ops: { targets: ["worker", "explorer"] } } };
     const epoch = await ensurePolicyEpochStore(root, mesh.meshId, { mode: "ops", catalog: localCatalog, callPolicy: localPolicy });
     const files = await writeRuntimeFiles(root); const deps = { ...files, env: {}, exec: absentTmux, activeCaller: () => caller(mesh.meshId, epoch, { identity: "mode:ops", sessionFile: join(root, "missing.jsonl") }) };
@@ -918,7 +918,7 @@ void test("mesh_send rejects omitted, forged, extra, and unauthorized selectors 
 void test("mesh_send reuse requires the current child definition", async () => withRoot("mesh-reuse-profile-edge-", async root => {
     const sessionFile = join(root, "root.jsonl"); await writeFile(sessionFile, ""); const mesh = await initializeMesh(root, { rootSessionId: "root", rootSessionFile: sessionFile, recoverable: true, budgets });
     const initial = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", roleSet: ["worker"], roles: { worker: settledAgentDefinition("worker") } }); const worker = await publishWorker(root, mesh.meshId, initial.epochId);
-    const cursorWorker = { ...settledAgentDefinition("worker"), execution: cursorExecution }; const narrowedPolicy: CallPolicy = { modes: { narrowed: { targets: ["worker"] } } }; const narrowed = await ensurePolicyEpochStore(root, mesh.meshId, { mode: "narrowed", catalog: { schemaVersion: 1, children: { worker: cursorWorker } }, callPolicy: narrowedPolicy });
+    const cursorWorker = { ...settledAgentDefinition("worker"), execution: cursorExecution }; const narrowedPolicy: CallPolicy = { modes: { narrowed: { targets: ["worker"] } } }; const narrowed = await ensurePolicyEpochStore(root, mesh.meshId, { mode: "narrowed", catalog: { schemaVersion: 2, children: { worker: cursorWorker } }, callPolicy: narrowedPolicy });
     await bindMeshEndpoint(root, mesh.meshId, { endpointId: `root:${mesh.meshId}`, kind: "root", harness: "pi", sessionId: "root", sessionFile }); const files = await writeRuntimeFiles(root); const deps = { ...files, env: {}, exec: absentTmux, activeCaller: () => caller(mesh.meshId, narrowed, { identity: "mode:narrowed", sessionFile }) }; const reservationsBefore = await readdir(meshPaths(root, mesh.meshId).reservations);
     await assert.rejects(createMeshSendTool(deps, { worker: cursorWorker }).execute("reuse-stale-profile", { agentId: worker.agentId, message: "must not reuse" }, undefined, undefined, { cwd: root } as never), /current immutable capability route/u);
     assert.deepEqual(await readdir(meshPaths(root, mesh.meshId).reservations), reservationsBefore); assert.deepEqual(await readdir(meshPaths(root, mesh.meshId).tasks), []);
@@ -1443,7 +1443,7 @@ void test("native launch preserves prompt-only contributions through the launch 
 // Given a selected Cursor profile whose mapping is absent, mesh_send rejects before persisting any reservation, agent, or task.
 void test("Cursor mapping resolution rejects before capacity reservation", async () => withRoot("mesh-cursor-mapping-", async root => {
     const mesh = await initializeMesh(root, { rootSessionId: "root", recoverable: true, budgets });
-    const localCatalog: ChildCatalog = { schemaVersion: 1, children: { worker: { ...settledAgentDefinition("worker"), execution: cursorExecution } } };
+    const localCatalog: ChildCatalog = { schemaVersion: 2, children: { worker: { ...settledAgentDefinition("worker"), execution: cursorExecution } } };
     const localPolicy: CallPolicy = { modes: { ops: { targets: ["worker"] } } };
     const epoch = await ensurePolicyEpochStore(root, mesh.meshId, { mode: "ops", catalog: localCatalog, callPolicy: localPolicy });
     const files = await writeRuntimeFiles(root); const rawConfig = JSON.parse(await readFile(files.configPath, "utf8")) as OrchestrationConfig; rawConfig.harnesses["cursor-agent"]!.modelIds = {}; await writeFile(files.configPath, JSON.stringify(rawConfig));

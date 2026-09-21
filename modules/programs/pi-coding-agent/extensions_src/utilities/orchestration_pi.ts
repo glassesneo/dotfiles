@@ -43,8 +43,9 @@ export function piLaunchDescriptor(config: SubagentRuntimeConfig, input: { meshI
 
     const args = ["--session-dir", `${input.agentDirectory}/session`, "--no-extensions"];
     for (const extension of runtimeExtensions(envelope)) args.push("-e", extension);
-    args.push("--model", execution.models[envelope.initialCandidateIndex] ?? execution.models[0]!);
-    if (execution.thinkingLevel) args.push("--thinking", execution.thinkingLevel);
+    const initial = execution.models[envelope.initialCandidateIndex] ?? execution.models[0]!;
+    args.push("--model", initial.model);
+    if (initial.thinkingLevel) args.push("--thinking", initial.thinkingLevel);
 
     if (envelope.self.contextPolicy === "prompt-only") {
         args.push("--no-context-files", "--no-skills", "--no-prompt-templates", "--no-tools");

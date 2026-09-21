@@ -9,6 +9,7 @@ export {
     reconcileForwardIndex as reconcileProfileRoute,
     sanitizeDiagnostic as sanitizeProfileDiagnostic,
     selectProfileCandidate,
+    selectedProfileThinkingLevel,
     splitProviderModel,
     type ModelRouteAttempt as ProfileAttempt,
     type ModelRouteAttemptCategory as ProfileAttemptCategory,

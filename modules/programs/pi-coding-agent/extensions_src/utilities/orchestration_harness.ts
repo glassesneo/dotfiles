@@ -17,11 +17,11 @@ function piOptions(execution: ExecutionConfig, harnessId: string): void {
     if (harnessId !== "pi" || execution.harness !== "pi" || execution.harnessOptions !== undefined) throw new Error("Pi execution must use pi without harnessOptions");
 }
 function cursorOptions(execution: ExecutionConfig, harnessId: string): void {
-    if (harnessId !== "cursor-agent" || execution.harness !== "cursor-agent" || execution.models.length !== 1 || !execution.models[0]!.startsWith("cursor/") || execution.thinkingLevel !== undefined) throw new Error("Cursor execution requires cursor-agent, cursor/<model>, and no thinkingLevel");
+    if (harnessId !== "cursor-agent" || execution.harness !== "cursor-agent" || execution.models.length !== 1 || !execution.models[0]!.model.startsWith("cursor/") || execution.models[0]!.thinkingLevel !== undefined) throw new Error("Cursor execution requires cursor-agent, cursor/<model>, and no thinkingLevel");
     if (!isApprovedCursorHarnessOptions(execution.harnessOptions)) throw new Error("Cursor execution requires exact approved harnessOptions");
 }
 function codexOptions(execution: ExecutionConfig, harnessId: string): void {
-    if (harnessId !== "codex" || execution.harness !== "codex" || execution.models.length !== 1 || !execution.models[0]!.startsWith("codex/") || !execution.thinkingLevel) throw new Error("Codex execution requires codex, codex/<model>, and thinkingLevel");
+    if (harnessId !== "codex" || execution.harness !== "codex" || execution.models.length !== 1 || !execution.models[0]!.model.startsWith("codex/") || !execution.models[0]!.thinkingLevel) throw new Error("Codex execution requires codex, codex/<model>, and thinkingLevel");
     exactOptions(execution.harnessOptions, expectedCodex, "Codex execution");
 }
 function selected(input: HarnessLaunchInput): AgentLaunchEnvelope {
@@ -44,7 +44,7 @@ const codex: HarnessAdapter = { kind: "codex-acp", capabilities: externalCapabil
 export function resolveCursorAcpModelId(config: SubagentRuntimeConfig, execution: ExecutionConfig): string | undefined {
     if (execution.harness !== "cursor-agent") return undefined;
     cursorOptions(execution, execution.harness);
-    const alias = execution.models[0]!.slice("cursor/".length);
+    const alias = execution.models[0]!.model.slice("cursor/".length);
     const modelId = config.harnesses[execution.harness]?.modelIds?.[alias];
     if (!modelId) throw new Error(`Cursor ACP model mapping is unavailable for ${alias}`);
     return modelId;

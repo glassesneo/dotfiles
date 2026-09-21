@@ -28,7 +28,7 @@ const definition = {
     instructions: "Work.",
     contextPolicy: "project" as const,
     childExtensionContributions: [] as string[],
-    execution: { models: ["openai/test"], thinkingLevel: "medium" as const, harness: "pi" as const },
+    execution: { models: [{ model: "openai/test", thinkingLevel: "medium" as const }], harness: "pi" as const },
     targets: [] as string[],
     gc: { collectAt: 2, retain: 1, pressureFloor: 0 },
 };
@@ -114,7 +114,7 @@ void test("interactive input opens the process gate only after a released manual
 // Admission: held tasks must remain nonterminal across claim, stale resume, and peer resume of a limit hold.
 void test("store control keeps held tasks and rejects stale or peer limit resume", async () => withRoot("mesh-execution-hold-", async root => {
     const mesh = await initializeMesh(root, { rootSessionId: "root", recoverable: true, budgets });
-    const catalog = { schemaVersion: 1 as const, children: { worker: definition } };
+    const catalog = { schemaVersion: 2 as const, children: { worker: definition } };
     const callPolicy = { modes: { ops: { targets: ["worker"] } } };
     const epoch = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", catalog, callPolicy });
     const worker = await publishIdleWorker(root, mesh.meshId, epoch.epochId);
@@ -141,7 +141,7 @@ void test("store control keeps held tasks and rejects stale or peer limit resume
 // Admission: stale runtime/binding CAS and idle GC must not drop a held task; types cannot observe the claim/GC exclusion.
 void test("stale runtime control is rejected and held idle agents are excluded from GC claims", async () => withRoot("mesh-execution-cas-gc-", async root => {
     const mesh = await initializeMesh(root, { rootSessionId: "root", recoverable: true, budgets });
-    const catalog = { schemaVersion: 1 as const, children: { worker: definition } };
+    const catalog = { schemaVersion: 2 as const, children: { worker: definition } };
     const callPolicy = { modes: { ops: { targets: ["worker"] } } };
     const epoch = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", catalog, callPolicy });
     const worker = await publishIdleWorker(root, mesh.meshId, epoch.epochId);
@@ -176,7 +176,7 @@ async function publishRole(root: string, meshId: string, epochId: string, childI
 void test("ancestor hold and task commit share one lock boundary", async () => withRoot("mesh-hold-dispatch-boundary-", async root => {
     const mesh = await initializeMesh(root, { rootSessionId: "root", recoverable: true, budgets });
     const lead = { ...definition, selector: { agent: "lead", access: "read" as const }, targets: ["worker"] };
-    const catalog = { schemaVersion: 1 as const, children: { lead, worker: definition } };
+    const catalog = { schemaVersion: 2 as const, children: { lead, worker: definition } };
     const callPolicy = { modes: { ops: { targets: ["lead"] } } };
     const epoch = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", catalog, callPolicy });
     const parent = await publishRole(root, mesh.meshId, epoch.epochId, "lead", lead as typeof definition);

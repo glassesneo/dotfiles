@@ -46,7 +46,7 @@ void test("external worker module loads without package resolution from a standa
 
 const childGc = { collectAt: 2, retain: 1, pressureFloor: 0 };
 function child(overrides: Partial<ChildDefinition> = {}): ChildDefinition {
-    return { selector: { agent: "standard", access: "read" }, description: "purpose", tools: [], instructions: "Own this purpose.", contextPolicy: "project", childExtensionContributions: [], execution: { models: ["openai-codex/gpt-5.6-terra"], thinkingLevel: "high", harness: "pi" }, targets: [], gc: childGc, ...overrides };
+    return { selector: { agent: "standard", access: "read" }, description: "purpose", tools: [], instructions: "Own this purpose.", contextPolicy: "project", childExtensionContributions: [], execution: { models: [{ model: "openai-codex/gpt-5.6-terra", thinkingLevel: "high" }], harness: "pi" }, targets: [], gc: childGc, ...overrides };
 }
 function envelope(input: { childId: string; self: ChildDefinition; extra?: Record<string, ChildDefinition>; extensions?: string[] }): AgentLaunchEnvelope {
     const children = { [input.childId]: input.self, ...input.extra };
@@ -72,7 +72,7 @@ async function waitUntil(check: () => boolean | Promise<boolean>, timeoutMs = 30
 const externalCapabilities = { nativeScreen: true, taskDelivery: true, taskCompletion: true, taskCancellation: true, usage: false, interactiveInterventions: false, terminalHistory: false };
 const externalTmux = { socket: "/tmp/tmux", serverPid: "1", sessionId: "$1", sessionName: "main", windowId: "@1", paneId: "%1", windowName: "worker" };
 const externalBudgets = { maxLiveAgents: 4, maxConcurrentTasks: 4, maxTasksPerMesh: 20 };
-const cursorExecution: ExecutionConfig = { models: [`cursor/${SYNTHETIC_CURSOR_ALIAS}`], harness: "cursor-agent", harnessOptions: { mode: "agent", permissionPolicy: "allow-always", sandbox: "disabled", trustWorkspace: true, worktree: false } };
+const cursorExecution: ExecutionConfig = { models: [{ model: `cursor/${SYNTHETIC_CURSOR_ALIAS}` }], harness: "cursor-agent", harnessOptions: { mode: "agent", permissionPolicy: "allow-always", sandbox: "disabled", trustWorkspace: true, worktree: false } };
 const externalConfig: ExternalWorkerConfig = { adapter: "cursor-acp", command: "/cursor", cwd: "/work", expectedAcpModelId: SYNTHETIC_ACP_MODEL_ID, mode: "agent", permissionPolicy: "allow-always" };
 
 async function externalFixture(root: string, input: { execution?: ExecutionConfig; config?: ExternalWorkerConfig } = {}) {
@@ -80,7 +80,7 @@ async function externalFixture(root: string, input: { execution?: ExecutionConfi
     const config = input.config ?? externalConfig;
     const general = child({ instructions: "Independently own one problem through exploration, implementation, and validation.", tools: [], execution });
     const mesh = await initializeMesh(root, { rootSessionId: "root", recoverable: false, budgets: externalBudgets });
-    const epoch = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", catalog: { schemaVersion: 1, children: { general } }, callPolicy: { modes: { ops: { targets: ["general"] } } } });
+    const epoch = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", catalog: { schemaVersion: 2, children: { general } }, callPolicy: { modes: { ops: { targets: ["general"] } } } });
     const reservation = await reserveMeshCapacity(root, mesh.meshId, "new-agent-task");
     const prepared = await prepareAgent(root, mesh.meshId, { reservationId: reservation.reservationId, childId: "general", harness: execution.harness, cwd: "/work", definitionSnapshot: general, launchEnvelope: "pending", epochId: epoch.epochId, provenance: { creatorSessionId: "parent" }, capabilities: externalCapabilities });
     const launchEnvelope = buildLaunchEnvelope({ meshId: mesh.meshId, agentId: prepared.agentId, epochId: epoch.epochId, childId: "general", snapshot: epoch, childExtensions: { general: [] } });
@@ -191,22 +191,22 @@ void test("external usual heading follows current purpose and state across reuse
 // Admission: launch isolation is repository-owned, a leaked context/tool/resource flag materially violates the role boundary, and neither types nor schema validation observes the final Pi argv.
 // Given project, outbound, and prompt-only role envelopes, when they cross the native launch-descriptor boundary, the Pi process observes only the selected profile and tools authorized for that context.
 void test("Pi launch descriptors isolate prompt-only roles and expose outbound or report-only mesh tools", () => {
-    const piExecution: ExecutionConfig = { models: ["openai-codex/gpt-5.6-terra"], thinkingLevel: "high", harness: "pi" };
+    const piExecution: ExecutionConfig = { models: [{ model: "openai-codex/gpt-5.6-terra", thinkingLevel: "high" }], harness: "pi" };
     const promptOnly = envelope({ childId: "prompt-only", self: child({ contextPolicy: "prompt-only", tools: [], execution: piExecution }) });
     const isolated = piLaunchDescriptor(runtime, launchInput("prompt-only", promptOnly));
-    assert.equal(option(isolated.args, "--model"), piExecution.models[0]);
-    assert.equal(option(isolated.args, "--thinking"), piExecution.thinkingLevel);
+    assert.equal(option(isolated.args, "--model"), piExecution.models[0]!.model);
+    assert.equal(option(isolated.args, "--thinking"), piExecution.models[0]!.thinkingLevel);
     assert.equal(isolated.args.includes("--no-extensions"), true);
     assert.deepEqual(extensions(isolated.args), ["/popup.ts", "/orchestration.ts", "/role-contribution.ts", "/orchestration_child_bridge.ts"]);
     for (const flag of ["--no-context-files", "--no-skills", "--no-prompt-templates", "--no-tools"]) assert.equal(isolated.args.includes(flag), true, flag);
     assert.equal(isolated.args.includes("--tools"), false);
 
     const reviewLens = child({ selector: { agent: "review-lens", access: "read" }, execution: piExecution });
-    const caller = envelope({ childId: "reviewer", self: child({ tools: ["read", "save_agent_artifact"], execution: { models: ["openai-codex/gpt-5.6-sol"], thinkingLevel: "high", harness: "pi" }, targets: ["review-lens"] }), extra: { "review-lens": reviewLens } });
+    const caller = envelope({ childId: "reviewer", self: child({ tools: ["read", "save_agent_artifact"], execution: { models: [{ model: "openai-codex/gpt-5.6-sol", thinkingLevel: "high" }], harness: "pi" }, targets: ["review-lens"] }), extra: { "review-lens": reviewLens } });
     const callerTools = option(piLaunchDescriptor(runtime, launchInput("reviewer", caller)).args, "--tools")!.split(",");
     assert.deepEqual(callerTools, ["read", "save_agent_artifact", "end_response", "mesh_send", "mesh_get", "mesh_stop", "mesh_control", "mesh_report"]);
 
-    const leaf = envelope({ childId: "validator", self: child({ tools: ["read", "bash"], execution: { models: ["openai-codex/gpt-5.6-luna"], thinkingLevel: "xhigh", harness: "pi" } }) });
+    const leaf = envelope({ childId: "validator", self: child({ tools: ["read", "bash"], execution: { models: [{ model: "openai-codex/gpt-5.6-luna", thinkingLevel: "xhigh" }], harness: "pi" } }) });
     assert.deepEqual(option(piLaunchDescriptor(runtime, launchInput("validator", leaf)).args, "--tools")!.split(","), ["read", "bash", "end_response", "mesh_report"]);
 });
 
@@ -223,7 +223,7 @@ void test("external routing consumes selected profiles without turning profiles 
     assert.equal(externalTaskPrompt(generalEnvelope.self.instructions, "Repair file A."), "Independently own one problem through exploration, implementation, and validation.\n\nDelegated task:\nRepair file A.");
 
     const searcher = child({ instructions: "Answer one bounded external question." });
-    const codexExecution: ExecutionConfig = { models: ["codex/gpt-5.6-luna"], thinkingLevel: "high", harness: "codex", harnessOptions: { mode: "read-only", permissionPolicy: "reject", webSearch: "cached" } };
+    const codexExecution: ExecutionConfig = { models: [{ model: "codex/gpt-5.6-luna", thinkingLevel: "high" }], harness: "codex", harnessOptions: { mode: "read-only", permissionPolicy: "reject", webSearch: "cached" } };
     const searcherEnvelope = envelope({ childId: "searcher", self: { ...searcher, execution: codexExecution } });
     const codex = resolveHarnessAdapter(runtime, codexExecution.harness, codexExecution);
     const codexLaunch = codex.adapter.launch(runtime, codex.harness, launchInput("searcher", searcherEnvelope));
@@ -256,7 +256,7 @@ void test("external worker rejects a Cursor ACP model ID mismatch before driver 
 // Admission: external adapter startup persists raw diagnostics for the TUI, but model-facing projection is the only stable public boundary; types and ACP capability checks cannot observe both outcomes.
 // Given configured Cursor and Codex profiles whose external startup fails with their configured full, alias, or ACP model identifiers, when the worker persists the failure and it crosses debug projection, the model observes route_unavailable while the raw diagnostic remains available to operators.
 void test("external startup diagnostics preserve operator details while hiding configured Cursor and Codex identities", async () => withTemporaryRoot("orchestration-external-projection-", async root => {
-    const codexExecution: ExecutionConfig = { models: ["codex/gpt-5.6-luna"], thinkingLevel: "high", harness: "codex", harnessOptions: { mode: "read-only", permissionPolicy: "reject", webSearch: "cached" } };
+    const codexExecution: ExecutionConfig = { models: [{ model: "codex/gpt-5.6-luna", thinkingLevel: "high" }], harness: "codex", harnessOptions: { mode: "read-only", permissionPolicy: "reject", webSearch: "cached" } };
     const codexConfig: ExternalWorkerConfig = { adapter: "codex-acp", command: "/codex", cwd: "/work", mode: "read-only", permissionPolicy: "reject", webSearch: "cached" };
     const cases = [
         { execution: cursorExecution, config: externalConfig, diagnostic: `Cursor ACP rejected cursor/${SYNTHETIC_CURSOR_ALIAS} alias ${SYNTHETIC_CURSOR_ALIAS} as ${SYNTHETIC_ACP_MODEL_ID}`, names: [`cursor/${SYNTHETIC_CURSOR_ALIAS}`, SYNTHETIC_CURSOR_ALIAS, SYNTHETIC_ACP_MODEL_ID] },

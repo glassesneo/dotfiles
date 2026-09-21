@@ -22,7 +22,7 @@ export interface ChildDefinition {
     targets: string[];
     gc: ChildGcPolicy;
 }
-export interface ChildCatalog { schemaVersion: 1; children: Record<string, ChildDefinition> }
+export interface ChildCatalog { schemaVersion: 2; children: Record<string, ChildDefinition> }
 export interface CallerPolicy { targets: string[] }
 export interface CallPolicy { modes: Record<string, CallerPolicy> }
 export interface MeshBudgets { maxLiveAgents: number; maxConcurrentTasks: number; maxTasksPerMesh: number }
@@ -85,8 +85,8 @@ export function validateChildDefinition(name: string, value: unknown, label = `c
     return { selector, description: text(raw.description, `${label}.description`), tools: strings(raw.tools, `${label}.tools`), instructions: text(raw.instructions, `${label}.instructions`), contextPolicy: raw.contextPolicy, childExtensionContributions: strings(raw.childExtensionContributions, `${label}.childExtensionContributions`), execution: validateExecutionConfig(raw.execution, `${label}.execution`), targets: strings(raw.targets, `${label}.targets`), gc: validateChildGcPolicy(raw.gc, `${label}.gc`) };
 }
 export function validateChildCatalog(value: unknown): ChildCatalog {
-    const root = object(value, "child catalog"); exact(root, ["schemaVersion", "children"], [], "child catalog"); if (root.schemaVersion !== 1) throw new Error("Unsupported child catalog schemaVersion");
-    return { schemaVersion: 1, children: Object.fromEntries(Object.entries(object(root.children, "children")).map(([name, child]) => [text(name, "child name"), validateChildDefinition(name, child)])) };
+    const root = object(value, "child catalog"); exact(root, ["schemaVersion", "children"], [], "child catalog"); if (root.schemaVersion !== 2) throw new Error("Unsupported child catalog schemaVersion");
+    return { schemaVersion: 2, children: Object.fromEntries(Object.entries(object(root.children, "children")).map(([name, child]) => [text(name, "child name"), validateChildDefinition(name, child)])) };
 }
 
 export function validateCallerPolicy(value: unknown, label: string): CallerPolicy { const raw = object(value, label); exact(raw, ["targets"], [], label); return { targets: strings(raw.targets, `${label}.targets`) }; }
@@ -135,7 +135,7 @@ export function validateOrchestrationReferences(config: OrchestrationConfig, cat
     for (const policy of Object.values(config.callPolicy.modes)) resolveAuthorizedSelectors(policy, catalog.children);
     for (const [_caller, child] of Object.entries(catalog.children)) resolveAuthorizedSelectors({ targets: child.targets }, catalog.children);
     for (const edge of policyEdges(catalog, config.callPolicy)) if (!knownChildren.has(edge.target)) throw new Error(`callPolicy references unknown child target: ${edge.target}`);
-    for (const [name, child] of Object.entries(catalog.children)) if (child.execution.harness === "cursor-agent") { const alias = child.execution.models[0]!.slice("cursor/".length); if (!config.harnesses[child.execution.harness]?.modelIds?.[alias]) throw new Error(`Cursor child ${name} has no configured ACP model ID for ${alias}`); }
+    for (const [name, child] of Object.entries(catalog.children)) if (child.execution.harness === "cursor-agent") { const alias = child.execution.models[0]!.model.slice("cursor/".length); if (!config.harnesses[child.execution.harness]?.modelIds?.[alias]) throw new Error(`Cursor child ${name} has no configured ACP model ID for ${alias}`); }
     for (const [mode, policy] of Object.entries(config.callPolicy.modes)) if (policy.targets.some(target => catalog.children[target]?.selector.agent === "search")) throw new Error(`search capability cannot be a root target in mode ${mode}`);
     for (const [caller, child] of Object.entries(catalog.children)) if (caller !== "research" && child.targets.some(target => catalog.children[target]?.selector.agent === "search")) throw new Error(`search capability may only be targeted by research, not ${caller}`);
     for (const [name, child] of Object.entries(catalog.children)) {

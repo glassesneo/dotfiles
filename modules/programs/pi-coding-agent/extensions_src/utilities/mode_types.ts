@@ -1,10 +1,13 @@
-export const MODE_SCHEMA_VERSION = 4 as const;
+export const MODE_SCHEMA_VERSION = 5 as const;
 export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
 export type ExecutionHarness = "pi" | "cursor-agent" | "codex";
 
-export interface ExecutionConfig {
-    models: string[];
+export interface ModelEntry {
+    model: string;
     thinkingLevel?: ThinkingLevel;
+}
+export interface ExecutionConfig {
+    models: ModelEntry[];
     harness: ExecutionHarness;
     harnessOptions?: Record<string, unknown>;
 }
@@ -14,7 +17,7 @@ export interface AgentMode {
     skillOptIns: string[];
     instructions: string;
 }
-export interface AgentModeConfig { schemaVersion: 4; defaultMode: string; execution: ExecutionConfig; modes: Record<string, AgentMode> }
+export interface AgentModeConfig { schemaVersion: typeof MODE_SCHEMA_VERSION; defaultMode: string; execution: ExecutionConfig; modes: Record<string, AgentMode> }
 
 const cursorCommonHarnessOptions = { sandbox: "disabled", trustWorkspace: true, worktree: false } as const;
 export const CURSOR_READ_HARNESS_OPTIONS = Object.freeze({ mode: "ask", permissionPolicy: "reject", ...cursorCommonHarnessOptions });
@@ -41,10 +44,20 @@ function strings(value: unknown, label: string): string[] {
     if (new Set(result).size !== result.length) throw new Error(`${label} must not contain duplicates`);
     return result;
 }
-function models(value: unknown, label: string): string[] {
-    const result = strings(value, label);
-    if (!result.length) throw new Error(`${label} must not be empty`);
-    for (const [index, candidate] of result.entries()) if (!/^[^/\s]+\/\S+$/u.test(candidate)) throw new Error(`${label}[${index}] must use provider/model format`);
+function modelEntries(value: unknown, label: string): ModelEntry[] {
+    if (!Array.isArray(value) || value.length === 0) throw new Error(`${label} must be a non-empty array`);
+    const result: ModelEntry[] = [];
+    const seen = new Set<string>();
+    for (const [index, raw] of value.entries()) {
+        const entry = object(raw, `${label}[${index}]`);
+        exact(entry, ["model", "thinkingLevel"], `${label}[${index}]`);
+        const model = text(entry.model, `${label}[${index}].model`);
+        if (!/^[^/\s]+\/\S+$/u.test(model)) throw new Error(`${label}[${index}].model must use provider/model format`);
+        if (seen.has(model)) throw new Error(`${label} must not contain duplicate models`);
+        seen.add(model);
+        const entryLevel = entry.thinkingLevel == null ? undefined : thinkingLevel(entry.thinkingLevel, `${label}[${index}].thinkingLevel`);
+        result.push({ model, ...(entryLevel === undefined ? {} : { thinkingLevel: entryLevel }) });
+    }
     return result;
 }
 function thinkingLevel(value: unknown, label: string): ThinkingLevel {
@@ -56,22 +69,24 @@ const CODEX_HARNESS_OPTIONS = { mode: "read-only", permissionPolicy: "reject", w
 
 export function validateExecutionConfig(value: unknown, label = "execution"): ExecutionConfig {
     const profile = object(value, label);
-    exact(profile, ["models", "thinkingLevel", "harness", "harnessOptions"], label);
+    exact(profile, ["models", "harness", "harnessOptions"], label);
     const harness = profile.harness;
     if (harness !== "pi" && harness !== "cursor-agent" && harness !== "codex") throw new Error(`${label}.harness is invalid`);
-    const resolvedModels = models(profile.models, `${label}.models`);
-    const resolvedThinking = profile.thinkingLevel === undefined ? undefined : thinkingLevel(profile.thinkingLevel, `${label}.thinkingLevel`);
+    const resolvedModels = modelEntries(profile.models, `${label}.models`);
     const harnessOptions = profile.harnessOptions === undefined ? undefined : object(profile.harnessOptions, `${label}.harnessOptions`);
-    if (harness === "pi" && (resolvedThinking === undefined || harnessOptions !== undefined)) throw new Error(`${label} pi execution requires thinkingLevel and no harnessOptions`);
+    if (harness === "pi") {
+        if (resolvedModels.some(entry => entry.thinkingLevel === undefined)) throw new Error(`${label} pi execution requires a thinkingLevel on every model`);
+        if (harnessOptions !== undefined) throw new Error(`${label} pi execution requires no harnessOptions`);
+    }
     if (harness === "cursor-agent") {
-        if (resolvedModels.length !== 1 || !resolvedModels[0]!.startsWith("cursor/") || resolvedThinking !== undefined || harnessOptions === undefined) throw new Error(`${label} cursor-agent execution requires exactly one cursor model, no thinkingLevel, and harnessOptions`);
+        if (resolvedModels.length !== 1 || !resolvedModels[0]!.model.startsWith("cursor/") || resolvedModels[0]!.thinkingLevel !== undefined || harnessOptions === undefined) throw new Error(`${label} cursor-agent execution requires exactly one cursor model, no thinkingLevel, and harnessOptions`);
         if (!isApprovedCursorHarnessOptions(harnessOptions)) throw new Error(`${label} cursor-agent execution requires an approved read or write harnessOptions combination`);
     }
     if (harness === "codex") {
-        if (resolvedModels.length !== 1 || !resolvedModels[0]!.startsWith("codex/") || resolvedThinking === undefined || harnessOptions === undefined) throw new Error(`${label} codex execution requires exactly one codex model, thinkingLevel, and harnessOptions`);
+        if (resolvedModels.length !== 1 || !resolvedModels[0]!.model.startsWith("codex/") || resolvedModels[0]!.thinkingLevel === undefined || harnessOptions === undefined) throw new Error(`${label} codex execution requires exactly one codex model, thinkingLevel, and harnessOptions`);
         if (!matchesExactOptions(harnessOptions, CODEX_HARNESS_OPTIONS)) throw new Error(`${label} codex execution requires exact read-only cached harnessOptions`);
     }
-    return { models: resolvedModels, ...(resolvedThinking === undefined ? {} : { thinkingLevel: resolvedThinking }), harness, ...(harnessOptions === undefined ? {} : { harnessOptions }) };
+    return { models: resolvedModels, harness, ...(harnessOptions === undefined ? {} : { harnessOptions }) };
 }
 
 export function validateModeConfig(value: unknown): AgentModeConfig {

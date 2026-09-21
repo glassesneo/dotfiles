@@ -1,5 +1,5 @@
 import type { Model } from "@earendil-works/pi-ai";
-import type { ExecutionConfig } from "./mode_types.ts";
+import type { ExecutionConfig, ModelEntry, ThinkingLevel } from "./mode_types.ts";
 
 export const MODEL_ROUTE_ATTEMPT_CATEGORIES = ["unavailable", "context", "invocation"] as const;
 export type ModelRouteAttemptCategory = (typeof MODEL_ROUTE_ATTEMPT_CATEGORIES)[number];
@@ -37,14 +37,19 @@ export function splitProviderModel(model: string): [string, string] {
 }
 
 export function selectedProfileModel(profile: ExecutionConfig, index = 0): string {
-    const model = profile.models[index] ?? profile.models[0];
-    if (!model) throw new Error("Execution config has no models");
-    return model;
+    const entry = profile.models[index] ?? profile.models[0];
+    if (!entry) throw new Error("Execution config has no models");
+    return entry.model;
+}
+export function selectedProfileThinkingLevel(profile: ExecutionConfig, index = 0): ThinkingLevel {
+    const entry = profile.models[index] ?? profile.models[0];
+    if (!entry) throw new Error("Execution config has no models");
+    return entry.thinkingLevel!;
 }
 
 export function initialModelRoute(profile: ExecutionConfig, index: number): ModelRouteState {
     if (!Number.isInteger(index) || index < 0 || index >= profile.models.length) throw new Error("initial candidate index is outside the profile models");
-    return { activeIndex: index, activeModel: profile.models[index]!, attempts: [], };
+    return { activeIndex: index, activeModel: profile.models[index]!.model, attempts: [], };
 }
 
 /** Start a new limit-retry cycle. Prior attempt history stays on execution limitHistory, not on this route. */
@@ -84,13 +89,13 @@ export function validateModelRouteState(value: unknown, label = "modelRoute"): M
     return { activeIndex: Number(raw.activeIndex), activeModel: raw.activeModel, attempts };
 }
 
-export function formatAggregateFallbackError(profileName: string, models: readonly string[], attempts: readonly ModelRouteAttempt[]): string {
+export function formatAggregateFallbackError(profileName: string, models: readonly ModelEntry[], attempts: readonly ModelRouteAttempt[]): string {
     const byIndex = new Map(attempts.map(attempt => [attempt.index, attempt]));
-    const parts = models.map((model, index) => {
+    const parts = models.map((entry, index) => {
         const attempt = byIndex.get(index);
-        if (!attempt) return `${model} (untried)`;
+        if (!attempt) return `${entry.model} (untried)`;
         const message = attempt.message === undefined ? undefined : sanitizeDiagnostic(attempt.message);
-        return `${model} (${attempt.category}${message ? `: ${message}` : ""})`;
+        return `${entry.model} (${attempt.category}${message ? `: ${message}` : ""})`;
     });
     return `Execution ${sanitizeDiagnostic(profileName)} fallback exhausted: ${parts.join("; ")}`;
 }
@@ -121,8 +126,8 @@ async function inspectCandidate(registry: ModelRegistryLike, model: string, now:
 function routeMatchesProfile(profile: ExecutionConfig, route: ModelRouteState): boolean {
     try {
         const validated = validateModelRouteState(route);
-        if (validated.activeIndex >= profile.models.length || validated.activeModel !== profile.models[validated.activeIndex]) return false;
-        return validated.attempts.every(attempt => profile.models[attempt.index] === attempt.model);
+        if (validated.activeIndex >= profile.models.length || validated.activeModel !== profile.models[validated.activeIndex]!.model) return false;
+        return validated.attempts.every(attempt => profile.models[attempt.index]!.model === attempt.model);
     } catch {
         return false;
     }
@@ -141,9 +146,9 @@ export async function preflightProfileCandidates(input: {
     const suppliedRoute = input.route && routeMatchesProfile(input.profile, input.route) ? validateModelRouteState(input.route) : undefined;
     const requestedStartIndex = suppliedRoute?.activeIndex ?? input.startIndex ?? 0;
     const startIndex = Number.isInteger(requestedStartIndex) && requestedStartIndex >= 0 && requestedStartIndex < input.profile.models.length ? requestedStartIndex : 0;
-    let route: ModelRouteState = suppliedRoute ? { ...suppliedRoute, attempts: [...suppliedRoute.attempts] } : { activeIndex: startIndex, activeModel: input.profile.models[startIndex] ?? input.profile.models[0] ?? "", attempts: [] };
+    let route: ModelRouteState = suppliedRoute ? { ...suppliedRoute, attempts: [...suppliedRoute.attempts] } : { activeIndex: startIndex, activeModel: input.profile.models[startIndex]?.model ?? input.profile.models[0]?.model ?? "", attempts: [] };
     for (let index = startIndex; index < input.profile.models.length; index += 1) {
-        const model = input.profile.models[index]!;
+        const model = input.profile.models[index]!.model;
         const inspected = await inspectCandidate(input.registry, model, now, index);
         if (!inspected.ok) { route = recordModelRouteAttempt(route, inspected.attempt); continue; }
         if (input.setModel) {
@@ -163,13 +168,13 @@ export async function preflightProfileCandidates(input: {
 export function restoreCompatibleRoute(profile: ExecutionConfig, profileName: string, persisted: { profile: string; candidates?: readonly string[]; models?: readonly string[]; route: ModelRouteState } | undefined): ModelRouteState | undefined {
     if (!persisted || persisted.profile !== profileName) return undefined;
     const list = persisted.candidates ?? persisted.models;
-    if (!Array.isArray(list) || list.length !== profile.models.length || list.some((model, index) => model !== profile.models[index])) return undefined;
+    if (!Array.isArray(list) || list.length !== profile.models.length || list.some((model, index) => model !== profile.models[index]!.model)) return undefined;
     return routeMatchesProfile(profile, persisted.route) ? validateModelRouteState(persisted.route) : undefined;
 }
 
 export function reconcileForwardIndex(profile: ExecutionConfig, route: ModelRouteState, currentModel: string | undefined): ModelRouteState {
     if (!currentModel) return route;
-    const currentIndex = profile.models.indexOf(currentModel);
+    const currentIndex = profile.models.findIndex(entry => entry.model === currentModel);
     if (currentIndex > route.activeIndex) return { ...route, activeIndex: currentIndex, activeModel: currentModel };
     return route;
 }
@@ -199,7 +204,7 @@ export async function selectRuntimePromotion(input: {
     let route = recordModelRouteAttempt(input.route, { index: input.route.activeIndex, model: input.route.activeModel, category: "invocation", at: now(), message: sanitizeDiagnostic(input.errorMessage) || undefined });
     for (let index = input.route.activeIndex + 1; index < input.profile.models.length; index += 1) {
         if (route.attempts.some(attempt => attempt.index === index)) continue;
-        const model = input.profile.models[index]!;
+        const model = input.profile.models[index]!.model;
         const inspected = await inspectCandidate(input.registry, model, now, index);
         if (!inspected.ok) { route = recordModelRouteAttempt(route, inspected.attempt); continue; }
         if (!candidateFitsContext(inspected.resolved.contextWindow, input.usageTokens, input.reserveTokens)) {

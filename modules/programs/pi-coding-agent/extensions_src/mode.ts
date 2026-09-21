@@ -17,6 +17,7 @@ import {
     reconcileProfileRoute,
     restoreCompatibleProfileRoute,
     selectProfileCandidate,
+    selectedProfileThinkingLevel,
     promoteProfileCandidate,
     type ProfileRoute,
 } from "./utilities/pi_profile_fallback.ts";
@@ -25,7 +26,6 @@ import {
     type AgentMode,
     type AgentModeConfig,
     type ExecutionConfig,
-    type ThinkingLevel,
 } from "./utilities/mode_types.ts";
 
 const CONFIG = join(getAgentDir(), "agent-modes.json");
@@ -41,7 +41,7 @@ interface TransitionReceipt { schemaVersion: 1; kind: "mode" | "handoff"; status
 interface HandoffMetadata { schemaVersion: 1; requestId: string; sourceSessionId: string; targetMode: string }
 interface ModeState { schemaVersion: 2; mode: string }
 type ParentExecutionDisposition = "active" | "manual" | "exhausted";
-interface ParentExecutionState { schemaVersion: 1; state: ParentExecutionDisposition; models: string[]; thinkingLevel: ThinkingLevel; route: ProfileRoute }
+interface ParentExecutionState { schemaVersion: 1; state: ParentExecutionDisposition; models: string[]; route: ProfileRoute }
 type ModeSwitchResult = { status: "applied" | "unchanged" | "refused" | "failed"; error?: string };
 
 export async function loadAgentModeConfig(path = CONFIG): Promise<AgentModeConfig> {
@@ -70,8 +70,7 @@ function executionIdentityMatches(execution: ExecutionConfig, state: Partial<Par
         && (state.state === "active" || state.state === "manual" || state.state === "exhausted")
         && Array.isArray(state.models)
         && state.models.length === execution.models.length
-        && state.models.every((model, index) => model === execution.models[index])
-        && state.thinkingLevel === execution.thinkingLevel
+        && state.models.every((model, index) => model === execution.models[index]!.model)
         && Boolean(state.route);
 }
 export function modeIdentityText(name: string, model = "unavailable", fallbackCount = 0): string {
@@ -100,12 +99,11 @@ export function registerModeController(pi: ExtensionAPI, configPath = CONFIG): {
     const ensureConfig = async (): Promise<void> => { config = config ?? await loadAgentModeConfig(configPath); };
     const persistExecution = (): void => {
         const execution = config?.execution;
-        if (!execution || !executionState || !activeRoute || execution.thinkingLevel === undefined || activeRoute.activeModel !== execution.models[activeRoute.activeIndex]) return;
+        if (!execution || !executionState || !activeRoute || activeRoute.activeModel !== execution.models[activeRoute.activeIndex]!.model) return;
         pi.appendEntry(PARENT_EXECUTION_STATE, {
             schemaVersion: 1,
             state: executionState,
-            models: [...execution.models],
-            thinkingLevel: execution.thinkingLevel,
+            models: execution.models.map(entry => entry.model),
             route: structuredClone(activeRoute),
         } satisfies ParentExecutionState);
     };
@@ -141,7 +139,7 @@ export function registerModeController(pi: ExtensionAPI, configPath = CONFIG): {
                 return false;
             }
             if (shuttingDown) return false;
-            pi.setThinkingLevel(execution.thinkingLevel!);
+            pi.setThinkingLevel(selectedProfileThinkingLevel(execution, activeRoute.activeIndex));
             executionState = "active";
             persistExecution();
             setIdentity(ctx);
@@ -468,9 +466,7 @@ export function registerModeController(pi: ExtensionAPI, configPath = CONFIG): {
             promotion = await promoteProfileCandidate({ profile: execution, profileName: PARENT_EXECUTION_PROFILE, route: activeRoute, registry: ctx.modelRegistry, tokens: usage?.tokens, activate: async model => {
                 if (shuttingDown) return false;
                 const selected = await pi.setModel(model);
-                if (!selected || shuttingDown) return false;
-                pi.setThinkingLevel(execution.thinkingLevel!);
-                return !shuttingDown;
+                return selected && !shuttingDown;
             } });
         } finally { applyingSelection = false; }
         if (shuttingDown) return;
@@ -483,6 +479,7 @@ export function registerModeController(pi: ExtensionAPI, configPath = CONFIG): {
             ctx.ui.notify(promotion.error, "error");
             return;
         }
+        pi.setThinkingLevel(selectedProfileThinkingLevel(execution, activeRoute.activeIndex));
         pendingFallbackPrompt = formatProfileFallbackContinuation(activeTaskPrompt!);
         pi.sendMessage({ customType: PROFILE_FALLBACK_CONTINUATION_TYPE, content: pendingFallbackPrompt, display: false }, { triggerTurn: true });
     });

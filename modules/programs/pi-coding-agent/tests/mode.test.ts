@@ -9,19 +9,19 @@ import { PARENT_TRANSITION_REQUEST_EVENT, PARENT_TRANSITION_RESULT_EVENT } from 
 import { validateActiveModeEvent } from "../extensions_src/utilities/mode_events.ts";
 import { validateExecutionConfig, validateModeConfig } from "../extensions_src/utilities/mode_types.ts";
 
-const execution = { models: ["provider/primary", "provider/small", "provider/alternate"], thinkingLevel: "low" as const, harness: "pi" as const };
+const execution = { models: [{ model: "provider/primary", thinkingLevel: "low" }, { model: "provider/small", thinkingLevel: "low" }, { model: "provider/alternate", thinkingLevel: "low" }], harness: "pi" as const };
 const controlTools = ["switch_mode", "session_handoff"];
 const reconMode = { description: "Synthetic recon", tools: ["read", ...controlTools], skillOptIns: ["prompt-interface-design"], instructions: "Investigate." };
 const leaderMode = { description: "Synthetic leader", tools: ["read", ...controlTools], skillOptIns: [], instructions: "Delegate implementation." };
 const opsMode = { description: "Synthetic ops", tools: ["read", "write", ...controlTools], skillOptIns: [], instructions: "Operate." };
-const modeConfig = { schemaVersion: 4 as const, defaultMode: "recon", execution, modes: { recon: reconMode, leader: leaderMode, ops: opsMode } };
+const modeConfig = { schemaVersion: 5 as const, defaultMode: "recon", execution, modes: { recon: reconMode, leader: leaderMode, ops: opsMode } };
 
-// Mechanical check: the consumer validator uniquely owns schema-v4 shape and exact parent/child harness rejection.
-void test("schema v4 separates Pi parent execution from authority modes", () => {
-    assert.deepEqual(validateExecutionConfig({ models: ["provider/one"], thinkingLevel: "high", harness: "pi" }).models, ["provider/one"]);
+// Mechanical check: the consumer validator uniquely owns schema-v5 shape and exact parent/child harness rejection.
+void test("schema v5 separates Pi parent execution from authority modes", () => {
+    assert.deepEqual(validateExecutionConfig({ models: [{ model: "provider/one", thinkingLevel: "high" }], harness: "pi" }).models, [{ model: "provider/one", thinkingLevel: "high" }]);
     assert.deepEqual(validateModeConfig(modeConfig), modeConfig);
     assert.throws(() => validateModeConfig({ ...modeConfig, schemaVersion: 3 }), /Unsupported/u);
-    assert.throws(() => validateModeConfig({ ...modeConfig, execution: { models: ["cursor/fast"], harness: "cursor-agent", harnessOptions: { worktree: false, trustWorkspace: true, sandbox: "disabled", permissionPolicy: "reject", mode: "ask" } } }), /pi harness/u);
+    assert.throws(() => validateModeConfig({ ...modeConfig, execution: { models: [{ model: "cursor/fast" }], harness: "cursor-agent", harnessOptions: { worktree: false, trustWorkspace: true, sandbox: "disabled", permissionPolicy: "reject", mode: "ask" } } }), /pi harness/u);
     assert.throws(() => validateModeConfig({ ...modeConfig, modes: { recon: { ...reconMode, execution } } }), /unknown keys/u);
     assert.deepEqual(validateActiveModeEvent({ schemaVersion: 2, name: "leader", reason: "switch" }), { schemaVersion: 2, name: "leader", reason: "switch" });
     assert.throws(() => validateActiveModeEvent({ schemaVersion: 2, name: "leader", mode: leaderMode, reason: "switch" }), /unknown keys/u);
@@ -162,7 +162,7 @@ void test("new sessions initialize the common execution in candidate order", asy
     assert.deepEqual(h.tools, reconMode.tools);
     assert.deepEqual(h.entries.find(entry => entry.type === "agent-mode-state")?.data, { schemaVersion: 2, mode: "recon" });
     assert.equal(h.latestExecution().state, "active");
-    assert.deepEqual(h.latestExecution().models, execution.models);
+    assert.deepEqual(h.latestExecution().models, execution.models.map(entry => entry.model));
     assert.equal(h.latestExecution().route.activeIndex, 1);
     assert.equal(h.latestExecution().route.attempts[0].message, "diagnostic redacted");
     assert.match(h.statuses.at(-1) ?? "", /mode:recon · model:provider\/small · fallback:1/u);
@@ -278,8 +278,8 @@ void test("active execution restores only from a compatible branch state", async
     const h = await controllerFixture();
     h.branch.push(
         { type: "custom", customType: "agent-mode-state", data: { schemaVersion: 2, mode: "leader" } },
-        { type: "custom", customType: "agent-parent-execution-state", data: { schemaVersion: 1, state: "active", models: [...execution.models], thinkingLevel: "low", route: { activeIndex: 2, activeModel: "provider/alternate", attempts: [] } } },
-        { type: "custom", customType: "agent-mode-execution-route", data: { schemaVersion: 1, mode: "ops", models: [...execution.models], route: { activeIndex: 1, activeModel: "provider/small", attempts: [] } } },
+        { type: "custom", customType: "agent-parent-execution-state", data: { schemaVersion: 1, state: "active", models: execution.models.map(entry => entry.model), route: { activeIndex: 2, activeModel: "provider/alternate", attempts: [] } } },
+        { type: "custom", customType: "agent-mode-execution-route", data: { schemaVersion: 1, mode: "ops", models: execution.models.map(entry => entry.model), route: { activeIndex: 1, activeModel: "provider/small", attempts: [] } } },
     );
     await h.handlers.get("session_start")?.({}, h.ctx);
     assert.equal(h.controller.activeMode(), "leader");

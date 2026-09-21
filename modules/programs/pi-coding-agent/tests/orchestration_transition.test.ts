@@ -43,9 +43,9 @@ import {
 import { cancelPressureAdmission, listPressureAdmissions } from "../extensions_src/utilities/orchestration_admission.ts";
 import { withTemporaryRoot as withRoot } from "./test_helpers.ts";
 
-const syntheticExecution = { models: ["provider/model"], thinkingLevel: "medium" as const, harness: "pi" as const };
+const syntheticExecution = { models: [{ model: "provider/model", thinkingLevel: "medium" as const }], harness: "pi" as const };
 const syntheticChild = (name = "worker", extra: Record<string, unknown> = {}): ChildDefinition => ({ selector: { agent: name, access: "read" as const }, description: `Synthetic ${name}`, tools: [], instructions: "Return the bounded result.", contextPolicy: "project" as const, childExtensionContributions: [], execution: syntheticExecution, targets: [] as string[], gc: { collectAt: 2, retain: 1, pressureFloor: 0 }, ...extra });
-const syntheticCatalog = (children: Record<string, ChildDefinition>): ChildCatalog => ({ schemaVersion: 1 as const, children });
+const syntheticCatalog = (children: Record<string, ChildDefinition>): ChildCatalog => ({ schemaVersion: 2 as const, children });
 const budgets = { maxLiveAgents: 4, maxConcurrentTasks: 4, maxTasksPerMesh: 16 };
 const tmux = { socket: "/tmp/tmux", serverPid: "10", sessionId: "$1", sessionName: "mesh", windowId: "@1", paneId: "%1", windowName: "worker" };
 const capabilities = { nativeScreen: true, taskDelivery: true, taskCompletion: true, taskCancellation: true, usage: true, interactiveInterventions: true, terminalHistory: true };

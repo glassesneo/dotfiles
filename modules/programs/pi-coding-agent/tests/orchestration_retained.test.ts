@@ -16,7 +16,7 @@ import { emptyUsage, type AgentSnapshot, type AgentState, type TaskState } from 
 import { yieldToIO } from "./test_helpers.ts";
 
 const syntheticGc = { collectAt: 2, retain: 1, pressureFloor: 0 };
-const syntheticExecution = { models: ["provider/model"], thinkingLevel: "medium" as const, harness: "pi" as const };
+const syntheticExecution = { models: [{ model: "provider/model", thinkingLevel: "medium" as const }], harness: "pi" as const };
 const syntheticChild = (name = "worker") => ({ selector: { agent: name, access: "read" as const }, description: `Synthetic ${name}`, tools: [], instructions: "Return the bounded result.", contextPolicy: "project" as const, childExtensionContributions: [] as string[], execution: syntheticExecution, targets: [] as string[], gc: syntheticGc });
 const definition = syntheticChild("worker");
 const meshId = "11111111-1111-4111-8111-111111111111";
@@ -231,7 +231,7 @@ void test("task-specific projections use purpose rather than the prompt first li
 void test("model-visible projections omit internal role, profile, and model identity", () => {
     const value = snapshot("acacacac-acac-4cac-8cac-acacacacacac", "idle");
     value.agent.childId = "small-write";
-    value.agent.definitionSnapshot = { selector: { agent: "small", access: "write" }, description: "Synthetic small write", tools: [], instructions: "Return the bounded result.", contextPolicy: "project", childExtensionContributions: [], execution: { models: ["openai-codex/gpt-5.6-luna"], thinkingLevel: "xhigh", harness: "pi" }, targets: [], gc: syntheticGc };
+    value.agent.definitionSnapshot = { selector: { agent: "small", access: "write" }, description: "Synthetic small write", tools: [], instructions: "Return the bounded result.", contextPolicy: "project", childExtensionContributions: [], execution: { models: [{ model: "openai-codex/gpt-5.6-luna", thinkingLevel: "xhigh" }], harness: "pi" }, targets: [], gc: syntheticGc };
     value.status.modelRoute = {
         activeIndex: 0,
         activeModel: "openai-codex/gpt-5.6-luna",

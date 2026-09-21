@@ -18,9 +18,9 @@ import type { CommandExecutor } from "../extensions_src/utilities/orchestration_
 import { withTemporaryRoot } from "./test_helpers.ts";
 
 const capabilities = { nativeScreen: true, taskDelivery: true, taskCompletion: true, taskCancellation: true, usage: true, interactiveInterventions: true, terminalHistory: true };
-const execution = { models: ["synthetic/pi"], thinkingLevel: "medium" as const, harness: "pi" as const };
+const execution = { models: [{ model: "synthetic/pi", thinkingLevel: "medium" as const }], harness: "pi" as const };
 function childDefinition(name: "worker" | "reviewer"): ChildDefinition { return { selector: { agent: name, access: "read" }, description: `Synthetic ${name}`, tools: ["read"], instructions: `Act as ${name}.`, contextPolicy: "project", childExtensionContributions: [], execution, targets: [], gc: name === "worker" ? { collectAt: 6, retain: 3, pressureFloor: 1 } : { collectAt: 3, retain: 1, pressureFloor: 1 } }; }
-const catalog: ChildCatalog = { schemaVersion: 1, children: { worker: childDefinition("worker"), reviewer: childDefinition("reviewer") } };
+const catalog: ChildCatalog = { schemaVersion: 2, children: { worker: childDefinition("worker"), reviewer: childDefinition("reviewer") } };
 const callPolicy: CallPolicy = { modes: { ops: { targets: ["worker", "reviewer"] } } };
 function syntheticGcConfig(): MeshGcConfig { return meshGcConfig({ contextHeadroomTokens: 32768, periodicIntervalMs: 5000, activityHeartbeatMs: 2000, activityStaleMs: 10000 }, catalog); }
 const withRoot = (run: (root: string) => Promise<void>) => withTemporaryRoot("mesh-gc-", run);
@@ -245,7 +245,7 @@ void test("periodic GC retires only enabled children for context while disabled 
     const retirementCtx = (tokens: number) => availableContext(tokens, 1000, 100);
     const trueDefinition: ChildDefinition = { ...childDefinition("worker"), gc: { collectAt: 6, retain: 3, pressureFloor: 1, retireOnContextPressure: true } };
     const falseDefinition: ChildDefinition = { ...childDefinition("reviewer"), gc: { collectAt: 6, retain: 3, pressureFloor: 1, retireOnContextPressure: false } };
-    const mixedCatalog: ChildCatalog = { schemaVersion: 1, children: { worker: trueDefinition, reviewer: falseDefinition } };
+    const mixedCatalog: ChildCatalog = { schemaVersion: 2, children: { worker: trueDefinition, reviewer: falseDefinition } };
     const mixedPolicy: CallPolicy = { modes: { ops: { targets: ["worker", "reviewer"] } } };
     const mesh = await initializeMesh(root, { rootSessionId: "root", recoverable: true, budgets: { maxLiveAgents: 20, maxConcurrentTasks: 20, maxTasksPerMesh: 100 } });
     const lease = await attachRootMesh(root, mesh.meshId, { rootSessionId: "root", budgets: { maxLiveAgents: 20, maxConcurrentTasks: 20, maxTasksPerMesh: 100 } });
@@ -283,7 +283,7 @@ void test("periodic GC retires only enabled children for context while disabled 
 // Given a full live budget with a threshold-reached retire-disabled child above pressureFloor, pressure reservation reclaims it.
 void test("pressure GC reclaims threshold-reached disabled children above the pressure floor", async () => withRoot(async root => {
     const falseDefinition: ChildDefinition = { ...childDefinition("worker"), gc: { collectAt: 6, retain: 3, pressureFloor: 0, retireOnContextPressure: false } };
-    const floorCatalog: ChildCatalog = { schemaVersion: 1, children: { worker: falseDefinition } };
+    const floorCatalog: ChildCatalog = { schemaVersion: 2, children: { worker: falseDefinition } };
     const floorPolicy: CallPolicy = { modes: { ops: { targets: ["worker"] } } };
     const budgets = { maxLiveAgents: 1, maxConcurrentTasks: 5, maxTasksPerMesh: 20 };
     const mesh = await initializeMesh(root, { rootSessionId: "root", recoverable: true, budgets });

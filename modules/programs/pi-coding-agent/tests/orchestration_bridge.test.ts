@@ -16,13 +16,14 @@ import { availableContext, publishAgentActivity, readAgentActivity } from "../ex
 import { bindAgentRuntime } from "../extensions_src/utilities/orchestration_runtime.ts";
 import { attachRootMesh, applyAgentControl, claimPendingTask, createTask, ensurePolicyEpoch, failAgent as persistAgentFailure, finishTask as persistTaskCompletion, initializeMesh, markAgentStopping, patchAgentStatus, prepareAgent, publishAgent, readAgentExecution, readAgentSnapshot, readTask, requestTaskCancellation, reserveMeshCapacity, taskPaths } from "../extensions_src/utilities/orchestration_store.ts";
 import { formatUsualIdentityLine, MESH_CHILD_IDENTITY_STATUS, NATURE_HANDLE_WORDS } from "../extensions_src/utilities/orchestration_identity.ts";
+import type { ExecutionConfig } from "../extensions_src/utilities/mode_types.ts";
 
 const capabilities = { nativeScreen: true, taskDelivery: true, taskCompletion: true, taskCancellation: true, usage: true, interactiveInterventions: true, terminalHistory: true };
 const tmux = { socket: "/tmp/tmux", serverPid: "1", sessionId: "$1", sessionName: "main", windowId: "@1", paneId: "%1", windowName: "worker" };
 const syntheticGc = { collectAt: 2, retain: 1, pressureFloor: 0 };
-const syntheticExecution = { models: ["provider/model"], thinkingLevel: "medium" as const, harness: "pi" as const };
-const syntheticChild = (name = "worker", extra: { contextPolicy?: "project" | "prompt-only"; execution?: typeof syntheticExecution; targets?: string[] } = {}) => ({ selector: { agent: name, access: "read" as const }, description: `Synthetic ${name}`, tools: [], instructions: "Return the bounded result.", contextPolicy: extra.contextPolicy ?? "project" as const, childExtensionContributions: [] as string[], execution: extra.execution ?? syntheticExecution, targets: extra.targets ?? [], gc: syntheticGc });
-const syntheticCatalog = (children: Record<string, ReturnType<typeof syntheticChild>>) => ({ schemaVersion: 1 as const, children });
+const syntheticExecution = { models: [{ model: "provider/model", thinkingLevel: "medium" as const }], harness: "pi" as const };
+const syntheticChild = (name = "worker", extra: { contextPolicy?: "project" | "prompt-only"; execution?: ExecutionConfig; targets?: string[] } = {}) => ({ selector: { agent: name, access: "read" as const }, description: `Synthetic ${name}`, tools: [], instructions: "Return the bounded result.", contextPolicy: extra.contextPolicy ?? "project" as const, childExtensionContributions: [] as string[], execution: extra.execution ?? syntheticExecution, targets: extra.targets ?? [], gc: syntheticGc });
+const syntheticCatalog = (children: Record<string, ReturnType<typeof syntheticChild>>) => ({ schemaVersion: 2 as const, children });
 const budgets = { maxLiveAgents: 4, maxConcurrentTasks: 4, maxTasksPerMesh: 20 };
 
 function reverseKeyInsertionOrder(value: unknown): unknown {
@@ -31,7 +32,7 @@ function reverseKeyInsertionOrder(value: unknown): unknown {
     return value;
 }
 
-async function bridgeFixture(options: { publish?: boolean; contextPolicy?: "project" | "prompt-only"; dependencies?: MeshChildBridgeDependencies; profile?: { models: string[]; thinkingLevel: "medium"; harness: "pi" }; registry?: { find(provider: string, modelId: string): { provider: string; id: string; contextWindow: number } | undefined }; currentModel?: { provider: string; id: string; contextWindow: number }; setModel?: (model: { provider: string; id: string }) => Promise<boolean> } = {}) {
+async function bridgeFixture(options: { publish?: boolean; contextPolicy?: "project" | "prompt-only"; dependencies?: MeshChildBridgeDependencies; profile?: ExecutionConfig; registry?: { find(provider: string, modelId: string): { provider: string; id: string; contextWindow: number } | undefined }; currentModel?: { provider: string; id: string; contextWindow: number }; setModel?: (model: { provider: string; id: string }) => Promise<boolean> } = {}) {
     const execution = options.profile ?? syntheticExecution;
     const root = await mkdtemp(join(tmpdir(), "orchestration-bridge-"));
     const mesh = await initializeMesh(root, { rootSessionId: "root", recoverable: false, budgets });
@@ -114,7 +115,7 @@ void test("child orchestration wait preserves the active parent task through int
     let parentTask!: Awaited<ReturnType<typeof createTask>>;
     const configPath = join(root, "orchestration.json"); const catalogPath = join(root, "catalog.json"); const modePath = join(root, "modes.json");
     await writeFile(configPath, JSON.stringify({ schemaVersion: 6, stateRoot: root, tmux: "/tmux", returnParentCommand: "/parent", parentNavigationHint: "parent", historyViewerExtension: "/history", popupExtension: "/popup", orchestrationExtension: "/orchestration", childBridgeExtension: "/bridge", harnesses: { pi: { adapter: "pi-native", command: "/pi" } }, natureHandleWords: ["May"], callPolicy: { modes: { ops: { targets: ["worker"] } } }, budgets, gc: { contextHeadroomTokens: 32, periodicIntervalMs: 5000, activityHeartbeatMs: 2000, activityStaleMs: 10000 } }));
-    await writeFile(catalogPath, JSON.stringify(syntheticCatalog(children))); await writeFile(modePath, JSON.stringify({ schemaVersion: 4, defaultMode: "ops", execution: syntheticExecution, modes: { ops: { description: "ops", tools: [], skillOptIns: [], instructions: "Use ops." } } }));
+    await writeFile(catalogPath, JSON.stringify(syntheticCatalog(children))); await writeFile(modePath, JSON.stringify({ schemaVersion: 5, defaultMode: "ops", execution: syntheticExecution, modes: { ops: { description: "ops", tools: [], skillOptIns: [], instructions: "Use ops." } } }));
 
     class IntegratedPi {
         readonly tools = new Map<string, any>(); readonly handlers = new Map<string, Array<(...args: any[]) => unknown>>(); readonly eventHandlers = new Map<string, Array<(value: unknown) => unknown>>();
@@ -430,7 +431,7 @@ async function claimAndStart(fixture: Awaited<ReturnType<typeof bridgeFixture>>,
 
 // Admitted contract: given a child reload with a persisted later route while Pi runs primary, startup restores or advances only from that route; exhausted restoration fails the child rather than moving backward.
 void test("child reload preserves sticky forward routing or fails closed", async () => {
-    const profile = { models: ["provider/primary", "provider/fallback", "provider/last"], thinkingLevel: "medium" as const, harness: "pi" as const };
+    const profile = { models: [{ model: "provider/primary", thinkingLevel: "medium" as const }, { model: "provider/fallback", thinkingLevel: "medium" as const }, { model: "provider/last", thinkingLevel: "medium" as const }], harness: "pi" as const };
     for (const outcome of ["restored", "missing-promotes", "rejected-promotes", "exhausted"] as const) {
         const fixture = await bridgeFixture({
             profile,
@@ -462,7 +463,7 @@ void test("child reload preserves sticky forward routing or fails closed", async
 
 // Admitted contract: given a persisted child route behind Pi's current candidate, reload reconciles the route forward and never selects the earlier persisted model.
 void test("child reload never moves the current model backward", async () => {
-    const profile = { models: ["provider/primary", "provider/fallback", "provider/last"], thinkingLevel: "medium" as const, harness: "pi" as const };
+    const profile = { models: [{ model: "provider/primary", thinkingLevel: "medium" as const }, { model: "provider/fallback", thinkingLevel: "medium" as const }, { model: "provider/last", thinkingLevel: "medium" as const }], harness: "pi" as const };
     const fixture = await bridgeFixture({
         profile,
         currentModel: { provider: "provider", id: "last", contextWindow: 200 },
@@ -479,7 +480,7 @@ void test("child reload never moves the current model backward", async () => {
 
 // Admitted contract: given an active task whose final model call settles with error, when a later candidate succeeds, the caller observes one successful logical task with cumulative accounting, sticky reuse, and no intermediate completion.
 void test("error settlement continues the same child task on a later candidate without intermediate completion", async () => {
-    const profile = { models: ["provider/primary", "provider/fallback"], thinkingLevel: "medium" as const, harness: "pi" as const };
+    const profile = { models: [{ model: "provider/primary", thinkingLevel: "medium" as const }, { model: "provider/fallback", thinkingLevel: "medium" as const }], harness: "pi" as const };
     const fixture = await bridgeFixture({ profile, registry: registryWindows({ "provider/primary": 200, "provider/fallback": 200 }) });
     fixture.activate();
     await fixture.start();
@@ -515,7 +516,7 @@ void test("error settlement continues the same child task on a later candidate w
 
 // Admitted contract: given a tool-result error in the settling turn, the child completes the task without promoting, while a restored model selection does not suspend a later provider-error fallback.
 void test("tool-result errors suppress child fallback and restore selections remain eligible", async () => {
-    const profile = { models: ["provider/primary", "provider/fallback"], thinkingLevel: "medium" as const, harness: "pi" as const };
+    const profile = { models: [{ model: "provider/primary", thinkingLevel: "medium" as const }, { model: "provider/fallback", thinkingLevel: "medium" as const }], harness: "pi" as const };
     const fixture = await bridgeFixture({ profile, registry: registryWindows({ "provider/primary": 200, "provider/fallback": 200 }) });
     fixture.activate(); await fixture.start();
     const toolFailure = await claimAndStart(fixture, "tool failure");
@@ -539,7 +540,7 @@ void test("tool-result errors suppress child fallback and restore selections rem
 
 // Admitted contract: given cancellation or shutdown while a child promotion awaits Pi or status persistence, the caller observes a stopped task and no fallback continuation.
 void test("cancellation and shutdown fence in-progress child promotions", async () => {
-    const profile = { models: ["provider/primary", "provider/fallback"], thinkingLevel: "medium" as const, harness: "pi" as const };
+    const profile = { models: [{ model: "provider/primary", thinkingLevel: "medium" as const }, { model: "provider/fallback", thinkingLevel: "medium" as const }], harness: "pi" as const };
     for (const race of ["setModel", "status", "shutdown"] as const) {
         let release!: () => void;
         let entered!: () => void;
@@ -570,7 +571,7 @@ void test("cancellation and shutdown fence in-progress child promotions", async 
 // Admission: route persistence after a successful setModel is a repository-owned child lifecycle; types cannot observe an escaped settlement that leaves the task busy.
 // Given a successful promotion setModel, when subsequent route status persistence rejects, the mesh caller observes a failed task with preserved output/usage, no continuation, and an agent that cannot accept another task.
 void test("route persistence rejection fails the active task without continuation or reuse", async () => {
-    const profile = { models: ["provider/primary", "provider/fallback"], thinkingLevel: "medium" as const, harness: "pi" as const };
+    const profile = { models: [{ model: "provider/primary", thinkingLevel: "medium" as const }, { model: "provider/fallback", thinkingLevel: "medium" as const }], harness: "pi" as const };
     const fixture = await bridgeFixture({
         profile,
         registry: registryWindows({ "provider/primary": 200, "provider/fallback": 200 }),
@@ -599,7 +600,7 @@ void test("route persistence rejection fails the active task without continuatio
 // Admission: cancellation lookup failure after route persistence rejection is a repository-owned exception boundary; types cannot observe an escaped settlement that leaves durable work busy.
 // Given rejected route persistence followed by unavailable cancellation state, the bridge queues failed completion and retirement so the caller observes terminal task and agent state without continuation.
 void test("route persistence rejection terminalizes when cancellation lookup also rejects", async () => {
-    const profile = { models: ["provider/primary", "provider/fallback"], thinkingLevel: "medium" as const, harness: "pi" as const };
+    const profile = { models: [{ model: "provider/primary", thinkingLevel: "medium" as const }, { model: "provider/fallback", thinkingLevel: "medium" as const }], harness: "pi" as const };
     const fixture = await bridgeFixture({
         profile,
         registry: registryWindows({ "provider/primary": 200, "provider/fallback": 200 }),
@@ -626,7 +627,7 @@ void test("route persistence rejection terminalizes when cancellation lookup als
 // Admission: cancellation versus route-persist rejection is a distinct consumer result from failed retirement; the existing blocked-success race does not observe a throwing persist.
 // Given cancellation requested while promoted-route persistence rejects, the mesh caller observes a stopped task and stopped agent, no fallback continuation, and no further task acceptance.
 void test("cancellation takes precedence over route persistence rejection", async () => {
-    const profile = { models: ["provider/primary", "provider/fallback"], thinkingLevel: "medium" as const, harness: "pi" as const };
+    const profile = { models: [{ model: "provider/primary", thinkingLevel: "medium" as const }, { model: "provider/fallback", thinkingLevel: "medium" as const }], harness: "pi" as const };
     let release!: () => void;
     let entered!: () => void;
     const gate = new Promise<void>(resolve => { release = resolve; });
@@ -662,7 +663,7 @@ void test("cancellation takes precedence over route persistence rejection", asyn
 // Admission: cancellation can become durable after retirement is queued; a captured pre-finish disposition cannot safely determine the terminal agent state.
 // Given cancellation requested after failed retirement is queued but before finishTask resolves, the durable stopped result makes the bridge retire the agent as stopped rather than failed.
 void test("durable completion outcome determines queued promotion retirement", async () => {
-    const profile = { models: ["provider/primary", "provider/fallback"], thinkingLevel: "medium" as const, harness: "pi" as const };
+    const profile = { models: [{ model: "provider/primary", thinkingLevel: "medium" as const }, { model: "provider/fallback", thinkingLevel: "medium" as const }], harness: "pi" as const };
     let release!: () => void;
     let entered!: () => void;
     const gate = new Promise<void>(resolve => { release = resolve; });
@@ -697,7 +698,7 @@ void test("durable completion outcome determines queued promotion retirement", a
 // Admission: finishTask-to-failAgent is a repository-owned child lifecycle; types cannot observe swallowed retirement that republishes idle and pumps new work.
 // Given route-persistence failure whose task completion writes and whose failAgent then rejects, when settlement crosses the child bridge, the mesh caller observes shutdown without a continuation or a further pumped task, and cannot submit another task.
 void test("failAgent rejection after route-persistence completion shuts down without pumping", async () => {
-    const profile = { models: ["provider/primary", "provider/fallback"], thinkingLevel: "medium" as const, harness: "pi" as const };
+    const profile = { models: [{ model: "provider/primary", thinkingLevel: "medium" as const }, { model: "provider/fallback", thinkingLevel: "medium" as const }], harness: "pi" as const };
     let now = Date.now();
     const fixture = await bridgeFixture({
         profile,
@@ -740,7 +741,7 @@ void test("failAgent rejection after route-persistence completion shuts down wit
 
 // Admitted contract: given current tokens plus native compaction reserve, an undersized middle candidate is skipped and the next fitting candidate continues.
 void test("capacity checks skip an undersized middle candidate in configured order", async () => {
-    const profile = { models: ["provider/primary", "provider/small", "provider/wide"], thinkingLevel: "medium" as const, harness: "pi" as const };
+    const profile = { models: [{ model: "provider/primary", thinkingLevel: "medium" as const }, { model: "provider/small", thinkingLevel: "medium" as const }, { model: "provider/wide", thinkingLevel: "medium" as const }], harness: "pi" as const };
     const fixture = await bridgeFixture({ profile, registry: registryWindows({ "provider/primary": 200, "provider/small": 167, "provider/wide": 200 }) });
     fixture.activate();
     await fixture.start();
@@ -757,7 +758,7 @@ void test("capacity checks skip an undersized middle candidate in configured ord
 
 // Admitted contract: non-error stop reasons and cancellation do not promote.
 void test("non-error settlement and cancellation do not promote profile candidates", async () => {
-    const profile = { models: ["provider/primary", "provider/fallback"], thinkingLevel: "medium" as const, harness: "pi" as const };
+    const profile = { models: [{ model: "provider/primary", thinkingLevel: "medium" as const }, { model: "provider/fallback", thinkingLevel: "medium" as const }], harness: "pi" as const };
     for (const stopReason of ["length", "toolUse", "aborted", "stop"] as const) {
         const fixture = await bridgeFixture({ profile, registry: registryWindows({ "provider/primary": 200, "provider/fallback": 200 }) });
         fixture.activate();
@@ -784,7 +785,7 @@ void test("non-error settlement and cancellation do not promote profile candidat
 // Admission: exhaustion retirement shares the repository-owned bounded completion lifecycle; type and store validation cannot detect a rejected retirement being discarded after task completion.
 // Given exhausted fallback whose initial retirement writes reject transiently, the bridge retains the retirement, does not accept or pump new work, and a later retry terminalizes the agent.
 void test("runtime exhaustion retains retirement through transient persistence failure", async () => {
-    const profile = { models: ["provider/primary", "provider/fallback"], thinkingLevel: "medium" as const, harness: "pi" as const };
+    const profile = { models: [{ model: "provider/primary", thinkingLevel: "medium" as const }, { model: "provider/fallback", thinkingLevel: "medium" as const }], harness: "pi" as const };
     let retirementAttempts = 0;
     const fixture = await bridgeFixture({
         profile,
@@ -818,7 +819,7 @@ void test("runtime exhaustion retains retirement through transient persistence f
 // Admission: a permanently rejected exhaustion retirement must reach the existing bounded shutdown path rather than exposing idle activity or pumping queued work.
 // Given exhausted fallback whose retirement write remains unavailable through its deadline, the bridge shuts down with the failed task retained and does not pump another task.
 void test("runtime exhaustion retirement rejection reaches bounded shutdown", async () => {
-    const profile = { models: ["provider/primary", "provider/fallback"], thinkingLevel: "medium" as const, harness: "pi" as const };
+    const profile = { models: [{ model: "provider/primary", thinkingLevel: "medium" as const }, { model: "provider/fallback", thinkingLevel: "medium" as const }], harness: "pi" as const };
     let now = Date.now();
     const fixture = await bridgeFixture({
         profile,
@@ -849,7 +850,7 @@ void test("runtime exhaustion retirement rejection reaches bounded shutdown", as
 
 // Admitted contract: when all candidates fail, the caller observes one failed task and a failed agent that cannot accept another task.
 void test("runtime exhaustion fails the active task and the agent", async () => {
-    const profile = { models: ["provider/primary", "provider/fallback"], thinkingLevel: "medium" as const, harness: "pi" as const };
+    const profile = { models: [{ model: "provider/primary", thinkingLevel: "medium" as const }, { model: "provider/fallback", thinkingLevel: "medium" as const }], harness: "pi" as const };
     const fixture = await bridgeFixture({ profile, registry: registryWindows({ "provider/primary": 200, "provider/fallback": 200 }) });
     fixture.activate();
     await fixture.start();
@@ -867,7 +868,7 @@ void test("runtime exhaustion fails the active task and the agent", async () => 
 
 // Admission: recoverable limit exhaustion must not finish the task; a later explicit user resume starts a new attempt cycle without replaying the original prompt.
 void test("limit exhaustion holds the task and user resume continues with a new attempt cycle", async () => {
-    const profile = { models: ["provider/primary", "provider/fallback"], thinkingLevel: "medium" as const, harness: "pi" as const };
+    const profile = { models: [{ model: "provider/primary", thinkingLevel: "medium" as const }, { model: "provider/fallback", thinkingLevel: "medium" as const }], harness: "pi" as const };
     const fixture = await bridgeFixture({ profile, registry: registryWindows({ "provider/primary": 200, "provider/fallback": 200 }) });
     fixture.activate();
     await fixture.start();

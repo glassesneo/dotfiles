@@ -12,7 +12,7 @@ const taskId = "22222222-2222-4222-8222-222222222222";
 const theme = { fg: (_role: string, text: string) => text, bold: (text: string) => text };
 
 function snapshot(route?: AgentSnapshot["status"]["modelRoute"]): AgentSnapshot {
-    const definition: ChildDefinition = { selector: { agent: "small", access: "write" }, description: "Synthetic worker", tools: ["read", "write"], instructions: "Complete the bounded task.", contextPolicy: "project", childExtensionContributions: [], execution: { models: ["synthetic/pi", "synthetic/fallback"], thinkingLevel: "medium", harness: "pi" }, targets: [], gc: { collectAt: 2, retain: 1, pressureFloor: 0 } };
+    const definition: ChildDefinition = { selector: { agent: "small", access: "write" }, description: "Synthetic worker", tools: ["read", "write"], instructions: "Complete the bounded task.", contextPolicy: "project", childExtensionContributions: [], execution: { models: [{ model: "synthetic/pi", thinkingLevel: "medium" }, { model: "synthetic/fallback", thinkingLevel: "medium" }], harness: "pi" }, targets: [], gc: { collectAt: 2, retain: 1, pressureFloor: 0 } };
     const usage = emptyUsage();
     const meshId = "55555555-5555-4555-8555-555555555555";
     return {

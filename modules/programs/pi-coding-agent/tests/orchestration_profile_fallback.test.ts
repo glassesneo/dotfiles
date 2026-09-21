@@ -12,7 +12,14 @@ import {
     type ModelRouteAttempt,
 } from "../extensions_src/utilities/orchestration_profile_fallback.ts";
 
-const profile = { models: ["provider/primary", "provider/fallback", "provider/last"], thinkingLevel: "medium" as const, harness: "pi" as const };
+const profile = {
+    models: [
+        { model: "provider/primary", thinkingLevel: "medium" as const },
+        { model: "provider/fallback", thinkingLevel: "medium" as const },
+        { model: "provider/last", thinkingLevel: "medium" as const },
+    ],
+    harness: "pi" as const,
+};
 const model = (id: string, contextWindow = 100_000) => ({ provider: "provider", id, contextWindow }) as Model<string>;
 
 // Admitted contract: given a compatible restored route with prior attempts, profile selection rechecks the active and later candidates without discarding or duplicating route history.
@@ -51,7 +58,7 @@ void test("restored profile selection preserves compatible attempts while advanc
     if (exhausted.ok) return;
     assert.deepEqual(exhausted.route.attempts.map(attempt => attempt.index), [0, 1, 2]);
     assert.equal(new Set(exhausted.route.attempts.map(attempt => attempt.index)).size, 3);
-    for (const candidate of profile.models) assert.match(exhausted.error, new RegExp(candidate.replace("/", "\\/"), "u"));
+    for (const candidate of profile.models) assert.match(exhausted.error, new RegExp(candidate.model.replace("/", "\\/"), "u"));
 });
 
 // Admitted contract: given a route whose active index or attempt history is outside the selected profile, runtime fallback settles rather than selecting an unbounded candidate.
@@ -71,7 +78,7 @@ void test("invalid route state cannot trigger runtime promotion", async () => {
     assert.deepEqual(decision, { action: "settle" });
     assert.equal(restoreCompatibleRoute(profile, "ordered", {
         profile: "ordered",
-        models: profile.models,
+        models: profile.models.map(entry => entry.model),
         route: { activeIndex: 1, activeModel: "provider/fallback", attempts: [{ index: 4, model: "provider/unknown", category: "unavailable", at: "2026-01-01T00:00:00.000Z" }] },
     }), undefined);
     assert.doesNotThrow(() => restoreCompatibleRoute(profile, "ordered", {
@@ -83,9 +90,9 @@ void test("invalid route state cannot trigger runtime promotion", async () => {
 
 // Mechanical validation: diagnostics are individually bounded and sanitized while aggregate exhaustion remains complete for every configured candidate.
 void test("fallback diagnostics sanitize each message without truncating candidate coverage", () => {
-    const attempts: ModelRouteAttempt[] = profile.models.map((modelName, index) => ({
+    const attempts: ModelRouteAttempt[] = profile.models.map((entry, index) => ({
         index,
-        model: modelName,
+        model: entry.model,
         category: index === 1 ? "context" : "unavailable",
         at: "2026-01-01T00:00:00.000Z",
         message: `${"é".repeat(400)} token=secret-${index}`,
@@ -97,7 +104,7 @@ void test("fallback diagnostics sanitize each message without truncating candida
         assert.ok(Buffer.byteLength(sanitizeDiagnostic(attempt.message), "utf8") <= 512);
         assert.doesNotMatch(sanitizeDiagnostic(attempt.message), /secret-/u);
     }
-    for (const candidate of profile.models) assert.match(error, new RegExp(candidate.replace("/", "\\/"), "u"));
+    for (const candidate of profile.models) assert.match(error, new RegExp(candidate.model.replace("/", "\\/"), "u"));
 });
 
 // Admitted contract: given external provider diagnostics with sensitive transport or environment material, route persistence and aggregate errors expose only a bounded generic category while retaining ordered candidates.
@@ -109,7 +116,7 @@ void test("fallback diagnostics redact representative credential-bearing provide
         '{"request":{"body":"password=topsecret"}}',
         "OPENAI_API_KEY=topsecret",
     ];
-    const attempts: ModelRouteAttempt[] = diagnostics.map((message, index) => ({ index, model: profile.models[index % profile.models.length]!, category: "unavailable", at: "2026-01-01T00:00:00.000Z", message }));
+    const attempts: ModelRouteAttempt[] = diagnostics.map((message, index) => ({ index, model: profile.models[index % profile.models.length]!.model, category: "unavailable", at: "2026-01-01T00:00:00.000Z", message }));
     for (const diagnostic of diagnostics) {
         const safe = sanitizeDiagnostic(diagnostic);
         assert.equal(safe, "diagnostic redacted");
@@ -118,7 +125,7 @@ void test("fallback diagnostics redact representative credential-bearing provide
     }
     const aggregate = formatAggregateFallbackError("ordered", profile.models, attempts);
     assert.ok(!/topsecret|authorization|bearer|headers|body|openai_api_key/iu.test(aggregate));
-    for (const candidate of profile.models) assert.match(aggregate, new RegExp(candidate.replace("/", "\\/"), "u"));
+    for (const candidate of profile.models) assert.match(aggregate, new RegExp(candidate.model.replace("/", "\\/"), "u"));
 });
 
 // Mechanical validation: an unavailable compaction-reserve setting does not turn the native reserve requirement into zero.

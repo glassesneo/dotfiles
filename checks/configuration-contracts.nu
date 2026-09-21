@@ -138,10 +138,10 @@ def main [] {
     const enabledModeConfig = validateModeConfig(enabledModes);
     validateOrchestrationReferences(orchestrationConfig, childCatalog, Object.keys(enabledModeConfig.modes));
     validateModeConfig(disabledModes);
-    assert.equal(childCatalog.schemaVersion, 1);
+    assert.equal(childCatalog.schemaVersion, 2);
     assert.equal(orchestrationConfig.schemaVersion, 6);
     assert.ok(orchestrationConfig.stateRoot.endsWith("/pi/orchestration-v11"));
-    assert.equal(enabledModeConfig.schemaVersion, 4);
+    assert.equal(enabledModeConfig.schemaVersion, 5);
     assert.equal(enabledModeConfig.execution.harness, "pi");
     validateExtensionKeybindings(keybindings, "generated extension-keybindings.json");
 

@@ -35,10 +35,15 @@
       retireOnContextPressure = boolOption true;
     };
   };
+  modelEntryType = delib.submodule {
+    options = with delib; {
+      model = noDefault (strOption null);
+      thinkingLevel = allowNull (enumOption ["off" "minimal" "low" "medium" "high" "xhigh" "max"] null);
+    };
+  };
   executionModule = {
     options = with delib; {
-      models = noDefault (listOfOption str []);
-      thinkingLevel = allowNull (enumOption ["off" "minimal" "low" "medium" "high" "xhigh" "max"] null);
+      models = noDefault (listOfOption modelEntryType []);
       harness = enumOption ["pi" "cursor-agent" "codex"] "pi";
       harnessOptions = attrsOfOption lib.types.anything {};
     };
@@ -64,7 +69,8 @@
   callerPolicyType = delib.submodule {
     options.targets = delib.listOfOption delib.str [];
   };
-  cleanExecution = execution: lib.filterAttrs (_name: value: value != null && value != {}) execution;
+  cleanModelEntry = entry: lib.filterAttrs (_name: value: value != null) entry;
+  cleanExecution = execution: (lib.filterAttrs (_name: value: value != null && value != {}) execution) // {models = map cleanModelEntry execution.models;};
   resultContract = ''
     Return the outcome, changed paths when any, verification performed and its
     results, missing evidence, and decisions needed from the caller. Separate
@@ -151,73 +157,123 @@
   settledExecutions = {
     small-read = {
       models = [
-        "openrouter/cohere/north-mini-code:free"
-        "mistral/mistral-small-2603"
-        "commandcode/deepseek/deepseek-v4.1-flash"
-        "openai-codex/gpt-5.6-luna"
+        {
+          model = "openrouter/cohere/north-mini-code:free";
+          thinkingLevel = "medium";
+        }
+        {
+          model = "mistral/mistral-small-2603";
+          thinkingLevel = "high";
+        }
+        {
+          model = "commandcode/deepseek/deepseek-v4.1-flash";
+          thinkingLevel = "high";
+        }
+        {
+          model = "openai-codex/gpt-5.6-luna";
+          thinkingLevel = "high";
+        }
       ];
-      thinkingLevel = "high";
       harness = "pi";
     };
     small-write = {
       models = [
-        "openai-codex/gpt-5.6-luna"
+        {
+          model = "openai-codex/gpt-5.6-luna";
+          thinkingLevel = "high";
+        }
       ];
-      thinkingLevel = "high";
       harness = "pi";
     };
     standard-read = {
       models = [
-        "commandcode/deepseek/deepseek-v4.1-flash"
-        "commandcode/meta/muse-spark-1.3-contributor"
-        "openai/gpt-5.6-terra"
+        {
+          model = "commandcode/deepseek/deepseek-v4.1-flash";
+          thinkingLevel = "medium";
+        }
+        {
+          model = "commandcode/meta/muse-spark-1.3-contributor";
+          thinkingLevel = "medium";
+        }
+        {
+          model = "openai/gpt-5.6-terra";
+          thinkingLevel = "medium";
+        }
       ];
-      thinkingLevel = "medium";
       harness = "pi";
     };
     standard-write = {
       models = [
-        "commandcode/deepseek/deepseek-v4.1-flash"
-        "commandcode/meta/muse-spark-1.3-contributor"
-        "openai/gpt-5.6-terra"
+        {
+          model = "commandcode/deepseek/deepseek-v4.1-flash";
+          thinkingLevel = "medium";
+        }
+        {
+          model = "commandcode/meta/muse-spark-1.3-contributor";
+          thinkingLevel = "medium";
+        }
+        {
+          model = "openai/gpt-5.6-terra";
+          thinkingLevel = "medium";
+        }
       ];
-      thinkingLevel = "medium";
       harness = "pi";
     };
     advanced-read = {
       models = [
-        "openai-codex/gpt-5.6-sol"
-        "commandcode/gpt-5.6-sol"
+        {
+          model = "openai-codex/gpt-5.6-sol";
+          thinkingLevel = "medium";
+        }
+        {
+          model = "commandcode/gpt-5.6-sol";
+          thinkingLevel = "medium";
+        }
       ];
-      thinkingLevel = "medium";
       harness = "pi";
     };
     advanced-write = {
       models = [
-        "openai-codex/gpt-5.6-sol"
-        "commandcode/gpt-5.6-sol"
+        {
+          model = "openai-codex/gpt-5.6-sol";
+          thinkingLevel = "medium";
+        }
+        {
+          model = "commandcode/gpt-5.6-sol";
+          thinkingLevel = "medium";
+        }
       ];
-      thinkingLevel = "medium";
       harness = "pi";
     };
     research = {
-      models = ["openai-codex/gpt-5.6-terra"];
-      thinkingLevel = "high";
+      models = [
+        {
+          model = "openai-codex/gpt-5.6-terra";
+          thinkingLevel = "high";
+        }
+      ];
       harness = "pi";
     };
     perspective = {
       models = [
-        "commandcode/moonshotai/Kimi-K3"
-        "cohere/command-a-plus-05-2026"
-        "openrouter/z-ai/glm-5.2:free"
-        "mistral/mistral-medium-3.5"
+        {
+          model = "commandcode/moonshotai/Kimi-K3";
+          thinkingLevel = "high";
+        }
+        {
+          model = "cohere/command-a-plus-05-2026";
+          thinkingLevel = "high";
+        }
       ];
-      thinkingLevel = "high";
       harness = "pi";
     };
     search = {
-      models = ["codex/gpt-5.6-luna"];
-      thinkingLevel = "high";
+      models = [
+        {
+          model = "codex/gpt-5.6-luna";
+          thinkingLevel = "high";
+        }
+      ];
       harness = "codex";
       harnessOptions = {
         mode = "read-only";
@@ -484,11 +540,11 @@ in
       invalidSelectors = builtins.filter (name: let selector = cfg.children.${name}.selector; in !(builtins.isString selector.agent) || selector.agent == "") childNames;
       searchOnRoot = lib.concatMap (mode: map (target: "${mode}: ${target}") (builtins.filter (target: builtins.hasAttr target cfg.children && cfg.children.${target}.selector.agent == "search") cfg.callPolicy.modes.${mode}.targets)) (builtins.attrNames cfg.callPolicy.modes);
       searchFromNonResearch = lib.concatMap (caller: map (target: "${caller}: ${target}") (builtins.filter (target: builtins.hasAttr target cfg.children && cfg.children.${target}.selector.agent == "search") cfg.children.${caller}.targets)) (builtins.filter (caller: caller != "research") childNames);
-      invalidChildModelLists = builtins.filter (name: let models = cfg.children.${name}.execution.models; in models == [] || duplicates models != []) childNames;
+      invalidChildModelLists = builtins.filter (name: let models = cfg.children.${name}.execution.models; in models == [] || duplicates (map (entry: entry.model) models) != []) childNames;
       invalidChildModelIdentifiers =
         lib.concatMap (
           name:
-            builtins.filter (model: builtins.match "^[^/[:space:]]+/[^[:space:]]+$" model == null) cfg.children.${name}.execution.models
+            builtins.filter (entry: builtins.match "^[^/[:space:]]+/[^[:space:]]+$" entry.model == null) cfg.children.${name}.execution.models
         )
         childNames;
       cursorReadHarnessOptions = {
@@ -515,7 +571,7 @@ in
         alias =
           if execution.models == []
           then ""
-          else lib.removePrefix "cursor/" (builtins.head execution.models);
+          else lib.removePrefix "cursor/" (builtins.head execution.models).model;
       in
         execution.harness
         == "cursor-agent"
@@ -526,16 +582,25 @@ in
           name: let
             execution = cfg.children.${name}.execution;
             hasSingletonModel = builtins.length execution.models == 1;
-            model =
+            entry =
               if hasSingletonModel
               then builtins.head execution.models
-              else "";
+              else null;
+            model =
+              if entry == null
+              then ""
+              else entry.model;
+            level =
+              if entry == null
+              then null
+              else entry.thinkingLevel;
+            allHaveLevel = lib.all (item: item.thinkingLevel != null) execution.models;
           in
             if execution.harness == "pi"
-            then execution.thinkingLevel == null || execution.harnessOptions != {}
+            then !allHaveLevel || execution.harnessOptions != {}
             else if execution.harness == "cursor-agent"
-            then !hasSingletonModel || !(lib.hasPrefix "cursor/" model) || execution.thinkingLevel != null || !(execution.harnessOptions == cursorReadHarnessOptions || execution.harnessOptions == cursorWriteHarnessOptions)
-            else !hasSingletonModel || !(lib.hasPrefix "codex/" model) || execution.thinkingLevel == null || execution.harnessOptions != codexHarnessOptions
+            then !hasSingletonModel || !(lib.hasPrefix "cursor/" model) || level != null || !(execution.harnessOptions == cursorReadHarnessOptions || execution.harnessOptions == cursorWriteHarnessOptions)
+            else !hasSingletonModel || !(lib.hasPrefix "codex/" model) || level == null || execution.harnessOptions != codexHarnessOptions
         )
         childNames;
       isAbsoluteChildExtension = path: lib.hasPrefix "/" path;
@@ -626,7 +691,7 @@ in
       ];
       home.file = {
         "${myconfig.programs.pi-coding-agent.configDir}/child-catalog.json".text = builtins.toJSON {
-          schemaVersion = 1;
+          schemaVersion = 2;
           children = generatedChildren;
         };
         "${myconfig.programs.pi-coding-agent.configDir}/orchestration.json".text = builtins.toJSON {

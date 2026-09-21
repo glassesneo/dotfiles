@@ -35,10 +35,10 @@ import { withMeshLock } from "../extensions_src/utilities/orchestration_lock.ts"
 import { emptyUsage } from "../extensions_src/utilities/orchestration_types.ts";
 import { settleWithinEventLoopTurns, withTemporaryRoot as withRoot, yieldToIO } from "./test_helpers.ts";
 
-const syntheticExecution = { models: ["provider/model"], thinkingLevel: "medium" as const, harness: "pi" as const };
+const syntheticExecution = { models: [{ model: "provider/model", thinkingLevel: "medium" as const }], harness: "pi" as const };
 const syntheticGc = { collectAt: 2, retain: 1, pressureFloor: 0 };
 const syntheticChild = (name = "worker", extra: Record<string, unknown> = {}) => ({ selector: { agent: name, access: "read" as const }, description: `Synthetic ${name}`, tools: [], instructions: "Return the bounded result.", contextPolicy: "project" as const, childExtensionContributions: [], execution: syntheticExecution, targets: [] as string[], gc: syntheticGc, ...extra });
-const syntheticCatalog = (children: Record<string, ReturnType<typeof syntheticChild>>) => ({ schemaVersion: 1 as const, children });
+const syntheticCatalog = (children: Record<string, ReturnType<typeof syntheticChild>>) => ({ schemaVersion: 2 as const, children });
 const syntheticEpochInput = (mode: string, children: Record<string, ReturnType<typeof syntheticChild>>) => ({
     mode,
     catalog: syntheticCatalog(children),
@@ -167,8 +167,8 @@ void test("an ephemeral root remains nonrecoverable while supporting the persist
 
 void test("holistic orchestration references reject unknown and incompatible child edges", () => {
     const child = (name: string, extra: Record<string, unknown> = {}) => ({ ...syntheticChild(name), ...extra });
-    const cursorExecution = { models: ["cursor/model"], harness: "cursor-agent" as const, harnessOptions: { mode: "agent" as const, permissionPolicy: "allow-always" as const, sandbox: "disabled" as const, trustWorkspace: true, worktree: false } };
-    const catalog = { schemaVersion: 1 as const, children: { worker: child("worker"), external: child("external", { execution: cursorExecution }), isolated: child("isolated", { contextPolicy: "prompt-only" as const }) } };
+    const cursorExecution = { models: [{ model: "cursor/model" }], harness: "cursor-agent" as const, harnessOptions: { mode: "agent" as const, permissionPolicy: "allow-always" as const, sandbox: "disabled" as const, trustWorkspace: true, worktree: false } };
+    const catalog = { schemaVersion: 2 as const, children: { worker: child("worker"), external: child("external", { execution: cursorExecution }), isolated: child("isolated", { contextPolicy: "prompt-only" as const }) } };
     const raw = {
         schemaVersion: 6, stateRoot: "/state", tmux: "/tmux", returnParentCommand: "/return", parentNavigationHint: "parent", historyViewerExtension: "/history", popupExtension: "/popup", orchestrationExtension: "/orchestration", childBridgeExtension: "/bridge",
         harnesses: { pi: { adapter: "pi-native", command: "/pi" }, "cursor-agent": { adapter: "cursor-acp", command: "/cursor", modelIds: { model: "synthetic-acp-model" } } }, natureHandleWords: ["May"],
@@ -183,12 +183,12 @@ void test("holistic orchestration references reject unknown and incompatible chi
     reject({ modes: { ops: { targets: ["ghost"] } } }, /unknown child/u);
     assert.throws(() => validateOrchestrationConfig({ ...raw, callPolicy: { modes: { ops: { targets: ["worker"] } }, roles: {} } }), /unknown keys/u);
     assert.throws(() => validateOrchestrationConfig({ ...raw, gc: { ...raw.gc, roles: {} } }), /unknown keys/u);
-    assert.throws(() => validateOrchestrationReferences(config, { schemaVersion: 1, children: { ...catalog.children, worker: { ...catalog.children.worker, targets: ["ghost"] } } }, ["ops"]), /unknown child/u);
-    assert.throws(() => validateOrchestrationReferences(config, { schemaVersion: 1, children: { ...catalog.children, external: { ...catalog.children.external, targets: ["worker"] } } }, ["ops"]), /external-harness caller/u);
-    assert.throws(() => validateOrchestrationReferences(config, { schemaVersion: 1, children: { ...catalog.children, isolated: { ...catalog.children.isolated, targets: ["worker"] } } }, ["ops"]), /prompt-only caller/u);
-    assert.throws(() => validateOrchestrationReferences(config, { schemaVersion: 1, children: { ...catalog.children, isolated: { ...catalog.children.isolated, execution: cursorExecution } } }, ["ops"]), /prompt-only child isolated/u);
+    assert.throws(() => validateOrchestrationReferences(config, { schemaVersion: 2, children: { ...catalog.children, worker: { ...catalog.children.worker, targets: ["ghost"] } } }, ["ops"]), /unknown child/u);
+    assert.throws(() => validateOrchestrationReferences(config, { schemaVersion: 2, children: { ...catalog.children, external: { ...catalog.children.external, targets: ["worker"] } } }, ["ops"]), /external-harness caller/u);
+    assert.throws(() => validateOrchestrationReferences(config, { schemaVersion: 2, children: { ...catalog.children, isolated: { ...catalog.children.isolated, targets: ["worker"] } } }, ["ops"]), /prompt-only caller/u);
+    assert.throws(() => validateOrchestrationReferences(config, { schemaVersion: 2, children: { ...catalog.children, isolated: { ...catalog.children.isolated, execution: cursorExecution } } }, ["ops"]), /prompt-only child isolated/u);
     assert.throws(() => resolveAuthorizedSelectors({ targets: ["worker", "alias"] }, { worker: child("worker"), alias: { ...child("worker"), selector: { agent: "worker", access: "read" } } }), /ambiguous/u);
-    const searchCatalog = { schemaVersion: 1 as const, children: { ...catalog.children, research: { ...child("research"), selector: { agent: "research", access: "read" as const }, targets: ["search"] }, search: { ...child("search"), selector: { agent: "search", access: "read" as const } } } };
+    const searchCatalog = { schemaVersion: 2 as const, children: { ...catalog.children, research: { ...child("research"), selector: { agent: "research", access: "read" as const }, targets: ["search"] }, search: { ...child("search"), selector: { agent: "search", access: "read" as const } } } };
     const searchPolicy = (callPolicy: unknown, extra = searchCatalog) => validateOrchestrationReferences(validateOrchestrationConfig({ ...raw, callPolicy }), extra, ["ops"]);
     assert.throws(() => searchPolicy({ modes: { ops: { targets: ["search"] } } }), /root target/u);
     assert.throws(() => searchPolicy({ modes: { ops: { targets: ["worker"] } } }, { ...searchCatalog, children: { ...searchCatalog.children, worker: { ...searchCatalog.children.worker, targets: ["search"] } } }), /only be targeted by research/u);
@@ -200,20 +200,20 @@ void test("holistic orchestration references reject unknown and incompatible chi
 void test("child protocol v1 captures required-access closure and rejects retired role generations", async () => withRoot("mesh-child-v1-", async root => {
     const mesh = await initializeMesh(root, { rootSessionId: "session", recoverable: true, budgets });
     const child = (name: string, extra: Record<string, unknown> = {}) => ({ ...syntheticChild(name), description: name, ...extra });
-    const catalog = { schemaVersion: 1 as const, children: {
-        reviewer: child("reviewer", { execution: { models: ["provider/review"], thinkingLevel: "high" as const, harness: "pi" as const }, targets: ["lens"] }),
-        lens: child("lens", { execution: { models: ["provider/lens"], thinkingLevel: "medium" as const, harness: "pi" as const }, targets: ["leaf"] }),
-        leaf: child("leaf", { execution: { models: ["provider/leaf"], thinkingLevel: "low" as const, harness: "pi" as const } }),
-        sibling: child("sibling", { execution: { models: ["provider/leaf"], thinkingLevel: "low" as const, harness: "pi" as const } }),
+    const catalog = { schemaVersion: 2 as const, children: {
+        reviewer: child("reviewer", { execution: { models: [{ model: "provider/review", thinkingLevel: "high" }], harness: "pi" as const }, targets: ["lens"] }),
+        lens: child("lens", { execution: { models: [{ model: "provider/lens", thinkingLevel: "medium" }], harness: "pi" as const }, targets: ["leaf"] }),
+        leaf: child("leaf", { execution: { models: [{ model: "provider/leaf", thinkingLevel: "low" }], harness: "pi" as const } }),
+        sibling: child("sibling", { execution: { models: [{ model: "provider/leaf", thinkingLevel: "low" }], harness: "pi" as const } }),
     } };
     assert.deepEqual(validateChildCatalog(catalog), catalog);
     assert.throws(() => validateChildCatalog({ ...catalog, schemaVersion: 6 }), /Unsupported/u);
     assert.throws(() => validateChildCatalog({ ...catalog, children: { ...catalog.children, invalid: { ...child("invalid"), selector: { agent: "small" } } } }), /missing required keys/u);
     assert.doesNotThrow(() => validateChildCatalog({ ...catalog, children: { ...catalog.children, research: { ...child("research"), selector: { agent: "research", access: "read" } } } }));
     assert.throws(() => validateChildCatalog({ ...catalog, children: { ...catalog.children, reviewer: { ...catalog.children.reviewer, defaultProfile: "review" } } }), /unknown keys/u);
-    assert.deepEqual(validateChildCatalog({ schemaVersion: 1, children: { kept: child("kept", { gc: { ...syntheticGc, retireOnContextPressure: false } }) } }).children.kept!.gc, { ...syntheticGc, retireOnContextPressure: false });
-    assert.deepEqual(validateChildCatalog({ schemaVersion: 1, children: { omitted: child("omitted") } }).children.omitted!.gc, syntheticGc);
-    assert.throws(() => validateChildCatalog({ schemaVersion: 1, children: { bad: child("bad", { gc: { ...syntheticGc, retireOnContextPressure: "yes" } }) } }), /retireOnContextPressure/u);
+    assert.deepEqual(validateChildCatalog({ schemaVersion: 2, children: { kept: child("kept", { gc: { ...syntheticGc, retireOnContextPressure: false } }) } }).children.kept!.gc, { ...syntheticGc, retireOnContextPressure: false });
+    assert.deepEqual(validateChildCatalog({ schemaVersion: 2, children: { omitted: child("omitted") } }).children.omitted!.gc, syntheticGc);
+    assert.throws(() => validateChildCatalog({ schemaVersion: 2, children: { bad: child("bad", { gc: { ...syntheticGc, retireOnContextPressure: "yes" } }) } }), /retireOnContextPressure/u);
     const callPolicy = { modes: { ops: { targets: ["reviewer", "sibling"] } } };
     const epoch = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", catalog, callPolicy });
     assert.equal(epoch.schemaVersion, 7);
@@ -226,9 +226,9 @@ void test("child protocol v1 captures required-access closure and rejects retire
     assert.equal(envelope.children.sibling, undefined);
     assert.deepEqual(envelope.self.targets, ["lens"]);
     assert.deepEqual(envelope.self.execution, catalog.children.reviewer.execution);
-    assert.deepEqual(envelope.children.leaf!.execution.models, ["provider/leaf"]);
+    assert.deepEqual(envelope.children.leaf!.execution.models, [{ model: "provider/leaf", thinkingLevel: "low" }]);
     const forgedExternalCaller = structuredClone(envelope);
-    forgedExternalCaller.children.lens!.execution = { models: ["cursor/model"], harness: "cursor-agent", harnessOptions: { mode: "ask", permissionPolicy: "reject", sandbox: "disabled", trustWorkspace: true, worktree: false } };
+    forgedExternalCaller.children.lens!.execution = { models: [{ model: "cursor/model" }], harness: "cursor-agent", harnessOptions: { mode: "ask", permissionPolicy: "reject", sandbox: "disabled", trustWorkspace: true, worktree: false } };
     assert.throws(() => validateLaunchEnvelope(forgedExternalCaller), /external harness caller lens/u);
     const empty = buildPolicySnapshot({ mode: "missing", catalog, callPolicy });
     assert.deepEqual(empty, { mode: "missing", directTargets: [], children: {} });
@@ -256,7 +256,7 @@ void test("capability selectors resolve uniquely and keep write and search out o
         perspective: capabilityChild("perspective"),
         search: capabilityChild("search"),
     };
-    const catalog = { schemaVersion: 1 as const, children };
+    const catalog = { schemaVersion: 2 as const, children };
     const callPolicy = {
         modes: {
             recon: { targets: ["small-read", "standard-read", "advanced-read", "research", "perspective"] },
@@ -288,7 +288,7 @@ void test("capability selectors resolve uniquely and keep write and search out o
 // Given a root policy that exposes research and a research-only search edge, projecting a child envelope permits search only through research while root construction still rejects search.
 void test("nested child envelope permits research-only search dispatch without exposing a root search target", () => {
     const capabilityChild = (agent: string, extra: Record<string, unknown> = {}) => ({ ...syntheticChild(agent), selector: { agent, access: "read" as const }, ...extra });
-    const catalog = { schemaVersion: 1 as const, children: { research: capabilityChild("research", { targets: ["search"] }), search: capabilityChild("search") } };
+    const catalog = { schemaVersion: 2 as const, children: { research: capabilityChild("research", { targets: ["search"] }), search: capabilityChild("search") } };
     const callPolicy = { modes: { recon: { targets: ["research"] } } };
     const snapshot = buildPolicySnapshot({ mode: "recon", catalog, callPolicy });
     assert.equal(snapshot.directTargets.includes("search"), false);
