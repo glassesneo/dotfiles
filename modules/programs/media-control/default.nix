@@ -59,6 +59,7 @@ in
     myconfig.ifEnabled = {cfg, ...}: {
       system.tcc-stable-binaries.entries.media-control = {
         source = lib.getExe' cfg.package "media-control";
+        bundleRoot = "${cfg.package}";
         scope = "user";
       };
     };

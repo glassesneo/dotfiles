@@ -11,6 +11,11 @@
         type = lib.types.str;
         description = "Nix store executable copied onto the stable destination.";
       };
+      bundleRoot = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Package root copied as a unit when the executable needs adjacent runtime files.";
+      };
       scope = lib.mkOption {
         type = lib.types.enum ["user" "system"];
         description = "user copies into the login-user bin dir; system copies as root into /Library.";
@@ -24,15 +29,25 @@
   copyFile = {
     rsync,
     source,
+    bundleRoot ? null,
     dest,
     privileged,
   }: ''
     $DRY_RUN_CMD mkdir -p ${lib.escapeShellArg (dirOf dest)}
-    if [ -e ${lib.escapeShellArg dest} ]; then
-      $DRY_RUN_CMD chmod u+w ${lib.escapeShellArg dest} || true
-    fi
-    $DRY_RUN_CMD ${rsync} --checksum --copy-links --chmod=F755 \
-      ${lib.escapeShellArg source} ${lib.escapeShellArg dest}
+    ${
+      if bundleRoot == null
+      then ''
+        if [ -e ${lib.escapeShellArg dest} ]; then
+          $DRY_RUN_CMD chmod u+w ${lib.escapeShellArg dest} || true
+        fi
+        $DRY_RUN_CMD ${rsync} --checksum --copy-links --chmod=F755 \
+          ${lib.escapeShellArg source} ${lib.escapeShellArg dest}
+      ''
+      else ''
+        $DRY_RUN_CMD ${rsync} --archive --checksum --chmod=Du+w \
+          ${lib.escapeShellArg "${bundleRoot}/"} ${lib.escapeShellArg "${dirOf (dirOf dest)}/"}
+      ''
+    }
     ${lib.optionalString privileged ''
       $DRY_RUN_CMD chown root:wheel ${lib.escapeShellArg dest}
       $DRY_RUN_CMD chmod 0555 ${lib.escapeShellArg dest}
@@ -74,7 +89,7 @@ in
               name: entry:
                 copyFile {
                   inherit rsync;
-                  inherit (entry) source;
+                  inherit (entry) source bundleRoot;
                   dest = destFor cfg name entry;
                   privileged = false;
                 }
@@ -92,7 +107,7 @@ in
           name: entry:
             copyFile {
               inherit rsync;
-              inherit (entry) source;
+              inherit (entry) source bundleRoot;
               dest = destFor cfg name entry;
               privileged = true;
             }
@@ -102,8 +117,8 @@ in
     in {
       system.activationScripts.extraActivation.text = lib.mkAfter ''
         echo "copying TCC-stable system binaries..." >&2
-        DRY_RUN_CMD=
         ${lib.optionalString (systemEntries != {}) ''
+          DRY_RUN_CMD=
           mkdir -p ${lib.escapeShellArg cfg.systemDir}
           chown root:wheel ${lib.escapeShellArg cfg.systemDir}
           chmod 0755 ${lib.escapeShellArg cfg.systemDir}
