@@ -18,21 +18,11 @@
     configuration = denix.lib.denixConfiguration {
       extraInputs = inputs;
 
-      modules = [
-        denix.denixModules.nixDarwin
-        {
-          hosts.seiran.darwin.ifEnabled = {
-            nixpkgs.hostPlatform = system;
-            system.stateVersion = 4;
-            system.primaryUser = "neo";
-
-            users.users.neo = {
-              name = "neo";
-              home = "/Users/neo";
-            };
-          };
-        }
-      ];
+      modules =
+        [
+          denix.denixModules.nixDarwin
+        ]
+        ++ denix.lib.umport {paths = [./hosts];};
     };
   in {
     darwinConfigurations.seiran = configuration.genSystem {
