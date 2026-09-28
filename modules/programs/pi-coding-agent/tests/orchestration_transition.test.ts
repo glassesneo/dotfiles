@@ -8,6 +8,7 @@ import { availableContext, publishAgentActivity } from "../extensions_src/utilit
 import { requestPressureAdmission } from "../extensions_src/utilities/orchestration_admission.ts";
 import { bindMeshEndpoint, materializeMeshCompletionEvents, readMeshEndpoint, registerStateAwareMeshSend, reserveNewAgentMeshSendSubmission } from "../extensions_src/utilities/orchestration_events.ts";
 import { writeAtomicJson } from "../extensions_src/utilities/orchestration_json.ts";
+import { setOrchestrationLockObserverForTest } from "../extensions_src/utilities/orchestration_lock.ts";
 import { orchestrationIndexPath } from "../extensions_src/utilities/orchestration_index.ts";
 import { bindAgentRuntime } from "../extensions_src/utilities/orchestration_runtime.ts";
 import {
@@ -34,10 +35,14 @@ import {
 } from "../extensions_src/utilities/orchestration_store.ts";
 import {
     assertNoParentTransitionUnlocked,
+    ParentTransitionQuiescenceError,
     parentTransitionPath,
+    parentTransitionReceiptGuidance,
+    parentTransitionSafePrepareError,
     prepareParentTransition,
     readParentTransition,
     releaseParentTransition,
+    setParentTransitionPublicationObserverForTest,
     validateParentTransitionFence,
 } from "../extensions_src/utilities/orchestration_transition.ts";
 import { cancelPressureAdmission, listPressureAdmissions } from "../extensions_src/utilities/orchestration_admission.ts";
@@ -126,6 +131,42 @@ void test("prepare succeeds at full quiescence and records one short-lived fence
     assert.equal(await readParentTransition(root, fixture.meshId), undefined);
 }));
 
+// Admission: deadline/lifecycle loss can occur after rename, which pre-write guards cannot observe.
+// Given ownership is lost immediately after atomic publication, prepare removes only its write before rejecting.
+void test("prepare rolls back its fence when ownership is lost immediately after publication", async () => withRoot("parent-transition-post-publish-", async root => {
+    const fixture = await createRootFixture(root);
+    let owned = true;
+    const restore = setParentTransitionPublicationObserverForTest(() => { owned = false; });
+    try {
+        await assert.rejects(prepareParentTransition(root, fixture.meshId, { ...prepareInput(fixture), guard: () => { if (!owned) throw new Error("synthetic ownership loss"); } }), /ownership loss/u);
+        assert.equal(await readParentTransition(root, fixture.meshId), undefined);
+    } finally { restore(); }
+}));
+
+// Admission: ownership can also disappear after the in-lock guard passes but before lock release returns.
+// Given loss in that release window, the outer guard reacquires the lock and removes the unacknowledged fence.
+void test("prepare rolls back its fence when ownership is lost during lock release", async () => withRoot("parent-transition-release-race-", async root => {
+    const fixture = await createRootFixture(root);
+    let owned = true;
+    const restore = setOrchestrationLockObserverForTest(observation => { if (observation.scope === "mesh" && observation.meshId === fixture.meshId && observation.phase === "released") owned = false; });
+    try {
+        await assert.rejects(prepareParentTransition(root, fixture.meshId, { ...prepareInput(fixture), guard: () => { if (!owned) throw new Error("synthetic release-window ownership loss"); } }), /release-window ownership loss/u);
+        assert.equal(await readParentTransition(root, fixture.meshId), undefined);
+    } finally { restore(); }
+}));
+
+// Admission: model-visible rejection detail crosses a trust boundary that types cannot enforce.
+// Given a typed domain blocker and untyped operational failures, classification preserves only the domain blocker.
+void test("prepare error classification preserves domain blockers and rejects raw operational detail", async () => withRoot("parent-transition-error-classification-", async root => {
+    const fixture = await createRootFixture(root);
+    const fence = await prepareParentTransition(root, fixture.meshId, prepareInput(fixture));
+    const existing = await prepareParentTransition(root, fixture.meshId, prepareInput(fixture)).catch(error => error);
+    assert.match(parentTransitionSafePrepareError(existing) ?? "", /already has an active parent transition fence/u);
+    assert.equal(parentTransitionSafePrepareError(new Error(`raw failure at ${root}/private.json`)), undefined);
+    assert.equal(parentTransitionSafePrepareError(`raw failure at ${root}/private.json`), undefined);
+    await releaseParentTransition(root, fixture.meshId, { token: fence.token, rootLeaseId: fixture.leaseId });
+}));
+
 void test("prepare rejects nonterminal work and leaves no fence", async () => withRoot("parent-transition-nonterminal-", async root => {
     const fixture = await createRootFixture(root);
     const child = await createIdleChild(fixture);
@@ -171,10 +212,22 @@ void test("prepare rejects open pressure admissions and unacknowledged root deli
     await requestPressureAdmission(root, fixture.meshId, { requestId: randomUUID(), requesterAgentId: child.agentId, requesterRuntimeId: child.runtimeId! });
     await assert.rejects(prepareParentTransition(root, fixture.meshId, prepareInput(fixture)), /pressure admission/u);
     for (const admission of await listPressureAdmissions(root, fixture.meshId)) await cancelPressureAdmission(root, fixture.meshId, admission.requestId, "test cleanup");
-    const taskId = await completeChildTask(fixture, child.agentId);
+    const endpoint = await readMeshEndpoint(root, fixture.meshId, fixture.endpointId);
+    const pending = await createTask(root, fixture.meshId, child.agentId, { prompt: "pending delivery", purpose: "synthetic purpose" }, { requesterEndpointId: fixture.endpointId, completion: { endpointId: fixture.endpointId, endpointSessionFile: fixture.endpointSessionFile, bindingId: endpoint.bindingId } });
+    await assert.rejects(prepareParentTransition(root, fixture.meshId, prepareInput(fixture)), error => {
+        assert.ok(error instanceof ParentTransitionQuiescenceError);
+        assert.equal(error.code, "pending-completion-tasks");
+        assert.match(parentTransitionReceiptGuidance(error) ?? "", /normal context path/u);
+        return true;
+    });
+    await finishTask(root, fixture.meshId, pending.request.taskId, { outcome: "succeeded", output: "done" });
     await materializeMeshCompletionEvents(root, fixture.meshId, fixture.leaseId);
-    await assert.rejects(prepareParentTransition(root, fixture.meshId, prepareInput(fixture)), /quiescence/u);
-    void taskId;
+    await assert.rejects(prepareParentTransition(root, fixture.meshId, prepareInput(fixture)), error => {
+        assert.ok(error instanceof ParentTransitionQuiescenceError);
+        assert.equal(error.code, "unacknowledged-events");
+        assert.match(parentTransitionReceiptGuidance(error) ?? "", /never acknowledges/u);
+        return true;
+    });
 }));
 
 void test("prepare rejects a closed mesh, a foreign root lease, and corrupted store state", async () => withRoot("parent-transition-identity-corruption-", async root => {

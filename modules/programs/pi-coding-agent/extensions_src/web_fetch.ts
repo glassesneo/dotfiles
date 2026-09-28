@@ -16,6 +16,7 @@ import { Text } from "@earendil-works/pi-tui";
 import { Type, type Static } from "typebox";
 import {
     WEB_FETCH_DEADLINE_MS,
+    WebRetrievalReadinessError,
     parseWebFetchInput,
     type FetchItem,
     type WebFetchDetails,
@@ -63,7 +64,8 @@ const DEFAULT_CONFIG_PATH = join(getAgentDir(), "web-retrieval.json");
 export async function loadWebFetchConfig(path = DEFAULT_CONFIG_PATH): Promise<WebRetrievalRuntimeConfig> {
     try {
         return await loadWebRetrievalRuntimeConfig(path);
-    } catch {
+    } catch (error) {
+        if (error instanceof WebRetrievalReadinessError) throw error;
         throw new Error(WEB_FETCH_CONFIG_UNAVAILABLE);
     }
 }
@@ -123,10 +125,10 @@ export function createWebFetchToolDefinition(
                 const terminal = terminalError();
                 if (terminal !== undefined) throw terminal;
                 config = await raceWithSignal(deps.loadConfig(), operationSignal);
-            } catch {
+            } catch (error) {
                 const terminal = terminalError();
                 if (terminal !== undefined) throw terminal;
-                throw new Error(WEB_FETCH_CONFIG_UNAVAILABLE);
+                throw error instanceof WebRetrievalReadinessError ? error : new Error(WEB_FETCH_CONFIG_UNAVAILABLE);
             }
             let routed: Awaited<ReturnType<typeof routeWebFetch>>;
             try {

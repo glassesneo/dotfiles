@@ -1,6 +1,8 @@
 import type { WebRetrievalProviderConfig } from "./web_retrieval_types.ts";
 import {
     ProviderError,
+    WebRetrievalReadinessError,
+    credentialReadFailureCategory,
     type AdapterFetchResponse,
     type FetchAdapter,
     type FetchItem,
@@ -43,14 +45,16 @@ function configFor(config: WebRetrievalRuntimeConfig, provider: FetchProviderId)
 }
 
 async function loadCredential(provider: FetchProviderId, path: string | null, readTextFile: ReadTextFile): Promise<string> {
-    if (path === null) throw new ProviderError({ provider, category: "credential", retryable: false });
+    if (path === null) throw new WebRetrievalReadinessError("credential-not-configured", provider);
+    let raw: string;
     try {
-        const key = (await readTextFile(path)).trim();
-        if (key !== "") return key;
-    } catch {
-        // Replace filesystem diagnostics with a bounded provider error.
+        raw = await readTextFile(path);
+    } catch (error) {
+        throw new WebRetrievalReadinessError(credentialReadFailureCategory(error), provider);
     }
-    throw new ProviderError({ provider, category: "credential", retryable: false });
+    const key = raw.trim();
+    if (key === "") throw new WebRetrievalReadinessError("credential-empty", provider);
+    return key;
 }
 
 export function combineSignals(signals: readonly AbortSignal[]): AbortSignal {

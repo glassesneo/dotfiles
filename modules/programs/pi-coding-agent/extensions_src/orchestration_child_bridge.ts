@@ -30,7 +30,7 @@ function terminal(stopReason: StopReason | undefined, errorMessage: string | und
     return { outcome: "succeeded" };
 }
 
-export interface MeshChildBridgeDependencies { claimPendingTask?: typeof claimPendingTask; readTaskCancellation?: typeof readTaskCancellation; finishTask?: typeof finishTask; failAgent?: typeof failAgent; markBridgeReady?: typeof markBridgeReady; patchAgentStatus?: typeof patchAgentStatus; recordChildSessionIdentity?: typeof recordChildSessionIdentity; readAgentSnapshot?: typeof readAgentSnapshot; publishAgentActivity?: typeof publishAgentActivity; natureHandleWords?: readonly string[]; resolveCompactionReserveTokens?: (ctx: ExtensionContext) => number | undefined; standaloneRuntimeBinding?: boolean; retryIntervalMs?: number; idleClaimIntervalMs?: number; activityHeartbeatMs?: number; contextHeadroomTokens?: number; deliveryAckTimeoutMs?: number; completionPersistenceTimeoutMs?: number; publicationTimeoutMs?: number; publicationRetryMs?: number; sleep?: (milliseconds: number) => Promise<void>; now?: () => number; setInterval?: (callback: () => void | Promise<void>, intervalMs: number) => unknown; clearInterval?: (timer: unknown) => void; cadenceSetTimeout?: (callback: () => void | Promise<void>, timeoutMs: number) => unknown; cadenceClearTimeout?: (timer: unknown) => void; setTimeout?: (callback: () => void, timeoutMs: number) => unknown; clearTimeout?: (timer: unknown) => void; wake?: DirectoryWakeDependencies }
+export interface MeshChildBridgeDependencies { claimPendingTask?: typeof claimPendingTask; readTaskCancellation?: typeof readTaskCancellation; finishTask?: typeof finishTask; failAgent?: typeof failAgent; markBridgeReady?: typeof markBridgeReady; patchAgentStatus?: typeof patchAgentStatus; recordChildSessionIdentity?: typeof recordChildSessionIdentity; readAgentSnapshot?: typeof readAgentSnapshot; publishAgentActivity?: typeof publishAgentActivity; executionGate?: ProcessExecutionGate; natureHandleWords?: readonly string[]; resolveCompactionReserveTokens?: (ctx: ExtensionContext) => number | undefined; standaloneRuntimeBinding?: boolean; retryIntervalMs?: number; idleClaimIntervalMs?: number; activityHeartbeatMs?: number; contextHeadroomTokens?: number; deliveryAckTimeoutMs?: number; completionPersistenceTimeoutMs?: number; publicationTimeoutMs?: number; publicationRetryMs?: number; sleep?: (milliseconds: number) => Promise<void>; now?: () => number; setInterval?: (callback: () => void | Promise<void>, intervalMs: number) => unknown; clearInterval?: (timer: unknown) => void; cadenceSetTimeout?: (callback: () => void | Promise<void>, timeoutMs: number) => unknown; cadenceClearTimeout?: (timer: unknown) => void; setTimeout?: (callback: () => void, timeoutMs: number) => unknown; clearTimeout?: (timer: unknown) => void; wake?: DirectoryWakeDependencies }
 function configuredNatureHandleWords(): readonly string[] {
     try { return validateOrchestrationConfig(JSON.parse(readFileSync(join(getAgentDir(), "orchestration.json"), "utf8"))).natureHandleWords; } catch { return NATURE_HANDLE_WORDS; }
 }
@@ -46,7 +46,7 @@ export function registerMeshChildBridge(pi: ExtensionAPI, env: NodeJS.ProcessEnv
     let runtimeId: string = randomUUID(); let activityPhase: AgentActivityPhase = "starting"; let phaseSince = new Date((dependencies.now ?? Date.now)()).toISOString(); let compactionReason: AgentCompactionReason | undefined; let awaitingPostCompactionSettlement = false; let reserveTokens: number | undefined; let lastHeartbeat = Number.NEGATIVE_INFINITY; let compactionObservation = 0;
     let route: ModelRouteState | undefined; let fallbackSuspended = false; let applyingSetModel = false; let turnHadToolError = false; let promotionPass: Promise<"promoted" | "exhausted" | "stopped" | "settle" | "held"> | undefined;
     let lastMessages: unknown[] = [];
-    const executionGate = new ProcessExecutionGate();
+    const executionGate = dependencies.executionGate ?? new ProcessExecutionGate();
     const natureHandleWords = dependencies.natureHandleWords ?? configuredNatureHandleWords();
     const projectUsualIdentity = async () => {
         const ctx = bridgeContext;
@@ -257,12 +257,12 @@ export function registerMeshChildBridge(pi: ExtensionAPI, env: NodeJS.ProcessEnv
     const runTick = (forceClaim = false): Promise<void> => { if (shuttingDown) return Promise.resolve(); if (tickPass) return tickPass; const pass = tickOnce(forceClaim); tickPass = pass; const clear = () => { if (tickPass === pass) tickPass = undefined; }; void pass.then(clear, clear); return pass; };
     const scheduleNext = () => { if (shuttingDown || shutdownAfterStoreFailure || !bridgeContext) return; if (timer !== undefined) (dependencies.cadenceClearTimeout ?? (value => globalThis.clearTimeout(value as NodeJS.Timeout)))(timer); const now = (dependencies.now ?? Date.now)(); const activeState = Boolean(activeTaskId || awaitingDelivery || pendingCompletion || completing || !settled); const heartbeatAt = lastHeartbeat + (dependencies.activityHeartbeatMs ?? 2000); const deadline = activeState ? now + (dependencies.retryIntervalMs ?? 100) : Math.min(nextClaimAt, heartbeatAt); const scheduleTimeout = dependencies.cadenceSetTimeout ?? ((callback: () => void | Promise<void>, timeoutMs: number) => globalThis.setTimeout(() => { void callback(); }, timeoutMs)); timer = scheduleTimeout(() => runTick().catch(() => {}).finally(scheduleNext), Math.max(0, deadline - now)); };
     pi.on("tool_call", async (event, ctx) => {
-        const admission = await executionGate.waitForAdmission(event.toolCallId, ctx.signal);
+        const admission = await executionGate.waitForAdmission(event.toolCallId, ctx.signal, { kind: "tool", name: event.toolName });
         if (admission === "abort") return { block: true, reason: "Mesh execution interrupted" };
     });
     pi.on("tool_execution_end", event => { executionGate.complete(event.toolCallId); });
     pi.on("before_provider_request", async (_event, ctx) => {
-        const admission = await executionGate.waitForAdmission("provider", ctx.signal);
+        const admission = await executionGate.waitForAdmission("provider", ctx.signal, { kind: "provider" });
         if (admission === "abort") throw ctx.signal?.reason ?? new Error("Mesh execution interrupted");
     });
     pi.on("after_provider_response", () => { executionGate.complete("provider"); });
@@ -311,6 +311,9 @@ export function registerMeshChildBridge(pi: ExtensionAPI, env: NodeJS.ProcessEnv
     pi.on("model_select", event => { if (applyingSetModel || event.source === "restore") return; fallbackSuspended = true; bridgeContext?.ui.notify("Automatic execution fallback suspended after explicit model selection", "info"); });
     pi.on("agent_end", event => { lastMessages = Array.isArray(event.messages) ? event.messages : lastMessages; });
     pi.on("agent_settled", async () => {
+        // The completed run owns this boundary. Pi defers a triggerTurn queued below until every
+        // agent_settled handler returns, so the next run cannot admit work before this cleanup.
+        executionGate.settleRun();
         const settledStopReason = stopReason;
         const settledErrorMessage = errorMessage;
         const toolError = turnHadToolError;

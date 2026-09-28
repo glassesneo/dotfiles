@@ -204,7 +204,7 @@ export class FetchHttpError extends ProviderError {
     constructor(provider: FetchProviderId, status: number, retryWaitMs: number) {
         super({
             provider,
-            category: status === 401 || status === 403 ? "credential" : status === 429 ? "rate-limit" : "http",
+            category: status === 401 || status === 403 ? "credential-remote-auth" : status === 429 ? "rate-limit" : "http",
             retryable: status === 429 || status === 502 || status === 503 || status === 504,
             status,
         });

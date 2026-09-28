@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, readdir, writeFile, access } from "node:fs/promises";
+import { mkdir, readFile, readdir, rm, writeFile, access } from "node:fs/promises";
 import { join } from "node:path";
 import test from "node:test";
 import { Value } from "typebox/value";
@@ -23,8 +23,8 @@ import { indexEventCreation } from "../extensions_src/utilities/orchestration_in
 import { withMeshLock } from "../extensions_src/utilities/orchestration_lock.ts";
 import { buildChildExtensionManifest, MESH_PEER_TOOL_NAMES, piLaunchDescriptor } from "../extensions_src/utilities/orchestration_pi.ts";
 import { MAX_MODEL_VISIBLE_BYTES, MAX_MODEL_VISIBLE_LINES, packCompactCompletionDelivery, projectMeshCompletionContext, receiptIdsFromToolResults, serializeModelVisibleJson } from "../extensions_src/utilities/orchestration_projection.ts";
-import { attachRootMesh, applyAgentControl, claimTaskUsage, createTask as createTaskStore, ensurePolicyEpoch as ensurePolicyEpochStore, finishTask, initializeMesh, meshPaths, patchAgentStatus, prepareAgent, publishAgent, readAgentExecution, readAgentSnapshot, readMesh, readPolicyEpoch, readTask, reserveMeshCapacity, taskPaths } from "../extensions_src/utilities/orchestration_store.ts";
-import { PARENT_TRANSITION_REQUEST_EVENT, PARENT_TRANSITION_RESULT_EVENT, parentTransitionPath } from "../extensions_src/utilities/orchestration_transition.ts";
+import { attachRootMesh, applyAgentControl, claimTaskUsage, createTask as createTaskStore, ensurePolicyEpoch as ensurePolicyEpochStore, finishTask, initializeMesh, meshPaths, patchAgentStatus, prepareAgent, publishAgent, readAgentExecution, readAgentSnapshot, readAgentStopRequest, readMesh, readPolicyEpoch, readTask, requestAgentStop, reserveMeshCapacity, taskPaths } from "../extensions_src/utilities/orchestration_store.ts";
+import { PARENT_TRANSITION_REQUEST_EVENT, PARENT_TRANSITION_RESULT_EVENT, parentTransitionPath, readParentTransition } from "../extensions_src/utilities/orchestration_transition.ts";
 import { POPUP_OPEN_EVENT } from "../extensions_src/utilities/popup_types.ts";
 import { FakeMonotonicTimers, withTemporaryRoot as withRoot, yieldToIO } from "./test_helpers.ts";
 
@@ -330,7 +330,7 @@ void test("armed root agent_end follows durable completion through one final con
     const files = await writeRuntimeFiles(root); const clock = new FakeMonotonicTimers(); const pi = new PiMock(); let queued = false; const notifications: string[] = [];
     // Native-only: Pi hasPendingMessages does not count custom sendMessage.
     pi.sendMessage = (message: unknown, options: unknown) => { pi.messages.push({ message, options }); };
-    const branch = [{ type: "custom", customType: "mesh-root-binding-v11", data: { schemaVersion: 1, meshId: mesh.meshId } }]; const signal = new AbortController(); const ctx = { sessionManager: { getSessionId: () => "root", getSessionFile: () => sessionFile, getBranch: () => branch }, ui: { setStatus() {}, notify(text: string) { notifications.push(text); } }, isIdle: () => false, hasPendingMessages: () => queued, signal: signal.signal } as never;
+    const branch = [{ type: "custom", customType: "mesh-root-binding-v12", data: { schemaVersion: 1, meshId: mesh.meshId } }]; const signal = new AbortController(); const ctx = { sessionManager: { getSessionId: () => "root", getSessionFile: () => sessionFile, getBranch: () => branch }, ui: { setStatus() {}, notify(text: string) { notifications.push(text); } }, isIdle: () => false, hasPendingMessages: () => queued, signal: signal.signal } as never;
     await registerOrchestration(pi as never, { ...files, env: {}, now: () => clock.now, setInterval: clock.setTimeout, clearInterval: clock.clearTimeout, wake: { watch: () => ({ close() {}, on() { return this; }, unref() {} }) } });
     pi.events.emit("neo.dotfiles.pi:active-mode", { schemaVersion: 2, name: "ops", reason: "startup" }); await pi.handlers.get("session_start")![0]!({}, ctx);
     const liveEndpoint = await readMeshEndpoint(root, mesh.meshId, endpointId); const task = await createTaskStore(root, mesh.meshId, worker.agentId, { prompt: "wait through completion", purpose: "synthetic purpose" }, { requesterEndpointId: endpointId, completion: { endpointId, endpointSessionFile: sessionFile, bindingId: liveEndpoint.bindingId } });
@@ -352,16 +352,385 @@ void test("parent transition prepare refusal keeps mesh authority operational", 
     const worker = await publishWorker(root, mesh.meshId, epoch.epochId);
     await createTaskStore(root, mesh.meshId, worker.agentId, { prompt: "remain in flight", purpose: "synthetic purpose" }, `root:${mesh.meshId}`);
     const files = await writeRuntimeFiles(root); const clock = new FakeMonotonicTimers(); const pi = new PiMock(); const notifications: string[] = [];
-    const branch = [{ type: "custom", customType: "mesh-root-binding-v11", data: { schemaVersion: 1, meshId: mesh.meshId } }];
+    const branch = [{ type: "custom", customType: "mesh-root-binding-v12", data: { schemaVersion: 1, meshId: mesh.meshId } }];
     const ctx = { sessionManager: { getSessionId: () => "root", getSessionFile: () => sessionFile, getBranch: () => branch }, ui: { setStatus() {}, notify(text: string) { notifications.push(text); } }, isIdle: () => true } as never;
     await registerOrchestration(pi as never, { ...files, env: {}, now: () => clock.now, setInterval: clock.setTimeout, clearInterval: clock.clearTimeout, wake: { watch: () => ({ close() {}, on() { return this; }, unref() {} }) } });
     emitActiveMode(pi as never, "ops", "startup"); await pi.handlers.get("session_start")![0]!({}, ctx);
     const requestId = randomUUID(); const result = new Promise<any>(resolve => pi.events.on(PARENT_TRANSITION_RESULT_EVENT, value => { if ((value as any).requestId === requestId) resolve(value); }));
     pi.events.emit(PARENT_TRANSITION_REQUEST_EVENT, { schemaVersion: 1, operation: "prepare", requestId, kind: "mode", fromMode: "ops", targetMode: "recon" });
-    assert.equal((await within(result, "prepare refusal result")).status, "rejected");
+    const refused = await within(result, "prepare refusal result");
+    assert.equal(refused.status, "rejected");
+    assert.match(refused.error, /agent .* is busy/u);
     pi.events.on(POPUP_OPEN_EVENT, value => (value as any).resolve("back"));
     await assert.doesNotReject(async () => { await pi.commands.get("mesh")!.handler("", ctx); });
     assert.equal(notifications.some(text => text.includes("Mesh unavailable")), false);
+    await pi.handlers.get("session_shutdown")![0]!({ reason: "reload" });
+}));
+
+// Admission: ordinary provider and tool work are process blockers until their normal Pi completion events arrive.
+// Given admitted provider and tool execution with no other blocker, prepare waits for both completion events and then succeeds.
+void test("parent transition prepare waits for ordinary provider and tool completion", async () => withRoot("mesh-transition-settle-", async root => {
+    const sessionFile = join(root, "root.jsonl"); await writeFile(sessionFile, "");
+    const mesh = await initializeMesh(root, { rootSessionId: "root", rootSessionFile: sessionFile, recoverable: true, budgets });
+    const files = await writeRuntimeFiles(root); const clock = new FakeMonotonicTimers(); const pi = new PiMock();
+    const branch = [{ type: "custom", customType: "mesh-root-binding-v12", data: { schemaVersion: 1, meshId: mesh.meshId } }];
+    const ctx = { sessionManager: { getSessionId: () => "root", getSessionFile: () => sessionFile, getBranch: () => branch }, ui: { setStatus() {}, notify() {} }, isIdle: () => true } as never;
+    await registerOrchestration(pi as never, { ...files, env: {}, now: () => clock.now, setInterval: clock.setTimeout, clearInterval: clock.clearTimeout, wake: { watch: () => ({ close() {}, on() { return this; }, unref() {} }) } });
+    emitActiveMode(pi as never, "ops", "startup"); await pi.handlers.get("session_start")![0]!({}, ctx);
+    for (const handler of pi.handlers.get("before_provider_request") ?? []) await handler({}, ctx);
+    for (const handler of pi.handlers.get("tool_call") ?? []) await handler({ toolCallId: "transient-execution", toolName: "read" }, ctx);
+    let settled = false;
+    const requestId = randomUUID(); const result = new Promise<any>(resolve => pi.events.on(PARENT_TRANSITION_RESULT_EVENT, value => { if ((value as any).requestId === requestId) resolve(value); })).finally(() => { settled = true; });
+    pi.events.emit(PARENT_TRANSITION_REQUEST_EVENT, { schemaVersion: 1, operation: "prepare", requestId, kind: "mode", fromMode: "ops", targetMode: "recon" });
+    await yieldToIO();
+    assert.equal(settled, false);
+    for (const handler of pi.handlers.get("after_provider_response") ?? []) await handler({}, ctx);
+    await yieldToIO();
+    assert.equal(settled, false);
+    for (const handler of pi.handlers.get("tool_execution_end") ?? []) await handler({ toolCallId: "transient-execution", toolName: "read" }, ctx);
+    assert.equal((await within(result, "transient settlement result")).status, "prepared");
+    await pi.handlers.get("session_shutdown")![0]!({ reason: "reload" });
+}));
+
+// Admission: agent_settled is Pi's run boundary after provider/tool completion, and is the common owner for repairing a missing end event before deferred navigation.
+// Given a mode or handoff run whose provider/tool end event was missed, prepare remains blocked before settlement and succeeds after agent_settled clears only that run's identities; a genuine admission created after settlement stays a tracked blocker.
+void test("agent settlement repairs stale execution admissions before mode and handoff prepare", async () => {
+    for (const [kind, toolName] of [["mode", "switch_mode"], ["handoff", "session_handoff"]] as const) await withRoot(`mesh-transition-settled-${kind}-`, async root => {
+        const sessionFile = join(root, "root.jsonl"); await writeFile(sessionFile, "");
+        const mesh = await initializeMesh(root, { rootSessionId: "root", rootSessionFile: sessionFile, recoverable: true, budgets });
+        const files = await writeRuntimeFiles(root); const pi = new PiMock();
+        const branch = [{ type: "custom", customType: "mesh-root-binding-v12", data: { schemaVersion: 1, meshId: mesh.meshId } }];
+        const ctx = { sessionManager: { getSessionId: () => "root", getSessionFile: () => sessionFile, getBranch: () => branch }, ui: { setStatus() {}, notify() {} }, isIdle: () => true } as never;
+        await registerOrchestration(pi as never, { ...files, env: {}, wake: { watch: () => ({ close() {}, on() { return this; }, unref() {} }) } });
+        emitActiveMode(pi as never, "ops", "startup"); await pi.handlers.get("session_start")![0]!({}, ctx);
+        for (const handler of pi.handlers.get("before_provider_request") ?? []) await handler({}, ctx);
+        for (const handler of pi.handlers.get("tool_call") ?? []) await handler({ toolCallId: `${kind}-scheduler`, toolName }, ctx);
+        const requestId = randomUUID(); let resolved = false;
+        const result = new Promise<any>(resolve => pi.events.on(PARENT_TRANSITION_RESULT_EVENT, value => { if ((value as any).requestId === requestId) resolve(value); })).finally(() => { resolved = true; });
+        pi.events.emit(PARENT_TRANSITION_REQUEST_EVENT, { schemaVersion: 1, operation: "prepare", requestId, kind, fromMode: "ops", ...(kind === "mode" ? { targetMode: "recon" } : {}) });
+        await yieldToIO();
+        assert.equal(resolved, false);
+        for (const handler of pi.handlers.get("agent_settled") ?? []) await handler({}, ctx);
+        const prepared = await within(result, `${kind} post-settlement prepare result`);
+        assert.equal(prepared.status, "prepared");
+        // A genuine admission created after settlement belongs to the next run; it must survive the completed run's cleanup.
+        for (const handler of pi.handlers.get("before_provider_request") ?? []) await handler({}, ctx);
+        const blockedId = randomUUID();
+        const blocked = new Promise<any>(resolve => pi.events.on(PARENT_TRANSITION_RESULT_EVENT, value => { if ((value as any).requestId === blockedId) resolve(value); }));
+        pi.events.emit(PARENT_TRANSITION_REQUEST_EVENT, { schemaVersion: 1, operation: "apply", requestId: blockedId, token: prepared.token });
+        const refused = await within(blocked, `${kind} later admission apply result`);
+        assert.equal(refused.status, "rejected");
+        assert.match(refused.error, /1 mesh execution\(s\) are still in flight \(provider: 1\)/u);
+        for (const handler of pi.handlers.get("after_provider_response") ?? []) await handler({}, ctx);
+        const cancelId = randomUUID(); const cancelled = new Promise<any>(resolve => pi.events.on(PARENT_TRANSITION_RESULT_EVENT, value => { if ((value as any).requestId === cancelId) resolve(value); }));
+        pi.events.emit(PARENT_TRANSITION_REQUEST_EVENT, { schemaVersion: 1, operation: "cancel", requestId: cancelId, token: prepared.token });
+        assert.equal((await within(cancelled, `${kind} settlement cancel result`)).status, "cancelled");
+        await pi.handlers.get("session_shutdown")![0]!({ reason: "reload" });
+    });
+});
+
+// Admission: an unbounded retry would hide a stuck process-local latch; the exact class must surface before the requester timeout.
+// Given an admitted execution gate entry that never completes, when prepare runs, the caller observes the exact in-flight class.
+void test("parent transition prepare reports the exact transient class before the requester timeout", async () => withRoot("mesh-transition-nonconverge-", async root => {
+    const sessionFile = join(root, "root.jsonl"); await writeFile(sessionFile, "");
+    const mesh = await initializeMesh(root, { rootSessionId: "root", rootSessionFile: sessionFile, recoverable: true, budgets });
+    const files = await writeRuntimeFiles(root); const clock = new FakeMonotonicTimers(); const pi = new PiMock();
+    const branch = [{ type: "custom", customType: "mesh-root-binding-v12", data: { schemaVersion: 1, meshId: mesh.meshId } }];
+    const ctx = { sessionManager: { getSessionId: () => "root", getSessionFile: () => sessionFile, getBranch: () => branch }, ui: { setStatus() {}, notify() {} }, isIdle: () => true } as never;
+    await registerOrchestration(pi as never, { ...files, env: {}, now: () => clock.now, setInterval: clock.setTimeout, clearInterval: clock.clearTimeout, wake: { watch: () => ({ close() {}, on() { return this; }, unref() {} }) } });
+    emitActiveMode(pi as never, "ops", "startup"); await pi.handlers.get("session_start")![0]!({}, ctx);
+    for (const handler of pi.handlers.get("tool_call") ?? []) await handler({ toolCallId: "stuck-execution", toolName: "read" }, ctx);
+    for (const handler of pi.handlers.get("turn_start") ?? []) await handler({}, ctx);
+    const requestId = randomUUID(); const result = new Promise<any>(resolve => pi.events.on(PARENT_TRANSITION_RESULT_EVENT, value => { if ((value as any).requestId === requestId) resolve(value); }));
+    const startedAt = performance.now();
+    pi.events.emit(PARENT_TRANSITION_REQUEST_EVENT, { schemaVersion: 1, operation: "prepare", requestId, kind: "mode", fromMode: "ops", targetMode: "recon" });
+    const refused = await within(result, "nonconvergent settlement result");
+    assert.equal(refused.status, "rejected");
+    assert.match(refused.error, /1 mesh execution\(s\) are still in flight \(tool read: 1\)/u);
+    assert.ok(performance.now() - startedAt < 15_000);
+    await pi.handlers.get("session_shutdown")![0]!({ reason: "reload" });
+}));
+
+// Admission: the requester timeout cannot protect a responder stuck inside one owned await; the responder itself must
+// bound materialization and safely tolerate its late completion.
+// Given materialization blocked on the mesh lock, prepare returns a concrete refusal before the 15-second requester bound.
+void test("parent transition bounds a stalled owned cleanup await", async () => withRoot("mesh-transition-stalled-cleanup-", async root => {
+    const sessionFile = join(root, "root.jsonl"); await writeFile(sessionFile, "");
+    const mesh = await initializeMesh(root, { rootSessionId: "root", rootSessionFile: sessionFile, recoverable: true, budgets });
+    const files = await writeRuntimeFiles(root); const pi = new PiMock();
+    const branch = [{ type: "custom", customType: "mesh-root-binding-v12", data: { schemaVersion: 1, meshId: mesh.meshId } }];
+    const ctx = { sessionManager: { getSessionId: () => "root", getSessionFile: () => sessionFile, getBranch: () => branch }, ui: { setStatus() {}, notify() {} }, isIdle: () => true } as never;
+    let unlock!: () => void; let held: Promise<void> | undefined;
+    await registerOrchestration(pi as never, { ...files, env: {}, beforeParentTransitionPrepare: async () => {
+        let acquired!: () => void; const acquiredPromise = new Promise<void>(resolve => { acquired = resolve; });
+        held = withMeshLock(root, mesh.meshId, async () => { acquired(); await new Promise<void>(resolve => { unlock = resolve; }); });
+        await acquiredPromise;
+    }, wake: { watch: () => ({ close() {}, on() { return this; }, unref() {} }) } });
+    emitActiveMode(pi as never, "ops", "startup"); await pi.handlers.get("session_start")![0]!({}, ctx);
+    const unhandled: unknown[] = []; const onUnhandled = (error: unknown) => { unhandled.push(error); }; process.on("unhandledRejection", onUnhandled);
+    try {
+        const requestId = randomUUID(); const result = new Promise<any>(resolve => pi.events.on(PARENT_TRANSITION_RESULT_EVENT, value => { if ((value as any).requestId === requestId) resolve(value); }));
+        const startedAt = performance.now();
+        pi.events.emit(PARENT_TRANSITION_REQUEST_EVENT, { schemaVersion: 1, operation: "prepare", requestId, kind: "mode", fromMode: "ops", targetMode: "recon" });
+        const refused = await within(result, "stalled durable prepare result", 12_000);
+        assert.equal(refused.status, "rejected");
+        assert.equal(refused.error, "Mesh parent transition blocked: durable preparation failed.");
+        assert.ok(performance.now() - startedAt < 5_000);
+        unlock(); await held; await yieldToIO();
+        assert.equal(await readParentTransition(root, mesh.meshId), undefined);
+        assert.deepEqual(unhandled, []);
+    } finally {
+        process.off("unhandledRejection", onUnhandled);
+        if (held) { unlock(); await held; }
+        await pi.handlers.get("session_shutdown")![0]!({ reason: "reload" });
+    }
+}));
+
+// Admission: only the normal context receipt may cross the completion boundary; durable and already-injected completion
+// states must stay unacknowledged and name the same actionable receipt requirement.
+// Given pending, materialized, and context-queued completion variants, prepare refuses each without acknowledging it;
+// after the real context path acknowledges delivery, prepare succeeds.
+void test("parent transition keeps every unreceived completion variant for normal context receipt", async () => withRoot("mesh-transition-receipt-", async root => {
+    const sessionFile = join(root, "root.jsonl"); await writeFile(sessionFile, "");
+    const mesh = await initializeMesh(root, { rootSessionId: "root", rootSessionFile: sessionFile, recoverable: true, budgets });
+    const epoch = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", roleSet: ["worker"], roles: { worker: settledAgentDefinition("worker") } });
+    const worker = await publishWorker(root, mesh.meshId, epoch.epochId);
+    const files = await writeRuntimeFiles(root); const clock = new FakeMonotonicTimers(); const pi = new PiMock();
+    const branch = [{ type: "custom", customType: "mesh-root-binding-v12", data: { schemaVersion: 1, meshId: mesh.meshId } }];
+    const ctx = { sessionManager: { getSessionId: () => "root", getSessionFile: () => sessionFile, getBranch: () => branch }, ui: { setStatus() {}, notify() {} }, isIdle: () => true } as never;
+    await registerOrchestration(pi as never, { ...files, env: {}, now: () => clock.now, setInterval: clock.setTimeout, clearInterval: clock.clearTimeout, wake: { watch: () => ({ close() {}, on() { return this; }, unref() {} }) } });
+    emitActiveMode(pi as never, "ops", "startup"); await pi.handlers.get("session_start")![0]!({}, ctx);
+    const endpoint = await readMeshEndpoint(root, mesh.meshId, `root:${mesh.meshId}`);
+    const task = await createTaskStore(root, mesh.meshId, worker.agentId, { prompt: "unreceived completion", purpose: "synthetic purpose" }, { requesterEndpointId: endpoint.endpointId, completion: { endpointId: endpoint.endpointId, endpointSessionFile: sessionFile, bindingId: endpoint.bindingId } });
+    const prepare = async (label: string) => {
+        const requestId = randomUUID(); const result = new Promise<any>(resolve => pi.events.on(PARENT_TRANSITION_RESULT_EVENT, value => { if ((value as any).requestId === requestId) resolve(value); }));
+        pi.events.emit(PARENT_TRANSITION_REQUEST_EVENT, { schemaVersion: 1, operation: "prepare", requestId, kind: "mode", fromMode: "ops", targetMode: "recon" });
+        return within(result, label);
+    };
+    for (const handler of pi.handlers.get("tool_call") ?? []) await handler({ toolCallId: "stuck-alongside-completion", toolName: "read" }, ctx);
+    const pending = await prepare("pending completion result");
+    assert.equal(pending.status, "rejected");
+    assert.match(pending.error, /normal context path/u);
+    assert.doesNotMatch(pending.error, /mesh execution/u);
+    assert.equal(await readCompletionLedger(root, mesh.meshId, endpoint.endpointId, sessionFile), undefined);
+
+    await finishTask(root, mesh.meshId, task.request.taskId, { outcome: "succeeded", output: "done" });
+    const durable = await prepare("durable completion result");
+    assert.equal(durable.status, "rejected");
+    assert.match(durable.error, /normal context path/u);
+    let snapshot = await readEndpointDeliverySnapshot(root, mesh.meshId, endpoint);
+    assert.equal(snapshot.events.length, 1);
+    assert.notEqual(snapshot.events[0]!.state, "acknowledged");
+
+    await clock.advance(10_000);
+    assert.equal(pi.messages.length, 1);
+    const injected = await prepare("context-pending completion result");
+    assert.equal(injected.status, "rejected");
+    assert.match(injected.error, /normal context path/u);
+    snapshot = await readEndpointDeliverySnapshot(root, mesh.meshId, endpoint);
+    assert.equal(snapshot.events[0]?.state, "injected");
+    assert.deepEqual((await readCompletionLedger(root, mesh.meshId, endpoint.endpointId, sessionFile))?.receipts ?? [], []);
+
+    await pi.handlers.get("context")![0]!({ messages: [pi.messages[0]!.message] }, ctx);
+    assert.equal((await readEndpointDeliverySnapshot(root, mesh.meshId, endpoint)).events.length, 0);
+    for (const handler of pi.handlers.get("tool_execution_end") ?? []) await handler({ toolCallId: "stuck-alongside-completion", toolName: "read" }, ctx);
+    assert.equal((await prepare("post-receipt prepare result")).status, "prepared");
+    await pi.handlers.get("session_shutdown")![0]!({ reason: "reload" });
+}));
+
+// Admission: a confirmed durable receipt is the consumer boundary even when in-memory send tracking has not yet observed it;
+// schemas cannot prove that transition settlement reconciles this cross-layer window without acknowledging unreceived work.
+// Given one receipt-confirmed tracked task and one truly unreceived tracked task, prepare clears the former while still refusing the latter.
+void test("parent transition reconciles receipt-confirmed tasks before guarding unreceived tracking", async () => withRoot("mesh-transition-tracked-receipt-", async root => {
+    const h = await waitRuntime(root);
+    try {
+        await bindMeshEndpoint(root, h.mesh.meshId, { endpointId: `agent:${h.worker.agentId}`, kind: "agent", agentId: h.worker.agentId, harness: "pi", sessionId: "worker", sessionFile: join(root, "worker.jsonl") });
+        const send = h.pi.tools.get("mesh_send")!;
+        const receivedResult = await send.execute("received-send", { agentId: h.worker.agentId, purpose: "received work", message: "received work" }, undefined, undefined, h.ctx);
+        const receivedTaskId = JSON.parse(receivedResult.content[0].text).taskId as string;
+        await finishTask(root, h.mesh.meshId, receivedTaskId, { outcome: "succeeded", output: "done" });
+        const receipt = await createCompletionReceipt(root, h.mesh.meshId, { endpointId: h.endpoint.endpointId, endpointSessionFile: h.endpoint.sessionFile, claimantSessionFile: h.endpoint.sessionFile, toolCallId: "received-get", toolName: "mesh_get", canonicalArguments: { taskId: receivedTaskId, outputMode: "compact" }, taskIds: [receivedTaskId], maxTasksPerMesh: budgets.maxTasksPerMesh });
+        await h.invoke("context", { messages: [{ role: "toolResult", toolName: "mesh_get", details: { accounting: { receiptIds: [receipt.receipt!.receiptId], receivedTaskIds: [receivedTaskId], claimedTaskIds: [] } } }] });
+
+        const prepare = async () => {
+            const requestId = randomUUID(); const result = new Promise<any>(resolve => h.pi.events.on(PARENT_TRANSITION_RESULT_EVENT, value => { if ((value as any).requestId === requestId) resolve(value); }));
+            h.pi.events.emit(PARENT_TRANSITION_REQUEST_EVENT, { schemaVersion: 1, operation: "prepare", requestId, kind: "mode", fromMode: "ops", targetMode: "recon" });
+            return within(result, "tracked receipt prepare result");
+        };
+        const prepared = await prepare();
+        assert.equal(prepared.status, "prepared");
+        const cancelId = randomUUID(); const cancelled = new Promise<any>(resolve => h.pi.events.on(PARENT_TRANSITION_RESULT_EVENT, value => { if ((value as any).requestId === cancelId) resolve(value); }));
+        h.pi.events.emit(PARENT_TRANSITION_REQUEST_EVENT, { schemaVersion: 1, operation: "cancel", requestId: cancelId, token: prepared.token });
+        assert.equal((await within(cancelled, "tracked receipt cancel result")).status, "cancelled");
+
+        const unreceivedResult = await send.execute("unreceived-send", { agentId: h.worker.agentId, purpose: "unreceived work", message: "unreceived work" }, undefined, undefined, h.ctx);
+        const unreceivedTaskId = JSON.parse(unreceivedResult.content[0].text).taskId as string;
+        const refused = await prepare();
+        assert.equal(refused.status, "rejected");
+        assert.match(refused.error, /normal context path/u);
+        assert.equal((await readCompletionLedger(root, h.mesh.meshId, h.endpoint.endpointId, h.endpoint.sessionFile))?.receipts.some(item => item.taskIds.includes(unreceivedTaskId)), false);
+    } finally { await h.close(); }
+}));
+
+// Admission: same-runtime reload must fence an old asynchronous responder before replacing its lease/session globals.
+// Given prepare held immediately before durable work, shutdown/start emits no stale result or fence and the new session prepares normally.
+void test("an in-flight prepare cannot cross a same-runtime reload lifecycle", async () => withRoot("mesh-transition-lifecycle-", async root => {
+    const sessionFile = join(root, "root.jsonl"); await writeFile(sessionFile, "");
+    const mesh = await initializeMesh(root, { rootSessionId: "root", rootSessionFile: sessionFile, recoverable: true, budgets });
+    const files = await writeRuntimeFiles(root); const clock = new FakeMonotonicTimers(); const pi = new PiMock();
+    const branch = [{ type: "custom", customType: "mesh-root-binding-v12", data: { schemaVersion: 1, meshId: mesh.meshId } }];
+    const ctx = { sessionManager: { getSessionId: () => "root", getSessionFile: () => sessionFile, getBranch: () => branch }, ui: { setStatus() {}, notify() {} }, isIdle: () => true } as never;
+    let entered!: () => void; const enteredPrepare = new Promise<void>(resolve => { entered = resolve; }); let unlock!: () => void; let held: Promise<void> | undefined; let holdFirst = true;
+    await registerOrchestration(pi as never, { ...files, env: {}, now: () => clock.now, setInterval: clock.setTimeout, clearInterval: clock.clearTimeout, beforeParentTransitionPrepare: async () => { if (holdFirst) { holdFirst = false; held = withMeshLock(root, mesh.meshId, async () => { entered(); await new Promise<void>(resolve => { unlock = resolve; }); }); await enteredPrepare; } }, wake: { watch: () => ({ close() {}, on() { return this; }, unref() {} }) } });
+    emitActiveMode(pi as never, "ops", "startup"); await pi.handlers.get("session_start")![0]!({}, ctx);
+    const results: any[] = []; pi.events.on(PARENT_TRANSITION_RESULT_EVENT, value => { results.push(value); });
+    const staleRequestId = randomUUID();
+    pi.events.emit(PARENT_TRANSITION_REQUEST_EVENT, { schemaVersion: 1, operation: "prepare", requestId: staleRequestId, kind: "mode", fromMode: "ops", targetMode: "recon" });
+    await enteredPrepare; await yieldToIO();
+    const shutdown = Promise.resolve(pi.handlers.get("session_shutdown")![0]!({ reason: "reload" }));
+    await yieldToIO(); unlock(); await held; await shutdown;
+    await pi.handlers.get("session_start")![0]!({}, ctx);
+    await yieldToIO();
+    assert.equal(results.some(result => result.requestId === staleRequestId), false);
+    assert.equal(await readParentTransition(root, mesh.meshId), undefined);
+    const requestId = randomUUID(); const result = new Promise<any>(resolve => pi.events.on(PARENT_TRANSITION_RESULT_EVENT, value => { if ((value as any).requestId === requestId) resolve(value); }));
+    pi.events.emit(PARENT_TRANSITION_REQUEST_EVENT, { schemaVersion: 1, operation: "prepare", requestId, kind: "mode", fromMode: "ops", targetMode: "recon" });
+    assert.equal((await within(result, "post-restart prepare result")).status, "prepared");
+    await pi.handlers.get("session_shutdown")![0]!({ reason: "reload" });
+}));
+
+// Admission: queued terminal requests own the prepared fence even when reload supersedes their responder generation.
+// Given apply or cancel queued in the same tick as reload, no stale result is emitted, only its token/lease fence is released,
+// and the reloaded session can prepare another transition.
+void test("superseded apply and cancel release only their owned fence across reload", async () => {
+    for (const operation of ["apply", "cancel"] as const) await withRoot(`mesh-transition-${operation}-reload-`, async root => {
+        const sessionFile = join(root, "root.jsonl"); await writeFile(sessionFile, "");
+        const mesh = await initializeMesh(root, { rootSessionId: "root", rootSessionFile: sessionFile, recoverable: true, budgets });
+        const files = await writeRuntimeFiles(root); const clock = new FakeMonotonicTimers(); const pi = new PiMock();
+        const branch = [{ type: "custom", customType: "mesh-root-binding-v12", data: { schemaVersion: 1, meshId: mesh.meshId } }];
+        const ctx = { sessionManager: { getSessionId: () => "root", getSessionFile: () => sessionFile, getBranch: () => branch }, ui: { setStatus() {}, notify() {} }, isIdle: () => true } as never;
+        await registerOrchestration(pi as never, { ...files, env: {}, now: () => clock.now, setInterval: clock.setTimeout, clearInterval: clock.clearTimeout, wake: { watch: () => ({ close() {}, on() { return this; }, unref() {} }) } });
+        emitActiveMode(pi as never, "ops", "startup"); await pi.handlers.get("session_start")![0]!({}, ctx);
+        const results: any[] = []; pi.events.on(PARENT_TRANSITION_RESULT_EVENT, value => { results.push(value); });
+        const prepareId = randomUUID(); const prepared = new Promise<any>(resolve => pi.events.on(PARENT_TRANSITION_RESULT_EVENT, value => { if ((value as any).requestId === prepareId) resolve(value); }));
+        pi.events.emit(PARENT_TRANSITION_REQUEST_EVENT, { schemaVersion: 1, operation: "prepare", requestId: prepareId, kind: "mode", fromMode: "ops", targetMode: "recon" });
+        const fence = await within(prepared, `${operation} reload prepare result`); assert.equal(fence.status, "prepared");
+        const staleRequestId = randomUUID();
+        pi.events.emit(PARENT_TRANSITION_REQUEST_EVENT, { schemaVersion: 1, operation, requestId: staleRequestId, token: fence.token });
+        await pi.handlers.get("session_shutdown")![0]!({ reason: "reload" });
+        assert.equal(results.some(result => result.requestId === staleRequestId), false);
+        assert.equal(await readParentTransition(root, mesh.meshId), undefined);
+        await pi.handlers.get("session_start")![0]!({}, ctx);
+        const nextId = randomUUID(); const next = new Promise<any>(resolve => pi.events.on(PARENT_TRANSITION_RESULT_EVENT, value => { if ((value as any).requestId === nextId) resolve(value); }));
+        pi.events.emit(PARENT_TRANSITION_REQUEST_EVENT, { schemaVersion: 1, operation: "prepare", requestId: nextId, kind: "mode", fromMode: "ops", targetMode: "recon" });
+        assert.equal((await within(next, `${operation} post-reload prepare result`)).status, "prepared");
+        await pi.handlers.get("session_shutdown")![0]!({ reason: "reload" });
+    });
+});
+
+// Admission: filesystem diagnostics cross a public result/UI boundary and can reveal the private state root.
+// Given path-bearing durable-state failures during cancel and apply, public diagnostics stay actionable and path-free.
+void test("apply and cancel failures sanitize filesystem details", async () => {
+    for (const operation of ["cancel", "apply"] as const) await withRoot(`mesh-transition-${operation}-sanitize-`, async root => {
+        const sessionFile = join(root, "root.jsonl"); await writeFile(sessionFile, "");
+        const mesh = await initializeMesh(root, { rootSessionId: "root", rootSessionFile: sessionFile, recoverable: true, budgets });
+        const files = await writeRuntimeFiles(root); const clock = new FakeMonotonicTimers(); const pi = new PiMock(); const notifications: string[] = [];
+        const branch = [{ type: "custom", customType: "mesh-root-binding-v12", data: { schemaVersion: 1, meshId: mesh.meshId } }];
+        const ctx = { sessionManager: { getSessionId: () => "root", getSessionFile: () => sessionFile, getBranch: () => branch }, ui: { setStatus() {}, notify(text: string) { notifications.push(text); } }, isIdle: () => true } as never;
+        await registerOrchestration(pi as never, { ...files, env: {}, now: () => clock.now, setInterval: clock.setTimeout, clearInterval: clock.clearTimeout, wake: { watch: () => ({ close() {}, on() { return this; }, unref() {} }) } });
+        emitActiveMode(pi as never, "ops", "startup"); await pi.handlers.get("session_start")![0]!({}, ctx);
+        const prepareId = randomUUID(); const prepared = new Promise<any>(resolve => pi.events.on(PARENT_TRANSITION_RESULT_EVENT, value => { if ((value as any).requestId === prepareId) resolve(value); }));
+        pi.events.emit(PARENT_TRANSITION_REQUEST_EVENT, { schemaVersion: 1, operation: "prepare", requestId: prepareId, kind: "mode", fromMode: "ops", targetMode: "recon" });
+        const fence = await within(prepared, `${operation} sanitize prepare result`); assert.equal(fence.status, "prepared");
+        const failurePath = operation === "cancel" ? parentTransitionPath(root, mesh.meshId) : join(meshPaths(root, mesh.meshId).epochs, `${(await readMesh(root, mesh.meshId)).currentEpochId!}.json`);
+        await rm(failurePath); await mkdir(failurePath);
+        const requestId = randomUUID(); const failed = new Promise<any>(resolve => pi.events.on(PARENT_TRANSITION_RESULT_EVENT, value => { if ((value as any).requestId === requestId) resolve(value); }));
+        pi.events.emit(PARENT_TRANSITION_REQUEST_EVENT, { schemaVersion: 1, operation, requestId, token: fence.token });
+        const result = await within(failed, `${operation} sanitized failure result`); assert.equal(result.status, "failed");
+        assert.match(result.error, operation === "apply" ? /mesh mutations remain suspended/u : /retry the transition/u);
+        assert.doesNotMatch(result.error, new RegExp(root.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&"), "u"));
+        assert.doesNotMatch(`${result.error}\n${notifications.join("\n")}`, /EISDIR|errno|syscall|open|read|\/var\/folders/u);
+        await assert.doesNotReject(async () => { await pi.commands.get("mesh")!.handler("", ctx); });
+        await pi.handlers.get("session_shutdown")![0]!({ reason: "reload" });
+    });
+});
+
+// Admission: already-requested stop reconciliation is responder-owned settlement; durable quiescence or the local
+// responder deadline keeps the final word without starting another stop.
+// Given an existing requested stop whose server is gone, prepare confirms it and succeeds; given one whose server is
+// unavailable, prepare refuses within the local bound and leaves the existing stop request intact.
+void test("parent transition reconciles an already-requested stop or bounds its recovery", async () => {
+    for (const mode of ["confirmable", "nonconfirmable"] as const) await withRoot(`mesh-transition-stop-${mode}-`, async root => {
+        const sessionFile = join(root, "root.jsonl"); await writeFile(sessionFile, "");
+        const mesh = await initializeMesh(root, { rootSessionId: "root", rootSessionFile: sessionFile, recoverable: true, budgets });
+        const epoch = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", roleSet: ["worker"], roles: { worker: settledAgentDefinition("worker") } });
+        const worker = await publishWorker(root, mesh.meshId, epoch.epochId);
+        const files = await writeRuntimeFiles(root); const clock = new FakeMonotonicTimers(); const pi = new PiMock();
+        // An absent server confirms the already-requested stop; an unavailable server leaves it terminating with no confirmation.
+        pi.exec = async () => ({ stdout: "", stderr: mode === "nonconfirmable" ? "tmux server unavailable" : "no server running", code: 1 });
+        const branch = [{ type: "custom", customType: "mesh-root-binding-v12", data: { schemaVersion: 1, meshId: mesh.meshId } }];
+        const ctx = { sessionManager: { getSessionId: () => "root", getSessionFile: () => sessionFile, getBranch: () => branch }, ui: { setStatus() {}, notify() {} }, isIdle: () => true } as never;
+        await registerOrchestration(pi as never, { ...files, env: {}, now: () => clock.now, setInterval: clock.setTimeout, clearInterval: clock.clearTimeout, wake: { watch: () => ({ close() {}, on() { return this; }, unref() {} }) } });
+        emitActiveMode(pi as never, "ops", "startup"); await pi.handlers.get("session_start")![0]!({}, ctx);
+        await requestAgentStop(root, mesh.meshId, worker.agentId, { source: "user", reason: "already requested" });
+        const requestId = randomUUID(); const result = new Promise<any>(resolve => pi.events.on(PARENT_TRANSITION_RESULT_EVENT, value => { if ((value as any).requestId === requestId) resolve(value); }));
+        pi.events.emit(PARENT_TRANSITION_REQUEST_EVENT, { schemaVersion: 1, operation: "prepare", requestId, kind: "mode", fromMode: "ops", targetMode: "recon" });
+        if (mode === "confirmable") {
+            assert.equal((await within(result, "confirmed stop prepare result")).status, "prepared");
+            assert.equal((await readAgentStopRequest(root, mesh.meshId, worker.agentId))?.state, "confirmed");
+        } else {
+            const refused = await within(result, "nonconfirmable stop prepare result");
+            assert.deepEqual({ status: refused.status, error: refused.error }, { status: "rejected", error: "Mesh parent transition blocked: requested agent-stop recovery did not settle before the responder deadline." });
+            assert.equal((await readAgentStopRequest(root, mesh.meshId, worker.agentId))?.state, "terminating");
+        }
+        await pi.handlers.get("session_shutdown")![0]!({ reason: "reload" });
+    });
+});
+
+// Admission: a rejected owned cleanup is a failure, not successful convergence, and its raw store error is not model-visible.
+// Given a corrupted lease that rejects materialization, prepare returns the exact sanitized cleanup failure.
+void test("parent transition propagates a sanitized cleanup rejection", async () => withRoot("mesh-transition-cleanup-rejection-", async root => {
+    const sessionFile = join(root, "root.jsonl"); await writeFile(sessionFile, "");
+    const mesh = await initializeMesh(root, { rootSessionId: "root", rootSessionFile: sessionFile, recoverable: true, budgets });
+    const files = await writeRuntimeFiles(root); const clock = new FakeMonotonicTimers(); const pi = new PiMock();
+    const branch = [{ type: "custom", customType: "mesh-root-binding-v12", data: { schemaVersion: 1, meshId: mesh.meshId } }];
+    const ctx = { sessionManager: { getSessionId: () => "root", getSessionFile: () => sessionFile, getBranch: () => branch }, ui: { setStatus() {}, notify() {} }, isIdle: () => true } as never;
+    await registerOrchestration(pi as never, { ...files, env: {}, now: () => clock.now, setInterval: clock.setTimeout, clearInterval: clock.clearTimeout, wake: { watch: () => ({ close() {}, on() { return this; }, unref() {} }) } });
+    emitActiveMode(pi as never, "ops", "startup"); await pi.handlers.get("session_start")![0]!({}, ctx);
+    const leasePath = meshPaths(root, mesh.meshId).lease; const lease = await readFile(leasePath, "utf8"); await writeFile(leasePath, "raw-secret-path /private/lease");
+    const requestId = randomUUID(); const result = new Promise<any>(resolve => pi.events.on(PARENT_TRANSITION_RESULT_EVENT, value => { if ((value as any).requestId === requestId) resolve(value); }));
+    pi.events.emit(PARENT_TRANSITION_REQUEST_EVENT, { schemaVersion: 1, operation: "prepare", requestId, kind: "mode", fromMode: "ops", targetMode: "recon" });
+    const rejected = await within(result, "cleanup rejection result");
+    assert.deepEqual({ status: rejected.status, error: rejected.error }, { status: "rejected", error: "Mesh parent transition blocked: completion materialization failed." });
+    assert.doesNotMatch(rejected.error, /private|lease|JSON|raw-secret/u);
+    await writeFile(leasePath, lease); await pi.handlers.get("session_shutdown")![0]!({ reason: "reload" });
+}));
+
+// Admission: apply and cancel are competing terminal actions on one fence and must be atomically ordered.
+// Given concurrent apply then cancel requests, only apply acts; cancel observes the consumed fence and state stays coherent.
+void test("parent transition serializes concurrent apply and cancel", async () => withRoot("mesh-transition-apply-cancel-", async root => {
+    const sessionFile = join(root, "root.jsonl"); await writeFile(sessionFile, "");
+    const mesh = await initializeMesh(root, { rootSessionId: "root", rootSessionFile: sessionFile, recoverable: true, budgets });
+    const files = await writeRuntimeFiles(root); const clock = new FakeMonotonicTimers(); const pi = new PiMock();
+    const branch = [{ type: "custom", customType: "mesh-root-binding-v12", data: { schemaVersion: 1, meshId: mesh.meshId } }];
+    const ctx = { sessionManager: { getSessionId: () => "root", getSessionFile: () => sessionFile, getBranch: () => branch }, ui: { setStatus() {}, notify() {} }, isIdle: () => true } as never;
+    await registerOrchestration(pi as never, { ...files, env: {}, now: () => clock.now, setInterval: clock.setTimeout, clearInterval: clock.clearTimeout, wake: { watch: () => ({ close() {}, on() { return this; }, unref() {} }) } });
+    emitActiveMode(pi as never, "ops", "startup"); await pi.handlers.get("session_start")![0]!({}, ctx);
+    const prepareId = randomUUID(); const prepared = new Promise<any>(resolve => pi.events.on(PARENT_TRANSITION_RESULT_EVENT, value => { if ((value as any).requestId === prepareId) resolve(value); }));
+    pi.events.emit(PARENT_TRANSITION_REQUEST_EVENT, { schemaVersion: 1, operation: "prepare", requestId: prepareId, kind: "mode", fromMode: "ops", targetMode: "recon" });
+    const fence = await within(prepared, "race prepare result"); assert.equal(fence.status, "prepared");
+    const duplicateId = randomUUID(); const duplicate = new Promise<any>(resolve => pi.events.on(PARENT_TRANSITION_RESULT_EVENT, value => { if ((value as any).requestId === duplicateId) resolve(value); }));
+    pi.events.emit(PARENT_TRANSITION_REQUEST_EVENT, { schemaVersion: 1, operation: "prepare", requestId: duplicateId, kind: "mode", fromMode: "ops", targetMode: "recon" });
+    const duplicateResult = await within(duplicate, "existing fence result"); assert.equal(duplicateResult.status, "rejected"); assert.match(duplicateResult.error, /already has an active parent transition fence/u);
+    const applyId = randomUUID(); const cancelId = randomUUID();
+    const apply = new Promise<any>(resolve => pi.events.on(PARENT_TRANSITION_RESULT_EVENT, value => { if ((value as any).requestId === applyId) resolve(value); }));
+    const cancel = new Promise<any>(resolve => pi.events.on(PARENT_TRANSITION_RESULT_EVENT, value => { if ((value as any).requestId === cancelId) resolve(value); }));
+    pi.events.emit(PARENT_TRANSITION_REQUEST_EVENT, { schemaVersion: 1, operation: "apply", requestId: applyId, token: fence.token });
+    pi.events.emit(PARENT_TRANSITION_REQUEST_EVENT, { schemaVersion: 1, operation: "cancel", requestId: cancelId, token: fence.token });
+    assert.equal((await within(apply, "race apply result")).status, "applied");
+    const cancelled = await within(cancel, "race cancel result"); assert.equal(cancelled.status, "rejected"); assert.match(cancelled.error, /fence does not match/u);
+    assert.equal(await readParentTransition(root, mesh.meshId), undefined);
+    const currentMesh = await readMesh(root, mesh.meshId); assert.equal((await readPolicyEpoch(root, mesh.meshId, currentMesh.currentEpochId!)).mode, "recon");
     await pi.handlers.get("session_shutdown")![0]!({ reason: "reload" });
 }));
 
@@ -372,7 +741,7 @@ void test("corrupt parent transition fence disables authority without crashing /
     const mesh = await initializeMesh(root, { rootSessionId: "root", rootSessionFile: sessionFile, recoverable: true, budgets });
     await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", roleSet: ["worker"], roles: { worker: settledAgentDefinition("worker") } });
     const files = await writeRuntimeFiles(root); const clock = new FakeMonotonicTimers(); const pi = new PiMock(); const notifications: string[] = [];
-    const branch = [{ type: "custom", customType: "mesh-root-binding-v11", data: { schemaVersion: 1, meshId: mesh.meshId } }];
+    const branch = [{ type: "custom", customType: "mesh-root-binding-v12", data: { schemaVersion: 1, meshId: mesh.meshId } }];
     const ctx = { sessionManager: { getSessionId: () => "root", getSessionFile: () => sessionFile, getBranch: () => branch }, ui: { setStatus() {}, notify(text: string) { notifications.push(text); } }, isIdle: () => true } as never;
     await registerOrchestration(pi as never, { ...files, env: {}, now: () => clock.now, setInterval: clock.setTimeout, clearInterval: clock.clearTimeout, wake: { watch: () => ({ close() {}, on() { return this; }, unref() {} }) } });
     emitActiveMode(pi as never, "ops", "startup"); await pi.handlers.get("session_start")![0]!({}, ctx);
@@ -395,7 +764,7 @@ void test("a completion delivery from a replaced mesh is stale, not fatal", asyn
     const mesh = await initializeMesh(root, { rootSessionId: "root", rootSessionFile: sessionFile, recoverable: true, budgets });
     await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", roleSet: ["worker"], roles: { worker: settledAgentDefinition("worker") } });
     const files = await writeRuntimeFiles(root); const clock = new FakeMonotonicTimers(); const pi = new PiMock();
-    const branch = [{ type: "custom", customType: "mesh-root-binding-v11", data: { schemaVersion: 1, meshId: mesh.meshId } }];
+    const branch = [{ type: "custom", customType: "mesh-root-binding-v12", data: { schemaVersion: 1, meshId: mesh.meshId } }];
     const ctx = { sessionManager: { getSessionId: () => "root", getSessionFile: () => sessionFile, getBranch: () => branch }, ui: { setStatus() {}, notify() {} }, isIdle: () => true } as never;
     await registerOrchestration(pi as never, { ...files, env: {}, now: () => clock.now, setInterval: clock.setTimeout, clearInterval: clock.clearTimeout, wake: { watch: () => ({ close() {}, on() { return this; }, unref() {} }) } });
     pi.events.emit("neo.dotfiles.pi:active-mode", { schemaVersion: 2, name: "ops", reason: "startup" });
@@ -422,7 +791,7 @@ void test("a completion delivery pinned to a superseded binding is stale, not fa
     await finishTask(root, mesh.meshId, task.request.taskId, { outcome: "succeeded", output: "done" });
     await bindMeshEndpoint(root, mesh.meshId, { endpointId, kind: "root", harness: "pi", sessionId: "root", sessionFile });
     const files = await writeRuntimeFiles(root); const clock = new FakeMonotonicTimers(); const pi = new PiMock();
-    const branch = [{ type: "custom", customType: "mesh-root-binding-v11", data: { schemaVersion: 1, meshId: mesh.meshId } }];
+    const branch = [{ type: "custom", customType: "mesh-root-binding-v12", data: { schemaVersion: 1, meshId: mesh.meshId } }];
     const ctx = { sessionManager: { getSessionId: () => "root", getSessionFile: () => sessionFile, getBranch: () => branch }, ui: { setStatus() {}, notify() {} }, isIdle: () => true } as never;
     await registerOrchestration(pi as never, { ...files, env: {}, now: () => clock.now, setInterval: clock.setTimeout, clearInterval: clock.clearTimeout, wake: { watch: () => ({ close() {}, on() { return this; }, unref() {} }) } });
     pi.events.emit("neo.dotfiles.pi:active-mode", { schemaVersion: 2, name: "ops", reason: "startup" });
@@ -442,7 +811,7 @@ async function waitRuntime(root: string) {
     const mesh = await initializeMesh(root, { rootSessionId: "root", rootSessionFile: sessionFile, recoverable: true, budgets });
     const epoch = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", roleSet: ["worker", "reviewer"], roles: settledAgentCatalog().children });
     const worker = await publishWorker(root, mesh.meshId, epoch.epochId); const files = await writeRuntimeFiles(root); const clock = new FakeMonotonicTimers(); const pi = new PiMock(); const signal = new AbortController(); const notifications: string[] = [];
-    let queued = false; const branch = [{ type: "custom", customType: "mesh-root-binding-v11", data: { schemaVersion: 1, meshId: mesh.meshId } }];
+    let queued = false; const branch = [{ type: "custom", customType: "mesh-root-binding-v12", data: { schemaVersion: 1, meshId: mesh.meshId } }];
     // Native-only: custom sendMessage is owned by production awaitingContextEvents, not this flag.
     pi.sendMessage = (message, options) => { pi.messages.push({ message, options }); };
     const statuses: Array<{ key: string; value?: string }> = [];
@@ -483,9 +852,9 @@ function countMessagesContaining(messages: unknown[], text: string): number {
     return messages.filter(message => JSON.stringify(message).includes(text)).length;
 }
 function meshIdFromSession(session: { sessionManager: { getBranch(): ReadonlyArray<{ type: string; customType?: string; data?: unknown }> } }): string {
-    const entry = [...session.sessionManager.getBranch()].reverse().find(item => item.type === "custom" && item.customType === "mesh-root-binding-v11");
+    const entry = [...session.sessionManager.getBranch()].reverse().find(item => item.type === "custom" && item.customType === "mesh-root-binding-v12");
     const meshId = entry && typeof entry.data === "object" && entry.data && "meshId" in entry.data ? String((entry.data as { meshId: string }).meshId) : undefined;
-    assert.ok(meshId, "session_start did not persist a mesh-root-binding-v11");
+    assert.ok(meshId, "session_start did not persist a mesh-root-binding-v12");
     return meshId;
 }
 
@@ -961,16 +1330,16 @@ void test("root and envelope-less children do not expose mesh bootstrap", async 
     finally { if (previous === undefined) delete process.env.PI_EXTENSION_KEYBINDINGS_PATH; else process.env.PI_EXTENSION_KEYBINDINGS_PATH = previous; }
 }));
 
-// Admission: custom-type names and state-root paths are not type-checked; restoring a retired mesh-root-binding would attach a v11 process to leftover mesh state.
-// Given a previous-namespace directory and an old binding that names a leftover mesh in the new root, a fresh session creates a new mesh, writes only the v11 binding, and leaves both leftovers unmodified.
-void test("a v11 root ignores retired bindings and leaves the previous state directory unmodified", async () => withRoot("mesh-retained-v9-", async root => {
-    const stateRoot = join(root, "orchestration-v11");
-    const legacyRoot = join(root, "orchestration-v9");
-    const marker = join(legacyRoot, "retained.json");
-    await mkdir(legacyRoot, { recursive: true });
+// Admission: custom-type names and state-root paths are not type-checked; restoring a retired v11 mesh-root-binding would attach a v12 process to leftover mesh state.
+// Given the retired v11 namespace with a sentinel and a leftover mesh, and a restored branch carrying v11 bindings, a fresh session creates a new v12 mesh, writes only the v12 binding, and leaves the v11 tree unmodified.
+void test("a v12 root ignores retired v11 bindings and leaves the v11 state directory unmodified", async () => withRoot("mesh-retained-v11-", async root => {
+    const stateRoot = join(root, "orchestration-v12");
+    const retiredRoot = join(root, "orchestration-v11");
+    const marker = join(retiredRoot, "retained.json");
+    await mkdir(retiredRoot, { recursive: true });
     await writeFile(marker, "retained");
-    const leftover = await initializeMesh(stateRoot, { rootSessionId: "legacy-session", recoverable: true, budgets });
-    const leftoverRecord = await readMesh(stateRoot, leftover.meshId);
+    const leftover = await initializeMesh(retiredRoot, { rootSessionId: "legacy-session", recoverable: true, budgets });
+    const leftoverRecord = await readMesh(retiredRoot, leftover.meshId);
     const files = await writeRuntimeFiles(root);
     await writeFile(files.configPath, JSON.stringify(runtimeConfig(stateRoot)));
     const sessionFile = join(root, "session.jsonl");
@@ -979,8 +1348,8 @@ void test("a v11 root ignores retired bindings and leaves the previous state dir
     const previous = process.env.PI_EXTENSION_KEYBINDINGS_PATH;
     process.env.PI_EXTENSION_KEYBINDINGS_PATH = keybindings;
     const branch = [
-        { type: "custom", customType: "mesh-root-binding", data: { schemaVersion: 1, meshId: leftover.meshId } },
-        { type: "custom", customType: "mesh-policy-epoch", data: { schemaVersion: 1, meshId: leftover.meshId, mode: "ops", epochId: leftover.meshId, policyDigest: "0".repeat(64) } },
+        { type: "custom", customType: "mesh-root-binding-v11", data: { schemaVersion: 1, meshId: leftover.meshId } },
+        { type: "custom", customType: "mesh-policy-epoch-v11", data: { schemaVersion: 1, meshId: leftover.meshId, mode: "ops", epochId: leftover.meshId, policyDigest: "0".repeat(64) } },
     ];
     const notifications: string[] = [];
     const ctx = { sessionManager: { getSessionId: () => "root-session", getSessionFile: () => sessionFile, getBranch: () => branch }, ui: { notify(text: string) { notifications.push(text); }, setStatus() {} }, isIdle: () => true } as never;
@@ -990,11 +1359,13 @@ void test("a v11 root ignores retired bindings and leaves the previous state dir
         await pi.handlers.get("session_start")![0]!({}, ctx);
         assert.deepEqual(notifications, []);
         assert.equal(await readFile(marker, "utf8"), "retained");
-        const persisted = pi.entries.find(entry => entry.customType === "mesh-root-binding-v11") as { data?: { meshId?: string } } | undefined;
+        const persisted = pi.entries.find(entry => entry.customType === "mesh-root-binding-v12") as { data?: { meshId?: string } } | undefined;
         assert.equal(typeof persisted?.data?.meshId, "string");
         assert.notEqual(persisted!.data!.meshId, leftover.meshId);
-        assert.equal(pi.entries.some(entry => entry.customType === "mesh-root-binding" || entry.customType === "mesh-policy-epoch"), false);
-        const leftoverAfter = await readMesh(stateRoot, leftover.meshId);
+        const fresh = await readMesh(stateRoot, persisted!.data!.meshId!);
+        assert.equal(fresh.state, "open");
+        assert.equal(pi.entries.some(entry => entry.customType === "mesh-root-binding-v11" || entry.customType === "mesh-policy-epoch-v11"), false);
+        const leftoverAfter = await readMesh(retiredRoot, leftover.meshId);
         assert.deepEqual({ state: leftoverAfter.state, updatedAt: leftoverAfter.updatedAt }, { state: leftoverRecord.state, updatedAt: leftoverRecord.updatedAt });
         await pi.handlers.get("session_shutdown")![0]!({ reason: "reload" });
     } finally { if (previous === undefined) delete process.env.PI_EXTENSION_KEYBINDINGS_PATH; else process.env.PI_EXTENSION_KEYBINDINGS_PATH = previous; }
@@ -1183,7 +1554,7 @@ void test("acknowledgment batches retain each child's direction and intake state
     const sessionFile = join(root, "root.jsonl"); await writeFile(sessionFile, "");
     const mesh = await initializeMesh(root, { rootSessionId: "root", rootSessionFile: sessionFile, recoverable: true, budgets });
     const files = await writeRuntimeFiles(root); const pi = new PiMock(); const clock = new FakeMonotonicTimers();
-    const branch = [{ type: "custom", customType: "mesh-root-binding-v11", data: { schemaVersion: 1, meshId: mesh.meshId } }];
+    const branch = [{ type: "custom", customType: "mesh-root-binding-v12", data: { schemaVersion: 1, meshId: mesh.meshId } }];
     const ctx = { sessionManager: { getSessionId: () => "root", getSessionFile: () => sessionFile, getBranch: () => branch }, ui: { setStatus() {}, notify() {} }, isIdle: () => false } as never;
     await registerOrchestration(pi as never, { ...files, env: {}, now: () => clock.now, setInterval: clock.setTimeout, clearInterval: clock.clearTimeout, wake: { watch: () => ({ close() {}, on() { return this; }, unref() {} }) } });
     await pi.handlers.get("session_start")![0]!({}, ctx);
@@ -1211,7 +1582,7 @@ void test("root registration materializes once per deadline and opens a fixed de
     const mesh = await initializeMesh(root, { rootSessionId: "root-session", rootSessionFile: sessionFile, recoverable: true, budgets });
     const epoch = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", roleSet: ["worker"], roles: { worker: settledAgentDefinition("worker") } });
     const worker = await publishWorker(root, mesh.meshId, epoch.epochId); const endpointId = `root:${mesh.meshId}`; const completion = { endpointId, endpointSessionFile: sessionFile };
-    const files = await writeRuntimeFiles(root); const clock = new FakeMonotonicTimers(); const pi = new PiMock(); const branch = [{ type: "custom", customType: "mesh-root-binding-v11", data: { schemaVersion: 1, meshId: mesh.meshId } }]; const ctx = { sessionManager: { getSessionId: () => "root-session", getSessionFile: () => sessionFile, getBranch: () => branch }, ui: { setStatus() {}, notify() {} }, isIdle: () => true } as never;
+    const files = await writeRuntimeFiles(root); const clock = new FakeMonotonicTimers(); const pi = new PiMock(); const branch = [{ type: "custom", customType: "mesh-root-binding-v12", data: { schemaVersion: 1, meshId: mesh.meshId } }]; const ctx = { sessionManager: { getSessionId: () => "root-session", getSessionFile: () => sessionFile, getBranch: () => branch }, ui: { setStatus() {}, notify() {} }, isIdle: () => true } as never;
     await registerOrchestration(pi as never, { ...files, env: {}, now: () => clock.now, setInterval: clock.setTimeout, clearInterval: clock.clearTimeout, wake: { watch: () => ({ close() {}, on() { return this; }, unref() {} }) } }); await pi.handlers.get("session_start")![0]!({}, ctx);
     const first = await createTaskStore(root, mesh.meshId, worker.agentId, { prompt: "first current-binding completion", purpose: "synthetic purpose" }, { requesterEndpointId: endpointId, completion }); await finishTask(root, mesh.meshId, first.request.taskId, { outcome: "succeeded" });
     assert.equal(pi.messages.length, 0); assert.equal(await readCompletionLedger(root, mesh.meshId, endpointId, sessionFile), undefined);
@@ -1232,7 +1603,7 @@ void test("delivery pump coalesces a fixed completion window without delaying a 
     const epoch = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", roleSet: ["worker"], roles: { worker: settledAgentDefinition("worker") } });
     const firstAgent = await publishWorker(root, mesh.meshId, epoch.epochId); const secondAgent = await publishWorker(root, mesh.meshId, epoch.epochId); const pendingAgent = await publishWorker(root, mesh.meshId, epoch.epochId);
     const endpointId = `root:${mesh.meshId}`; const completion = { endpointId, endpointSessionFile: sessionFile };
-    const files = await writeRuntimeFiles(root); await writeFile(files.configPath, JSON.stringify({ ...runtimeConfig(root), budgets: { ...budgets, maxConcurrentTasks: 8 } })); const clock = new FakeMonotonicTimers(); const pi = new PiMock(); const branch = [{ type: "custom", customType: "mesh-root-binding-v11", data: { schemaVersion: 1, meshId: mesh.meshId } }];
+    const files = await writeRuntimeFiles(root); await writeFile(files.configPath, JSON.stringify({ ...runtimeConfig(root), budgets: { ...budgets, maxConcurrentTasks: 8 } })); const clock = new FakeMonotonicTimers(); const pi = new PiMock(); const branch = [{ type: "custom", customType: "mesh-root-binding-v12", data: { schemaVersion: 1, meshId: mesh.meshId } }];
     const ctx = { sessionManager: { getSessionId: () => "root-bundle", getSessionFile: () => sessionFile, getBranch: () => branch }, ui: { setStatus() {}, notify() {} }, isIdle: () => false } as never;
     await registerOrchestration(pi as never, { ...files, env: {}, now: () => clock.now, setInterval: clock.setTimeout, clearInterval: clock.clearTimeout, wake: { watch: () => ({ close() {}, on() { return this; }, unref() {} }) } }); await pi.handlers.get("session_start")![0]!({}, ctx); assert.equal(pi.messages.length, 0);
     const first = await createTaskStore(root, mesh.meshId, firstAgent.agentId, { prompt: "first private prompt", purpose: "synthetic purpose" }, { requesterEndpointId: endpointId, completion }); const second = await createTaskStore(root, mesh.meshId, secondAgent.agentId, { prompt: "second private prompt", purpose: "synthetic purpose" }, { requesterEndpointId: endpointId, completion }); const pending = await createTaskStore(root, mesh.meshId, pendingAgent.agentId, { prompt: "pending private prompt", purpose: "synthetic purpose" }, { requesterEndpointId: endpointId, completion });
@@ -1298,7 +1669,7 @@ void test("same-session reload rotates the Pi runtime once and fences the old ge
 void test("notice pump contains failures, deduplicates presentation, and retains pending delivery", async () => withRoot("mesh-notice-failure-", async root => { const mesh = await initializeMesh(root, { rootSessionId: "root", recoverable: true, budgets }); const epoch = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", roleSet: ["worker"], roles: { worker: settledAgentDefinition("worker") } }); const worker = await publishWorker(root, mesh.meshId, epoch.epochId); const files = await writeRuntimeFiles(root); const sessionFile = join(root, "notice-failure.jsonl"); await writeFile(sessionFile, ""); const endpointId = `agent:${worker.agentId}`; const notice = await createExplicitStopNotice(root, mesh.meshId, { endpointId, requesterEndpointId: `root:${mesh.meshId}`, payload: { stopRequestId: randomUUID(), agentId: randomUUID(), agent: "worker", access: "read", source: "peer", reason: "retry display" } }); assert.ok(notice); let fail = true; const diagnostics: string[] = []; const ctx: any = { mode: "tui", sessionManager: { getSessionId: () => "notice-failure", getSessionFile: () => sessionFile, getBranch: () => [] }, ui: { setStatus() {}, notify(text: string) { if (fail && text.includes("retry display")) throw new Error("notice UI unavailable"); diagnostics.push(text); } }, isIdle: () => true }; let tick!: () => Promise<void>; const pi = new PiMock(); await registerOrchestration(pi as never, { ...files, env: { PI_MESH_ID: mesh.meshId, PI_MESH_AGENT_ID: worker.agentId, PI_AGENT_RESOLVED_AGENT: worker.envelopePath }, setInterval(callback) { tick = async () => { await callback(); }; return "timer"; }, clearInterval() {} }); await pi.handlers.get("session_start")![0]!({}, ctx); await tick(); assert.equal(pi.entries.length, 1); assert.equal((await listPendingTuiNotices(root, mesh.meshId, { endpointId })).length, 1); assert.equal(diagnostics.filter(text => text.includes("notice UI unavailable")).length, 1); fail = false; await tick(); assert.equal(pi.entries.length, 1); assert.deepEqual(await listPendingTuiNotices(root, mesh.meshId, { endpointId }), []); await pi.handlers.get("session_shutdown")![0]!({ reason: "reload" }); }));
 
 // Given a root maintenance pass held across shutdown, when reload crosses the lifecycle boundary, shutdown aborts and awaits that pass before cancelling open admissions.
-void test("root shutdown quiesces a held maintenance pass before admission cancellation", async () => withRoot("mesh-root-pass-shutdown-", async root => { const sessionFile = join(root, "root-session.jsonl"); await writeFile(sessionFile, ""); const mesh = await initializeMesh(root, { rootSessionId: "root-session", rootSessionFile: sessionFile, recoverable: true, budgets }); const epoch = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", roleSet: ["worker"], roles: { worker: settledAgentDefinition("worker") } }); const requester = await publishWorker(root, mesh.meshId, epoch.epochId); const requesterRuntime = randomUUID(); await bindAgentRuntime(root, mesh.meshId, requester.agentId, { runtimeId: requesterRuntime, kind: "external" }); await patchAgentStatus(root, mesh.meshId, requester.agentId, { state: "busy" }); const requestId = randomUUID(); await requestPressureAdmission(root, mesh.meshId, { requestId, requesterAgentId: requester.agentId, requesterRuntimeId: requesterRuntime }); const files = await writeRuntimeFiles(root); const branch = [{ type: "custom", customType: "mesh-root-binding-v11", data: { schemaVersion: 1, meshId: mesh.meshId } }]; const ctx = { sessionManager: { getSessionId: () => "root-session", getSessionFile: () => sessionFile, getBranch: () => branch }, ui: { notify() {}, setStatus() {} }, isIdle: () => true } as never; let tick!: () => Promise<void>; const pi = new PiMock(); await registerOrchestration(pi as never, { ...files, env: {}, setInterval(callback) { tick = async () => { await callback(); }; return "timer"; }, clearInterval() {} }); await pi.handlers.get("session_start")![0]!({}, ctx); let unlock!: () => void; let acquired!: () => void; const acquiredPromise = new Promise<void>(resolve => { acquired = resolve; }); const gate = new Promise<void>(resolve => { unlock = resolve; }); const held = withMeshLock(root, mesh.meshId, async () => { acquired(); await gate; }); await acquiredPromise;
+void test("root shutdown quiesces a held maintenance pass before admission cancellation", async () => withRoot("mesh-root-pass-shutdown-", async root => { const sessionFile = join(root, "root-session.jsonl"); await writeFile(sessionFile, ""); const mesh = await initializeMesh(root, { rootSessionId: "root-session", rootSessionFile: sessionFile, recoverable: true, budgets }); const epoch = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", roleSet: ["worker"], roles: { worker: settledAgentDefinition("worker") } }); const requester = await publishWorker(root, mesh.meshId, epoch.epochId); const requesterRuntime = randomUUID(); await bindAgentRuntime(root, mesh.meshId, requester.agentId, { runtimeId: requesterRuntime, kind: "external" }); await patchAgentStatus(root, mesh.meshId, requester.agentId, { state: "busy" }); const requestId = randomUUID(); await requestPressureAdmission(root, mesh.meshId, { requestId, requesterAgentId: requester.agentId, requesterRuntimeId: requesterRuntime }); const files = await writeRuntimeFiles(root); const branch = [{ type: "custom", customType: "mesh-root-binding-v12", data: { schemaVersion: 1, meshId: mesh.meshId } }]; const ctx = { sessionManager: { getSessionId: () => "root-session", getSessionFile: () => sessionFile, getBranch: () => branch }, ui: { notify() {}, setStatus() {} }, isIdle: () => true } as never; let tick!: () => Promise<void>; const pi = new PiMock(); await registerOrchestration(pi as never, { ...files, env: {}, setInterval(callback) { tick = async () => { await callback(); }; return "timer"; }, clearInterval() {} }); await pi.handlers.get("session_start")![0]!({}, ctx); let unlock!: () => void; let acquired!: () => void; const acquiredPromise = new Promise<void>(resolve => { acquired = resolve; }); const gate = new Promise<void>(resolve => { unlock = resolve; }); const held = withMeshLock(root, mesh.meshId, async () => { acquired(); await gate; }); await acquiredPromise;
     const ticking = tick(); await Promise.resolve(); let shutdownDone = false; const shutdown = Promise.resolve(pi.handlers.get("session_shutdown")![0]!({ reason: "reload" })).finally(() => { shutdownDone = true; }); await Promise.resolve(); assert.equal(shutdownDone, false); unlock(); await Promise.all([held, ticking, shutdown]); assert.equal((await readPressureAdmission(root, mesh.meshId, requestId)).state, "cancelled"); }));
 
 void test("failed pre-publication cleanup retains prepared capacity when process death cannot be confirmed", async () => withRoot("mesh-launch-cleanup-", async root => {
@@ -1357,7 +1728,7 @@ void test("historical usage claim without current schema is not readable as clai
 
 void test("persisted root startup reconciles an unpersisted usage claim before tools can observe it", async () => withRoot("mesh-root-usage-reconcile-", async root => {
     const sessionFile = join(root, "root-session.jsonl"); await writeFile(sessionFile, ""); const mesh = await initializeMesh(root, { rootSessionId: "root-session", rootSessionFile: sessionFile, recoverable: true, budgets }); const epoch = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", roleSet: ["worker"], roles: { worker: settledAgentDefinition("worker") } }); const worker = await publishWorker(root, mesh.meshId, epoch.epochId); const task = await createTask(root, mesh.meshId, worker.agentId, { prompt: "account once", purpose: "synthetic purpose" }); await finishTask(root, mesh.meshId, task.request.taskId, { outcome: "succeeded", output: "done" }); assert.equal((await claimTaskUsage(root, mesh.meshId, task.request.taskId, sessionFile, { source: "tool", toolCallId: "lost-call", toolName: "mesh_get" })).created, true);
-    const files = await writeRuntimeFiles(root); const keybindings = await writeMeshKeybindings(root); const previous = process.env.PI_EXTENSION_KEYBINDINGS_PATH; process.env.PI_EXTENSION_KEYBINDINGS_PATH = keybindings; const branch = [{ type: "custom", customType: "mesh-root-binding-v11", data: { schemaVersion: 1, meshId: mesh.meshId } }]; const ctx = { sessionManager: { getSessionId: () => "root-session", getSessionFile: () => sessionFile, getBranch: () => branch }, ui: { notify() {}, setStatus() {} }, isIdle: () => true } as never;
+    const files = await writeRuntimeFiles(root); const keybindings = await writeMeshKeybindings(root); const previous = process.env.PI_EXTENSION_KEYBINDINGS_PATH; process.env.PI_EXTENSION_KEYBINDINGS_PATH = keybindings; const branch = [{ type: "custom", customType: "mesh-root-binding-v12", data: { schemaVersion: 1, meshId: mesh.meshId } }]; const ctx = { sessionManager: { getSessionId: () => "root-session", getSessionFile: () => sessionFile, getBranch: () => branch }, ui: { notify() {}, setStatus() {} }, isIdle: () => true } as never;
     try { const pi = new PiMock(); await registerOrchestration(pi as never, { ...files, env: {} }); assert.equal(pi.messageRenderers.has("mesh-event"), true); await pi.handlers.get("session_start")![0]!({}, ctx); assert.equal((await claimTaskUsage(root, mesh.meshId, task.request.taskId, sessionFile, { source: "tool", toolCallId: "recovered-call", toolName: "mesh_get" })).created, true); await pi.handlers.get("session_shutdown")![0]!({ reason: "reload" }); }
     finally { if (previous === undefined) delete process.env.PI_EXTENSION_KEYBINDINGS_PATH; else process.env.PI_EXTENSION_KEYBINDINGS_PATH = previous; }
 }));
@@ -1365,7 +1736,7 @@ void test("persisted root startup reconciles an unpersisted usage claim before t
 // Given a receipt owned by a predecessor endpoint binding, root startup rotates the binding and leaves predecessor completion state ineligible rather than adopting it.
 void test("persisted root startup fences predecessor completion receipts and tasks", async () => withRoot("mesh-root-receipt-reconcile-", async root => {
     const sessionFile = join(root, "root-session.jsonl"); await writeFile(sessionFile, ""); const mesh = await initializeMesh(root, { rootSessionId: "root-session", rootSessionFile: sessionFile, recoverable: true, budgets }); const epoch = await ensurePolicyEpoch(root, mesh.meshId, { mode: "ops", roleSet: ["worker"], roles: { worker: settledAgentDefinition("worker") } }); const worker = await publishWorker(root, mesh.meshId, epoch.epochId); const endpointId = `root:${mesh.meshId}`; const predecessor = await bindMeshEndpoint(root, mesh.meshId, { endpointId, kind: "root", harness: "pi", sessionId: "root-session", sessionFile }); const completion = { endpointId, endpointSessionFile: sessionFile }; const task = await createTaskStore(root, mesh.meshId, worker.agentId, { prompt: "orphan receipt", purpose: "synthetic purpose" }, { requesterEndpointId: endpointId, completion }); await finishTask(root, mesh.meshId, task.request.taskId, { outcome: "succeeded", output: "visible after repair" }); await createCompletionReceipt(root, mesh.meshId, { endpointId, endpointSessionFile: sessionFile, claimantSessionFile: sessionFile, toolCallId: "lost-result", toolName: "mesh_get", canonicalArguments: { taskId: task.request.taskId }, taskIds: [task.request.taskId], maxTasksPerMesh: budgets.maxTasksPerMesh });
-    const files = await writeRuntimeFiles(root); const keybindings = await writeMeshKeybindings(root); const previous = process.env.PI_EXTENSION_KEYBINDINGS_PATH; process.env.PI_EXTENSION_KEYBINDINGS_PATH = keybindings; const branch = [{ type: "custom", customType: "mesh-root-binding-v11", data: { schemaVersion: 1, meshId: mesh.meshId } }]; const ctx = { sessionManager: { getSessionId: () => "root-session", getSessionFile: () => sessionFile, getBranch: () => branch }, ui: { notify() {}, setStatus() {} }, isIdle: () => true } as never;
+    const files = await writeRuntimeFiles(root); const keybindings = await writeMeshKeybindings(root); const previous = process.env.PI_EXTENSION_KEYBINDINGS_PATH; process.env.PI_EXTENSION_KEYBINDINGS_PATH = keybindings; const branch = [{ type: "custom", customType: "mesh-root-binding-v12", data: { schemaVersion: 1, meshId: mesh.meshId } }]; const ctx = { sessionManager: { getSessionId: () => "root-session", getSessionFile: () => sessionFile, getBranch: () => branch }, ui: { notify() {}, setStatus() {} }, isIdle: () => true } as never;
     try { const pi = new PiMock(); await registerOrchestration(pi as never, { ...files, env: {}, setInterval() { return "timer"; }, clearInterval() {} }); await pi.handlers.get("session_start")![0]!({}, ctx); assert.equal(await readCompletionLedger(root, mesh.meshId, endpointId, sessionFile), undefined); assert.equal(pi.messages.length, 0); const predecessorLedger = JSON.parse(await readFile(completionLedgerPath(root, mesh.meshId, endpointId, sessionFile, predecessor.bindingId), "utf8")) as { receipts: unknown[] }; assert.equal(predecessorLedger.receipts.length, 1); assert.equal((await readTask(root, mesh.meshId, task.request.taskId)).request.completion?.bindingId, predecessor.bindingId); await pi.handlers.get("session_shutdown")![0]!({ reason: "reload" }); }
     finally { if (previous === undefined) delete process.env.PI_EXTENSION_KEYBINDINGS_PATH; else process.env.PI_EXTENSION_KEYBINDINGS_PATH = previous; }
 }));

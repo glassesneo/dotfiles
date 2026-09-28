@@ -2,10 +2,10 @@
 
 This directory owns the Pi peer-mesh configuration and extension runtime. The
 current configuration writes new meshes below
-`$XDG_STATE_HOME/pi/orchestration-v11` (normally
-`~/.local/state/pi/orchestration-v11`).
+`$XDG_STATE_HOME/pi/orchestration-v12` (normally
+`~/.local/state/pi/orchestration-v12`).
 
-## v11 cutover
+## v12 cutover
 
 Changed owned formats accept only the new version. There is no reader that
 infers, backfills, or resumes an old form. Old state is not deleted
@@ -14,14 +14,14 @@ replacement keeps recorded holds and task identity; it does not reconstruct
 the in-process run or replay work.
 
 1. In the old Pi session, finish or stop every old mesh task before activating
-   the v11 configuration.
+   the v12 configuration.
 2. Activate the configuration and start a new root Pi session and mesh.
-3. Do not resume an old Pi session or mix an old mesh with a v11 mesh.
+3. Do not resume an old Pi session or mix an old mesh with a v12 mesh.
 4. The old state directory and user-created artifacts remain until you archive
    or remove them after checking their contents.
 
 A generated `orchestration.json` whose `stateRoot` ends in
-`/pi/orchestration-v11` confirms the new state root. It does not migrate or
+`/pi/orchestration-v12` confirms the new state root. It does not migrate or
 validate an old session.
 
 ## Reading child work

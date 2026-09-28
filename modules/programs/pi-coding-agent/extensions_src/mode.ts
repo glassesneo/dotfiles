@@ -468,18 +468,19 @@ export function registerModeController(pi: ExtensionAPI, configPath = CONFIG): {
                 const selected = await pi.setModel(model);
                 return selected && !shuttingDown;
             } });
+            if (shuttingDown) return;
+            activeRoute = promotion.route;
+            if (promotion.action === "exhausted") executionState = "exhausted";
+            persistExecution();
+            setIdentity(ctx);
+            // Pi emits thinking_level_select synchronously, so the promoted level must be applied inside this guard.
+            if (promotion.action === "promote") pi.setThinkingLevel(selectedProfileThinkingLevel(execution, activeRoute.activeIndex));
         } finally { applyingSelection = false; }
-        if (shuttingDown) return;
-        activeRoute = promotion.route;
-        if (promotion.action === "exhausted") executionState = "exhausted";
-        persistExecution();
-        setIdentity(ctx);
         if (promotion.action === "exhausted") {
             activeTaskPrompt = undefined;
             ctx.ui.notify(promotion.error, "error");
             return;
         }
-        pi.setThinkingLevel(selectedProfileThinkingLevel(execution, activeRoute.activeIndex));
         pendingFallbackPrompt = formatProfileFallbackContinuation(activeTaskPrompt!);
         pi.sendMessage({ customType: PROFILE_FALLBACK_CONTINUATION_TYPE, content: pendingFallbackPrompt, display: false }, { triggerTurn: true });
     });

@@ -89,6 +89,63 @@ void test("process gate holds new work until resume and rejects stale revisions"
     assert.equal(canApplyControlRevision(2, 1), false);
 });
 
+// Admission: the Pi settled boundary owns stale run-local identities, while pause/interrupt state belongs to the longer-lived control lifecycle.
+// Given classified admissions and an active interrupt hold, run settlement removes only execution identities and retains the control revision and hold state.
+void test("process gate settlement clears bounded execution sources without dropping control state", async () => {
+    const gate = new ProcessExecutionGate();
+    await gate.waitForAdmission("opaque-provider-id", undefined, { kind: "provider" });
+    await gate.waitForAdmission("opaque-tool-id", undefined, { kind: "tool", name: "read" });
+    await gate.waitForAdmission("opaque-unsafe-id", undefined, { kind: "tool", name: "/private/unbounded" });
+    assert.equal(gate.describeInFlight(), "provider: 1, tool read: 1, unknown: 1");
+    assert.doesNotMatch(gate.describeInFlight() ?? "", /opaque|private/u);
+    for (const name of ["alpha", "beta", "gamma", "delta", "epsilon"]) await gate.waitForAdmission(`opaque-${name}`, undefined, { kind: "tool", name });
+    const bounded = gate.describeInFlight() ?? "";
+    assert.equal(bounded.split(", ").length, 5);
+    assert.match(bounded, /other sources: 4/u);
+
+    assert.equal(gate.requestPause(3), true);
+    assert.equal(gate.requestInterrupt(4), true);
+    gate.settleRun();
+    assert.equal(gate.inFlightCount, 0);
+    assert.equal(gate.describeInFlight(), undefined);
+    assert.equal(gate.currentRevision, 4);
+    assert.equal(gate.isPaused, true);
+    assert.equal(gate.isInterrupting, true);
+});
+
+// Admission: a completed run's settlement must not reach past its own identities; an admission made after settlement
+// belongs to the next run and must stay a tracked execution blocker until its own completion boundary.
+// Given stale provider/tool admissions followed by a genuine later provider admission, settlement clears only the stale ones.
+void test("run settlement clears stale admissions without clearing a later genuine admission", async () => {
+    const gate = new ProcessExecutionGate();
+    await gate.waitForAdmission("stale-provider", undefined, { kind: "provider" });
+    await gate.waitForAdmission("stale-tool", undefined, { kind: "tool", name: "read" });
+    assert.equal(gate.inFlightCount, 2);
+    gate.settleRun();
+    assert.equal(gate.inFlightCount, 0);
+    assert.equal(gate.describeInFlight(), undefined);
+
+    await gate.waitForAdmission("genuine-provider", undefined, { kind: "provider" });
+    assert.equal(gate.inFlightCount, 1);
+    assert.equal(gate.describeInFlight(), "provider: 1");
+    gate.complete("genuine-provider");
+    assert.equal(gate.inFlightCount, 0);
+});
+
+// Given a same-runtime session reset while paused, old waiters abort but the active control hold still gates new work.
+void test("process gate reset clears old admissions without dropping a control hold", async () => {
+    const gate = new ProcessExecutionGate();
+    gate.requestPause(3);
+    const oldWaiter = gate.waitForAdmission("old-session");
+    gate.reset();
+    assert.equal(await oldWaiter, "abort");
+    assert.equal(gate.isPaused, true);
+    assert.equal(gate.currentRevision, 3);
+    const newWaiter = gate.waitForAdmission("new-session");
+    gate.resume(4);
+    assert.equal(await newWaiter, "admit");
+});
+
 void test("execution phases distinguish pausing, interrupted, and blocked-limit", () => {
     const manual = { holdId: "h1", kind: "manual" as const, revision: 1, requestId: "r1", source: "user" as const, targetRoot: "a", createdAt: "2026-01-01T00:00:00.000Z" };
     const limit = { ...manual, holdId: "h2", kind: "limit" as const };

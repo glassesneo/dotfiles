@@ -29,6 +29,28 @@ export interface ParentTransitionFence {
 }
 export type ParentTransitionOperation = "prepare" | "apply" | "cancel";
 export type ParentTransitionStatus = "prepared" | "rejected" | "applied" | "cancelled" | "failed";
+class ParentTransitionBlockerError extends Error {
+    constructor(message: string) { super(message); this.name = "ParentTransitionBlockerError"; }
+}
+export type ParentTransitionQuiescenceCode = "unacknowledged-events" | "pending-completion-tasks";
+export class ParentTransitionQuiescenceError extends ParentTransitionBlockerError {
+    readonly code: ParentTransitionQuiescenceCode;
+    constructor(code: ParentTransitionQuiescenceCode, message: string) { super(message); this.name = "ParentTransitionQuiescenceError"; this.code = code; }
+}
+export function parentTransitionSafeBlocker(value: unknown): string | undefined {
+    return value instanceof ParentTransitionBlockerError ? value.message : undefined;
+}
+const PARENT_TRANSITION_RECEIPT_GUIDANCE = "Mesh root must wait for pending completion delivery and receive it through the normal context path before retrying; transition preparation never acknowledges completion delivery.";
+export function parentTransitionReceiptGuidance(value: unknown): string | undefined {
+    const detail = typeof value === "string" ? value : value instanceof ParentTransitionQuiescenceError ? value.message : undefined;
+    return detail === undefined ? undefined : `${PARENT_TRANSITION_RECEIPT_GUIDANCE} ${detail}`;
+}
+export function parentTransitionSafePrepareError(value: unknown): string | undefined {
+    return value instanceof ParentTransitionQuiescenceError ? parentTransitionReceiptGuidance(value) : parentTransitionSafeBlocker(value);
+}
+export function parentTransitionSafeTerminalError(operation: "apply" | "cancel", value: unknown): string {
+    return parentTransitionSafeBlocker(value) ?? `Parent transition ${operation} failed while accessing durable transition state; retry the transition.`;
+}
 export interface ParentTransitionRequest {
     schemaVersion: 1;
     operation: ParentTransitionOperation;
@@ -121,16 +143,24 @@ export async function assertNoParentTransitionUnlocked(stateRoot: string, meshId
 }
 
 /** Quiescence listings are strict: an unrecognized entry name is unavailable state, never silently skipped. Reservation IDs are hashes, so only their file shape is enforced here. */
+let publicationObserverForTest: ((fence: ParentTransitionFence) => void | Promise<void>) | undefined;
+/** Test-only seam for losing request ownership immediately after atomic fence publication. */
+export function setParentTransitionPublicationObserverForTest(observer: ((fence: ParentTransitionFence) => void | Promise<void>) | undefined): () => void {
+    publicationObserverForTest = observer;
+    return () => { if (publicationObserverForTest === observer) publicationObserverForTest = undefined; };
+}
+const blocker = (message: string): ParentTransitionBlockerError => new ParentTransitionBlockerError(message);
+
 async function listQuiescentDirectoryIds(directory: string, withJsonSuffix = false): Promise<string[]> {
     const names = await readdir(directory).catch(error => (error as NodeJS.ErrnoException).code === "ENOENT" ? [] : Promise.reject(error));
     const ids: string[] = [];
     for (const name of names) {
         if (withJsonSuffix) {
-            if (!name.endsWith(".json")) throw new Error(`Mesh parent transition requires quiescence: unrecognized reservation entry ${name}`);
+            if (!name.endsWith(".json")) throw blocker(`Mesh parent transition requires quiescence: unrecognized reservation entry ${name}`);
             ids.push(name.slice(0, -5));
             continue;
         }
-        if (!UUID.test(name)) throw new Error(`Mesh parent transition requires quiescence: unrecognized state entry ${name}`);
+        if (!UUID.test(name)) throw blocker(`Mesh parent transition requires quiescence: unrecognized state entry ${name}`);
         ids.push(name);
     }
     return ids;
@@ -139,45 +169,45 @@ async function listQuiescentDirectoryIds(directory: string, withJsonSuffix = fal
 /** Strict quiescence inspection. Caller must hold the mesh lock. Any corrupted or unknown state rejects instead of being treated as empty. */
 export async function assertParentTransitionQuiescenceUnlocked(stateRoot: string, meshId: string): Promise<void> {
     const paths = meshPaths(stateRoot, meshId);
+    const endpoint = await readMeshEndpoint(stateRoot, meshId, `root:${meshId}`);
+    const delivery = await readQuiescentDeliverySnapshotUnlocked(stateRoot, meshId, endpoint);
+    if (delivery.events.length) throw new ParentTransitionQuiescenceError("unacknowledged-events", `Mesh parent transition requires quiescence: ${delivery.events.length} unacknowledged root delivery event(s)`);
+    if (delivery.pendingTasks.length) throw new ParentTransitionQuiescenceError("pending-completion-tasks", `Mesh parent transition requires quiescence: ${delivery.pendingTasks.length} pending root completion task(s)`);
     await mapConcurrent(await listQuiescentDirectoryIds(paths.agents), READ_CONCURRENCY, async agentId => {
         const pathsForAgent = agentPaths(stateRoot, meshId, agentId);
         const statusRaw = await optionalJson(pathsForAgent.status);
-        if (statusRaw === undefined) throw new Error(`Mesh parent transition requires quiescence: agent ${agentId} has no status record`);
+        if (statusRaw === undefined) throw blocker(`Mesh parent transition requires quiescence: agent ${agentId} has no status record`);
         const status = await readAgentStatus(pathsForAgent, meshId);
         const state: AgentState = status.state;
         if (isTerminalAgent(state)) return;
-        if (state !== "idle") throw new Error(`Mesh parent transition requires quiescence: agent ${agentId} is ${state}`);
-        if (status.activeTaskId) throw new Error(`Mesh parent transition requires quiescence: idle agent ${agentId} still references active task ${status.activeTaskId}`);
+        if (state !== "idle") throw blocker(`Mesh parent transition requires quiescence: agent ${agentId} is ${state}`);
+        if (status.activeTaskId) throw blocker(`Mesh parent transition requires quiescence: idle agent ${agentId} still references active task ${status.activeTaskId}`);
         const snapshot = await readAgentSnapshot(stateRoot, meshId, agentId);
-        if (snapshot.stop && (snapshot.stop.state === "requested" || snapshot.stop.state === "terminating")) throw new Error(`Mesh parent transition requires quiescence: agent ${agentId} has active stop request ${snapshot.stop.stopRequestId}`);
+        if (snapshot.stop && (snapshot.stop.state === "requested" || snapshot.stop.state === "terminating")) throw blocker(`Mesh parent transition requires quiescence: agent ${agentId} has active stop request ${snapshot.stop.stopRequestId}`);
         const execution = await readAgentExecution(stateRoot, meshId, agentId);
-        if (execution && execution.holds.length) throw new Error(`Mesh parent transition requires quiescence: agent ${agentId} has ${execution.holds.length} execution hold(s)`);
+        if (execution && execution.holds.length) throw blocker(`Mesh parent transition requires quiescence: agent ${agentId} has ${execution.holds.length} execution hold(s)`);
     });
     await mapConcurrent(await listQuiescentDirectoryIds(paths.tasks), READ_CONCURRENCY, async taskId => {
         const task = await readTask(stateRoot, meshId, taskId).catch(error => {
-            if ((error as NodeJS.ErrnoException).code === "ENOENT") throw new Error(`Mesh parent transition requires quiescence: task ${taskId} is missing its record`);
+            if ((error as NodeJS.ErrnoException).code === "ENOENT") throw blocker(`Mesh parent transition requires quiescence: task ${taskId} is missing its record`);
             throw error;
         });
-        if (!isTerminalTask(task.status.state)) throw new Error(`Mesh parent transition requires quiescence: task ${taskId} is ${task.status.state}`);
+        if (!isTerminalTask(task.status.state)) throw blocker(`Mesh parent transition requires quiescence: task ${taskId} is ${task.status.state}`);
     });
     for (const name of await listQuiescentDirectoryIds(paths.reservations, true)) {
         const reservation = await readMeshReservation(stateRoot, meshId, name);
-        if (reservation.state === "pending") throw new Error(`Mesh parent transition requires quiescence: reservation ${reservation.reservationId} is pending`);
+        if (reservation.state === "pending") throw blocker(`Mesh parent transition requires quiescence: reservation ${reservation.reservationId} is pending`);
         if (reservation.state === "committed") {
             const [agentMaterialized, taskMaterialized] = await Promise.all([
                 reservation.agentId ? optionalJson(agentPaths(stateRoot, meshId, reservation.agentId).status).then(value => value !== undefined) : Promise.resolve(false),
                 reservation.taskId ? optionalJson(taskPaths(stateRoot, meshId, reservation.taskId).request).then(value => value !== undefined) : Promise.resolve(false),
             ]);
-            if (!agentMaterialized || (reservation.taskId !== undefined && !taskMaterialized)) throw new Error(`Mesh parent transition requires quiescence: reservation ${reservation.reservationId} is committed but not materialized`);
+            if (!agentMaterialized || (reservation.taskId !== undefined && !taskMaterialized)) throw blocker(`Mesh parent transition requires quiescence: reservation ${reservation.reservationId} is committed but not materialized`);
         }
     }
     for (const admission of await listPressureAdmissions(stateRoot, meshId)) {
-        if (admission.state === "requested" || admission.state === "processing") throw new Error(`Mesh parent transition requires quiescence: pressure admission ${admission.requestId} is ${admission.state}`);
+        if (admission.state === "requested" || admission.state === "processing") throw blocker(`Mesh parent transition requires quiescence: pressure admission ${admission.requestId} is ${admission.state}`);
     }
-    const endpoint = await readMeshEndpoint(stateRoot, meshId, `root:${meshId}`);
-    const delivery = await readQuiescentDeliverySnapshotUnlocked(stateRoot, meshId, endpoint);
-    if (delivery.events.length) throw new Error(`Mesh parent transition requires quiescence: ${delivery.events.length} unacknowledged root delivery event(s)`);
-    if (delivery.pendingTasks.length) throw new Error(`Mesh parent transition requires quiescence: ${delivery.pendingTasks.length} pending root completion task(s)`);
 }
 /** Verifies the current root identity and mesh quiescence, then records a short-lived transition fence atomically under one mesh lock. */
 export async function prepareParentTransition(stateRoot: string, meshId: string, input: {
@@ -188,16 +218,23 @@ export async function prepareParentTransition(stateRoot: string, meshId: string,
     fromMode: string;
     targetMode?: string;
     expectedBinding: { endpointId: string; endpointSessionFile: string; bindingId: string };
+    guard?: () => void;
 }): Promise<ParentTransitionFence> {
-    return withMeshLock(stateRoot, meshId, async () => {
+    const fence = await withMeshLock(stateRoot, meshId, async () => {
+        input.guard?.();
         const mesh = await readMesh(stateRoot, meshId);
-        if (mesh.state !== "open") throw new Error(`Mesh ${meshId} is ${mesh.state}`);
-        const lease = await assertRootLeaseOwner(stateRoot, meshId, input.rootLeaseId);
-        if (lease.rootSessionId !== input.rootSessionId) throw new Error("Parent transition root session does not own the active root lease");
+        if (mesh.state !== "open") throw blocker(`Mesh ${meshId} is ${mesh.state}`);
+        let lease;
+        try { lease = await assertRootLeaseOwner(stateRoot, meshId, input.rootLeaseId); }
+        catch (error) {
+            if (error instanceof Error && error.message.endsWith("mutation requires the active root lease owner")) throw blocker(error.message);
+            throw error;
+        }
+        if (lease.rootSessionId !== input.rootSessionId) throw blocker("Parent transition root session does not own the active root lease");
         const endpoint = await readMeshEndpoint(stateRoot, meshId, `root:${meshId}`);
-        if (!endpoint.online || endpoint.endpointId !== input.expectedBinding.endpointId || endpoint.sessionFile !== input.expectedBinding.endpointSessionFile || endpoint.bindingId !== input.expectedBinding.bindingId) throw new Error("Parent transition root endpoint binding is stale or offline");
+        if (!endpoint.online || endpoint.endpointId !== input.expectedBinding.endpointId || endpoint.sessionFile !== input.expectedBinding.endpointSessionFile || endpoint.bindingId !== input.expectedBinding.bindingId) throw blocker("Parent transition root endpoint binding is stale or offline");
         const existing = await readParentTransition(stateRoot, meshId);
-        if (existing) throw new Error(`Mesh ${meshId} already has an active parent transition fence (request ${existing.requestId}, kind ${existing.kind}). Do not delete or replay it; stop the session normally and start a new root session.`);
+        if (existing) throw blocker(`Mesh ${meshId} already has an active parent transition fence (request ${existing.requestId}, kind ${existing.kind}). Do not delete or replay it; stop the session normally and start a new root session.`);
         await assertParentTransitionQuiescenceUnlocked(stateRoot, meshId);
         const fence: ParentTransitionFence = {
             schemaVersion: PARENT_TRANSITION_FENCE_SCHEMA_VERSION,
@@ -211,9 +248,28 @@ export async function prepareParentTransition(stateRoot: string, meshId: string,
             createdAt: new Date().toISOString(),
         };
         validateParentTransitionFence(fence);
-        await atomicJson(parentTransitionPath(stateRoot, meshId), fence);
+        input.guard?.();
+        const path = parentTransitionPath(stateRoot, meshId);
+        await atomicJson(path, fence);
+        try {
+            await publicationObserverForTest?.(fence);
+            input.guard?.();
+        } catch (error) {
+            const written = await optionalJson(path).catch(() => undefined);
+            let current: ParentTransitionFence | undefined;
+            if (written !== undefined) try { current = validateParentTransitionFence(written); }
+            catch { /* Never remove a fence that cannot be proven to be this write. */ }
+            if (current?.token === fence.token && current.requestId === fence.requestId && current.rootLeaseId === fence.rootLeaseId) await unlink(path);
+            throw error;
+        }
         return fence;
     });
+    try { input.guard?.(); }
+    catch (error) {
+        await releaseParentTransition(stateRoot, meshId, { token: fence.token, rootLeaseId: fence.rootLeaseId });
+        throw error;
+    }
+    return fence;
 }
 
 /** Deletes the fence only when the caller still owns it by token and root lease. */
@@ -222,7 +278,7 @@ export async function releaseParentTransition(stateRoot: string, meshId: string,
         const raw = await optionalJson(parentTransitionPath(stateRoot, meshId));
         if (raw === undefined) return;
         const fence = validateParentTransitionFence(raw);
-        if (fence.token !== expected.token || fence.rootLeaseId !== expected.rootLeaseId) throw new Error("Parent transition fence ownership mismatch; fence remains in place");
+        if (fence.token !== expected.token || fence.rootLeaseId !== expected.rootLeaseId) throw blocker("Parent transition fence ownership mismatch; fence remains in place");
         await unlink(parentTransitionPath(stateRoot, meshId));
     });
 }

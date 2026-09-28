@@ -14,6 +14,7 @@ export type HoldKind = "manual" | "limit";
 export type ControlAction = "pause" | "interrupt" | "resume";
 export type ControlSource = "user" | "peer" | "system";
 export type ControlTargetStatus = "requested" | "acknowledged" | "unsupported" | "unavailable" | "already-terminal" | "not_ready" | "manual_resume_required";
+export type ExecutionSource = { kind: "provider" } | { kind: "tool"; name: string } | { kind: "unknown" };
 
 export interface EndResponseMarker {
     kind: typeof END_RESPONSE_TOOL_NAME;
@@ -149,13 +150,24 @@ export class ProcessExecutionGate {
     private paused = false;
     private interrupting = false;
     private readonly admitted = new Set<string>();
-    private readonly inFlight = new Set<string>();
+    private readonly inFlight = new Map<string, string>();
     private readonly waiters: Array<() => void> = [];
 
     get currentRevision(): number { return this.revision; }
     get inFlightCount(): number { return this.inFlight.size; }
     get isPaused(): boolean { return this.paused; }
     get isInterrupting(): boolean { return this.interrupting; }
+
+    describeInFlight(): string | undefined {
+        if (!this.inFlight.size) return undefined;
+        const counts = new Map<string, number>();
+        for (const source of this.inFlight.values()) counts.set(source, (counts.get(source) ?? 0) + 1);
+        const entries = [...counts].sort(([left], [right]) => left.localeCompare(right));
+        const visible = entries.slice(0, 4).map(([source, count]) => `${source}: ${count}`);
+        const hidden = entries.slice(4).reduce((total, [, count]) => total + count, 0);
+        if (hidden) visible.push(`other sources: ${hidden}`);
+        return visible.join(", ");
+    }
 
     requestPause(revision: number): boolean {
         if (!canApplyControlRevision(this.revision, revision)) return false;
@@ -183,11 +195,11 @@ export class ProcessExecutionGate {
         return true;
     }
 
-    async waitForAdmission(id: string, signal?: AbortSignal): Promise<"admit" | "abort"> {
+    async waitForAdmission(id: string, signal?: AbortSignal, source: ExecutionSource = { kind: "unknown" }): Promise<"admit" | "abort"> {
         if (signal?.aborted) return "abort";
         if (!this.paused || this.admitted.has(id)) {
             this.admitted.add(id);
-            this.inFlight.add(id);
+            this.inFlight.set(id, this.sourceLabel(source));
             return "admit";
         }
         if (this.interrupting) return "abort";
@@ -198,11 +210,11 @@ export class ProcessExecutionGate {
                 if (signal?.aborted || this.interrupting) { resolve("abort"); return; }
                 if (!this.paused || this.admitted.has(id)) {
                     this.admitted.add(id);
-                    this.inFlight.add(id);
+                    this.inFlight.set(id, this.sourceLabel(source));
                     resolve("admit");
                     return;
                 }
-                void this.waitForAdmission(id, signal).then(resolve);
+                void this.waitForAdmission(id, signal, source).then(resolve);
             };
             const cleanup = () => {
                 signal?.removeEventListener("abort", abort);
@@ -217,6 +229,30 @@ export class ProcessExecutionGate {
     complete(id: string): void {
         this.inFlight.delete(id);
         this.admitted.delete(id);
+    }
+
+    /** Forget identities owned by the completed Pi run without changing pause, interrupt, revision, or pending holds. */
+    settleRun(): void {
+        this.admitted.clear();
+        this.inFlight.clear();
+    }
+
+    /** Abort old waiters and forget session-local admissions while preserving an active control hold. */
+    reset(): void {
+        const paused = this.paused;
+        const interrupting = this.interrupting;
+        this.paused = true;
+        this.interrupting = true;
+        this.releaseWaiters();
+        this.settleRun();
+        this.paused = paused;
+        this.interrupting = interrupting;
+    }
+
+    private sourceLabel(source: ExecutionSource): string {
+        if (source.kind === "provider") return "provider";
+        if (source.kind === "tool" && /^[A-Za-z][A-Za-z0-9_-]{0,63}$/u.test(source.name)) return `tool ${source.name}`;
+        return "unknown";
     }
 
     private releaseWaiters(): void {

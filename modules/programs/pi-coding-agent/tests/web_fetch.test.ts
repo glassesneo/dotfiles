@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, stat } from "node:fs/promises";
+import { mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -19,6 +19,7 @@ import {
 } from "../extensions_src/utilities/web_retrieval_types.ts";
 import {
     createWebFetchToolDefinition,
+    loadWebFetchConfig,
     registerWebFetch,
     webFetchParameters,
 } from "../extensions_src/web_fetch.ts";
@@ -137,7 +138,7 @@ void test("provider HTTP authentication failures are credential errors without r
             sleep: async () => { sleeps += 1; },
             now: () => 0,
         }), error => {
-            assert.match(String(error), new RegExp(`exa-contents.*credential`));
+            assert.match(String(error), new RegExp(`exa-contents.*credential-remote-auth`));
             assert.equal((error as { status?: number }).status, status);
             assert.doesNotMatch(String(error), /opaque-secret|credential rejected/);
             return true;
@@ -261,7 +262,7 @@ void test("fetch router retries only its fixed backend and applies normalized UT
         sleep: async () => {},
         now: () => 0,
     }), error => {
-        assert.match(String(error), /parallel-extract.*credential/);
+        assert.match(String(error), /credential-not-configured.*parallel-extract/);
         assert.doesNotMatch(String(error), /secret|path|exa-contents/);
         return true;
     });
@@ -320,5 +321,64 @@ void test("tool keeps complete normalized diagnostics while model output uses th
     } finally {
         if (previousTmpdir === undefined) delete process.env.TMPDIR;
         else process.env.TMPDIR = previousTmpdir;
+    }
+});
+
+// Given credential files that are unconfigured, absent, unreadable, or empty, when a fetch routes, the caller observes each path-free readiness category.
+void test("fetch credential readiness preserves each local reason without filesystem detail", async () => {
+    const url = "https://ready.example/doc";
+    const cases = [
+        { runtime: config(null), readTextFile: async () => "key", category: "credential-not-configured" },
+        { runtime: config("/private/missing"), readTextFile: async () => { throw Object.assign(new Error("absent"), { code: "ENOENT" }); }, category: "credential-missing" },
+        { runtime: config("/private/unreadable"), readTextFile: async () => { throw Object.assign(new Error("denied"), { code: "EACCES" }); }, category: "credential-unreadable" },
+        { runtime: config("/private/empty"), readTextFile: async () => "  \r\n", category: "credential-empty" },
+    ];
+    for (const testCase of cases) {
+        await assert.rejects(
+            routeWebFetch(parseWebFetchInput({ urls: [url] }), testCase.runtime, {
+                readTextFile: testCase.readTextFile,
+                fetch: async () => { throw new Error("must not fetch"); },
+                sleep: async () => {},
+                now: () => 0,
+            }),
+            error => {
+                assert.match(String(error), new RegExp(testCase.category));
+                assert.doesNotMatch(String(error), /private|ENOENT|EACCES|absent|denied/);
+                return true;
+            },
+        );
+    }
+});
+
+// Given runtime configuration that is absent or malformed, when the tool loads it, the caller observes a path-free configuration category.
+void test("configuration read and parse failures expose path-free readiness categories", async () => {
+    const url = "https://ready.example/doc";
+    const directory = await mkdtemp(join(tmpdir(), "web-fetch-config-"));
+    const invalidPath = join(directory, "invalid.json");
+    const invalidSchemaPath = join(directory, "invalid-schema.json");
+    await writeFile(invalidPath, "not json", "utf8");
+    await writeFile(invalidSchemaPath, JSON.stringify({ schemaVersion: 2 }), "utf8");
+    const cases = [
+        [join(directory, "absent.json"), "configuration-unavailable"],
+        [invalidPath, "configuration-invalid"],
+        [invalidSchemaPath, "configuration-invalid"],
+    ] as const;
+    for (const [path, category] of cases) {
+        const tool = createWebFetchToolDefinition({
+            loadConfig: () => loadWebFetchConfig(path),
+            readTextFile: async () => "key",
+            fetch: async () => { throw new Error("must not fetch"); },
+            sleep: async () => {},
+            now: () => 0,
+        });
+        await assert.rejects(
+            tool.execute("call", { urls: [url] }, undefined, undefined, { cwd: "/work" } as never),
+            error => {
+                assert.match(String(error), new RegExp(category));
+                assert.equal(String(error).includes(directory), false);
+                assert.doesNotMatch(String(error), /not json|ENOENT/);
+                return true;
+            },
+        );
     }
 });

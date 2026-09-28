@@ -140,7 +140,7 @@ def main [] {
     validateModeConfig(disabledModes);
     assert.equal(childCatalog.schemaVersion, 2);
     assert.equal(orchestrationConfig.schemaVersion, 6);
-    assert.ok(orchestrationConfig.stateRoot.endsWith("/pi/orchestration-v11"));
+    assert.ok(orchestrationConfig.stateRoot.endsWith("/pi/orchestration-v12"));
     assert.equal(enabledModeConfig.schemaVersion, 5);
     assert.equal(enabledModeConfig.execution.harness, "pi");
     validateExtensionKeybindings(keybindings, "generated extension-keybindings.json");

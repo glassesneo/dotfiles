@@ -22,8 +22,21 @@ export type SearchIntent = "auto" | "general" | "discovery";
 export type SearchLane = "general" | "discovery";
 export type SearchFreshness = "day" | "week" | "month" | "year";
 export type FetchMode = "relevant" | "full";
+/** Credential-file readiness reasons shared by readiness errors and search eligibility diagnostics. */
+export type CredentialFileReason =
+    | "credential-not-configured"
+    | "credential-missing"
+    | "credential-unreadable"
+    | "credential-empty";
+
+export type WebRetrievalReadinessCategory =
+    | "configuration-unavailable"
+    | "configuration-invalid"
+    | CredentialFileReason;
+
+/** Only the categories `ProviderError` actually emits; readiness failures use `WebRetrievalReadinessError`. */
 export type ProviderErrorCategory =
-    | "credential"
+    | "credential-remote-auth"
     | "network"
     | "timeout"
     | "rate-limit"
@@ -157,6 +170,25 @@ export class ProviderError extends Error implements ProviderErrorDetails {
     }
 }
 
+/** A path-free Web retrieval readiness failure; its category is the only model-visible detail. */
+export class WebRetrievalReadinessError extends Error {
+    readonly category: WebRetrievalReadinessCategory;
+    readonly provider?: WebRetrievalProviderId;
+
+    constructor(category: WebRetrievalReadinessCategory, provider?: WebRetrievalProviderId) {
+        super(provider === undefined ? `web retrieval ${category}` : `web retrieval ${category} for ${provider}`);
+        this.name = "WebRetrievalReadinessError";
+        this.category = category;
+        this.provider = provider;
+    }
+}
+
+/** Classifies a credential read failure using only stable Node error codes. */
+export function credentialReadFailureCategory(error: unknown): "credential-missing" | "credential-unreadable" {
+    const code = error !== null && typeof error === "object" ? (error as { code?: unknown }).code : undefined;
+    return code === "ENOENT" ? "credential-missing" : "credential-unreadable";
+}
+
 export interface SearchAttempt {
     provider: SearchProviderId;
     latencyMs: number;
@@ -165,10 +197,16 @@ export interface SearchAttempt {
     error?: Omit<ProviderErrorDetails, "provider">;
 }
 
+export type SearchEligibilityReason =
+    | CredentialFileReason
+    | "lane"
+    | "freshness"
+    | "domains";
+
 export interface SearchEligibilityDiagnostic {
     provider: SearchProviderId;
     category: "credential" | "capability";
-    reason: "not-configured" | "unreadable" | "empty" | "lane" | "freshness" | "domains";
+    reason: SearchEligibilityReason;
 }
 
 export interface PrivateTruncationDetails {

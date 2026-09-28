@@ -696,7 +696,7 @@ in
         };
         "${myconfig.programs.pi-coding-agent.configDir}/orchestration.json".text = builtins.toJSON {
           schemaVersion = 6;
-          stateRoot = "${homeConfig.xdg.stateHome}/pi/orchestration-v11";
+          stateRoot = "${homeConfig.xdg.stateHome}/pi/orchestration-v12";
           tmux = lib.getExe pkgs.tmux;
           returnParentCommand = lib.getExe returnParentCommand;
           inherit parentNavigationHint historyViewerExtension popupExtension orchestrationExtension childBridgeExtension;

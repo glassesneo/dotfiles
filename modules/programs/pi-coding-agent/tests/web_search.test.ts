@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, stat } from "node:fs/promises";
+import { mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -28,6 +28,7 @@ import {
 } from "../extensions_src/utilities/web_retrieval_types.ts";
 import {
     createWebSearchToolDefinition,
+    loadWebSearchConfig,
     registerWebSearch,
     WEB_SEARCH_MAX_VISIBLE_BYTES,
     WEB_SEARCH_MAX_VISIBLE_LINES,
@@ -150,7 +151,7 @@ void test("AC3: credential and capability eligibility preserve lane and native c
     const domainResult = await router.search(runtime, request({ includeDomains: ["example.com"] }));
     assert.equal(domainResult.provider, "brave-web-search");
     assert.equal(domainResult.eligibilityDiagnostics.some(item =>
-        item.provider === "parallel-search" && item.category === "credential" && item.reason === "not-configured"), true);
+        item.provider === "parallel-search" && item.category === "credential" && item.reason === "credential-not-configured"), true);
     assert.equal(domainResult.eligibilityDiagnostics.some(item =>
         item.provider === "brave-llm-context" && item.category === "capability" && item.reason === "domains"), true);
     const discoveryResult = await router.search(runtime, request({ intent: "discovery" }));
@@ -159,23 +160,29 @@ void test("AC3: credential and capability eligibility preserve lane and native c
 
     const ineligible = config("/valid");
     ineligible.providers.find(provider => provider.id === "parallel-search")!.apiKeyFile = null;
-    ineligible.providers.find(provider => provider.id === "brave-llm-context")!.apiKeyFile = "/private/unreadable";
-    ineligible.providers.find(provider => provider.id === "brave-web-search")!.apiKeyFile = "/private/empty";
+    ineligible.providers.find(provider => provider.id === "brave-llm-context")!.apiKeyFile = "/private/missing";
+    ineligible.providers.find(provider => provider.id === "brave-web-search")!.apiKeyFile = "/private/unreadable";
+    // `exa-search` keeps a readable credential so its general-lane capability, not its credential, excludes it.
     await assert.rejects(
         createSearchRouter(deps({
             readTextFile: async path => {
-                if (path.endsWith("unreadable")) throw new Error(`ENOENT ${path}`);
-                return path.endsWith("empty") ? "  \n" : "credential";
+                if (path.endsWith("missing")) throw Object.assign(new Error("no such file"), { code: "ENOENT" });
+                if (path.endsWith("unreadable")) throw Object.assign(new Error("permission denied"), { code: "EACCES" });
+                return "credential";
             },
         })).search(ineligible, request()),
         error => {
             assert.ok(error instanceof SearchRoutingError);
             assert.match(error.message, /no eligible general provider/);
-            assert.doesNotMatch(String(error), /private|unreadable|empty|ENOENT/);
+            assert.match(error.message, /credential-not-configured/);
+            assert.match(error.message, /credential-missing/);
+            assert.match(error.message, /credential-unreadable/);
+            assert.match(error.message, /exa-search:lane/);
+            assert.doesNotMatch(String(error), /private|ENOENT|EACCES|no such file|permission denied|\/valid/);
             assert.deepEqual(error.eligibilityDiagnostics, [
-                { provider: "parallel-search", category: "credential", reason: "not-configured" },
-                { provider: "brave-llm-context", category: "credential", reason: "unreadable" },
-                { provider: "brave-web-search", category: "credential", reason: "empty" },
+                { provider: "parallel-search", category: "credential", reason: "credential-not-configured" },
+                { provider: "brave-llm-context", category: "credential", reason: "credential-missing" },
+                { provider: "brave-web-search", category: "credential", reason: "credential-unreadable" },
                 { provider: "exa-search", category: "capability", reason: "lane" },
             ]);
             return true;
@@ -206,7 +213,7 @@ void test("credential reads overlap without changing provider-order diagnostics"
         assert.deepEqual(error.eligibilityDiagnostics, searchProviders.map(provider => ({
             provider: provider.id,
             category: "credential",
-            reason: "empty",
+            reason: "credential-empty",
         })));
         return true;
     });
@@ -343,7 +350,7 @@ void test("HTTP 401 and 403 are credential failures and do not retry", async () 
             1_000,
         );
         await assert.rejects(created.search(request(), new AbortController().signal), error => {
-            assert.equal(error instanceof Error && "category" in error && error.category, "credential");
+            assert.equal(error instanceof Error && "category" in error && error.category, "credential-remote-auth");
             assert.equal(error instanceof Error && "retryable" in error && error.retryable, false);
             assert.equal(error instanceof Error && "status" in error && error.status, status);
             assert.doesNotMatch(String(error), /opaque|secret-sentinel/);
@@ -360,9 +367,10 @@ void test("HTTP 401 and 403 are credential failures and do not retry", async () 
         })).search(runtime, request()),
         error => {
             assert.ok(error instanceof SearchRoutingError);
-            assert.equal(error.attempts[0]?.error?.category, "credential");
+            assert.equal(error.attempts[0]?.error?.category, "credential-remote-auth");
             assert.equal(error.attempts[0]?.error?.retryable, false);
-            assert.equal(error.eligibilityDiagnostics.every(item => item.reason === "not-configured"), true);
+            assert.equal(error.eligibilityDiagnostics.every(item => item.reason === "credential-not-configured"), true);
+            assert.match(String(error), /credential-remote-auth/);
             assert.doesNotMatch(String(error), /private provider body|\/key/);
             return true;
         },
@@ -540,5 +548,34 @@ void test("search tool preserves one default-sized request and bounds only model
     } finally {
         if (previousTmp === undefined) delete process.env.TMPDIR;
         else process.env.TMPDIR = previousTmp;
+    }
+});
+
+// Given runtime configuration that is absent or malformed, when the tool loads it, the caller observes a path-free configuration category.
+void test("configuration read and parse failures expose path-free readiness categories", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "web-search-config-"));
+    const invalidPath = join(directory, "invalid.json");
+    const invalidSchemaPath = join(directory, "invalid-schema.json");
+    await writeFile(invalidPath, "{ not json", "utf8");
+    await writeFile(invalidSchemaPath, JSON.stringify({ schemaVersion: 2 }), "utf8");
+    const cases = [
+        [join(directory, "absent.json"), "configuration-unavailable"],
+        [invalidPath, "configuration-invalid"],
+        [invalidSchemaPath, "configuration-invalid"],
+    ] as const;
+    for (const [path, category] of cases) {
+        const tool = createWebSearchToolDefinition({
+            loadConfig: () => loadWebSearchConfig(path),
+            router: { search: async () => { throw new Error("router must not run without configuration"); } },
+        });
+        await assert.rejects(
+            tool.execute("call", { query: "evidence" }, undefined, undefined, { cwd: "/work" } as never),
+            error => {
+                assert.match(String(error), new RegExp(category));
+                assert.equal(String(error).includes(directory), false);
+                assert.doesNotMatch(String(error), /not json|ENOENT/);
+                return true;
+            },
+        );
     }
 });

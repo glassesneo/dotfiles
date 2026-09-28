@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
     validateWebRetrievalRuntimeConfig,
+    WebRetrievalReadinessError,
     type WebRetrievalRuntimeConfig,
 } from "./web_retrieval_types.ts";
 
@@ -10,8 +11,19 @@ export async function loadWebRetrievalRuntimeConfig(
     path: string,
     signal?: AbortSignal,
 ): Promise<WebRetrievalRuntimeConfig> {
-    const raw = await readFile(path, { encoding: "utf8", signal });
-    return validateWebRetrievalRuntimeConfig(JSON.parse(raw));
+    let raw: string;
+    try {
+        raw = await readFile(path, { encoding: "utf8", signal });
+    } catch (error) {
+        if (signal?.aborted) throw signal.reason ?? error;
+        throw new WebRetrievalReadinessError("configuration-unavailable");
+    }
+    try {
+        return validateWebRetrievalRuntimeConfig(JSON.parse(raw));
+    } catch (error) {
+        if (signal?.aborted) throw signal.reason ?? error;
+        throw new WebRetrievalReadinessError("configuration-invalid");
+    }
 }
 
 export async function raceWithSignal<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {

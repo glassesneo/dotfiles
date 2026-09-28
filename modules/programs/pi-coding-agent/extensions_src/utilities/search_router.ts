@@ -3,6 +3,7 @@ import type { readFile as nodeReadFile } from "node:fs/promises";
 import { mapConcurrent } from "./concurrency.ts";
 import {
     ProviderError,
+    credentialReadFailureCategory,
     type AdapterSearchResponse,
     type NormalizedSearchRequest,
     type SearchAdapter,
@@ -157,17 +158,17 @@ async function loadEligibleAdapters(
     const loaded = await mapConcurrent(providers, CREDENTIAL_READ_CONCURRENCY, async (provider): Promise<CredentialLoadResult> => {
         const providerId = provider.id as SearchProviderId;
         if (provider.apiKeyFile === null) {
-            return { kind: "diagnostic", diagnostic: { provider: providerId, category: "credential", reason: "not-configured" } };
+            return { kind: "diagnostic", diagnostic: { provider: providerId, category: "credential", reason: "credential-not-configured" } };
         }
         let key: string;
         try {
             key = (await raceWithSignal(deps.readTextFile(provider.apiKeyFile, signal), signal)).trim();
         } catch (error) {
             if (signal.aborted) throw signal.reason ?? error;
-            return { kind: "diagnostic", diagnostic: { provider: providerId, category: "credential", reason: "unreadable" } };
+            return { kind: "diagnostic", diagnostic: { provider: providerId, category: "credential", reason: credentialReadFailureCategory(error) } };
         }
         if (key === "") {
-            return { kind: "diagnostic", diagnostic: { provider: providerId, category: "credential", reason: "empty" } };
+            return { kind: "diagnostic", diagnostic: { provider: providerId, category: "credential", reason: "credential-empty" } };
         }
         return { kind: "adapter", adapter: createSearchAdapter(provider, key, { fetch: deps.fetch, now: deps.now }, config.retry.defaultWaitMs) };
     });
@@ -296,7 +297,11 @@ export function createSearchRouter(deps: SearchRouterDependencies): SearchRouter
                 const diagnostics = [...loaded.diagnostics, ...capability];
                 const adapters = loaded.adapters.filter(adapter => capabilityDiagnostics(adapter, request, lane).length === 0);
                 if (adapters.length === 0) {
-                    throw new SearchRoutingError(`web_search has no eligible ${lane} provider`, diagnostics);
+                    const summary = diagnostics.map(diagnostic => `${diagnostic.provider}:${diagnostic.reason}`).join(",");
+                    throw new SearchRoutingError(
+                        `web_search has no eligible ${lane} provider${summary === "" ? "" : ` (${summary})`}`,
+                        diagnostics,
+                    );
                 }
                 const remaining = [...adapters];
                 const attempts: SearchAttempt[] = [];

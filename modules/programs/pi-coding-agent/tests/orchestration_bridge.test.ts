@@ -10,7 +10,7 @@ import { registerMeshChildBridge, type MeshChildBridgeDependencies } from "../ex
 import { buildLaunchEnvelope } from "../extensions_src/utilities/agent_types.ts";
 import { bindMeshEndpoint, materializeMeshCompletionEvents } from "../extensions_src/utilities/orchestration_events.ts";
 import { FALLBACK_CONTINUE_CUSTOM_TYPE, formatFallbackContinueContent } from "../extensions_src/utilities/orchestration_profile_fallback.ts";
-import { EXECUTION_RESUME_CONTENT, EXECUTION_RESUME_CUSTOM_TYPE } from "../extensions_src/utilities/orchestration_execution.ts";
+import { EXECUTION_RESUME_CONTENT, EXECUTION_RESUME_CUSTOM_TYPE, ProcessExecutionGate } from "../extensions_src/utilities/orchestration_execution.ts";
 import { FakeMonotonicTimers, yieldToIO } from "./test_helpers.ts";
 import { availableContext, publishAgentActivity, readAgentActivity } from "../extensions_src/utilities/orchestration_activity.ts";
 import { bindAgentRuntime } from "../extensions_src/utilities/orchestration_runtime.ts";
@@ -32,7 +32,7 @@ function reverseKeyInsertionOrder(value: unknown): unknown {
     return value;
 }
 
-async function bridgeFixture(options: { publish?: boolean; contextPolicy?: "project" | "prompt-only"; dependencies?: MeshChildBridgeDependencies; profile?: ExecutionConfig; registry?: { find(provider: string, modelId: string): { provider: string; id: string; contextWindow: number } | undefined }; currentModel?: { provider: string; id: string; contextWindow: number }; setModel?: (model: { provider: string; id: string }) => Promise<boolean> } = {}) {
+async function bridgeFixture(options: { publish?: boolean; contextPolicy?: "project" | "prompt-only"; dependencies?: MeshChildBridgeDependencies; profile?: ExecutionConfig; registry?: { find(provider: string, modelId: string): { provider: string; id: string; contextWindow: number } | undefined }; currentModel?: { provider: string; id: string; contextWindow: number }; setModel?: (model: { provider: string; id: string }) => Promise<boolean>; onSendMessage?: (message: any, messageOptions: any) => void } = {}) {
     const execution = options.profile ?? syntheticExecution;
     const root = await mkdtemp(join(tmpdir(), "orchestration-bridge-"));
     const mesh = await initializeMesh(root, { rootSessionId: "root", recoverable: false, budgets });
@@ -68,7 +68,7 @@ async function bridgeFixture(options: { publish?: boolean; contextPolicy?: "proj
         on(name: string, handler: (...args: any[]) => any) { handlers.set(name, handler); },
         events: { on(_name: string, handler: (value: unknown) => void) { eventHandlers.push(handler); return () => {}; } },
         sendUserMessage(prompt: string) { delivered.push(prompt); },
-        sendMessage(message: unknown, options: unknown) { sent.push({ message, options }); },
+        sendMessage(message: unknown, messageOptions: unknown) { sent.push({ message, options: messageOptions }); options.onSendMessage?.(message, messageOptions); },
         async setModel(model: { provider: string; id: string }) { selected.push(`${model.provider}/${model.id}`); return options.setModel ? options.setModel(model) : true; },
         setThinkingLevel() {},
     } as unknown as ExtensionAPI;
@@ -512,6 +512,40 @@ void test("error settlement continues the same child task on a later candidate w
     assert.equal(reused.task?.result?.outcome, "succeeded");
     assert.equal(fixture.sent.length, 1);
     assert.equal(reused.status.modelRoute?.activeIndex, 1);
+});
+
+// Admission: the child bridge owns completed-run admission cleanup, which types and store assertions cannot observe.
+// Given a stale provider admission and an error promotion, agent_settled clears the stale run before queueing Pi's
+// deferred triggerTurn; only after all settlement handlers finish does the next run acquire its own provider blocker.
+void test("promoted child fallback settles stale admission before the deferred next run", async () => {
+    const profile = { models: [{ model: "provider/primary", thinkingLevel: "medium" as const }, { model: "provider/fallback", thinkingLevel: "medium" as const }], harness: "pi" as const };
+    const executionGate = new ProcessExecutionGate();
+    let inFlightWhenQueued: number | undefined;
+    const fixture = await bridgeFixture({
+        profile,
+        registry: registryWindows({ "provider/primary": 200, "provider/fallback": 200 }),
+        dependencies: { executionGate },
+        onSendMessage: (_message, messageOptions) => { if ((messageOptions as { triggerTurn?: boolean }).triggerTurn) inFlightWhenQueued = executionGate.inFlightCount; },
+    });
+    fixture.activate(); await fixture.start();
+    await claimAndStart(fixture, "continue after fallback");
+    await fixture.emit("before_provider_request");
+    assert.equal(executionGate.inFlightCount, 1);
+    await fixture.emit("message_end", { message: { role: "assistant", content: [{ type: "text", text: "partial" }], stopReason: "error", errorMessage: "primary failed" } });
+    await fixture.emit("agent_settled");
+    assert.equal(fixture.sent.length, 1);
+    assert.equal(fixture.sent[0]?.message.customType, FALLBACK_CONTINUE_CUSTOM_TYPE);
+    assert.equal(inFlightWhenQueued, 0, "the completed run owns cleanup before the continuation is queued");
+    assert.equal(executionGate.inFlightCount, 0, "Pi has not started the deferred triggerTurn yet");
+
+    await fixture.emit("before_provider_request");
+    assert.equal(executionGate.inFlightCount, 1, "the next run owns a fresh provider blocker");
+    await applyAgentControl(fixture.root, fixture.meshId, fixture.agentId, { action: "pause", source: "user", issuer: "root" });
+    await fixture.tick();
+    assert.equal(executionGate.inFlightCount, 1, "pause retains already-started provider work");
+    await fixture.emit("after_provider_response");
+    assert.equal(executionGate.inFlightCount, 0);
+    await fixture.emit("session_shutdown", { reason: "reload" });
 });
 
 // Admitted contract: given a tool-result error in the settling turn, the child completes the task without promoting, while a restored model selection does not suspend a later provider-error fallback.

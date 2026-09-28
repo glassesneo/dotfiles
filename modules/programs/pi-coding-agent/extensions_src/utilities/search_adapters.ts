@@ -27,7 +27,7 @@ export class SearchRequestError extends ProviderError {
 
     constructor(
         provider: SearchProviderId,
-        category: "credential" | "rate-limit" | "http",
+        category: "credential-remote-auth" | "rate-limit" | "http",
         status: number,
         retryable: boolean,
         retryAfterMs?: number,
@@ -325,7 +325,7 @@ async function sendJson(
         const retryable = response.status === 429 || response.status === 502 || response.status === 503 || response.status === 504;
         throw new SearchRequestError(
             provider,
-            credentialFailure ? "credential" : response.status === 429 ? "rate-limit" : "http",
+            credentialFailure ? "credential-remote-auth" : response.status === 429 ? "rate-limit" : "http",
             response.status,
             retryable,
             retryable ? parseRetryWaitMs(response.headers, defaultRetryWaitMs, deps.now()) : undefined,

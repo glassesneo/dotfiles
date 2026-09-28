@@ -9,7 +9,7 @@ import { PARENT_TRANSITION_REQUEST_EVENT, PARENT_TRANSITION_RESULT_EVENT } from 
 import { validateActiveModeEvent } from "../extensions_src/utilities/mode_events.ts";
 import { validateExecutionConfig, validateModeConfig } from "../extensions_src/utilities/mode_types.ts";
 
-const execution = { models: [{ model: "provider/primary", thinkingLevel: "low" }, { model: "provider/small", thinkingLevel: "low" }, { model: "provider/alternate", thinkingLevel: "low" }], harness: "pi" as const };
+const execution = { models: [{ model: "provider/primary", thinkingLevel: "low" }, { model: "provider/small", thinkingLevel: "medium" }, { model: "provider/alternate", thinkingLevel: "high" }], harness: "pi" as const };
 const controlTools = ["switch_mode", "session_handoff"];
 const reconMode = { description: "Synthetic recon", tools: ["read", ...controlTools], skillOptIns: ["prompt-interface-design"], instructions: "Investigate." };
 const leaderMode = { description: "Synthetic leader", tools: ["read", ...controlTools], skillOptIns: [], instructions: "Delegate implementation." };
@@ -101,12 +101,18 @@ async function controllerFixture() {
         setActiveTools: (tools: string[]) => { activeTools = [...tools]; },
         getAllTools: () => [{ name: "read" }, { name: "write" }, { name: "switch_mode" }, { name: "session_handoff" }],
         getThinkingLevel: () => thinking,
-        setThinkingLevel: (value: string) => { thinking = value; },
+        // Pinned Pi emits change-only thinking events synchronously.
+        setThinkingLevel: (value: string) => { const previousLevel = thinking; if (value === previousLevel) return; thinking = value; handlers.get("thinking_level_select")?.({ level: value, previousLevel }, ctx); },
         async setModel(value: any) {
             modelCalls.push(value.id);
             const selected = setModelHandler ? await setModelHandler(value) : available.has(value.id);
-            if (selected) ctx.model = value;
-            return selected;
+            if (!selected) return false;
+            const previousModel = ctx.model; const previousLevel = thinking;
+            // Pi applies the configured global default before model_select.
+            thinking = "medium"; ctx.model = value;
+            if (thinking !== previousLevel) handlers.get("thinking_level_select")?.({ level: thinking, previousLevel }, ctx);
+            if (!previousModel || previousModel.provider !== value.provider || previousModel.id !== value.id) handlers.get("model_select")?.({ type: "model_select", model: value, previousModel, source: "set" }, ctx);
+            return true;
         },
         appendEntry: (type: string, data: unknown) => { entries.push({ type, data }); branch.push({ type: "custom", customType: type, data }); },
         sendMessage: (message: unknown, options: unknown) => sent.push({ message, options }),
@@ -158,7 +164,7 @@ void test("new sessions initialize the common execution in candidate order", asy
     await h.handlers.get("session_start")?.({}, h.ctx);
     assert.equal(h.controller.activeMode(), "recon");
     assert.equal(h.ctx.model.id, "small");
-    assert.equal(h.thinking, "low");
+    assert.equal(h.thinking, "medium");
     assert.deepEqual(h.tools, reconMode.tools);
     assert.deepEqual(h.entries.find(entry => entry.type === "agent-mode-state")?.data, { schemaVersion: 2, mode: "recon" });
     assert.equal(h.latestExecution().state, "active");
@@ -216,7 +222,7 @@ void test("provider fallback skips insufficient context while tool errors suppre
     await h.handlers.get("agent_end")?.({ messages: [{ role: "assistant", stopReason: "error" }] }, h.ctx);
     await h.handlers.get("agent_settled")?.({}, h.ctx);
     assert.equal(h.ctx.model.id, "alternate");
-    assert.equal(h.thinking, "low");
+    assert.equal(h.thinking, "high");
     assert.equal(h.latestExecution().state, "active");
     assert.equal(h.latestExecution().route.attempts.find((attempt: any) => attempt.index === 1)?.category, "context");
     assert.equal(h.sent.length, 1);
@@ -224,31 +230,70 @@ void test("provider fallback skips insufficient context while tool errors suppre
     assert.doesNotMatch(h.sent[0]?.message.content ?? "", /provider\/|alternate/iu);
 });
 
-// Admission: explicit native overrides can be overwritten only by runtime lifecycle code; schema validation cannot prove suspension survives mode/reload/tree boundaries.
-// Given an explicit model/thinking override, when mode, reload, and tree restoration occur, the parent preserves native execution and keeps fallback manual.
-void test("manual execution suspension survives mode switches, reload, and tree restore", async () => {
+// Admission: Pi emits thinking_level_select synchronously and reentrantly; a missed guard silently flips execution to manual and stops fallback.
+// Given distinct candidate levels, when two clean provider errors settle, the parent observes promotions in route order, both configured levels, active execution, and one continuation each.
+void test("consecutive parent promotions keep active execution under the selection guard", async () => {
     const h = await controllerFixture();
     await h.handlers.get("session_start")?.({}, h.ctx);
-    h.setCurrentModel("manual");
-    h.setThinking("high");
-    await h.handlers.get("model_select")?.({ source: "set", model: h.ctx.model }, h.ctx);
-    await h.handlers.get("thinking_level_select")?.({ level: "high", previousLevel: "low" }, h.ctx);
-    assert.equal(h.latestExecution().state, "manual");
-    const calls = h.modelCalls.length;
+    assert.equal(h.ctx.model.id, "primary");
+    assert.equal(h.thinking, "low");
+    await h.handlers.get("before_agent_start")?.({ prompt: "continue synthetic work", systemPrompt: "base", systemPromptOptions: { skills: [] } }, h.ctx);
+    const cleanProviderFailure = async () => {
+        await h.handlers.get("agent_start")?.({}, h.ctx);
+        await h.handlers.get("agent_end")?.({ messages: [{ role: "assistant", stopReason: "error" }] }, h.ctx);
+        await h.handlers.get("agent_settled")?.({}, h.ctx);
+    };
 
-    await h.commands.get("mode")!.handler("leader", h.ctx);
-    await h.handlers.get("session_start")?.({}, h.ctx);
-    await h.handlers.get("session_tree")?.({}, h.ctx);
-    assert.equal(h.controller.activeMode(), "leader");
-    assert.equal(h.ctx.model.id, "manual");
+    await cleanProviderFailure();
+    assert.equal(h.ctx.model.id, "small");
+    assert.equal(h.thinking, "medium");
+    assert.equal(h.latestExecution().state, "active");
+    assert.equal(h.latestExecution().route.activeIndex, 1);
+    assert.equal(h.latestExecution().route.activeModel, "provider/small");
+    assert.equal(h.sent.length, 1);
+
+    await cleanProviderFailure();
+    assert.equal(h.ctx.model.id, "alternate");
     assert.equal(h.thinking, "high");
-    assert.equal(h.modelCalls.length, calls);
-    assert.equal(h.latestExecution().state, "manual");
+    assert.equal(h.latestExecution().state, "active");
+    assert.equal(h.latestExecution().route.activeIndex, 2);
+    assert.equal(h.latestExecution().route.activeModel, "provider/alternate");
+    const continuations = h.sent.filter(entry => (entry.message as any).customType === "profile-fallback-continue");
+    assert.equal(continuations.length, 2);
+    for (const continuation of continuations) assert.deepEqual(continuation.options, { triggerTurn: true });
+});
 
-    await h.handlers.get("before_agent_start")?.({ prompt: "must not fallback", systemPrompt: "base", systemPromptOptions: { skills: [] } }, h.ctx);
-    await h.handlers.get("agent_end")?.({ messages: [{ role: "assistant", stopReason: "error" }] }, h.ctx);
-    await h.handlers.get("agent_settled")?.({}, h.ctx);
-    assert.equal(h.sent.length, 0);
+// Admission: genuine model and thinking selections are independent native override boundaries; testing both in one
+// fixture could let either event mask a missing handler for the other.
+// Given either genuine selection in its own session, mode/reload/tree restoration preserves it and fallback stays manual.
+void test("genuine model and thinking selections independently suspend parent fallback", async () => {
+    for (const selection of ["model", "thinking"] as const) {
+        const h = await controllerFixture();
+        await h.handlers.get("session_start")?.({}, h.ctx);
+        if (selection === "model") {
+            h.setCurrentModel("manual");
+            await h.handlers.get("model_select")?.({ source: "set", model: h.ctx.model }, h.ctx);
+        } else {
+            h.setThinking("high");
+            await h.handlers.get("thinking_level_select")?.({ level: "high", previousLevel: "low" }, h.ctx);
+        }
+        assert.equal(h.latestExecution().state, "manual", `${selection} selection did not suspend fallback`);
+        const calls = h.modelCalls.length;
+
+        await h.commands.get("mode")!.handler("leader", h.ctx);
+        await h.handlers.get("session_start")?.({}, h.ctx);
+        await h.handlers.get("session_tree")?.({}, h.ctx);
+        assert.equal(h.controller.activeMode(), "leader");
+        assert.equal(h.ctx.model.id, selection === "model" ? "manual" : "primary");
+        assert.equal(h.thinking, selection === "thinking" ? "high" : "low");
+        assert.equal(h.modelCalls.length, calls);
+        assert.equal(h.latestExecution().state, "manual");
+
+        await h.handlers.get("before_agent_start")?.({ prompt: "must not fallback", systemPrompt: "base", systemPromptOptions: { skills: [] } }, h.ctx);
+        await h.handlers.get("agent_end")?.({ messages: [{ role: "assistant", stopReason: "error" }] }, h.ctx);
+        await h.handlers.get("agent_settled")?.({}, h.ctx);
+        assert.equal(h.sent.length, 0);
+    }
 });
 
 // Admission: an exhausted route is a distinct persisted consumer state; resetting it on mode/reload would retry providers contrary to user-observable suspension.

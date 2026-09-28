@@ -10,7 +10,7 @@ import { buildLaunchEnvelope, canonicalJson, meshGcConfig, projectLaunchEnvelope
 import { validateModeConfig, type AgentModeConfig } from "./utilities/mode_types.ts";
 import { initialModelRoute, preflightProfileCandidates } from "./utilities/orchestration_profile_fallback.ts";
 import { createActiveModeBarrier, onActiveMode, type ActiveModeBarrier, type ActiveModeEvent } from "./utilities/mode_events.ts";
-import { PARENT_TRANSITION_REQUEST_EVENT, PARENT_TRANSITION_RESULT_EVENT, hasParentTransitionUnlocked, prepareParentTransition, readParentTransition, releaseParentTransition, validateParentTransitionRequest, type ParentTransitionRequest, type ParentTransitionResult } from "./utilities/orchestration_transition.ts";
+import { PARENT_TRANSITION_REQUEST_EVENT, PARENT_TRANSITION_RESULT_EVENT, hasParentTransitionUnlocked, parentTransitionReceiptGuidance, parentTransitionSafePrepareError, parentTransitionSafeTerminalError, prepareParentTransition, readParentTransition, releaseParentTransition, validateParentTransitionRequest, type ParentTransitionRequest, type ParentTransitionResult } from "./utilities/orchestration_transition.ts";
 import { resolveCursorAcpModelId, resolveHarnessAdapter } from "./utilities/orchestration_harness.ts";
 import { cleanupMeshAgents, failStartedMeshAgent, readReconciledAgentSnapshot, recoverPendingAgentStops, stopMeshAgentWithDisposition, stopMeshTaskWithDisposition } from "./utilities/orchestration_management.ts";
 import { reserveNewAgentCapacityWithPressure, runPeriodicAgentGc } from "./utilities/orchestration_gc.ts";
@@ -40,12 +40,14 @@ import { MeshArmedWait, type MeshWaitInspection } from "./utilities/orchestratio
 
 
 const CONFIG = join(getAgentDir(), "orchestration.json"); const CATALOG = join(getAgentDir(), "child-catalog.json"); const MODES = join(getAgentDir(), "agent-modes.json");
-const ROOT_BINDING = "mesh-root-binding-v11"; const POLICY_BINDING = "mesh-policy-epoch-v11"; const PARENT_STATUS = "mesh-parent-navigation"; const PUMP_STATUS = "mesh-event-pump"; const WAIT_STATUS = "mesh-auto-join"; const NOTICE_PUMP_STATUS = "mesh-notice-pump"; const NOTICE_ENTRY = "mesh-tui-notice"; const COMPLETION_DELIVERY_WINDOW_MS = 5_000;
+const ROOT_BINDING = "mesh-root-binding-v12"; const POLICY_BINDING = "mesh-policy-epoch-v12"; const PARENT_STATUS = "mesh-parent-navigation"; const PUMP_STATUS = "mesh-event-pump"; const WAIT_STATUS = "mesh-auto-join"; const NOTICE_PUMP_STATUS = "mesh-notice-pump"; const NOTICE_ENTRY = "mesh-tui-notice"; const COMPLETION_DELIVERY_WINDOW_MS = 5_000;
+// The requester waits at most 15s for a prepare result, so responder-owned settlement is bounded well below that.
+const PARENT_TRANSITION_SETTLEMENT_TIMEOUT_MS = 4_000; const PARENT_TRANSITION_SETTLEMENT_POLL_MS = 25; const PARENT_TRANSITION_SETTLEMENT_RECONCILE_INTERVAL_MS = 250;
 interface RootBinding { schemaVersion: 1; meshId: string }
 interface EpochBinding { schemaVersion: 1; meshId: string; mode: string; epochId: string; policyDigest: string }
 export interface ActiveCaller { identity: string; meshId: string; epoch: PolicyEpoch; catalog: ChildCatalog; envelope?: AgentLaunchEnvelope; agentId?: string; runtimeId?: string; endpointId: string; sessionFile?: string; error?: string }
 export interface OrchestrationDependencies { configPath: string; catalogPath?: string; modePath?: string; env: NodeJS.ProcessEnv; exec: CommandExecutor; activeCaller?: () => ActiveCaller | undefined; authorityBarrier?: () => Promise<void>; rootLeaseId?: () => string | undefined; natureHandleWords?: () => readonly string[]; currentBatchTools?: () => ReadonlyMap<string, string>; trackWaitTask?: (caller: ActiveCaller, taskId: string) => void; untrackWaitTask?: (caller: ActiveCaller, taskId: string) => void; applyControl?: (caller: ActiveCaller, agentId: string, action: ControlAction, source: ControlSource) => Promise<{ requestId: string; action: ControlAction; targets: Array<{ agentId: string; status: ControlTargetStatus; phase: string }> }>; sleep?: (ms: number, signal?: AbortSignal) => Promise<void>; now?: () => number }
-export interface OrchestrationRegistrationOptions extends Partial<Pick<OrchestrationDependencies, "configPath" | "catalogPath" | "modePath" | "env">> { setInterval?: (callback: () => void | Promise<void>, delay: number) => unknown; clearInterval?: (timer: unknown) => void; now?: () => number; onAuthorityWait?: () => void; wake?: DirectoryWakeDependencies }
+export interface OrchestrationRegistrationOptions extends Partial<Pick<OrchestrationDependencies, "configPath" | "catalogPath" | "modePath" | "env">> { setInterval?: (callback: () => void | Promise<void>, delay: number) => unknown; clearInterval?: (timer: unknown) => void; now?: () => number; onAuthorityWait?: () => void; beforeParentTransitionPrepare?: () => void | Promise<void>; wake?: DirectoryWakeDependencies }
 export async function loadOrchestrationConfig(path: string): Promise<SubagentRuntimeConfig> { try { return validateOrchestrationConfig(JSON.parse(await readFile(path, "utf8"))); } catch (error) { throw new Error(`Cannot read orchestration config ${path}: ${error instanceof Error ? error.message : String(error)}`); } }
 export async function loadChildCatalog(path: string): Promise<ChildCatalog> { try { return validateChildCatalog(JSON.parse(await readFile(path, "utf8"))); } catch (error) { throw new Error(`Cannot read child catalog ${path}: ${error instanceof Error ? error.message : String(error)}`); } }
 export async function loadAgentModes(path: string): Promise<AgentModeConfig> { try { return validateModeConfig(JSON.parse(await readFile(path, "utf8"))); } catch (error) { throw new Error(`Cannot read agent modes ${path}: ${error instanceof Error ? error.message : String(error)}`); } }
@@ -330,11 +332,12 @@ export async function registerOrchestration(pi: ExtensionAPI, options: Orchestra
     pi.registerEntryRenderer(NOTICE_ENTRY, (entry, renderOptions, theme) => renderTuiNotice(entry.data as TuiNotice, renderOptions.expanded, theme, noticeWords));
     loadFeatureKeybindings("meshPalette"); loadFeatureKeybindings("tmuxPreview"); const configPath = options.configPath ?? CONFIG; const catalogPath = options.catalogPath ?? CATALOG; const modePath = options.modePath ?? (configPath === CONFIG ? MODES : join(dirname(configPath), "agent-modes.json")); const env = options.env ?? process.env; const [runtime, catalog, modes] = await Promise.all([loadOrchestrationConfig(configPath), loadChildCatalog(catalogPath), loadAgentModes(modePath)]); validateOrchestrationReferences(runtime, catalog, Object.keys(modes.modes)); noticeWords = runtime.natureHandleWords; const exec: CommandExecutor = async (command, args) => { const value = await pi.exec(command, args); return { stdout: value.stdout, stderr: value.stderr, code: value.code }; };
     pi.registerMessageRenderer("mesh-event", (message, renderOptions, theme) => renderMeshEventMessage(message, renderOptions, theme, runtime.natureHandleWords));
-    let current: ActiveCaller | undefined; let rootLeaseId: string | undefined; let rootSessionId: string | undefined; let endpoint: MeshEndpoint | undefined; let sessionContext: ExtensionContext | undefined; let latestMode: ActiveModeEvent | undefined; let cadence: OrchestrationDeadlineScheduler | undefined; let completionDeliveryDeadline: number | undefined; let scheduledNow = 0; const deliveryNow = options.now ?? (options.setInterval ? () => scheduledNow : () => performance.now()); let materializationPass: Promise<void> | undefined; let pumpPass: Promise<boolean> | undefined; const armedWait = new MeshArmedWait(); let armedEndpoint: MeshEndpoint | undefined; let armedTaskId: string | undefined; const trackedWaitTasks = new Set<string>(); let recoverInjectedAfterSettle = false; let deliveryGeneration = 0; let noticePumping = false; let wakeHints: DirectoryWake[] = []; const closeWakeHints = () => { const closing = wakeHints; wakeHints = []; for (const wake of closing) void wake.close(); }; let shuttingDown = false; let lastPumpError: string | undefined; let lastNoticePumpError: string | undefined; let modeBarrier: ActiveModeBarrier; const maintenance = new AbortController(); const injectedThisRuntime = new Set<string>(); const awaitingContextEvents = new Set<string>(); const confirmedReceiptIds = new Set<string>(); const deliveredCompletionTaskIds = new Set<string>(); const appendedNotices = new Set<string>(); const notifiedNotices = new Set<string>(); const reportedNoticeErrors = new Set<string>(); let resolvedEnvelope: AgentLaunchEnvelope | undefined; const childAgentId = env.PI_MESH_AGENT_ID; const childMeshId = env.PI_MESH_ID; const childEnvironment = Boolean(env.PI_AGENT_RESOLVED_AGENT || childMeshId || childAgentId);
+    let current: ActiveCaller | undefined; let rootLeaseId: string | undefined; let rootSessionId: string | undefined; let endpoint: MeshEndpoint | undefined; let sessionContext: ExtensionContext | undefined; let latestMode: ActiveModeEvent | undefined; let cadence: OrchestrationDeadlineScheduler | undefined; let completionDeliveryDeadline: number | undefined; let scheduledNow = 0; const deliveryNow = options.now ?? (options.setInterval ? () => scheduledNow : () => performance.now()); let materializationPass: Promise<void> | undefined; let pumpPass: Promise<boolean> | undefined; const armedWait = new MeshArmedWait(); let armedEndpoint: MeshEndpoint | undefined; let armedTaskId: string | undefined; const trackedWaitTasks = new Set<string>(); let recoverInjectedAfterSettle = false; let deliveryGeneration = 0; let noticePumping = false; let wakeHints: DirectoryWake[] = []; const closeWakeHints = () => { const closing = wakeHints; wakeHints = []; for (const wake of closing) void wake.close(); }; let shuttingDown = false; let lastPumpError: string | undefined; let lastNoticePumpError: string | undefined; let modeBarrier: ActiveModeBarrier; let maintenance = new AbortController(); let transitionGeneration = 0; let transitionController = new AbortController(); let transitionTail = Promise.resolve(); const transitionTasks = new Set<Promise<void>>(); const durableTransitionTasks = new Set<Promise<unknown>>(); const injectedThisRuntime = new Set<string>(); const awaitingContextEvents = new Set<string>(); const confirmedReceiptIds = new Set<string>(); const deliveredCompletionTaskIds = new Set<string>(); const appendedNotices = new Set<string>(); const notifiedNotices = new Set<string>(); const reportedNoticeErrors = new Set<string>(); let resolvedEnvelope: AgentLaunchEnvelope | undefined; const childAgentId = env.PI_MESH_AGENT_ID; const childMeshId = env.PI_MESH_ID; const childEnvironment = Boolean(env.PI_AGENT_RESOLVED_AGENT || childMeshId || childAgentId);
     if (env.PI_AGENT_RESOLVED_AGENT) try { resolvedEnvelope = validateLaunchEnvelope(JSON.parse(await readFile(env.PI_AGENT_RESOLVED_AGENT, "utf8"))); } catch (error) { current = { identity: "agent:invalid", meshId: childMeshId ?? randomUUID(), epoch: {} as PolicyEpoch, catalog, endpointId: "invalid", error: errorText(error) }; }
     const isolatedPromptOnly = resolvedEnvelope?.self.contextPolicy === "prompt-only";
     const waitBindingKey = (caller: ActiveCaller, value: MeshEndpoint) => `${caller.meshId}\0${caller.endpointId}\0${caller.sessionFile ?? ""}\0${value.bindingId}\0${caller.runtimeId ?? ""}\0${armedTaskId ?? ""}`;
-    const clearWaitSession = () => { armedWait.disarm(); armedEndpoint = undefined; armedTaskId = undefined; trackedWaitTasks.clear(); cadence?.setEnabled("wait-input", false); try { sessionContext?.ui.setStatus(WAIT_STATUS, undefined); } catch {} };
+    const disarmWaitSession = () => { armedWait.disarm(); armedEndpoint = undefined; armedTaskId = undefined; cadence?.setEnabled("wait-input", false); try { sessionContext?.ui.setStatus(WAIT_STATUS, undefined); } catch {} };
+    const clearWaitSession = () => { disarmWaitSession(); trackedWaitTasks.clear(); };
     const failWait = (error: unknown) => { if (!armedWait.isArmed()) return; clearWaitSession(); const diagnostic = `Mesh wait ended: ${errorText(error)}`; try { sessionContext?.ui.setStatus(PUMP_STATUS, diagnostic); sessionContext?.ui.notify(diagnostic, "error"); } catch {} };
     const setWaitStatus = async (ctx: ExtensionContext) => {
         ctx.ui.setStatus(WAIT_STATUS, "Mesh: waiting for delegated work");
@@ -414,63 +417,198 @@ export async function registerOrchestration(pi: ExtensionAPI, options: Orchestra
     const applyMode = async (event: ActiveModeEvent) => { latestMode = event; if (!sessionContext || childAgentId || !current) return; const restored = branchData<EpochBinding>(sessionContext, POLICY_BINDING); const epoch = await ensurePolicyEpoch(runtime.stateRoot, current.meshId, { mode: event.name, catalog, callPolicy: runtime.callPolicy, ...(restored?.meshId === current.meshId && restored.mode === event.name ? { restoreEpochId: restored.epochId } : {}) }); current = { ...current, identity: `mode:${event.name}`, epoch, error: undefined }; registerDispatch(childTargets(current)); if (!restored || restored.epochId !== epoch.epochId) pi.appendEntry(POLICY_BINDING, { schemaVersion: 1, meshId: current.meshId, mode: event.name, epochId: epoch.epochId, policyDigest: epoch.policyDigest } satisfies EpochBinding); };
     modeBarrier = createActiveModeBarrier(applyMode, error => { if (current) current = { ...current, error: errorText(error) }; });
     onActiveMode(pi, event => modeBarrier.enqueue(event), error => { if (current) current = { ...current, error: errorText(error) }; });
-    const emitTransitionResult = (result: ParentTransitionResult) => { pi.events.emit(PARENT_TRANSITION_RESULT_EVENT, result); };
-    const handleParentTransition = async (value: unknown): Promise<void> => {
+    type TransitionOwner = { generation: number; signal: AbortSignal; caller: ActiveCaller; rootLeaseId: string; rootSessionId: string; endpoint: MeshEndpoint };
+    const transitionIsCurrent = (owner: Pick<TransitionOwner, "generation" | "signal">): boolean => owner.generation === transitionGeneration && !owner.signal.aborted;
+    const emitTransitionResult = (owner: Pick<TransitionOwner, "generation" | "signal">, result: ParentTransitionResult) => { if (transitionIsCurrent(owner)) pi.events.emit(PARENT_TRANSITION_RESULT_EVENT, result); };
+    const parentTransitionProcessBlocker = (includeContextDelivery = true): string | undefined => {
+        if (shuttingDown) return "the session is shutting down";
+        if (recoverInjectedAfterSettle) return "abort delivery recovery has not settled";
+        if (armedWait.isArmed()) return "the mesh auto-join wait is still armed";
+        if (includeContextDelivery && awaitingContextEvents.size) return `${awaitingContextEvents.size} delivered mesh event(s) are queued but have not crossed the context receipt boundary`;
+        if (trackedWaitTasks.size) return `${trackedWaitTasks.size} delegated task completion(s) have not been received`;
+        if (executionGate.inFlightCount) return `${executionGate.inFlightCount} mesh execution(s) are still in flight (${executionGate.describeInFlight()})`;
+        return undefined;
+    };
+    type BoundedSettlement<T> = { status: "settled"; value: T } | { status: "rejected"; error: unknown } | { status: "timed-out" } | { status: "aborted" };
+    // The production bound always uses the real monotonic clock. Promise rejection remains observed after timeout/abort.
+    const awaitSettlement = async <T>(promise: Promise<T>, deadline: number, signal: AbortSignal): Promise<BoundedSettlement<T>> => {
+        // Attach both handlers before checking the bound so already-expired calls still observe late rejection.
+        const observed = promise.then(value => ({ status: "settled" as const, value }), error => ({ status: "rejected" as const, error }));
+        const remaining = deadline - performance.now();
+        if (signal.aborted) return { status: "aborted" };
+        if (remaining <= 0) return { status: "timed-out" };
+        let timer: NodeJS.Timeout | undefined; let abort = () => {};
+        const timeout = new Promise<BoundedSettlement<T>>(resolve => { timer = setTimeout(() => resolve({ status: "timed-out" }), remaining); });
+        const aborted = new Promise<BoundedSettlement<T>>(resolve => { abort = () => resolve({ status: "aborted" }); signal.addEventListener("abort", abort, { once: true }); });
+        try { return await Promise.race([observed, timeout, aborted]); }
+        finally { if (timer !== undefined) clearTimeout(timer); signal.removeEventListener("abort", abort); }
+    };
+    const cleanupFailure = (label: string): string => `Mesh parent transition blocked: ${label} failed.`;
+    const timeoutFailure = (label: string): string => `Mesh parent transition blocked: ${label} did not settle before the responder deadline.`;
+    const reconcileTrackedWaitTasks = async (owner: TransitionOwner): Promise<void> => {
+        if (!owner.caller.sessionFile || trackedWaitTasks.size === 0) return;
+        const tracked = new Set(trackedWaitTasks);
+        const ledger = await readCompletionLedger(runtime.stateRoot, owner.caller.meshId, owner.caller.endpointId, owner.caller.sessionFile);
+        if (!transitionIsCurrent(owner)) return;
+        const received = new Set((ledger?.receipts ?? []).filter(receipt => confirmedReceiptIds.has(receipt.receiptId)).flatMap(receipt => receipt.taskIds));
+        for (const taskId of received) if (tracked.has(taskId)) trackedWaitTasks.delete(taskId);
+    };
+    // Settlement owns cleanup only. Completion delivery remains owned by the normal context receipt path.
+    const settleParentTransition = async (owner: TransitionOwner, deadline: number): Promise<string | undefined> => {
+        let nextOwnedIoAt = -Infinity; let nextStopReconcileAt = -Infinity; let stopPending = false;
+        const deadlineFailure = () => { const blocker = parentTransitionProcessBlocker(); return blocker ? `Mesh parent transition blocked: ${blocker}.` : stopPending ? timeoutFailure("requested agent-stop recovery") : undefined; };
+        for (;;) {
+            if (!transitionIsCurrent(owner)) return undefined;
+            if (performance.now() >= deadline) return deadlineFailure();
+            const now = performance.now();
+            if (now >= nextOwnedIoAt) {
+                nextOwnedIoAt = now + PARENT_TRANSITION_SETTLEMENT_RECONCILE_INTERVAL_MS;
+                if (trackedWaitTasks.size) {
+                    const reconciled = await awaitSettlement(reconcileTrackedWaitTasks(owner), deadline, owner.signal);
+                    if (reconciled.status === "aborted") return undefined;
+                    if (reconciled.status === "timed-out") return deadlineFailure() ?? timeoutFailure("tracked completion cleanup");
+                    if (reconciled.status === "rejected") return cleanupFailure("tracked completion cleanup");
+                }
+                if (awaitingContextEvents.size || trackedWaitTasks.size) return parentTransitionReceiptGuidance(`Process state still has ${awaitingContextEvents.size + trackedWaitTasks.size} unreceived completion delivery item(s).`)!;
+                if (recoverInjectedAfterSettle) {
+                    if (performance.now() >= deadline) return deadlineFailure();
+                    const recovered = await awaitSettlement(recoverInjectedEvents(), deadline, owner.signal);
+                    if (recovered.status === "aborted") return undefined;
+                    if (recovered.status === "timed-out") return deadlineFailure() ?? timeoutFailure("abort delivery recovery");
+                    if (recovered.status === "rejected") return cleanupFailure("abort delivery recovery");
+                }
+                if (performance.now() >= deadline) return deadlineFailure();
+                const materialized = await awaitSettlement(materializeMeshCompletionEvents(runtime.stateRoot, owner.caller.meshId, owner.rootLeaseId), deadline, owner.signal);
+                if (materialized.status === "aborted") return undefined;
+                if (materialized.status === "timed-out") return deadlineFailure() ?? timeoutFailure("completion materialization");
+                if (materialized.status === "rejected") return cleanupFailure("completion materialization");
+                if (performance.now() >= deadline) return deadlineFailure();
+                const inspected = await awaitSettlement(readEndpointDeliverySnapshot(runtime.stateRoot, owner.caller.meshId, owner.endpoint), deadline, owner.signal);
+                if (inspected.status === "aborted") return undefined;
+                if (inspected.status === "timed-out") return deadlineFailure() ?? timeoutFailure("completion inspection");
+                if (inspected.status === "rejected") return cleanupFailure("completion inspection");
+                if (inspected.value.events.length || inspected.value.pendingTasks.length) return parentTransitionReceiptGuidance(`Durable state still has ${inspected.value.events.length + inspected.value.pendingTasks.length} unreceived completion delivery item(s).`)!;
+                if (performance.now() >= deadline) return deadlineFailure();
+                const pumped = await awaitSettlement(requestPumpPass(), deadline, owner.signal);
+                if (pumped.status === "aborted") return undefined;
+                if (pumped.status === "timed-out") return deadlineFailure() ?? timeoutFailure("the event pump");
+                if (pumped.status === "rejected") return cleanupFailure("the event pump");
+                disarmWaitSession();
+            }
+            if (awaitingContextEvents.size || trackedWaitTasks.size) return parentTransitionReceiptGuidance(`Process state still has ${awaitingContextEvents.size + trackedWaitTasks.size} unreceived completion delivery item(s).`)!;
+            const blocker = parentTransitionProcessBlocker();
+            if (blocker && shuttingDown) return `Mesh parent transition blocked: ${blocker}.`;
+            if (!blocker && now >= nextStopReconcileAt) {
+                nextStopReconcileAt = now + PARENT_TRANSITION_SETTLEMENT_RECONCILE_INTERVAL_MS;
+                if (performance.now() >= deadline) return deadlineFailure();
+                const recovered = await awaitSettlement(recoverPendingAgentStops({ stateRoot: runtime.stateRoot, meshId: owner.caller.meshId, exec, tmux: runtime.tmux }), deadline, owner.signal);
+                if (recovered.status === "aborted") return undefined;
+                if (recovered.status === "timed-out") return deadlineFailure() ?? timeoutFailure("requested agent-stop recovery");
+                if (recovered.status === "rejected") return cleanupFailure("requested agent-stop recovery");
+                stopPending = recovered.value.pending > 0 || recovered.value.failed > 0;
+            }
+            if (!blocker && !stopPending) return undefined;
+            if (performance.now() >= deadline) return deadlineFailure();
+            const paused = await awaitSettlement(sleep(PARENT_TRANSITION_SETTLEMENT_POLL_MS), deadline, owner.signal);
+            if (paused.status === "aborted") return undefined;
+            if (paused.status === "rejected") return cleanupFailure("settlement wait");
+            if (paused.status === "timed-out") return deadlineFailure() ?? timeoutFailure("settlement wait");
+        }
+    };
+    const handleParentTransition = async (value: unknown, owner: TransitionOwner | undefined, lifecycle: { generation: number; signal: AbortSignal }, deadline: number): Promise<void> => {
         let request: ParentTransitionRequest;
         try { request = validateParentTransitionRequest(value); }
-        catch (error) { if (current) current = { ...current, error: errorText(error) }; return; }
-        const reject = (error: string) => emitTransitionResult({ schemaVersion: 1, requestId: request.requestId, status: "rejected", error });
+        catch (error) { if (transitionIsCurrent(lifecycle) && current) current = { ...current, error: errorText(error) }; return; }
+        if (!transitionIsCurrent(lifecycle)) {
+            if (owner && request.operation !== "prepare" && request.token) await releaseParentTransition(runtime.stateRoot, owner.caller.meshId, { token: request.token, rootLeaseId: owner.rootLeaseId }).catch(() => {});
+            return;
+        }
+        if (childAgentId || !owner) {
+            emitTransitionResult(lifecycle, { schemaVersion: 1, requestId: request.requestId, status: "rejected", error: "Mesh parent transition requires the attached root session" });
+            return;
+        }
+        const reject = (error: string) => emitTransitionResult(owner, { schemaVersion: 1, requestId: request.requestId, status: "rejected", error });
+        if (performance.now() >= deadline) { reject(timeoutFailure(`${request.operation} queue`)); return; }
         try {
-            if (childAgentId || !current || !rootLeaseId || !rootSessionId || !endpoint) { reject("Mesh parent transition requires the attached root session"); return; }
-            if (shuttingDown || recoverInjectedAfterSettle || armedWait.isArmed() || trackedWaitTasks.size || executionGate.inFlightCount) { reject("Mesh root is not settled for a parent transition"); return; }
             if (request.operation === "prepare") {
                 if (request.kind === undefined || request.fromMode === undefined) { reject("prepare requires kind and fromMode"); return; }
                 if (request.kind === "mode" && request.targetMode === undefined) { reject("mode prepare requires targetMode"); return; }
-                let fence: Awaited<ReturnType<typeof prepareParentTransition>>;
-                try {
-                    fence = await prepareParentTransition(runtime.stateRoot, current.meshId, { requestId: request.requestId, rootLeaseId, rootSessionId, kind: request.kind, fromMode: request.fromMode, ...(request.targetMode !== undefined ? { targetMode: request.targetMode } : {}), expectedBinding: { endpointId: endpoint.endpointId, endpointSessionFile: endpoint.sessionFile, bindingId: endpoint.bindingId } });
-                } catch (error) {
-                    reject(errorText(error));
-                    return;
-                }
-                emitTransitionResult({ schemaVersion: 1, requestId: request.requestId, status: "prepared", token: fence.token });
+                const settlement = await settleParentTransition(owner, deadline);
+                if (!transitionIsCurrent(owner)) return;
+                if (settlement) { reject(settlement); return; }
+                const beforePrepare = await awaitSettlement(Promise.resolve(options.beforeParentTransitionPrepare?.()), deadline, owner.signal);
+                if (beforePrepare.status === "aborted") return;
+                if (beforePrepare.status === "timed-out") { reject(timeoutFailure("durable preparation")); return; }
+                if (beforePrepare.status === "rejected") { reject(cleanupFailure("durable preparation")); return; }
+                const prepareController = new AbortController();
+                const abortPrepare = () => prepareController.abort(owner.signal.reason ?? new Error("Parent transition lifecycle ended"));
+                owner.signal.addEventListener("abort", abortPrepare, { once: true });
+                const prepareTimer = setTimeout(() => prepareController.abort(new Error("Parent transition responder deadline expired")), Math.max(0, deadline - performance.now()));
+                const guard = () => { prepareController.signal.throwIfAborted(); if (!transitionIsCurrent(owner) || performance.now() >= deadline) throw new Error("Parent transition prepare no longer owns the active responder deadline"); };
+                const durablePrepare = prepareParentTransition(runtime.stateRoot, owner.caller.meshId, { requestId: request.requestId, rootLeaseId: owner.rootLeaseId, rootSessionId: owner.rootSessionId, kind: request.kind, fromMode: request.fromMode, ...(request.targetMode !== undefined ? { targetMode: request.targetMode } : {}), expectedBinding: { endpointId: owner.endpoint.endpointId, endpointSessionFile: owner.endpoint.sessionFile, bindingId: owner.endpoint.bindingId }, guard });
+                durableTransitionTasks.add(durablePrepare);
+                void durablePrepare.finally(() => { durableTransitionTasks.delete(durablePrepare); clearTimeout(prepareTimer); owner.signal.removeEventListener("abort", abortPrepare); }).catch(() => {});
+                const releaseUnacknowledgedPrepare = async () => {
+                    const fence = await durablePrepare.catch(() => undefined);
+                    if (fence) await releaseParentTransition(runtime.stateRoot, owner.caller.meshId, { token: fence.token, rootLeaseId: fence.rootLeaseId }).catch(() => {});
+                };
+                const prepared = await awaitSettlement(durablePrepare, deadline, owner.signal);
+                if (prepared.status === "aborted") { prepareController.abort(owner.signal.reason); await releaseUnacknowledgedPrepare(); return; }
+                if (prepared.status === "timed-out") { prepareController.abort(new Error("Parent transition responder deadline expired")); reject(timeoutFailure("durable preparation")); await releaseUnacknowledgedPrepare(); return; }
+                if (prepared.status === "rejected") { reject(parentTransitionSafePrepareError(prepared.error) ?? cleanupFailure("durable preparation")); return; }
+                emitTransitionResult(owner, { schemaVersion: 1, requestId: request.requestId, status: "prepared", token: prepared.value.token });
                 return;
             }
-            const fence = await readParentTransition(runtime.stateRoot, current.meshId);
-            if (!fence || fence.token !== request.token || fence.rootLeaseId !== rootLeaseId) { reject("Parent transition fence does not match the request"); return; }
+            const blocker = parentTransitionProcessBlocker(false);
+            if (blocker) { reject(`Mesh parent transition blocked: ${blocker}.`); return; }
+            const fence = await readParentTransition(runtime.stateRoot, owner.caller.meshId);
+            if (!transitionIsCurrent(owner)) {
+                if (fence && fence.token === request.token && fence.rootLeaseId === owner.rootLeaseId) await releaseParentTransition(runtime.stateRoot, owner.caller.meshId, { token: fence.token, rootLeaseId: fence.rootLeaseId }).catch(() => {});
+                return;
+            }
+            if (performance.now() >= deadline) { reject(timeoutFailure(`${request.operation} queue`)); return; }
+            if (!fence || fence.token !== request.token || fence.rootLeaseId !== owner.rootLeaseId) { reject("Parent transition fence does not match the request"); return; }
             if (request.operation === "cancel") {
-                await releaseParentTransition(runtime.stateRoot, current.meshId, { token: fence.token, rootLeaseId: fence.rootLeaseId });
-                emitTransitionResult({ schemaVersion: 1, requestId: request.requestId, status: "cancelled" });
+                await releaseParentTransition(runtime.stateRoot, owner.caller.meshId, { token: fence.token, rootLeaseId: fence.rootLeaseId });
+                emitTransitionResult(owner, { schemaVersion: 1, requestId: request.requestId, status: "cancelled" });
                 return;
             }
             if (fence.kind !== "mode" || fence.targetMode === undefined) { reject("Only mode transitions can be applied"); return; }
-            const previousEpochId = current.epoch.epochId;
+            const previousEpochId = owner.caller.epoch.epochId;
             try { await applyMode({ schemaVersion: 2, name: fence.targetMode, reason: "switch" } as ActiveModeEvent); }
-            catch (error) {
+            catch {
                 let rolledBack = false;
                 if (previousEpochId !== undefined) {
                     try {
-                        const epoch = await ensurePolicyEpoch(runtime.stateRoot, current.meshId, { mode: fence.fromMode, catalog, callPolicy: runtime.callPolicy, restoreEpochId: previousEpochId });
-                        const restored: ActiveCaller = { ...current, identity: `mode:${fence.fromMode}`, epoch, error: undefined };
-                        current = restored;
-                        registerDispatch(childTargets(restored));
-                        rolledBack = true;
+                        const epoch = await ensurePolicyEpoch(runtime.stateRoot, owner.caller.meshId, { mode: fence.fromMode, catalog, callPolicy: runtime.callPolicy, restoreEpochId: previousEpochId });
+                        const restored: ActiveCaller = { ...owner.caller, identity: `mode:${fence.fromMode}`, epoch, error: undefined };
+                        current = restored; registerDispatch(childTargets(restored)); rolledBack = true;
                     } catch { rolledBack = false; }
                 }
-                const failure = rolledBack ? `Parent transition apply failed; rolled back to the previous mesh epoch. ${errorText(error)}` : `Parent transition apply failed and the epoch rollback also failed; mesh mutations remain suspended. ${errorText(error)}`;
-                current = { ...current, error: failure };
-                try { sessionContext?.ui.notify(failure, "error"); } catch {}
-                emitTransitionResult({ schemaVersion: 1, requestId: request.requestId, status: "failed", error: failure });
+                const failure = rolledBack ? "Parent transition apply failed; rolled back to the previous mesh epoch. Retry the transition." : "Parent transition apply failed and the epoch rollback also failed; mesh mutations remain suspended. Restart the root session after resolving durable state access.";
+                if (transitionIsCurrent(owner)) {
+                    current = { ...(current ?? owner.caller), error: failure };
+                    try { sessionContext?.ui.notify(failure, "error"); } catch {}
+                    emitTransitionResult(owner, { schemaVersion: 1, requestId: request.requestId, status: "failed", error: failure });
+                }
                 return;
             }
-            await releaseParentTransition(runtime.stateRoot, current.meshId, { token: fence.token, rootLeaseId: fence.rootLeaseId });
-            emitTransitionResult({ schemaVersion: 1, requestId: request.requestId, status: "applied" });
+            await releaseParentTransition(runtime.stateRoot, owner.caller.meshId, { token: fence.token, rootLeaseId: fence.rootLeaseId });
+            emitTransitionResult(owner, { schemaVersion: 1, requestId: request.requestId, status: "applied" });
         } catch (error) {
-            if (current) current = { ...current, error: errorText(error) };
-            emitTransitionResult({ schemaVersion: 1, requestId: request.requestId, status: "failed", error: errorText(error) });
+            if (!transitionIsCurrent(owner)) return;
+            const failure = request.operation === "prepare" ? cleanupFailure("durable preparation") : parentTransitionSafeTerminalError(request.operation, error);
+            current = { ...(current ?? owner.caller), error: failure };
+            emitTransitionResult(owner, { schemaVersion: 1, requestId: request.requestId, status: "failed", error: failure });
         }
     };
-    if (!childAgentId && !isolatedPromptOnly) pi.events.on(PARENT_TRANSITION_REQUEST_EVENT, value => { void handleParentTransition(value); });
+    if (!childAgentId && !isolatedPromptOnly) pi.events.on(PARENT_TRANSITION_REQUEST_EVENT, value => {
+        const lifecycle = { generation: transitionGeneration, signal: transitionController.signal };
+        const owner = current && rootLeaseId && rootSessionId && endpoint ? { ...lifecycle, caller: current, rootLeaseId, rootSessionId, endpoint } : undefined;
+        const deadline = performance.now() + PARENT_TRANSITION_SETTLEMENT_TIMEOUT_MS;
+        const task = transitionTail.catch(() => {}).then(() => handleParentTransition(value, owner, lifecycle, deadline));
+        transitionTail = task; transitionTasks.add(task); void task.finally(() => { transitionTasks.delete(task); }).catch(() => {});
+    });
     if (!childAgentId) pi.on("session_before_tree", async (_event) => {
         if (!current) return;
         // A present or unreadable/corrupted fence blocks tree operations; a missing fence never does.
@@ -686,8 +824,10 @@ export async function registerOrchestration(pi: ExtensionAPI, options: Orchestra
         return trackedWaitTasks.size || snapshot.pendingTasks.length || snapshot.events.length ? "pending" : "drained";
     };
     const recoverInjectedEvents = async () => {
-        if (!recoverInjectedAfterSettle || !current || !endpoint) return;
-        deliveryGeneration += 1;
+        if (!recoverInjectedAfterSettle) return;
+        // Always clear the abort-recovery latch once settlement is reached; a missing mesh context must not preserve it.
+        if (!current || !endpoint) { recoverInjectedAfterSettle = false; return; }
+        const recoveryGeneration = ++deliveryGeneration;
         try {
             // Finish the old generation while delivery is paused, then reconcile only durable unacknowledged events.
             await pumpPass?.catch(() => {});
@@ -695,7 +835,7 @@ export async function registerOrchestration(pi: ExtensionAPI, options: Orchestra
             for (const event of snapshot.events) injectedThisRuntime.delete(event.eventId);
             deliveredCompletionTaskIds.clear();
         } catch (error) { try { sessionContext?.ui.notify(`Mesh abort delivery recovery: ${errorText(error)}`, "error"); } catch {} }
-        finally { recoverInjectedAfterSettle = false; }
+        finally { if (deliveryGeneration === recoveryGeneration) recoverInjectedAfterSettle = false; }
         // The existing scheduler resumes asynchronous delivery after all settlement handlers finish.
     };
     const pumpWithDiagnostics = async () => { try { if (await requestPumpPass() && lastPumpError !== undefined) { lastPumpError = undefined; try { sessionContext?.ui.setStatus(PUMP_STATUS, undefined); } catch {} } } catch (error) { failWait(error); if (endpoint && current && !await isLiveMeshEndpointBinding(runtime.stateRoot, current.meshId, endpoint).catch(() => false)) closeWakeHints(); const text = errorText(error).replace(/\s+/gu, " ").trim(); if (text !== lastPumpError) { lastPumpError = text; const diagnostic = `Mesh event pump: ${text}`; try { sessionContext?.ui.setStatus(PUMP_STATUS, diagnostic); } catch {} try { sessionContext?.ui.notify(diagnostic, "error"); } catch {} } } };
@@ -718,6 +858,12 @@ export async function registerOrchestration(pi: ExtensionAPI, options: Orchestra
     };
     if (childAgentId && !isolatedPromptOnly) pi.registerCommand("parent", { description: "Return to this mesh agent's inviter tmux window", async handler(_args, ctx) { const result = await exec(runtime.returnParentCommand, []); if (result.code !== 0) ctx.ui.notify(result.stderr.trim() || "Could not return to the inviter window", "error"); } });
     pi.on("session_start", async (_event, ctx) => {
+        // Fence the prior generation before replacing any session globals. Detached durable prepare work retains a guard
+        // that prevents it from writing after this boundary.
+        transitionController.abort(new Error("Parent transition superseded by session start"));
+        await Promise.allSettled([...transitionTasks, ...durableTransitionTasks]);
+        transitionGeneration += 1; transitionController = new AbortController(); transitionTail = Promise.resolve();
+        shuttingDown = false; recoverInjectedAfterSettle = false; maintenance = new AbortController(); executionGate.reset(); armedWait.disarm(); trackedWaitTasks.clear(); awaitingContextEvents.clear(); injectedThisRuntime.clear(); deliveredCompletionTaskIds.clear(); confirmedReceiptIds.clear();
         sessionContext = ctx; const sessionId = ctx.sessionManager.getSessionId(); const sessionFile = ctx.sessionManager.getSessionFile();
         if (childEnvironment) { if (!resolvedEnvelope || !childMeshId || !childAgentId) throw new Error("Mesh child environment requires a valid launch envelope and mesh identity"); if (resolvedEnvelope.meshId !== childMeshId || resolvedEnvelope.agentId !== childAgentId) throw new Error("Mesh child environment does not match launch envelope"); if (!sessionFile) throw new Error("Mesh child session requires a durable session file"); const binding = await bindAgentRuntime(runtime.stateRoot, childMeshId, childAgentId, { runtimeId: randomUUID(), kind: "pi", sessionId, sessionFile }); const epochRecord = await readPolicyEpoch(runtime.stateRoot, childMeshId, resolvedEnvelope.epochId); current = { identity: resolvedEnvelope.identity, meshId: childMeshId, epoch: epochRecord, catalog: { schemaVersion: 2, children: resolvedEnvelope.children }, envelope: resolvedEnvelope, agentId: childAgentId, runtimeId: binding.runtimeId, endpointId: `agent:${childAgentId}`, sessionFile }; emitResolvedAgent(pi, resolvedEnvelope); if (sessionFile && !isolatedPromptOnly) endpoint = await bindMeshEndpoint(runtime.stateRoot, childMeshId, { endpointId: current.endpointId, kind: "agent", agentId: childAgentId, harness: "pi", sessionId, sessionFile }); const childSnapshot = await readAgentSnapshot(runtime.stateRoot, childMeshId, childAgentId); stagedMeshToolsEnabled = !isolatedPromptOnly && childSnapshot.status.meshToolsEnabled; const roleTools = resolvedEnvelope.self.tools.filter(name => !MESH_PEER_TOOL_NAMES.includes(name as typeof MESH_PEER_TOOL_NAMES[number])); const staged = childHasOutboundEdges ? stagedMeshToolsEnabled ? authorizedMeshTools(current) : ["mesh_send", MESH_REPORT_TOOL_NAME] : [MESH_REPORT_TOOL_NAME]; pi.setActiveTools(isolatedPromptOnly ? [] : [...new Set([...roleTools, ...staged, END_RESPONSE_TOOL_NAME])]); if (stagedMeshToolsEnabled) { const activeTools = new Set(pi.getActiveTools()); const missing = authorizedMeshTools(current).filter(name => !activeTools.has(name)); if (missing.length) throw new Error(`Persisted mesh activation could not be restored; child process restart required: ${missing.join(", ")}`); } ctx.ui.setStatus(MESH_CHILD_IDENTITY_STATUS, formatUsualIdentityLine(childSnapshot, runtime.natureHandleWords)); if (!isolatedPromptOnly) ctx.ui.setStatus(PARENT_STATUS, runtime.parentNavigationHint); if (sessionFile) await reconcileMeshUsageClaims(runtime.stateRoot, childMeshId, sessionFile); }
         else {
@@ -867,12 +1013,12 @@ export async function registerOrchestration(pi: ExtensionAPI, options: Orchestra
         pi.on("tool_call", async (event, ctx) => {
             batchTools.set(event.toolCallId, event.toolName);
             if (event.toolName === END_RESPONSE_TOOL_NAME) return;
-            const admission = await executionGate.waitForAdmission(event.toolCallId, ctx.signal);
+            const admission = await executionGate.waitForAdmission(event.toolCallId, ctx.signal, { kind: "tool", name: event.toolName });
             if (admission === "abort") return { block: true, reason: "Mesh execution interrupted" };
         });
         pi.on("tool_execution_end", event => { executionGate.complete(event.toolCallId); });
         pi.on("before_provider_request", async (_event, ctx) => {
-            const admission = await executionGate.waitForAdmission("provider", ctx.signal);
+            const admission = await executionGate.waitForAdmission("provider", ctx.signal, { kind: "provider" });
             if (admission === "abort") throw ctx.signal?.reason ?? new Error("Mesh execution interrupted");
         });
         pi.on("after_provider_response", () => { executionGate.complete("provider"); });
@@ -913,7 +1059,13 @@ export async function registerOrchestration(pi: ExtensionAPI, options: Orchestra
                 try { ctx.ui.setStatus(PUMP_STATUS, diagnostic); } catch {}
             } finally { cadence?.setEnabled("wait-input", false); try { ctx.ui.setStatus(WAIT_STATUS, undefined); } catch {} }
         });
-        pi.on("agent_settled", async () => { removeRunAbortListener(); batchTools.clear(); clearWaitSession(); awaitingContextEvents.clear(); await recoverInjectedEvents(); });
+        pi.on("agent_settled", async () => {
+            // Settle the completed run first: a reentrant continuation (for example a child fallback triggerTurn)
+            // may admit new provider/tool work during this handler, and that admission must outlive this run.
+            executionGate.settleRun();
+            removeRunAbortListener(); batchTools.clear(); clearWaitSession(); awaitingContextEvents.clear();
+            await recoverInjectedEvents();
+        });
     }
     if (resolvedEnvelope) pi.on("before_agent_start", event => { const instructions = resolvedEnvelope!.self.instructions; return { systemPrompt: `${event.systemPrompt}\n\n${instructions}` }; });
     const paletteDeps = (): MeshPaletteDependencies => {
@@ -965,7 +1117,7 @@ export async function registerOrchestration(pi: ExtensionAPI, options: Orchestra
         }
         await open(ctx);
     } }); }
-    pi.on("session_shutdown", async event => { shuttingDown = true; removeRunAbortListener(); clearWaitSession(); awaitingContextEvents.clear(); deliveryGeneration += 1; cadence?.setEnabled("wait-input", false); const closingWakeHints = wakeHints; wakeHints = []; await Promise.all(closingWakeHints.map(wake => wake.close())); maintenance.abort(new Error("Mesh root maintenance stopped for session shutdown")); unregister(); await cadence?.stop(); if (endpoint && current) await setMeshEndpointOffline(runtime.stateRoot, current.meshId, endpoint.endpointId, endpoint).catch(() => {}); if (!childAgentId && current && rootLeaseId) await failOpenPressureAdmissions(runtime.stateRoot, current.meshId).catch(() => {}); if (childAgentId || !current || !rootLeaseId || event.reason === "reload") return; await beginMeshClose(runtime.stateRoot, current.meshId, rootLeaseId); const hubContext = await probeTmux(exec, runtime.tmux, env) ?? undefined; await cleanupMeshAgents({ stateRoot: runtime.stateRoot, meshId: current.meshId, exec, tmux: runtime.tmux, shutdownReason: event.reason, hubContext }); await completeMeshClose(runtime.stateRoot, current.meshId, rootLeaseId); try { const transitionFence = await readParentTransition(runtime.stateRoot, current.meshId); if (transitionFence && transitionFence.kind === "handoff" && transitionFence.rootLeaseId === rootLeaseId) await releaseParentTransition(runtime.stateRoot, current.meshId, { token: transitionFence.token, rootLeaseId: transitionFence.rootLeaseId }); } catch {} });
+    pi.on("session_shutdown", async event => { shuttingDown = true; transitionController.abort(new Error("Parent transition stopped for session shutdown")); await Promise.allSettled([...transitionTasks, ...durableTransitionTasks]); removeRunAbortListener(); clearWaitSession(); awaitingContextEvents.clear(); deliveryGeneration += 1; cadence?.setEnabled("wait-input", false); const closingWakeHints = wakeHints; wakeHints = []; await Promise.all(closingWakeHints.map(wake => wake.close())); maintenance.abort(new Error("Mesh root maintenance stopped for session shutdown")); unregister(); await cadence?.stop(); if (endpoint && current) await setMeshEndpointOffline(runtime.stateRoot, current.meshId, endpoint.endpointId, endpoint).catch(() => {}); if (!childAgentId && current && rootLeaseId) await failOpenPressureAdmissions(runtime.stateRoot, current.meshId).catch(() => {}); if (childAgentId || !current || !rootLeaseId || event.reason === "reload") return; await beginMeshClose(runtime.stateRoot, current.meshId, rootLeaseId); const hubContext = await probeTmux(exec, runtime.tmux, env) ?? undefined; await cleanupMeshAgents({ stateRoot: runtime.stateRoot, meshId: current.meshId, exec, tmux: runtime.tmux, shutdownReason: event.reason, hubContext }); await completeMeshClose(runtime.stateRoot, current.meshId, rootLeaseId); try { const transitionFence = await readParentTransition(runtime.stateRoot, current.meshId); if (transitionFence && transitionFence.kind === "handoff" && transitionFence.rootLeaseId === rootLeaseId) await releaseParentTransition(runtime.stateRoot, current.meshId, { token: transitionFence.token, rootLeaseId: transitionFence.rootLeaseId }); } catch {} });
     return true;
 }
 export default registerOrchestration;

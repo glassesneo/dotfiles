@@ -16,6 +16,7 @@ import {
     WEB_SEARCH_DETAILS_SCHEMA_VERSION,
     WEB_SEARCH_QUERY_MAX_CHARS,
     WEB_SEARCH_QUERY_MAX_WORDS,
+    WebRetrievalReadinessError,
     parseWebSearchInput,
     type SearchResult,
     type WebRetrievalRuntimeConfig,
@@ -81,7 +82,9 @@ export async function loadWebSearchConfig(
 ): Promise<WebRetrievalRuntimeConfig> {
     try {
         return await loadWebRetrievalRuntimeConfig(path, signal);
-    } catch {
+    } catch (error) {
+        if (error instanceof WebRetrievalReadinessError) throw error;
+        if (signal?.aborted) throw signal.reason ?? error;
         throw new Error(WEB_RETRIEVAL_CONFIG_UNAVAILABLE);
     }
 }
@@ -169,7 +172,7 @@ export function createWebSearchToolDefinition(
                     config = await awaitWithSignal(deps.loadConfig(wholeTool.signal), wholeTool.signal);
                 } catch (error) {
                     if (wholeTool.signal.aborted) throw wholeTool.signal.reason ?? error;
-                    throw new Error(WEB_RETRIEVAL_CONFIG_UNAVAILABLE);
+                    throw error instanceof WebRetrievalReadinessError ? error : new Error(WEB_RETRIEVAL_CONFIG_UNAVAILABLE);
                 }
                 const response = await awaitWithSignal(
                     deps.router.search(config, request, wholeTool.signal),
