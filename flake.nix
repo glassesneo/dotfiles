@@ -9,6 +9,7 @@
   }: let
     system = "aarch64-darwin";
     pkgs = nixpkgs.legacyPackages.${system};
+    inherit (pkgs) lib;
 
     treefmt = treefmt-nix.lib.evalModule pkgs {
       projectRootFile = "flake.nix";
@@ -21,8 +22,13 @@
       modules =
         [
           denix.denixModules.nixDarwin
+          ./adapters/hjem.nix
         ]
-        ++ denix.lib.umport {paths = [./hosts];};
+        ++ lib.fileset.toList (
+          lib.fileset.fileFilter
+          (file: file.name == "default.nix")
+          ./abstractions
+        );
     };
   in {
     darwinConfigurations.seiran = configuration.genSystem {
@@ -30,8 +36,29 @@
       host = "seiran";
     };
 
+    hjemConfigurations."neo@seiran" = configuration.genSystem {
+      moduleSystem = "hjem";
+      host = "seiran";
+
+      extraArgs = {
+        inherit system;
+        username = "neo";
+        homeDirectory = "/Users/neo";
+      };
+    };
+
+    devShells.${system}.default = pkgs.mkShellNoCC {
+      packages = [pkgs.just pkgs.nushell inputs.hjem.packages.${system}.hjem];
+    };
+
     formatter.${system} = treefmt.config.build.wrapper;
-    checks.${system}.formatting = treefmt.config.build.check self;
+    checks.${system} =
+      import ./tests {
+        inherit inputs denix pkgs system;
+      }
+      // {
+        formatting = treefmt.config.build.check self;
+      };
   };
 
   inputs = {

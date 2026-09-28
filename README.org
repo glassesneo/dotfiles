@@ -1,0 +1,45 @@
+#+TITLE: Neo's Nix Dotfiles
+#+AUTHOR: Neo Kitani
+
+* About
+
+This repository manages my machines and user environment with the rewrite branch of [[https://github.com/yunfachi/denix][Denix]], [[https://github.com/nix-darwin/nix-darwin][nix-darwin]], and standalone [[https://github.com/feel-co/hjem][Hjem]]. It is a personal configuration, not a reusable template.
+
+* Layout
+
+- =abstractions/= contains auto-discovered Denix hosts and modules.
+- =adapters/= connects Denix to unsupported module systems such as Hjem.
+- =tests/= contains sandboxed checks discovered as flake checks.
+- =scripts/= contains procedures that modify user or system state.
+- =docs/= contains durable cross-cutting contracts and runbooks. Start with [[file:docs/architecture.md][the architecture contract]].
+
+* Commands
+
+Enter the development shell before using the repository commands:
+
+#+begin_src sh
+nix develop
+#+end_src
+
+Format and validate the repository:
+
+#+begin_src sh
+just fmt
+just eval
+just check hjem
+nix flake check
+#+end_src
+
+Build or apply the standalone Hjem configuration for a host. The current =$USER= is used unless another user is supplied:
+
+#+begin_src sh
+just build-hjem seiran
+just switch-hjem seiran
+just switch-hjem seiran alice
+#+end_src
+
+The build command realizes all managed sources and packages without changing user state. The switch command performs the same build before activation. Hjem activation itself is not transactional; see [[file:docs/architecture.md][the architecture contract]] for the failure boundary.
+
+* License
+
+See [[file:LICENSE][LICENSE]].
