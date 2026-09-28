@@ -23,6 +23,7 @@
         [
           denix.denixModules.nixDarwin
           ./adapters/hjem.nix
+          ./extensions/hosts.nix
         ]
         ++ lib.fileset.toList (
           lib.fileset.fileFilter
@@ -30,22 +31,37 @@
           ./abstractions
         );
     };
+
+    hosts = configuration.config.hosts;
   in {
-    darwinConfigurations.seiran = configuration.genSystem {
-      moduleSystem = "darwin";
-      host = "seiran";
-    };
+    darwinConfigurations =
+      builtins.mapAttrs
+      (hostName: _:
+        configuration.genSystem {
+          moduleSystem = "darwin";
+          host = hostName;
+        })
+      (lib.filterAttrs
+        (_: host: (lib.systems.elaborate host.system).isDarwin)
+        hosts);
 
-    hjemConfigurations."neo@seiran" = configuration.genSystem {
-      moduleSystem = "hjem";
-      host = "seiran";
+    hjemConfigurations =
+      lib.concatMapAttrs
+      (hostName: host:
+        lib.mapAttrs'
+        (userName: user:
+          lib.nameValuePair "${userName}@${hostName}" (configuration.genSystem {
+            moduleSystem = "hjem";
+            host = hostName;
 
-      extraArgs = {
-        inherit system;
-        username = "neo";
-        homeDirectory = "/Users/neo";
-      };
-    };
+            extraArgs = {
+              inherit (host) system;
+              inherit (user) homeDirectory;
+              username = userName;
+            };
+          }))
+        host.users)
+      hosts;
 
     devShells.${system}.default = pkgs.mkShellNoCC {
       packages = [pkgs.just pkgs.nushell inputs.hjem.packages.${system}.hjem];

@@ -9,6 +9,7 @@ This repository manages my machines and user environment with the rewrite branch
 
 - =abstractions/= contains auto-discovered Denix hosts and modules.
 - =adapters/= connects Denix to unsupported module systems such as Hjem.
+- =extensions/= extends the Denix configuration schema, such as host attributes.
 - =tests/= contains sandboxed checks discovered as flake checks.
 - =scripts/= contains procedures that modify user or system state.
 - =docs/= contains durable cross-cutting contracts and runbooks. Start with [[file:docs/architecture.md][the architecture contract]].
@@ -30,7 +31,7 @@ just check hjem
 nix flake check
 #+end_src
 
-Build or apply the standalone Hjem configuration for a host. The current =$USER= is used unless another user is supplied:
+Build or apply the standalone Hjem configuration for a host. The current =$USER= is used unless another user is supplied; the user must be declared in the host's =users=:
 
 #+begin_src sh
 just build-hjem seiran

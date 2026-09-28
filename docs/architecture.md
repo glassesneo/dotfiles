@@ -4,7 +4,7 @@ This file is the canonical description of repository structure and command owner
 
 ## Composition and discovery
 
-`flake.nix` is the composition root. It selects inputs, loads adapters, discovers Denix abstractions, and publishes configurations, checks, formatting, and the development shell.
+`flake.nix` is the composition root. It selects inputs, loads adapters and extensions, discovers Denix abstractions, and publishes configurations, checks, formatting, and the development shell.
 
 Denix receives every `default.nix` below `abstractions/`. Files in that tree declare independent Denix abstractions; they do not form manual import chains. New files must be Git-tracked before flake evaluation can discover them.
 
@@ -13,11 +13,20 @@ Denix receives every `default.nix` below `abstractions/`. Files in that tree dec
 - `abstractions/hosts/` owns machine-specific facts and choices.
 - `abstractions/modules/` owns reusable features. A feature keeps its Darwin, Hjem, and other module-system outputs together.
 - `adapters/` owns integrations for module systems that Denix does not provide. An adapter translates Denix modules into the external system's configuration result; it does not own user configuration policy.
+- `extensions/` owns extensions of the Denix configuration schema, such as additional host attributes. Extensions declare structure; features that consume it live in `abstractions/modules/`.
 - `tests/` owns sandboxed checks exported through `checks.<system>`. Each immediate `tests/<name>/default.nix` is discovered automatically.
 - `scripts/` owns effectful procedures that coordinate commands or mutate user or system state.
 - `justfile` exposes short operator commands and delegates their procedures to Nix or `scripts/`.
 
 A concern has one owner. Shared outputs have one final writer, and adapters translate values without taking ownership of the feature that produced them.
+
+A module's name is its `myconfig` interface path, so choose it for the modules and hosts that reference it. Directory placement serves navigation and may differ from the name.
+
+## Host facts and shared values
+
+Hosts declare their Nix system, their users with home directories, and their primary user through `extensions/hosts.nix`. These attributes are the single source for those facts: `flake.nix` publishes one Darwin configuration per Darwin host and one Hjem configuration per host user from them, and modules read them through the read-only `myconfig.host`.
+
+Each module-system configuration evaluates independently because each is activated separately. A value needed by several module systems comes from `myconfig.host` or from bindings inside the feature that owns it. Checks under `tests/` verify consistency across module systems.
 
 ## Command boundary
 
