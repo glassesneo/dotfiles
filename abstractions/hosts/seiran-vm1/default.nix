@@ -1,6 +1,6 @@
 {delib, ...}:
 delib.host {
-  name = "seiran";
+  name = "seiran-vm1";
   system = "aarch64-darwin";
   users.neo = {};
 
