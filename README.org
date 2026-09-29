@@ -31,7 +31,7 @@ just check hjem
 nix flake check
 #+end_src
 
-Commands take the form =just <layer> <operation> [host]=. The layers are =hjem=, =darwin=, and =all= (Hjem, then nix-darwin); the operations are =build= and =switch=. An omitted host means this machine:
+Commands take the form =just <layer> <operation> [host]=. The layers are =hjem=, =darwin=, and =all= (nix-darwin, then Hjem); the operations are =build= and =switch=. An omitted host means this machine:
 
 #+begin_src sh
 just hjem build

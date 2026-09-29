@@ -80,11 +80,11 @@ export def darwin [host: string, --target: string = ""] {
   with-roots {|roots| apply-darwin $host $target $roots }
 }
 
-# Apply Hjem, then nix-darwin; a failure stops before the next layer.
+# Apply nix-darwin, then Hjem; a failure stops before the next layer.
 export def all [host: string, --target: string = ""] {
   let target = resolve-target $host $target
   with-roots {|roots|
-    apply-hjem $host $target $roots
     apply-darwin $host $target $roots
+    apply-hjem $host $target $roots
   }
 }
