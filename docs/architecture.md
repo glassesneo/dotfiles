@@ -32,15 +32,15 @@ Each module-system configuration evaluates independently because each is activat
 
 Nix owns evaluation and realization. Build recipes call Nix directly and do not modify user or system state. Effectful procedures belong in Nushell and are invoked through `justfile`.
 
-Standalone Hjem commands select `hjemConfigurations."<user>@<host>"`. Its `preflight` derivation realizes the configuration's sources and packages. `build-hjem` builds only that derivation, while `switch-hjem` continues with activation:
+Operator commands follow `just <layer> <operation> [host]`. Each layer is a `just` module under `just/`: `hjem` and `darwin` address one module system, and `all` applies every layer of the host in order. The operations are `build` and `switch`.
 
-1. Build the selected configuration's `preflight` derivation and retain it with a temporary GC root.
-2. Run `hjem standalone switch` for the same `<user>@<host>` output.
-3. Remove the temporary root after Hjem exits.
+- `build` realizes the layer without touching any state: Hjem's `preflight` derivation for `$USER`, the nix-darwin `system`, or both for `all`.
+- `switch` delegates to `scripts/apply.nu`, which holds temporary GC roots for everything it realizes and removes them when it exits.
+- `all switch` applies Hjem before nix-darwin and stops at the first failure.
 
-A preflight failure occurs before activation and leaves the existing home unchanged. Hjem activation itself is not transactional; a failure during activation may leave partial changes.
+An omitted host means this machine, resolved with `hostname -s`; the `hostname` module keeps the system name equal to the Denix host name. `switch` applies to `--target` over SSH when it is given, and locally when the host is this machine; any other host without `--target` is an error. Hosts carry no SSH destinations, so one configuration can be applied to any machine that accepts it. A remote switch builds everything locally, copies the closures and the flake source over `ssh-ng` without signature checks, and activates over SSH. Hjem is applied for the SSH user there and for `$USER` locally.
 
-Recipes name the operation they perform and require an explicit host. Hjem recipes default the user to `$USER` and permit an explicit user override. Add Darwin or composed recipes only when their implementations exist.
+A preflight failure occurs before activation and leaves the existing home unchanged. Hjem activation itself is not transactional; a failure during activation may leave partial changes. Snapshots of virtual machines are outside this interface.
 
 ## Validation boundary
 

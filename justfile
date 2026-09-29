@@ -1,5 +1,14 @@
 system := `nix eval --impure --raw --expr builtins.currentSystem`
 
+# Build or apply the standalone Hjem configuration: just hjem <build|switch> [host]
+mod hjem 'just/hjem.just'
+
+# Build or apply the nix-darwin configuration: just darwin <build|switch> [host]
+mod darwin 'just/darwin.just'
+
+# Build or apply every layer of a host in order: just all <build|switch> [host]
+mod all 'just/all.just'
+
 fmt:
     nix fmt
 
@@ -8,9 +17,3 @@ eval:
 
 check name:
     nix build --no-link ".#checks.{{system}}.{{name}}"
-
-build-hjem host user=env_var('USER'):
-    nix build --no-link {{quote('.#hjemConfigurations."' + user + '@' + host + '".preflight')}}
-
-switch-hjem host user=env_var('USER'):
-    nu scripts/hjem-switch.nu {{quote(host)}} {{quote(user)}}

@@ -63,8 +63,10 @@
         host.users)
       hosts;
 
+    packages.${system}.hjem = inputs.hjem.packages.${system}.hjem;
+
     devShells.${system}.default = pkgs.mkShellNoCC {
-      packages = [pkgs.just pkgs.nushell inputs.hjem.packages.${system}.hjem];
+      packages = [pkgs.just pkgs.nushell self.packages.${system}.hjem];
     };
 
     formatter.${system} = treefmt.config.build.wrapper;

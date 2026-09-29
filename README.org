@@ -31,15 +31,21 @@ just check hjem
 nix flake check
 #+end_src
 
-Build or apply the standalone Hjem configuration for a host. The current =$USER= is used unless another user is supplied; the user must be declared in the host's =users=:
+Commands take the form =just <layer> <operation> [host]=. The layers are =hjem=, =darwin=, and =all= (Hjem, then nix-darwin); the operations are =build= and =switch=. An omitted host means this machine:
 
 #+begin_src sh
-just build-hjem seiran
-just switch-hjem seiran
-just switch-hjem seiran alice
+just hjem build
+just all switch
+just darwin switch seiran
 #+end_src
 
-The build command realizes all managed sources and packages without changing user state. The switch command performs the same build before activation. Hjem activation itself is not transactional; see [[file:docs/architecture.md][the architecture contract]] for the failure boundary.
+=build= realizes a configuration without changing any state. =switch= applies it to this machine; applying another host requires an SSH destination through =--target=:
+
+#+begin_src sh
+just all switch seiran-vm1 --target seiran-vm1-raw
+#+end_src
+
+Hjem activation is not transactional; see [[file:docs/architecture.md][the architecture contract]] for the failure boundary.
 
 * License
 
