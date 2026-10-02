@@ -17,14 +17,16 @@ in {
         users =
           description
           (attrsOfOption (submodule ({name, ...}: {
-            options.homeDirectory =
-              description
-              (strOption (
-                if isDarwin
-                then "/Users/${name}"
-                else "/home/${name}"
-              ))
-              "Home directory of this user on the host.";
+            options = {
+              homeDirectory =
+                description
+                (strOption (
+                  if isDarwin
+                  then "/Users/${name}"
+                  else "/home/${name}"
+                ))
+                "Home directory of this user on the host.";
+            };
           })) {})
           "Users on this host. Each user receives its own Hjem configuration.";
 

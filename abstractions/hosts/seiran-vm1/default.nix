@@ -3,6 +3,9 @@ delib.host {
   name = "seiran-vm1";
   system = "aarch64-darwin";
   users.neo = {};
+  primaryUser = "neo";
+
+  myconfig.ifEnabled.shell.loginShell = "zsh";
 
   darwin.ifEnabled = {
     system.stateVersion = 4;

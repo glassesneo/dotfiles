@@ -32,6 +32,13 @@
               directory = homeDirectory;
               clobberFiles = false;
             }
+            # standalone applies packages through current-profile; expose it on PATH.
+            ({config, ...}: {
+              environment.sessionVariables.PATH = lib.mkMerge [
+                (lib.mkBefore ["${config.xdg.state.directory}/hjem/standalone/current-profile/bin"])
+                (lib.mkAfter ["$PATH"])
+              ];
+            })
           ]
           ++ modules;
       };
