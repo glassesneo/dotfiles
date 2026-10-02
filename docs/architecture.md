@@ -22,6 +22,8 @@ A concern has one owner. Shared outputs have one final writer, and adapters tran
 
 A module's name is its `myconfig` interface path, so choose it for the modules and hosts that reference it. Directory placement serves navigation and may differ from the name.
 
+`extensions/module-dependencies.nix` derives enable dependencies from module names. A dotted module depends only on its immediate parent (for example, `zsh.interactive` depends on `zsh`) when that parent is registered and both have an `enable` option. The child's declared default becomes its original condition AND the parent's enable value. Explicit child overrides are preserved; an enabled child with a disabled parent fails through the shared assertions in Darwin and Hjem. Missing parents and modules without `enable` are skipped; the extension does not search for more distant ancestors or gate unconditional outputs.
+
 ## Host facts and shared values
 
 Hosts declare their Nix system, their users with home directories, and their primary user through `extensions/hosts.nix`. These attributes are the single source for those facts: `flake.nix` publishes one Darwin configuration per Darwin host and one Hjem configuration per host user from them, and modules read them through the read-only `myconfig.host`.

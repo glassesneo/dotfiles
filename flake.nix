@@ -24,6 +24,7 @@
           denix.denixModules.nixDarwin
           ./adapters/hjem.nix
           ./extensions/hosts.nix
+          ./extensions/module-dependencies.nix
         ]
         ++ lib.fileset.toList (
           lib.fileset.fileFilter
