@@ -6,24 +6,72 @@
 }: let
   lib = pkgs.lib;
 
-  configuration = denix.lib.denixConfiguration {
-    extraInputs = inputs;
+  # Hjem provides the `assertions` option itself (it imports nixpkgs' module), and
+  # the assertions feature forwards `myconfig.assertions` into it. Both are needed
+  # so the forwarding path is exercised, and nix-darwin registers the `darwin`
+  # side that the feature also configures.
+  baseModules = [
+    denix.denixModules.nixDarwin
+    ../../adapters/hjem.nix
+    ../../abstractions/modules/assertions/default.nix
+  ];
 
-    modules = [
-      ../../adapters/hjem.nix
-      ./fixture.nix
-    ];
-  };
+  mkResult = extraModules:
+    (denix.lib.denixConfiguration {
+      extraInputs = inputs;
+      modules = baseModules ++ extraModules;
+    }).genSystem {
+      moduleSystem = "hjem";
 
-  result = configuration.genSystem {
-    moduleSystem = "hjem";
-
-    extraArgs = {
-      inherit system;
-      username = "fixture";
-      homeDirectory = "/tmp/hjem-adapter-fixture";
+      extraArgs = {
+        inherit system;
+        username = "fixture";
+        homeDirectory = "/tmp/hjem-adapter-fixture";
+      };
     };
-  };
+
+  assertionModule = assertions: {delib, ...}:
+    delib.module ({...}: {
+      name = "test-assertions";
+      myconfig.always.assertions = assertions;
+    });
+
+  result = mkResult [
+    ./fixture.nix
+    (assertionModule [
+      {
+        assertion = true;
+        message = "passing assertion";
+      }
+    ])
+  ];
+
+  # A passing assertion must not be reported, and later failures must not be
+  # skipped: an implementation that only inspects the first assertion would let
+  # this configuration through.
+  failing = mkResult [
+    (assertionModule [
+      {
+        assertion = true;
+        message = "passing assertion";
+      }
+      {
+        assertion = false;
+        message = "first failure";
+      }
+      {
+        assertion = false;
+        message = "second failure";
+      }
+    ])
+  ];
+
+  # The guard wraps the whole result, so forcing any output must evaluate it.
+  # `tryEval` reports only whether evaluation was blocked, not the message text.
+  blockedOutputs =
+    !(builtins.tryEval failing.manifest).success
+    && !(builtins.tryEval failing.packages).success
+    && !(builtins.tryEval failing.preflight).success;
 
   manifest = result.manifest;
 
@@ -50,6 +98,7 @@ in
     && lib.all (file: !lib.hasSuffix "/disabled.txt" file.target) manifest.files
     && builtins.length result.packages == 1
   ) "Hjem adapter contract failed";
+  assert lib.assertMsg blockedOutputs "Failed assertions must block manifest, packages, and preflight";
     pkgs.runCommand "hjem-adapter-test" {
       inherit manifestFile package;
       inherit (result) preflight;

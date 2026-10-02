@@ -77,15 +77,25 @@
             printf '%s\n' "$dependency"
           done > "$out"
         '';
-    in {
-      manifest = {
-        version = 3;
-        files = map hjemLib.fileToJson enabledFiles;
+
+      # Hjem's per-user module imports nixpkgs' assertions module, so `assertions`
+      # is already declared in this evaluation.
+      failedAssertions = map (x: x.message) (lib.filter (x: !x.assertion) cfg.assertions);
+
+      throwAssertions = res:
+        if failedAssertions != []
+        then throw "\nFailed assertions:\n${lib.concatStringsSep "\n" (map (x: "- ${x}") failedAssertions)}"
+        else res;
+    in
+      throwAssertions {
+        manifest = {
+          version = 3;
+          files = map hjemLib.fileToJson enabledFiles;
+        };
+
+        packages = map toString cfg.packages;
+
+        inherit preflight;
       };
-
-      packages = map toString cfg.packages;
-
-      inherit preflight;
-    };
   };
 }
