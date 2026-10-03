@@ -18,6 +18,7 @@
 
     configuration = denix.lib.denixConfiguration {
       extraInputs = inputs;
+      specialArgs.mylib = import ./lib {inherit lib;};
 
       modules =
         [

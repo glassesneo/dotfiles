@@ -4,7 +4,7 @@ This file owns the structure of the repository: how the configuration is compose
 
 ## Composition
 
-`flake.nix` is the composition root. It selects inputs, loads adapters and extensions, discovers Denix abstractions, and publishes configurations, checks, formatting, and the development shell.
+`flake.nix` is the composition root. It selects inputs, loads adapters and extensions, discovers Denix abstractions, passes `lib/` to them as `mylib`, and publishes configurations, checks, formatting, and the development shell.
 
 Denix receives every `default.nix` below `abstractions/`. Files in that tree declare independent Denix abstractions; they do not form manual import chains. New files must be Git-tracked before flake evaluation can discover them.
 
@@ -32,6 +32,7 @@ A module's name is its `myconfig` interface path, so choose it for the modules a
 - `abstractions/modules/` owns reusable features. A feature keeps its Darwin, Hjem, and other module-system outputs together.
 - `adapters/` owns integrations for module systems that Denix does not provide. An adapter translates Denix modules into the external system's configuration result; it does not own user configuration policy.
 - `extensions/` owns extensions of Denix itself: host attributes and behavior applied to every module or host. Features that consume them live in `abstractions/modules/`.
+- `lib/` owns pure Nix helpers passed to abstractions as `mylib`. Helpers define types and transformations; they do not own configuration.
 - `tests/` owns sandboxed checks exported through `checks.<system>`. Each immediate `tests/<name>/default.nix` is discovered automatically.
 - `scripts/` and `justfile` own operator commands; see `docs/commands.md`.
 
@@ -45,6 +46,7 @@ Each mechanism is specified at the top of its file and by its option description
 - `extensions/module-dependencies.nix`: a dotted module's `enable` depends on its immediate parent.
 - `extensions/provenance.nix`: every module and host section is labelled with its origin as the location of its definitions.
 - `adapters/hjem.nix`: the Hjem module system, including files that only one location may define.
+- `lib/fragments.nix`: named fragments ordered by dependency, for a file that several features contribute to.
 
 ## Validation boundary
 

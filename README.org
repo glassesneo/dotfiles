@@ -10,6 +10,7 @@ This repository manages my machines and user environment with the rewrite branch
 - =abstractions/= contains auto-discovered Denix hosts and modules.
 - =adapters/= connects Denix to unsupported module systems such as Hjem.
 - =extensions/= extends Denix itself, such as host attributes.
+- =lib/= contains pure Nix helpers passed to modules as =mylib=.
 - =tests/= contains sandboxed checks discovered as flake checks.
 - =scripts/= contains procedures that modify user or system state.
 - =docs/= contains durable cross-cutting contracts and runbooks. Start with [[file:docs/architecture.md][the architecture contract]].
