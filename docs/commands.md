@@ -6,6 +6,24 @@ This file owns the operator commands: what each one realizes or changes, and how
 
 Nix owns evaluation and realization. Build recipes call Nix directly and do not modify user or system state. Effectful procedures belong in Nushell under `scripts/` and are invoked through `justfile`.
 
+## Formatting, documentation, and checks
+
+- `just fmt` runs `nix fmt` over the repository using treefmt.
+- `just docs` regenerates `docs/generated/modules.md` without staging it. The catalogue includes all modules, regardless of host enablement, sorted by Denix name. Descriptions are taken from `meta.description` without translation or summarization; source links use declaration paths. It contains no generation timestamp.
+- `just eval` evaluates the flake checks without building or updating the lock file.
+- `just check <name>` builds one check for the current system.
+- `nix flake check` runs all checks, including formatting and catalogue freshness. Checks do not rewrite repository files.
+
+## Commit automation
+
+Entering `nix develop`, or entering through an allowed direnv environment, installs the git-hooks.nix runner and sets this repository's `core.hooksPath`. Installation replaces the configured hooks path; existing hooks are not chained. The installed tools are GC-rooted in the Git common directory. A fresh clone has no hooks until the development shell has been entered; re-enter it after changing the hook configuration or scripts. Hooks then also work outside the development shell, with access to Nix and its daemon still required.
+
+Before any mutation, the hook rejects unstaged tracked changes and untracked files; Git-ignored files are excluded. Stage, stash, ignore, or move these files first. Partial staging is therefore not supported. Do not edit the worktree or index concurrently with a commit.
+
+The hook runs repository-wide formatting and catalogue generation, stages all resulting non-ignored additions, modifications, and deletions, and displays a `git diff --stat` summary of only those automatic changes. It then runs `nix flake check`. Successful checks allow the commit without another confirmation. Lock-file updates are disabled throughout this sequence.
+
+Check failure blocks the commit and leaves automatic changes staged. Formatting or generation failure stops immediately and leaves any completed edits in the worktree without automatically staging them. Interrupted execution does not roll changes back; inspect `git status` before retrying. Git's `--no-verify` bypass remains available, and checks can still be run manually. The stateful commit runner is not itself a flake check: sandboxed checks cannot invoke nested Nix builds, and doing so would recurse.
+
 ## Layers and operations
 
 Operator commands follow `just <layer> <operation> [host]`. Each layer is a `just` module under `just/`: `hjem` and `darwin` address one module system, and `all` applies every layer of the host in order. The operations are `build` and `switch`.

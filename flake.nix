@@ -37,6 +37,15 @@
     };
 
     hosts = configuration.config.hosts;
+    moduleDocs = pkgs.writeText "modules.md" (import ./lib/module-docs.nix {inherit lib;} {
+      inherit configuration;
+      root = self;
+    });
+    commitHooks = import ./git-hooks.nix {
+      inherit pkgs system;
+      inherit (inputs) git-hooks;
+      src = self;
+    };
   in {
     darwinConfigurations =
       builtins.mapAttrs
@@ -67,10 +76,14 @@
         host.users)
       hosts;
 
-    packages.${system}.hjem = inputs.hjem.packages.${system}.hjem;
+    packages.${system} = {
+      hjem = inputs.hjem.packages.${system}.hjem;
+      module-docs = moduleDocs;
+    };
 
     devShells.${system}.default = pkgs.mkShellNoCC {
       packages = [pkgs.just pkgs.nushell self.packages.${system}.hjem];
+      inherit (commitHooks) shellHook;
     };
 
     formatter.${system} = treefmt.config.build.wrapper;
@@ -85,6 +98,10 @@
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixpkgs-unstable";
+    git-hooks = {
+      url = "github:cachix/git-hooks.nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     treefmt-nix = {
       url = "github:numtide/treefmt-nix";
       inputs.nixpkgs.follows = "nixpkgs";

@@ -48,6 +48,8 @@ Each mechanism is specified at the top of its file and by its option description
 - `extensions/provenance.nix`: every module and host section is labelled with its origin as the location of its definitions.
 - `adapters/hjem.nix`: the Hjem module system, including files that only one location may define.
 - `lib/fragments.nix`: named fragments ordered by dependency, for a file that several features contribute to.
+- `lib/module-docs.nix`: a module catalogue rendered from Denix metadata and declaration locations without generating a host configuration.
+- `git-hooks.nix`: development-shell installation of commit automation, with the transaction owned by `scripts/commit.nu`.
 
 ## Validation boundary
 

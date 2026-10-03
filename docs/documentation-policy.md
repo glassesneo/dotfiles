@@ -24,6 +24,7 @@ Only written contracts are contracts. What no document states is not a gap: the 
 - `docs/architecture.md` owns the structure of the repository: composition, Denix concepts, directory ownership, and an index of repository mechanisms. It names each mechanism in one sentence and leaves its behavior to the mechanism's owner.
 - A repository mechanism — an extension, an adapter contract, a `lib/` helper — is specified beside its implementation: a comment at the top of the file, the `description` of each option it declares, and the checks under `tests/` that exercise it.
 - `docs/commands.md` owns operator commands and their effects on state.
+- `docs/generated/` holds committed, machine-generated reference material, separate from handwritten contracts. `modules.md` lists every Denix module's name, `meta.description`, and declaration paths; regenerate it with `just docs`, never edit it by hand.
 - `README.org` orients humans and lists first commands; it points to owners instead of restating them.
 - `AGENTS.md` holds agent-facing decision rules that no other owner covers; apart from the summary allowed under Ownership, it does not restate other documents.
 
@@ -39,7 +40,9 @@ A change that leaves every documented contract true leaves the documentation alo
 
 - a value: adding, changing, or removing a choice inside a module or host;
 - an implementation, fix, or refactor that keeps the documented contract true;
-- facts of a kind the documentation never records, such as inventories, current defaults, copies of command help, or migration notes.
+- facts of a kind handwritten documentation never records, such as inventories, current defaults, copies of command help, or migration notes.
+
+Generated references are the exception for inventories: they follow their source automatically, and `nix flake check` rejects stale output.
 
 A comment changes only when the code it explains changes.
 

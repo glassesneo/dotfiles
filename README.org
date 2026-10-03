@@ -13,7 +13,7 @@ This repository manages my machines and user environment with the rewrite branch
 - =lib/= contains pure Nix helpers passed to modules as =mylib=.
 - =tests/= contains sandboxed checks discovered as flake checks.
 - =scripts/= contains procedures that modify user or system state.
-- =docs/= contains durable cross-cutting contracts and runbooks. Start with [[file:docs/architecture.md][the architecture contract]].
+- =docs/= contains durable cross-cutting contracts and runbooks. Start with [[file:docs/architecture.md][the architecture contract]]. The generated [[file:docs/generated/modules.md][module catalogue]] is kept separately under =docs/generated/=.
 
 * Commands
 
@@ -23,10 +23,13 @@ Enter the development shell before using the repository commands:
 nix develop
 #+end_src
 
-Format and validate the repository:
+Entering the development shell installs commit automation; see [[file:docs/commands.md][the command contract]] for automatic staging and failure behavior.
+
+Format, regenerate the module catalogue, and validate the repository:
 
 #+begin_src sh
 just fmt
+just docs
 just eval
 just check hjem
 nix flake check

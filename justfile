@@ -12,6 +12,9 @@ mod all 'just/all.just'
 fmt:
     nix fmt
 
+docs:
+    nu --no-config-file scripts/docs.nu
+
 eval:
     nix flake check --no-build --no-update-lock-file
 
