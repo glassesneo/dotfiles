@@ -1,6 +1,7 @@
 {
   delib,
   lib,
+  mylib,
   ...
 }:
 delib.module {
@@ -11,6 +12,15 @@ delib.module {
       enable = boolOption true;
       package = packageOption pkgs.zsh;
     };
+
+  hjem.always.options.zsh.zshenv = mylib.fragments.option;
+
+  hjem.ifEnabled = {config, ...}: {
+    files.".zshenv" = {
+      exclusive = true;
+      text = mylib.fragments.render config.zsh.zshenv;
+    };
+  };
 
   darwin.ifEnabled = {config, ...}: {
     # explicitly disable nix-darwin default

@@ -1,4 +1,9 @@
-{delib, ...}:
+{
+  delib,
+  lib,
+  mylib,
+  ...
+}:
 delib.module ({myconfig, ...}: {
   name = "zsh.interactive";
 
@@ -7,17 +12,22 @@ delib.module ({myconfig, ...}: {
     package = packageOption myconfig.zsh.package;
   };
 
+  hjem.always.options.zsh.zshrc = mylib.fragments.option;
+
   hjem.ifEnabled = {config, ...}: let
     dotDir = "${config.xdg.config.directory}/zsh";
-    underDotDir = attrs: attrs // {relativeTo = dotDir;};
   in {
-    files = {
-      ".zshenv".text = ''
-        ZDOTDIR="${dotDir}"
-      '';
-      ".zshrc" = underDotDir {
-        source = ./rc.zsh;
-      };
+    zsh.zshenv.zdotdir.text = ''
+      ZDOTDIR="${dotDir}"
+    '';
+
+    files.".zshrc" = {
+      relativeTo = dotDir;
+      exclusive = true;
+      text = lib.concatStringsSep "\n" [
+        (builtins.readFile ./rc.zsh)
+        (mylib.fragments.render config.zsh.zshrc)
+      ];
     };
   };
 })

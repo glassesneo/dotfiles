@@ -18,7 +18,7 @@ delib.module ({
   };
 
   hjem.ifEnabled = {config, ...}: {
-    files.".zshenv".text = ''
+    zsh.zshenv.hjem-environment.text = ''
       if [ -z "''${__HJEM_ENV_LOADED-}" ]; then
         export __HJEM_ENV_LOADED=1
         . ${config.environment.loadEnv}
