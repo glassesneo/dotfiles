@@ -2,16 +2,15 @@
   inputs,
   denix,
   pkgs,
-  system,
 }: let
   lib = pkgs.lib;
 
   # Repository-owned contract: disabling a parent gates child defaults without
-  # masking explicit child overrides. Hjem's existing check owns assertion forwarding.
+  # masking explicit child overrides, and conflicts produce failed assertions.
+  # Assertion enforcement is tested at the consumer boundary, not here.
   feature = name: enabled: {delib, ...}:
     delib.module {
       inherit name;
-      meta.description = "Provide a feature for the module dependency fixture.";
       options.enable = delib.boolOption enabled;
     };
 
@@ -19,16 +18,11 @@
     configuration = denix.lib.denixConfiguration {
       extraInputs = inputs;
       modules = [
-        denix.denixModules.nixDarwin
-        ../../adapters/hjem.nix
-        ../../abstractions/modules/assertions/default.nix
         ../../extensions/module-dependencies.nix
-        ../../extensions/module-metadata.nix
         (feature "parent" true)
         ({delib, ...}:
           delib.module ({myconfig, ...}: {
             name = "parent.child";
-            meta.description = "Exercise a child whose default depends on parent settings.";
             options = {pkgs, ...}: {
               enable = delib.boolOption (myconfig.parent.settings.value == "setting");
               package = delib.packageOption pkgs.zsh;
@@ -41,13 +35,11 @@
         ({delib, ...}:
           delib.module {
             name = "parent.settings";
-            meta.description = "Provide parent settings for conditional child defaults.";
             options.value = delib.strOption "setting";
           })
         ({delib, ...}:
           delib.module {
             name = "test-overrides";
-            meta.description = "Apply overrides for the module dependency fixture.";
             myconfig.always = overrides;
           })
       ];
@@ -55,17 +47,17 @@
   in {
     config =
       (lib.evalModules {
-        modules = [(configuration.genModule {})];
+        modules = [
+          (configuration.genModule {})
+          {
+            options.myconfig.assertions = lib.mkOption {
+              type = lib.types.listOf lib.types.unspecified;
+              default = [];
+            };
+          }
+        ];
         specialArgs = {inherit pkgs;};
       }).config.myconfig;
-    result = configuration.genSystem {
-      moduleSystem = "hjem";
-      extraArgs = {
-        inherit system;
-        username = "fixture";
-        homeDirectory = "/tmp/module-dependencies-fixture";
-      };
-    };
   };
 
   normal = evaluate {};
@@ -92,9 +84,10 @@ in
     && conflict.config.parent.child.enable
   ) "Module dependency defaults or overrides failed";
   assert lib.assertMsg (
-    (builtins.tryEval disabled.result.manifest).success
-    && !(builtins.tryEval conflict.result.manifest).success
-  ) "An enabled child with a disabled parent must fail evaluation";
+    lib.all (entry: entry.assertion) normal.config.assertions
+    && lib.all (entry: entry.assertion) disabled.config.assertions
+    && lib.any (entry: !entry.assertion) conflict.config.assertions
+  ) "An enabled child with a disabled parent must produce a failed assertion";
     pkgs.runCommand "module-dependencies-test" {} ''
       mkdir "$out"
     ''

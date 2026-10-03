@@ -53,4 +53,6 @@ Each mechanism is specified at the top of its file and by its option description
 
 A test belongs under `tests/` only when it can run as a sandboxed flake check. Use Nix option validation, evaluation, or a consumer validator before adding a behavioral test at a higher layer. Upstream Denix and Hjem APIs are trusted; checks cover repository-owned adapters and contracts.
 
+Mechanism checks use the smallest input boundary they own, without importing unrelated feature modules or extensions. Checks of feature wiring receive the real Denix `configuration` from `flake.nix` instead of reconstructing its module list.
+
 Live activation and platform behavior require an explicit operator command; evaluation and derivation builds do not exercise them.

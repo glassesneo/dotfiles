@@ -76,7 +76,7 @@
     formatter.${system} = treefmt.config.build.wrapper;
     checks.${system} =
       import ./tests {
-        inherit inputs denix pkgs system;
+        inherit inputs denix pkgs system configuration;
       }
       // {
         formatting = treefmt.config.build.check self;

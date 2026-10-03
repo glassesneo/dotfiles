@@ -1,28 +1,16 @@
 {
   inputs,
-  denix,
   pkgs,
   system,
 }: let
   lib = pkgs.lib;
 
-  # Hjem provides the `assertions` option itself (it imports nixpkgs' module), and
-  # the assertions feature forwards `myconfig.assertions` into it. Both are needed
-  # so the forwarding path is exercised, and nix-darwin registers the `darwin`
-  # side that the feature also configures.
-  baseModules = [
-    denix.denixModules.nixDarwin
-    ../../adapters/hjem.nix
-    ../../extensions/module-metadata.nix
-    ../../abstractions/modules/assertions/default.nix
-  ];
-
-  mkResult = extraModules:
-    (denix.lib.denixConfiguration {
-      extraInputs = inputs;
-      modules = baseModules ++ extraModules;
-    }).genSystem {
-      moduleSystem = "hjem";
+  # Test the adapter's output and assertion guard at its Hjem input boundary.
+  # Denix assertion forwarding is covered separately against the real composition.
+  makeSystem = (import ../../adapters/hjem.nix {inherit inputs;}).moduleSystems.hjem.makeSystem;
+  mkResult = modules:
+    makeSystem {
+      inherit modules;
 
       extraArgs = {
         inherit system;
@@ -31,12 +19,7 @@
       };
     };
 
-  assertionModule = assertions: {delib, ...}:
-    delib.module ({...}: {
-      name = "test-assertions";
-      meta.description = "Contribute assertions for the Hjem forwarding fixture.";
-      myconfig.always.assertions = assertions;
-    });
+  assertionModule = assertions: {inherit assertions;};
 
   result = mkResult [
     ./fixture.nix

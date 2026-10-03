@@ -3,6 +3,7 @@
   denix,
   pkgs,
   system,
+  configuration,
 }: let
   root = ./.;
   entries = builtins.readDir root;
@@ -18,7 +19,7 @@
 in
   builtins.mapAttrs
   (name: _:
-    import (root + "/${name}/default.nix") {
-      inherit inputs denix pkgs system;
-    })
+    pkgs.lib.callPackageWith {
+      inherit inputs denix pkgs system configuration;
+    } (root + "/${name}/default.nix") {})
   tests
