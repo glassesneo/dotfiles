@@ -44,7 +44,7 @@ Each mechanism is specified at the top of its file and by its option description
 - `extensions/hosts.nix`: host attributes (system, users, primary user) and the read-only `myconfig.host` that modules read them from.
 - `extensions/module-dependencies.nix`: a dotted module's `enable` depends on its immediate parent.
 - `extensions/provenance.nix`: every module and host section is labelled with its origin as the location of its definitions.
-- `adapters/hjem.nix`: the Hjem module system.
+- `adapters/hjem.nix`: the Hjem module system, including files that only one location may define.
 
 ## Validation boundary
 

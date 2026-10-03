@@ -3,6 +3,11 @@
 # `makeSystem` evaluates one user's Hjem configuration and returns the manifest,
 # the packages, and a `preflight` derivation that realizes every file source and
 # package. Any failed assertion blocks all three.
+#
+# A file declared with `exclusive = true` in any file set (`files` or
+# `xdg.<kind>.files`) must be defined from one location; a second module or host
+# defining it fails through the assertions. Locations are the origin labels of
+# `extensions/provenance.nix`.
 {inputs, ...}: {
   moduleSystems.hjem = {
     flakeOutputs = {
@@ -19,6 +24,57 @@
       lib = inputs.nixpkgs.lib;
       pkgs = inputs.nixpkgs.legacyPackages.${system};
       hjemLib = inputs.hjem."hjem-lib".${system};
+
+      fileSetPaths = [
+        ["files"]
+        ["xdg" "cache" "files"]
+        ["xdg" "config" "files"]
+        ["xdg" "data" "files"]
+        ["xdg" "state" "files"]
+      ];
+
+      # Hjem merges `text` definitions silently, so exclusivity counts definition
+      # locations, excluding Hjem's own defaults at the option declarations.
+      exclusiveFiles = {config, ...}: let
+        fileExtension = {options, ...}: {
+          options = {
+            exclusive = lib.mkOption {
+              type = lib.types.bool;
+              default = false;
+              description = "Whether a single location must define this file.";
+            };
+            definers = lib.mkOption {
+              type = lib.types.listOf lib.types.str;
+              internal = true;
+              readOnly = true;
+              description = "Locations defining this file, excluding option declarations.";
+            };
+          };
+
+          config.definers = lib.unique (lib.concatMap
+            (option:
+              map (definition: definition.file)
+              (lib.filter
+                (definition: !(lib.elem definition.file option.declarations))
+                option.definitionsWithLocations))
+            (lib.collect lib.isOption (builtins.removeAttrs options ["_module" "exclusive" "definers"])));
+        };
+      in {
+        options = lib.foldl' lib.recursiveUpdate {} (map
+          (path:
+            lib.setAttrByPath path (lib.mkOption {
+              type = lib.types.attrsOf (lib.types.submodule fileExtension);
+            }))
+          fileSetPaths);
+
+        config.assertions = lib.concatMap (path:
+          lib.mapAttrsToList (name: file: {
+            assertion = !file.exclusive || builtins.length file.definers <= 1;
+            message = "${lib.concatStringsSep "." path}.\"${name}\" is exclusive but defined by: ${lib.concatStringsSep ", " file.definers}";
+          })
+          (lib.getAttrFromPath path config))
+        fileSetPaths;
+      };
 
       evaluation = lib.evalModules {
         class = "hjem";
@@ -37,6 +93,7 @@
               directory = homeDirectory;
               clobberFiles = false;
             }
+            exclusiveFiles
             # standalone applies packages through current-profile; expose it on PATH.
             ({config, ...}: {
               environment.sessionVariables.PATH = lib.mkMerge [
@@ -50,13 +107,7 @@
 
       cfg = evaluation.config;
 
-      fileSets = [
-        cfg.files
-        cfg.xdg.cache.files
-        cfg.xdg.config.files
-        cfg.xdg.data.files
-        cfg.xdg.state.files
-      ];
+      fileSets = map (path: lib.getAttrFromPath path cfg) fileSetPaths;
 
       enabledFiles =
         lib.concatMap
