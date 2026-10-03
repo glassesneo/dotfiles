@@ -6,9 +6,8 @@
   inputs,
   system,
 }: let
-  fakeNix = pkgs.writeScriptBin "nix" ''
-    #!${pkgs.python3}/bin/python3
-    ${builtins.readFile ./fake-nix.py}
+  fakeNix = pkgs.writeShellScriptBin "nix" ''
+    exec ${pkgs.nushell}/bin/nu --no-config-file ${./fake-nix.nu} "$@"
   '';
   hooks = import ../../git-hooks.nix {
     pkgs = pkgs // {nix = fakeNix;};
@@ -18,10 +17,10 @@
   };
 in
   pkgs.runCommand "commit-hook" {
-    nativeBuildInputs = [pkgs.git pkgs.python3];
+    nativeBuildInputs = [pkgs.git pkgs.nushell];
   } ''
     export HOME="$TMPDIR/home"
     mkdir -p "$HOME"
-    python ${./test.py} ${hooks.directory}
+    nu --no-config-file ${./test.nu} ${hooks.directory}
     touch "$out"
   ''
