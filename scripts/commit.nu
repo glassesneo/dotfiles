@@ -2,7 +2,7 @@
 # Failure leaves completed fixes in place; check failure leaves them staged.
 use ./docs.nu
 
-def main [] {
+export def main [] {
   do --capture-errors {
     cd (^git rev-parse --show-toplevel | str trim)
     let dirty = ^git diff --quiet --ignore-submodules=none | complete

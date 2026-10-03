@@ -49,3 +49,8 @@ def --wrapped "main update" [manifest: path, ...packages: string] {
 def "main sync" [manifest: path] {
   run-bun $manifest ["install"]
 }
+
+export alias add = main add
+export alias remove = main remove
+export alias update = main update
+export alias sync = main sync
