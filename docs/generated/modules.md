@@ -4,6 +4,7 @@ Generated from Denix module metadata. Do not edit; run `just docs`.
 
 | Module | Description | Source |
 | --- | --- | --- |
+| <code>agents</code> | Provide a shared configuration interface for LLM agents and configure the selected agent packages. | [<code>abstractions/modules/agents/default.nix</code>](../../abstractions/modules/agents/default.nix) |
 | <code>assertions</code> | Enforce module-contributed assertions across module systems. | [<code>abstractions/modules/assertions/default.nix</code>](../../abstractions/modules/assertions/default.nix) |
 | <code>bat</code> | Provide bat and configure its file display style. | [<code>abstractions/modules/bat/default.nix</code>](../../abstractions/modules/bat/default.nix) |
 | <code>batman</code> | Provide batman and configure it as Zsh's manual page pager. | [<code>abstractions/modules/bat/batman/default.nix</code>](../../abstractions/modules/bat/batman/default.nix) |

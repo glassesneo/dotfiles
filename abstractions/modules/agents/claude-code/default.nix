@@ -1,16 +1,12 @@
-{
-  delib,
-  inputs,
-  ...
-}:
-delib.module {
+{delib, ...}:
+delib.module ({myconfig, ...}: {
   name = "claude-code";
   meta.description = "Provide Claude Code and configure its memory, permissions, sandbox, and updates.";
 
   options.enable = delib.boolOption true;
 
-  hjem.ifEnabled = {pkgs, ...}: {
-    packages = [inputs.llm-agents.packages.${pkgs.stdenv.hostPlatform.system}.claude-code];
+  hjem.ifEnabled = {
+    packages = [myconfig.agents.packages.cursor-agent];
 
     files.".claude/settings.json" = {
       exclusive = true;
@@ -29,4 +25,4 @@ delib.module {
       };
     };
   };
-}
+})
