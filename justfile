@@ -10,13 +10,13 @@ mod darwin 'just/darwin.just'
 mod all 'just/all.just'
 
 fmt:
-    nix fmt
+  nix fmt
 
 docs:
-    nu --no-config-file scripts/docs.nu
+  nu --no-config-file scripts/docs.nu
 
 eval:
-    nix flake check --no-build --no-update-lock-file
+  nix flake check --no-build --no-update-lock-file
 
 check name:
-    nix build --no-link ".#checks.{{system}}.{{name}}"
+  nix build --no-link ".#checks.{{ system }}.{{ name }}"

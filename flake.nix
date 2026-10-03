@@ -13,7 +13,16 @@
 
     treefmt = treefmt-nix.lib.evalModule pkgs {
       projectRootFile = "flake.nix";
-      programs.alejandra.enable = true;
+      programs = {
+        alejandra = {
+          enable = true;
+        };
+
+        just = {
+          enable = true;
+          indentation = "  ";
+        };
+      };
     };
 
     configuration = denix.lib.denixConfiguration {
