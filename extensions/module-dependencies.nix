@@ -1,3 +1,12 @@
+# Owns the enable dependency of a dotted module on its immediate parent.
+#
+# `zsh.interactive` depends on `zsh` when that parent is registered and both
+# declare `enable`. The child's declared default becomes its original condition
+# AND the parent's enable value. Explicit child overrides are preserved; an
+# enabled child with a disabled parent fails through the shared assertions in
+# every module system. Missing parents and modules without `enable` are skipped;
+# more distant ancestors are not searched, and unconditional sections are not
+# gated.
 {
   delib,
   lib,

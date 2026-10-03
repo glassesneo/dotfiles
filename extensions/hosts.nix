@@ -1,3 +1,8 @@
+# Owns the host attributes and their read-only view `myconfig.host`.
+#
+# These attributes are the single source for a host's system, users, and
+# primary user. `flake.nix` publishes configurations from them, and modules
+# read them through `myconfig.host` instead of declaring their own.
 {
   delib,
   lib,

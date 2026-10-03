@@ -9,7 +9,7 @@ This repository manages my machines and user environment with the rewrite branch
 
 - =abstractions/= contains auto-discovered Denix hosts and modules.
 - =adapters/= connects Denix to unsupported module systems such as Hjem.
-- =extensions/= extends the Denix configuration schema, such as host attributes.
+- =extensions/= extends Denix itself, such as host attributes.
 - =tests/= contains sandboxed checks discovered as flake checks.
 - =scripts/= contains procedures that modify user or system state.
 - =docs/= contains durable cross-cutting contracts and runbooks. Start with [[file:docs/architecture.md][the architecture contract]].
@@ -45,7 +45,7 @@ just darwin switch seiran
 just all switch seiran-vm1 --target seiran-vm1-raw
 #+end_src
 
-Hjem activation is not transactional; see [[file:docs/architecture.md][the architecture contract]] for the failure boundary.
+Hjem activation is not transactional; see [[file:docs/commands.md][the command contract]] for the failure boundary.
 
 * License
 

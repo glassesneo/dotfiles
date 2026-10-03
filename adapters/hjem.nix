@@ -1,3 +1,8 @@
+# Owns the Hjem module system and the contract of its result.
+#
+# `makeSystem` evaluates one user's Hjem configuration and returns the manifest,
+# the packages, and a `preflight` derivation that realizes every file source and
+# package. Any failed assertion blocks all three.
 {inputs, ...}: {
   moduleSystems.hjem = {
     flakeOutputs = {
