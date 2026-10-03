@@ -1,16 +1,11 @@
-# Owns the host attributes and their read-only view `myconfig.host`.
-#
-# These attributes are the single source for a host's system, users, and
-# primary user. `flake.nix` publishes configurations from them, and modules
-# read them through `myconfig.host` instead of declaring their own.
+# Owns the host attributes: system, users, and primary user.
+# `flake.nix` publishes configurations from these attributes; the host module
+# exposes them to other modules through the read-only view `myconfig.host`.
 {
   delib,
   lib,
-  config,
   ...
-}: let
-  inherit (config) host;
-in {
+}: {
   settings.hosts.extraSubmodules = {config, ...}: let
     isDarwin = (lib.systems.elaborate config.system).isDarwin;
     userNames = builtins.attrNames config.users;
@@ -45,17 +40,4 @@ in {
           "User that owns per-user system settings. Defaults to the only user when exactly one is declared.";
       };
     };
-
-  imports = [
-    (delib.module {
-      name = "host";
-
-      options = with delib; {
-        name = readOnly (strOption host.name);
-        system = readOnly (strOption host.system);
-        users = readOnly (attrsOption host.users);
-        primaryUser = readOnly (allowNull (strOption host.primaryUser));
-      };
-    })
-  ];
 }

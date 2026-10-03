@@ -26,6 +26,7 @@
           ./adapters/hjem.nix
           ./extensions/hosts.nix
           ./extensions/module-dependencies.nix
+          ./extensions/module-metadata.nix
           ./extensions/provenance.nix
         ]
         ++ lib.fileset.toList (

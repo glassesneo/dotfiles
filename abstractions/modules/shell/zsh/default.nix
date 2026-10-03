@@ -6,6 +6,7 @@
 }:
 delib.module {
   name = "zsh";
+  meta.description = "Enable Zsh and provide the foundation required for its use.";
 
   options = {pkgs, ...}:
     with delib; {

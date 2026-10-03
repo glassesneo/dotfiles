@@ -1,6 +1,7 @@
 {delib, ...}:
 delib.module {
   name = "fixture";
+  meta.description = "Provide files and a package for the Hjem adapter fixture.";
 
   options.enable = delib.boolOption true;
   hjem.ifEnabled = {pkgs, ...}: {

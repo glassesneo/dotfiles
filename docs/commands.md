@@ -16,7 +16,7 @@ Operator commands follow `just <layer> <operation> [host]`. Each layer is a `jus
 
 ## Targets
 
-An omitted host means this machine, resolved with `hostname -s`; the `hostname` module keeps the system name equal to the Denix host name. `switch` applies to `--target` over SSH when it is given, and locally when the host is this machine; any other host without `--target` is an error. Hosts carry no SSH destinations, so one configuration can be applied to any machine that accepts it. A remote switch builds everything locally, copies the closures and the flake source over `ssh-ng` without signature checks, and activates over SSH. Hjem is applied for the SSH user there and for `$USER` locally.
+An omitted host means this machine, resolved with `hostname -s`; the `host` module keeps the system name equal to the Denix host name. `switch` applies to `--target` over SSH when it is given, and locally when the host is this machine; any other host without `--target` is an error. Hosts carry no SSH destinations, so one configuration can be applied to any machine that accepts it. A remote switch builds everything locally, copies the closures and the flake source over `ssh-ng` without signature checks, and activates over SSH. Hjem is applied for the SSH user there and for `$USER` locally.
 
 ## Failure
 

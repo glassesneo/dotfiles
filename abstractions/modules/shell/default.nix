@@ -5,6 +5,7 @@ delib.module ({
   ...
 }: {
   name = "shell";
+  meta.description = "Define a shared configuration interface for shells and configure the selected login shell.";
 
   options = with delib; {
     enable = boolOption true;

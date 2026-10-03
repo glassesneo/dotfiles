@@ -13,6 +13,7 @@
   baseModules = [
     denix.denixModules.nixDarwin
     ../../adapters/hjem.nix
+    ../../extensions/module-metadata.nix
     ../../abstractions/modules/assertions/default.nix
   ];
 
@@ -33,6 +34,7 @@
   assertionModule = assertions: {delib, ...}:
     delib.module ({...}: {
       name = "test-assertions";
+      meta.description = "Contribute assertions for the Hjem forwarding fixture.";
       myconfig.always.assertions = assertions;
     });
 

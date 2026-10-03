@@ -11,6 +11,7 @@
   feature = name: enabled: {delib, ...}:
     delib.module {
       inherit name;
+      meta.description = "Provide a feature for the module dependency fixture.";
       options.enable = delib.boolOption enabled;
     };
 
@@ -22,10 +23,12 @@
         ../../adapters/hjem.nix
         ../../abstractions/modules/assertions/default.nix
         ../../extensions/module-dependencies.nix
+        ../../extensions/module-metadata.nix
         (feature "parent" true)
         ({delib, ...}:
           delib.module ({myconfig, ...}: {
             name = "parent.child";
+            meta.description = "Exercise a child whose default depends on parent settings.";
             options = {pkgs, ...}: {
               enable = delib.boolOption (myconfig.parent.settings.value == "setting");
               package = delib.packageOption pkgs.zsh;
@@ -38,11 +41,13 @@
         ({delib, ...}:
           delib.module {
             name = "parent.settings";
+            meta.description = "Provide parent settings for conditional child defaults.";
             options.value = delib.strOption "setting";
           })
         ({delib, ...}:
           delib.module {
             name = "test-overrides";
+            meta.description = "Apply overrides for the module dependency fixture.";
             myconfig.always = overrides;
           })
       ];

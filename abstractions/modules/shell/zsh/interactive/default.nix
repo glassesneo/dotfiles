@@ -6,6 +6,7 @@
 }:
 delib.module ({myconfig, ...}: {
   name = "zsh.interactive";
+  meta.description = "Build Zsh's interactive environment.";
 
   options = with delib; {
     enable = boolOption true;
