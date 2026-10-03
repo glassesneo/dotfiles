@@ -25,6 +25,7 @@
           ./adapters/hjem.nix
           ./extensions/hosts.nix
           ./extensions/module-dependencies.nix
+          ./extensions/provenance.nix
         ]
         ++ lib.fileset.toList (
           lib.fileset.fileFilter
