@@ -14,6 +14,14 @@ Nix owns evaluation and realization. Build recipes call Nix directly and do not 
 - `just check <name>` builds one check for the current system.
 - `nix flake check` runs all checks, including formatting and catalogue freshness. Checks do not rewrite repository files.
 
+## Bun dependencies
+
+A Bun project is the directory of a `package.json`. Its npm dependencies reach Nix only through the `bun.nix` that bun2nix generates from its `bun.lock`.
+
+- `just bun <add|remove|update|sync> <package.json> [packages]` runs the matching Bun command in that project, then rewrites its `bun.nix` with the unformatted output of bun2nix; `nix fmt` excludes every `bun.nix`. `sync` runs `bun install` after a manual `package.json` edit. Arguments after the manifest, flags included, pass through to Bun; a relative manifest resolves against the invoking directory.
+- These commands need `bun` and `bun2nix` from the development shell and reach the npm registry. They create the Git-ignored `node_modules` in the project and change no other state.
+- `package.json` carries no lifecycle script that regenerates `bun.nix`. Changing the lock with Bun directly leaves `bun.nix` stale, and the `bun-lock` check, run by `nix flake check`, fails until `just bun sync` is run.
+
 ## Commit automation
 
 Entering `nix develop`, or entering through an allowed direnv environment, installs the git-hooks.nix runner and sets this repository's `core.hooksPath`. Installation replaces the configured hooks path; existing hooks are not chained. The installed tools are GC-rooted in the Git common directory. A fresh clone has no hooks until the development shell has been entered; re-enter it after changing the hook configuration or scripts. Hooks then also work outside the development shell, with access to Nix and its daemon still required.
@@ -26,7 +34,7 @@ Check failure blocks the commit and leaves automatic changes staged. Formatting 
 
 ## Layers and operations
 
-Operator commands follow `just <layer> <operation> [host]`. Each layer is a `just` module under `just/`: `hjem` and `darwin` address one module system, and `all` applies every layer of the host in order. The operations are `build` and `switch`.
+Commands that build or apply a configuration follow `just <layer> <operation> [host]`. Each layer is a `just` module under `just/`: `hjem` and `darwin` address one module system, and `all` applies every layer of the host in order. The operations are `build` and `switch`.
 
 - `build` realizes the layer without touching any state: Hjem's `preflight` derivation for `$USER`, the nix-darwin `system`, or both for `all`.
 - `switch` delegates to `scripts/apply.nu`, which holds temporary GC roots for everything it realizes and removes them when it exits.

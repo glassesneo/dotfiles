@@ -50,6 +50,7 @@ Each mechanism is specified at the top of its file and by its option description
 - `adapters/hjem/services.nix`: Hjem-owned portable/native service declarations and Darwin lowering, with lifecycle reconciliation in `adapters/hjem/services.py`.
 - `lib/fragments.nix`: named fragments ordered by dependency, for a file that several features contribute to.
 - `lib/module-docs.nix`: a module catalogue rendered from Denix metadata and declaration locations without generating a host configuration.
+- `scripts/bun.nu`: npm dependencies of a Bun project pinned for Nix in a `bun.nix` generated from its `bun.lock`, kept current by `tests/bun-lock`.
 - `git-hooks.nix`: development-shell installation of commit automation, with the transaction owned by `scripts/commit.nu`.
 
 ## Validation boundary

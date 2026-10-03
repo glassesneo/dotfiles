@@ -302,6 +302,10 @@
     },
     "root": {
       "inputs": {
+        "bun2nix": [
+          "llm-agents",
+          "bun2nix"
+        ],
         "denix": "denix",
         "git-hooks": "git-hooks_2",
         "hjem": "hjem",
