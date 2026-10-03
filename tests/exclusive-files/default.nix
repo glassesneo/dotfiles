@@ -38,7 +38,7 @@
         modules =
           [
             denix.denixModules.nixDarwin
-            ../../adapters/hjem.nix
+            ../../adapters/hjem
             ../../extensions/hosts.nix
             ../../extensions/provenance.nix
             owner

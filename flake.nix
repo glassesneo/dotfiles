@@ -32,7 +32,7 @@
       modules =
         [
           denix.denixModules.nixDarwin
-          ./adapters/hjem.nix
+          ./adapters/hjem
           ./extensions/hosts.nix
           ./extensions/module-dependencies.nix
           ./extensions/module-metadata.nix

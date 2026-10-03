@@ -4,7 +4,7 @@ This file owns the operator commands: what each one realizes or changes, and how
 
 ## Boundary
 
-Nix owns evaluation and realization. Build recipes call Nix directly and do not modify user or system state. Effectful procedures belong in Nushell under `scripts/` and are invoked through `justfile`.
+Nix owns evaluation and realization. Build recipes call Nix directly and do not modify user or system state. Operator procedures and external-command orchestration default to Nushell under `scripts/` and are invoked through `justfile`. Internal runtime implementations may use another language for a concrete standard-library or safety benefit, with the reason documented near the implementation.
 
 ## Formatting, documentation, and checks
 
@@ -31,6 +31,18 @@ Operator commands follow `just <layer> <operation> [host]`. Each layer is a `jus
 - `build` realizes the layer without touching any state: Hjem's `preflight` derivation for `$USER`, the nix-darwin `system`, or both for `all`.
 - `switch` delegates to `scripts/apply.nu`, which holds temporary GC roots for everything it realizes and removes them when it exits.
 - `all switch` applies nix-darwin before Hjem and stops at the first failure.
+- Hjem switch applies files/packages with standalone, then reconciles Hjem-owned
+  user services as the same target user. Calling upstream standalone directly
+  does not update services. Service generations have persistent per-user GC roots
+  under `.local/state/hjem/services` in the configured home, beyond temporary build roots.
+  LaunchAgent files are owned copies, not store symlinks. Modified or unmanaged
+  files/jobs are rejected; remove declarations to retire managed jobs.
+- GUI absence defers live service operations until another switch; manual
+  launchctl disable is respected. Successful switch means registration/start
+  requests succeeded, not application readiness. Background services are not
+  guaranteed to return after reboot. Linux service declarations currently fail
+  evaluation rather than silently doing nothing. Darwin-native declarations
+  are ignored on non-Darwin systems; an empty service apply there is a no-op.
 
 ## Targets
 
@@ -38,4 +50,4 @@ An omitted host means this machine, resolved with `hostname -s`; the `host` modu
 
 ## Failure
 
-A Hjem preflight failure occurs after nix-darwin activation during `all switch`, but before Hjem activation, and leaves the existing home unchanged. Hjem activation itself is not transactional; a failure during activation may leave partial changes. Snapshots of virtual machines are outside this interface.
+A Hjem preflight failure occurs after nix-darwin activation during `all switch`, but before Hjem activation, and leaves the existing home unchanged. Hjem activation itself is not transactional; a failure during activation may leave partial changes. Service failure is also nontransactional: earlier changes remain, ownership state and closure roots survive, and the next switch retries. Do not manually edit managed plists or the service journal. Snapshots of virtual machines are outside this interface.

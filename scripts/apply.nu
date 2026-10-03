@@ -37,15 +37,16 @@ def apply-hjem [host: string, target: any, roots: string] {
   let attr = $'hjemConfigurations."($user)@($host)"'
 
   let preflight = realize $'($root)#($attr).preflight' ($roots | path join hjem-preflight)
+  let services = realize $'($root)#($attr).serviceApply' ($roots | path join hjem-services)
   let hjem = realize $'($root)#hjem' ($roots | path join hjem-cli)
   let source = ^nix flake metadata --json $root | from json | get path
 
   if $target != null {
-    push $target $preflight $hjem
+    push $target $preflight $hjem $services
     ^nix flake archive --to $'ssh-ng://($target)' $root
   }
 
-  run-on $target $"($hjem)/bin/hjem standalone switch --flake ($source) --flake-attr '($attr)'"
+  run-on $target $"($hjem)/bin/hjem standalone switch --flake ($source) --flake-attr '($attr)' && ($services)/bin/apply"
 }
 
 def apply-darwin [host: string, target: any, roots: string] {

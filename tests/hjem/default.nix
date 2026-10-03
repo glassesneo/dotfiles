@@ -7,7 +7,7 @@
 
   # Test the adapter's output and assertion guard at its Hjem input boundary.
   # Denix assertion forwarding is covered separately against the real composition.
-  makeSystem = (import ../../adapters/hjem.nix {inherit inputs;}).moduleSystems.hjem.makeSystem;
+  makeSystem = (import ../../adapters/hjem {inherit inputs;}).moduleSystems.hjem.makeSystem;
   mkResult = modules:
     makeSystem {
       inherit modules;

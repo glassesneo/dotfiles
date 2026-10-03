@@ -1,8 +1,8 @@
 # Owns the Hjem module system and the contract of its result.
 #
 # `makeSystem` evaluates one user's Hjem configuration and returns the manifest,
-# the packages, and a `preflight` derivation that realizes every file source and
-# package. Any failed assertion blocks all three.
+# the packages, `serviceApply` (bin/apply), and a `preflight` derivation that
+# realizes all file, package and service closures. Assertions block every output.
 #
 # A file declared with `exclusive = true` in any file set (`files` or
 # `xdg.<kind>.files`) must be defined from one location; a second module or host
@@ -94,6 +94,7 @@
               clobberFiles = false;
             }
             exclusiveFiles
+            ./services.nix
             # standalone applies packages through current-profile; expose it on PATH.
             ({config, ...}: {
               environment.sessionVariables.PATH = lib.mkMerge [
@@ -121,7 +122,7 @@
         (source: source != null)
         (map (file: file.source) enabledFiles);
 
-      dependencies = sources ++ cfg.packages;
+      dependencies = sources ++ cfg.packages ++ [cfg.serviceApply];
 
       preflight =
         pkgs.runCommand
@@ -152,6 +153,7 @@
         packages = map toString cfg.packages;
 
         inherit preflight;
+        serviceApply = cfg.serviceApply;
       };
   };
 }

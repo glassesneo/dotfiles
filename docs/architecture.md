@@ -22,7 +22,7 @@ Both write configuration in sections per module system, such as `darwin.ifEnable
 
 Option declarations go in `always`; a conditional section cannot declare options.
 
-The module systems are `darwin` (nix-darwin), `hjem` (through `adapters/hjem.nix`), and `myconfig`. `myconfig` is not evaluated on its own: Denix merges it into every other module system's evaluation under the `myconfig` prefix. A `myconfig` value is therefore seen by every module system and must mean the same in each. A value that only means something inside one system, such as a path or derivation that system computes, belongs to that system's sections.
+The module systems are `darwin` (nix-darwin), `hjem` (through `adapters/hjem/default.nix`), and `myconfig`. `myconfig` is not evaluated on its own: Denix merges it into every other module system's evaluation under the `myconfig` prefix. A `myconfig` value is therefore seen by every module system and must mean the same in each. A value that only means something inside one system, such as a path or derivation that system computes, belongs to that system's sections.
 
 A module's name is its `myconfig` interface path, so choose it for the modules and hosts that reference it. Directory placement serves navigation and may differ from the name.
 
@@ -46,7 +46,8 @@ Each mechanism is specified at the top of its file and by its option description
 - `extensions/module-dependencies.nix`: a dotted module's `enable` depends on its immediate parent.
 - `extensions/module-metadata.nix`: required responsibility descriptions for modules.
 - `extensions/provenance.nix`: every module and host section is labelled with its origin as the location of its definitions.
-- `adapters/hjem.nix`: the Hjem module system, including files that only one location may define.
+- `adapters/hjem/default.nix`: the Hjem module system, including files that only one location may define.
+- `adapters/hjem/services.nix`: Hjem-owned portable/native service declarations and Darwin lowering, with lifecycle reconciliation in `adapters/hjem/services.py`.
 - `lib/fragments.nix`: named fragments ordered by dependency, for a file that several features contribute to.
 - `lib/module-docs.nix`: a module catalogue rendered from Denix metadata and declaration locations without generating a host configuration.
 - `git-hooks.nix`: development-shell installation of commit automation, with the transaction owned by `scripts/commit.nu`.

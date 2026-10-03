@@ -6,7 +6,7 @@ This file owns the agent rules no other document covers and summarizes the conce
 
 - The configuration is built with Denix. Modules (`delib.module`) are features under `abstractions/modules/`; hosts (`delib.host`) are machines under `abstractions/hosts/`. Denix discovers them; they do not import each other.
 - A module declares options under `myconfig.<name>`, and its name is that interface path. A dotted module such as `zsh.interactive` is enabled only when its parent is.
-- Modules and hosts write configuration in sections per module system: `always`, `ifEnabled`, and `ifDisabled`. The module systems are `darwin` (nix-darwin), `hjem` (user files, through `adapters/hjem.nix`), and `myconfig`.
+- Modules and hosts write configuration in sections per module system: `always`, `ifEnabled`, and `ifDisabled`. The module systems are `darwin` (nix-darwin), `hjem` (user files, through `adapters/hjem/default.nix`), and `myconfig`.
 - `myconfig` is merged into every module system's evaluation, so it carries choices that mean the same everywhere. Values one system computes stay in that system's sections.
 - A feature keeps all of its module-system outputs together, and every shared output has one owner. Files several features contribute to are owned by one module and receive the others' contributions as ordered fragments.
 
