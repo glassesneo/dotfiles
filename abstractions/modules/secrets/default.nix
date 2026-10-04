@@ -15,6 +15,7 @@
     "parallel-api-key"
     "exa-api-key"
     "command-code-api-key"
+    "iniad-gitconfig"
   ];
 in
   delib.module ({cfg, ...}: {

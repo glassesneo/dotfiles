@@ -2,7 +2,10 @@
 delib.host {
   name = "seiran-vm1";
   system = "aarch64-darwin";
-  users.neo = {};
+  users.neo = {
+    fullName = "Neo Kitani";
+    email = "glassesneo@protonmail.com";
+  };
   primaryUser = "neo";
 
   myconfig.ifEnabled = {

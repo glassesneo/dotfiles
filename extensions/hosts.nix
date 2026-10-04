@@ -26,6 +26,16 @@
                   else "/home/${name}"
                 ))
                 "Home directory of this user on the host.";
+
+              fullName =
+                description
+                (allowNull (strOption null))
+                "Full name of this user, such as the author name of their commits.";
+
+              email =
+                description
+                (allowNull (strOption null))
+                "Email address of this user, such as the author address of their commits.";
             };
           })) {})
           "Users on this host. Each user receives its own Hjem configuration.";

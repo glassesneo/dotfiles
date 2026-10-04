@@ -15,6 +15,8 @@ Generated from Denix module metadata. Do not edit; run `just docs`.
 | <code>fd</code> | Provide fd for finding files and directories. | [<code>abstractions/modules/fd/default.nix</code>](../../abstractions/modules/fd/default.nix) |
 | <code>fzf</code> | Provide fzf, configure its candidate search and display, and enable selected Zsh bindings. | [<code>abstractions/modules/fzf/default.nix</code>](../../abstractions/modules/fzf/default.nix) |
 | <code>gh</code> | Provide the GitHub CLI. | [<code>abstractions/modules/gh/default.nix</code>](../../abstractions/modules/gh/default.nix) |
+| <code>git</code> | Provide Git with signed commits, a commit message template, and global ignores. | [<code>abstractions/modules/git/default.nix</code>](../../abstractions/modules/git/default.nix) |
+| <code>git.include</code> | Include the encrypted INIAD Git configuration in repositories under ~/iniad/. | [<code>abstractions/modules/git/include/default.nix</code>](../../abstractions/modules/git/include/default.nix) |
 | <code>gomi</code> | Provide gomi and use it as Zsh's rm alias. | [<code>abstractions/modules/gomi/default.nix</code>](../../abstractions/modules/gomi/default.nix) |
 | <code>harness</code> | Provide the self-built LLM agent harness, built on the Pi SDK with an OpenTUI interface. | [<code>abstractions/modules/harness/default.nix</code>](../../abstractions/modules/harness/default.nix) |
 | <code>host</code> | Expose the selected host's information to modules and reflect its identity in OS host names. | [<code>abstractions/modules/host/default.nix</code>](../../abstractions/modules/host/default.nix) |
@@ -27,6 +29,7 @@ Generated from Denix module metadata. Do not edit; run `just docs`.
 | <code>ripgrep</code> | Provide ripgrep for searching file contents. | [<code>abstractions/modules/ripgrep/default.nix</code>](../../abstractions/modules/ripgrep/default.nix) |
 | <code>secrets</code> | Manage the selected encrypted secrets with nix-secrets. | [<code>abstractions/modules/secrets/default.nix</code>](../../abstractions/modules/secrets/default.nix) |
 | <code>shell</code> | Define a shared configuration interface for shells and configure the selected login shell. | [<code>abstractions/modules/shell/default.nix</code>](../../abstractions/modules/shell/default.nix) |
+| <code>ssh</code> | Configure the OpenSSH client and the user's main identity. | [<code>abstractions/modules/ssh/default.nix</code>](../../abstractions/modules/ssh/default.nix) |
 | <code>users</code> | Apply the host's declared user information to OS user configuration. | [<code>abstractions/modules/users/default.nix</code>](../../abstractions/modules/users/default.nix) |
 | <code>zoxide</code> | Provide zoxide and initialize its directory navigation in Zsh. | [<code>abstractions/modules/zoxide/default.nix</code>](../../abstractions/modules/zoxide/default.nix) |
 | <code>zsh</code> | Enable Zsh and provide the foundation required for its use. | [<code>abstractions/modules/shell/zsh/default.nix</code>](../../abstractions/modules/shell/zsh/default.nix) |
