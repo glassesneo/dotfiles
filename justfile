@@ -9,7 +9,7 @@ mod darwin 'just/darwin.just'
 # Build or apply every layer of a host in order: just all <build|switch> [host]
 mod all 'just/all.just'
 
-# Change a Bun project's dependencies and regenerate its bun.nix: just bun <add|remove|update|sync> <package.json> [packages]
+# Change a Bun project's dependencies and regenerate its bun.nix: just bun <add|remove|update|sync> <package.json> ...
 mod bun 'just/bun.just'
 
 fmt:

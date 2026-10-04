@@ -45,7 +45,7 @@ by this check.
 
 A Bun project is the directory of a `package.json`. Its npm dependencies reach Nix only through the `bun.nix` that bun2nix generates from its `bun.lock`.
 
-- `just bun <add|remove|update|sync> <package.json> [packages]` runs the matching Bun command in that project, then rewrites its `bun.nix` with the unformatted output of bun2nix; `nix fmt` excludes every `bun.nix`. `sync` runs `bun install` after a manual `package.json` edit. Arguments after the manifest, flags included, pass through to Bun; a relative manifest resolves against the invoking directory.
+- `just bun add|remove <package.json> <packages...>`, `just bun update <package.json> [packages...]` (all packages when omitted), and `just bun sync <package.json>` run the matching Bun command in that project, then rewrite its `bun.nix` with the unformatted output of bun2nix; `nix fmt` excludes every `bun.nix`. `sync` runs `bun install` after a manual `package.json` edit and takes no further arguments; for the other operations, arguments after the manifest, flags included, pass through to Bun. A relative manifest resolves against the invoking directory.
 - These commands need `bun` and `bun2nix` from the development shell and reach the npm registry. They create the Git-ignored `node_modules` in the project and change no other state.
 - `package.json` carries no lifecycle script that regenerates `bun.nix`. Changing the lock with Bun directly leaves `bun.nix` stale, and the `bun-lock` check, run by `nix flake check`, fails until `just bun sync` is run.
 
