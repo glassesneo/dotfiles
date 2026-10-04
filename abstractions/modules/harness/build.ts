@@ -11,7 +11,6 @@ const result = await Bun.build({
   target: "bun",
   plugins: [solidPlugin],
   minify: true,
-  sourcemap: "linked",
   // A compiled pi reads its own package.json beside the executable at run
   // time, so the version is fixed here instead.
   define: {
