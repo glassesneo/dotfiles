@@ -36,6 +36,14 @@
       runHook postBuild
     '';
 
+    # Bun's bundler strips types without checking them.
+    doCheck = true;
+    checkPhase = ''
+      runHook preCheck
+      bun node_modules/typescript/bin/tsc --noEmit
+      runHook postCheck
+    '';
+
     # A compiled pi looks for its package.json, themes, docs, and other assets
     # beside the executable, as in pi's own release layout (its
     # `copy-binary-assets` script); the executable is kept out of bin/ so that
