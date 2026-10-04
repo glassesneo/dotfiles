@@ -7,7 +7,7 @@ delib.module ({myconfig, ...}: {
   name = "pay-respects.disrespectful";
   meta.description = "Replace command-not-found handling with sl.";
 
-  options.enable = delib.boolOption false;
+  options.enable = delib.boolOption myconfig.pay-respects.useSl;
 
   hjem.ifEnabled = {pkgs, ...}: {
     packages = [pkgs.sl];

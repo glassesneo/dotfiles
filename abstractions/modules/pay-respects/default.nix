@@ -16,5 +16,9 @@ delib.module ({cfg, ...}: {
   hjem.ifEnabled = {pkgs, ...}:
     lib.mkIf (!cfg.useSl) {
       packages = [pkgs.pay-respects];
+
+      zsh.zshrc.pay-respects.text = ''
+        eval "$(${lib.getExe pkgs.pay-respects} zsh)"
+      '';
     };
 })
