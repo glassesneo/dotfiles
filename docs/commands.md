@@ -14,6 +14,33 @@ Nix owns evaluation and realization. Build recipes call Nix directly and do not 
 - `just check <name>` builds one check for the current system.
 - `nix flake check` runs all checks, including formatting and catalogue freshness. Checks do not rewrite repository files.
 
+## nix-secrets checks
+
+`just check nix-secrets` runs the sandboxed compatibility check. It validates
+configuration/manifest wiring and the live script's syntax, checks that a missing
+identity prevents plaintext publication, and rejects an ordinary directory with
+a forged RAM-disk marker. It does not register LaunchAgents or create disk images.
+The sandboxed and live checks share `tests/nix-secrets/fixture.nix`.
+
+Inside the development shell, `nu scripts/nix-secrets-smoke.nu` runs the explicit
+macOS compatibility check outside the Nix sandbox. It verifies user LaunchAgent
+activation, fresh RAM-disk creation, reuse and recreation, consumer-visible value
+updates and actual file ownership/mode. It also rejects a mounted disk-backed HFS
+image carrying the marker. These are observations of the current package,
+patches, Hjem backend and macOS environment, not a general security guarantee.
+
+Run the live check after nix-secrets updates or local patch changes; after Hjem,
+service wiring, environment or dependency changes that can affect activation;
+after a macOS upgrade; and before first use on a new machine. Run sandboxed checks
+first. Unrelated configuration changes do not require this live check.
+
+The live check creates temporary dummy keys, encrypted input, a user LaunchAgent
+and disk images, then removes its owned test state. Its dedicated job label is
+separate from normal activation; it refuses an existing probe job and does not
+switch the normal host or use real credentials. Reboot/login recovery, real-app-specific loading/reload behavior,
+swap/hibernation protection and forced-interruption cleanup are not established
+by this check.
+
 ## Bun dependencies
 
 A Bun project is the directory of a `package.json`. Its npm dependencies reach Nix only through the `bun.nix` that bun2nix generates from its `bun.lock`.

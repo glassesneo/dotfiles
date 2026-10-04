@@ -137,6 +137,10 @@
       url = "github:nix-darwin/nix-darwin/master";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    nix-secrets = {
+      url = "github:unnamed-systems/nix-secrets/151f264a22b595802647db8fac09a2dbd6cb202c";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     hjem = {
       url = "github:feel-co/hjem";
       inputs.nixpkgs.follows = "nixpkgs";

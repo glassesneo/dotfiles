@@ -237,6 +237,27 @@
         "type": "github"
       }
     },
+    "nix-secrets": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1788356805,
+        "narHash": "sha256-rxClV4z02Ev/bk0/FpdT5h9Oq4/o16RA7e6LRl1/QtU=",
+        "owner": "unnamed-systems",
+        "repo": "nix-secrets",
+        "rev": "151f264a22b595802647db8fac09a2dbd6cb202c",
+        "type": "github"
+      },
+      "original": {
+        "owner": "unnamed-systems",
+        "repo": "nix-secrets",
+        "rev": "151f264a22b595802647db8fac09a2dbd6cb202c",
+        "type": "github"
+      }
+    },
     "nixpkgs": {
       "locked": {
         "lastModified": 1764947035,
@@ -311,6 +332,7 @@
         "hjem": "hjem",
         "llm-agents": "llm-agents",
         "nix-darwin": "nix-darwin",
+        "nix-secrets": "nix-secrets",
         "nixpkgs": "nixpkgs_3",
         "treefmt-nix": "treefmt-nix_2"
       }

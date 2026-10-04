@@ -95,6 +95,7 @@
             }
             exclusiveFiles
             ./services.nix
+            (import ./nix-secrets.nix {inherit inputs;})
             # standalone applies packages through current-profile; expose it on PATH.
             ({config, ...}: {
               environment.sessionVariables.PATH = lib.mkMerge [
