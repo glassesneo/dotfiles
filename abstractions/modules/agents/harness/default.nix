@@ -17,13 +17,13 @@ delib.module ({cfg, ...}: {
       });
     };
 
-  bundles.ifEnabled.harness = {
-    package = cfg.package;
-  };
-
   hjem.ifEnabled = {
     packages = [
       cfg.package
     ];
+  };
+
+  bundles.ifEnabled.harness = {
+    inherit (cfg) package;
   };
 })

@@ -18,7 +18,7 @@ Generated from Denix module metadata. Do not edit; run `just docs`.
 | <code>git</code> | Provide Git with signed commits, a commit message template, and global ignores. | [<code>abstractions/modules/git/default.nix</code>](../../abstractions/modules/git/default.nix) |
 | <code>git.include</code> | Include the encrypted INIAD Git configuration in repositories under ~/iniad/. | [<code>abstractions/modules/git/include/default.nix</code>](../../abstractions/modules/git/include/default.nix) |
 | <code>gomi</code> | Provide gomi and use it as Zsh's rm alias. | [<code>abstractions/modules/gomi/default.nix</code>](../../abstractions/modules/gomi/default.nix) |
-| <code>harness</code> | Provide the self-built LLM agent harness, built on the Pi SDK with an OpenTUI interface. | [<code>abstractions/modules/harness/default.nix</code>](../../abstractions/modules/harness/default.nix) |
+| <code>harness</code> | Provide the self-built LLM agent harness, built on the Pi SDK with an OpenTUI interface. | [<code>abstractions/modules/agents/harness/default.nix</code>](../../abstractions/modules/agents/harness/default.nix) |
 | <code>host</code> | Expose the selected host's information to modules and reflect its identity in OS host names. | [<code>abstractions/modules/host/default.nix</code>](../../abstractions/modules/host/default.nix) |
 | <code>identity</code> | Expose the fixed identity of the person who uses these hosts. | [<code>abstractions/modules/identity/default.nix</code>](../../abstractions/modules/identity/default.nix) |
 | <code>nh</code> | Provide nh for package and option searches. | [<code>abstractions/modules/nh/default.nix</code>](../../abstractions/modules/nh/default.nix) |
