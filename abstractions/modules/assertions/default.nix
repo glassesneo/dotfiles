@@ -14,4 +14,7 @@ delib.module ({myconfig, ...}: {
   hjem.always = {
     inherit (myconfig) assertions;
   };
+  bundles.always = {
+    imports = [{inherit (myconfig) assertions;}];
+  };
 })

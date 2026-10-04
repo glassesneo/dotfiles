@@ -10,6 +10,8 @@ Denix receives every `default.nix` below `abstractions/`. Files in that tree dec
 
 `flake.nix` publishes one nix-darwin configuration per Darwin host and one Hjem configuration per user of each host. Each configuration evaluates independently because each is activated separately.
 
+The same composition publishes `packages.<system>`, merging feature-owned bundles selected for publication into the flake's own packages. A published name that equals an existing package name fails evaluation instead of overriding it.
+
 ## Modules, hosts, and sections
 
 A module (`delib.module`) is a feature. It declares options under `myconfig.<name>` and configuration for each module system. A host (`delib.host`) holds the facts and choices of one machine.
@@ -22,7 +24,7 @@ Both write configuration in sections per module system, such as `darwin.ifEnable
 
 Option declarations go in `always`; a conditional section cannot declare options.
 
-The module systems are `darwin` (nix-darwin), `hjem` (through `adapters/hjem/default.nix`), and `myconfig`. `myconfig` is not evaluated on its own: Denix merges it into every other module system's evaluation under the `myconfig` prefix. A `myconfig` value is therefore seen by every module system and must mean the same in each. A value that only means something inside one system, such as a path or derivation that system computes, belongs to that system's sections.
+The module systems are `darwin` (nix-darwin), `hjem` (through `adapters/hjem/default.nix`), `bundles` (feature-owned packages selected for publication, through `adapters/bundles.nix`), and `myconfig`. `myconfig` is not evaluated on its own: Denix merges it into every other module system's evaluation under the `myconfig` prefix. A `myconfig` value is therefore seen by every module system and must mean the same in each. A value that only means something inside one system, such as a path or derivation that system computes, belongs to that system's sections.
 
 A module's name is its `myconfig` interface path, so choose it for the modules and hosts that reference it. Directory placement serves navigation and may differ from the name.
 
@@ -49,6 +51,7 @@ Each mechanism is specified at the top of its file and by its option description
 - `adapters/hjem/default.nix`: the Hjem module system, including files that only one location may define.
 - `adapters/hjem/services.nix`: Hjem-owned portable/native service declarations and Darwin lowering, with lifecycle reconciliation in `adapters/hjem/services.py`.
 - `adapters/hjem/nix-secrets.nix`: standalone compatibility for upstream nix-secrets options and manifest-based Darwin user activation.
+- `adapters/bundles.nix`: the bundles module system, through which a feature declares a package and whether to publish it.
 - `lib/fragments.nix`: named fragments ordered by dependency, for a file that several features contribute to.
 - `lib/module-docs.nix`: a module catalogue rendered from Denix metadata and declaration locations without generating a host configuration.
 - `scripts/bun.nu`: npm dependencies of a Bun project pinned for Nix in a `bun.nix` generated from its `bun.lock`, kept current by `tests/bun-lock`.

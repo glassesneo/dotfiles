@@ -35,6 +35,7 @@
         [
           denix.denixModules.nixDarwin
           ./adapters/hjem
+          ./adapters/bundles.nix
           ./extensions/hosts.nix
           ./extensions/module-dependencies.nix
           ./extensions/module-metadata.nix
@@ -46,6 +47,16 @@
           ./abstractions
         );
     };
+
+    publishedBundles = configuration.genSystem {
+      moduleSystem = "bundles";
+      extraArgs = {inherit system;};
+    };
+    existingPackages = {
+      hjem = inputs.hjem.packages.${system}.hjem;
+      module-docs = moduleDocs;
+    };
+    packageCollisions = builtins.attrNames (builtins.intersectAttrs existingPackages publishedBundles);
 
     hosts = configuration.config.hosts;
     moduleDocs = pkgs.writeText "modules.md" (import ./lib/module-docs.nix {inherit lib;} {
@@ -87,10 +98,10 @@
         host.users)
       hosts;
 
-    packages.${system} = {
-      hjem = inputs.hjem.packages.${system}.hjem;
-      module-docs = moduleDocs;
-    };
+    packages.${system} =
+      if packageCollisions != []
+      then throw "Published bundles collide with existing packages: ${lib.concatStringsSep ", " packageCollisions}"
+      else existingPackages // publishedBundles;
 
     devShells.${system}.default = pkgs.mkShellNoCC {
       packages = [
@@ -99,6 +110,7 @@
         pkgs.bun
         inputs.bun2nix.packages.${system}.default
         self.packages.${system}.hjem
+        self.packages.${system}.harness
       ];
       inherit (commitHooks) shellHook;
     };

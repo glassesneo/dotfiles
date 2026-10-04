@@ -15,6 +15,10 @@ delib.module ({cfg, ...}: {
       });
     };
 
+  bundles.ifEnabled.harness = {
+    package = cfg.package;
+  };
+
   hjem.ifEnabled = {
     packages = [
       cfg.package

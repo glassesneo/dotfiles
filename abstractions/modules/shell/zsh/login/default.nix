@@ -8,7 +8,7 @@ delib.module ({
   meta.description = "Configure the behavior required to use Zsh as a login shell.";
 
   options = with delib; {
-    enable = boolOption (myconfig.shell.loginShell == "zsh");
+    enable = boolOption false;
     package = packageOption myconfig.zsh.package;
   };
 
