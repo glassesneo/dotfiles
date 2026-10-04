@@ -5,6 +5,7 @@ import { bedrockProviderModule } from "@earendil-works/pi-ai/bedrock-provider";
 import { registerBunOAuthFlows } from "@earendil-works/pi-ai/bun-oauth";
 import { setBedrockProviderModule } from "@earendil-works/pi-ai/compat";
 
+// As in pi's entry: warnings go straight to stderr, which corrupts the full-screen TUI.
 process.emitWarning = () => {};
 registerBunOAuthFlows();
 setBedrockProviderModule(bedrockProviderModule);

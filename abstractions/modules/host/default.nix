@@ -16,7 +16,7 @@ in
       primaryUser = readOnly (allowNull (strOption host.primaryUser));
     };
 
-    # Host-less operator commands resolve the selected host through `hostname -s`.
+    # Host-less operator commands find the host through `hostname -s`, so the OS names follow the Denix host name.
     darwin.always.networking = {
       hostName = host.name;
       computerName = host.name;

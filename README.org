@@ -12,7 +12,7 @@ This repository manages my machines and user environment with the rewrite branch
 - =extensions/= extends Denix itself, such as host attributes.
 - =lib/= contains pure Nix helpers passed to modules as =mylib=.
 - =tests/= contains sandboxed checks discovered as flake checks.
-- =scripts/= contains procedures that modify user or system state.
+- =scripts/= contains the operator commands invoked through =justfile=; see [[file:docs/commands.md][the command contract]].
 - =docs/= contains durable cross-cutting contracts and runbooks. Start with [[file:docs/architecture.md][the architecture contract]]. The generated [[file:docs/generated/modules.md][module catalogue]] is kept separately under =docs/generated/=.
 
 * Commands
