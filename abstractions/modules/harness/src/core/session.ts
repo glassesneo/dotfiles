@@ -28,6 +28,8 @@ export interface SessionBindings {
   onEvent: (event: AgentSessionEvent) => void;
   onExtensionError: (error: ExtensionError) => void;
   onShutdownRequest: () => void;
+  /** Called after another session or branch replaces the bound history. */
+  onHistoryReplaced: (session: AgentSession) => void;
 }
 
 export async function createSessionHost(options: {
@@ -75,9 +77,13 @@ export async function createSessionHost(options: {
             fork: async (entryId, forkOptions) => ({
               cancelled: (await runtime.fork(entryId, forkOptions)).cancelled,
             }),
-            navigateTree: async (targetId, options) => ({
-              cancelled: (await session.navigateTree(targetId, options)).cancelled,
-            }),
+            navigateTree: async (targetId, options) => {
+              const { cancelled } = await session.navigateTree(targetId, options);
+              if (!cancelled) {
+                bindings.onHistoryReplaced(session);
+              }
+              return { cancelled };
+            },
             switchSession: (sessionPath, options) => runtime.switchSession(sessionPath, options),
             reload: () => session.reload(),
           },
@@ -86,7 +92,10 @@ export async function createSessionHost(options: {
         });
         unsubscribe = session.subscribe(bindings.onEvent);
       };
-      runtime.setRebindSession(rebind);
+      runtime.setRebindSession(async (session) => {
+        await rebind(session);
+        bindings.onHistoryReplaced(session);
+      });
       await rebind(runtime.session);
     },
     async dispose() {

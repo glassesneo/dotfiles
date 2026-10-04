@@ -2,7 +2,13 @@ import type { ScrollBoxRenderable } from "@opentui/core";
 import { useKeyboard, useRenderer } from "@opentui/solid";
 import { createSignal, For, onMount, Show } from "solid-js";
 import type { SessionHost } from "../core/session";
-import { type NoticeLevel, notice, reduceTranscript, type TranscriptEntry } from "../core/transcript";
+import {
+  type NoticeLevel,
+  notice,
+  reduceTranscript,
+  type TranscriptEntry,
+  transcriptFromMessages,
+} from "../core/transcript";
 import { DialogView } from "./dialog";
 import { createExtensionUI } from "./extension-ui";
 import { type Action, resolveAction } from "./keymap";
@@ -52,6 +58,10 @@ export function Root(props: { host: SessionHost; startupNotices: readonly Transc
         onExtensionError: (error) =>
           addNotice("error", `${error.extensionPath} (${error.event}): ${error.error}`),
         onShutdownRequest: actions.quit,
+        onHistoryReplaced: (session) => {
+          setEntries(transcriptFromMessages(session.messages));
+          setQueued([...session.getSteeringMessages(), ...session.getFollowUpMessages()]);
+        },
       })
       .catch((error) => addNotice("error", String(error)));
   });

@@ -1,4 +1,4 @@
-import type { AgentSessionEvent } from "@earendil-works/pi-coding-agent";
+import type { AgentSession, AgentSessionEvent } from "@earendil-works/pi-coding-agent";
 import { contentText } from "@earendil-works/pi-ai";
 
 /**
@@ -40,6 +40,50 @@ function updateAssistant(
   return next;
 }
 
+/**
+ * The transcript of an existing history, for when the session or branch is
+ * replaced. It shows what the live events would have shown for the same run.
+ */
+export function transcriptFromMessages(
+  messages: readonly AgentSession["messages"][number][],
+): readonly TranscriptEntry[] {
+  return messages.reduce<readonly TranscriptEntry[]>((entries, message) => {
+    switch (message.role) {
+      case "user":
+        return [...entries, { kind: "user", id: newId(), text: contentText(message.content, "") }];
+      case "assistant": {
+        const next = updateAssistant(entries, contentText(message.content, ""), false);
+        const error: TranscriptEntry[] =
+          message.stopReason === "error" && message.errorMessage
+            ? [notice("error", message.errorMessage)]
+            : [];
+        const tools = message.content.flatMap((block): TranscriptEntry[] =>
+          block.type === "toolCall"
+            ? [{ kind: "tool", id: block.id, name: block.name, status: "running" }]
+            : [],
+        );
+        return [...next, ...error, ...tools];
+      }
+      case "toolResult":
+        return finishTool(entries, message.toolCallId, message.isError);
+      default:
+        return entries;
+    }
+  }, []);
+}
+
+function finishTool(
+  entries: readonly TranscriptEntry[],
+  toolCallId: string,
+  isError: boolean,
+): readonly TranscriptEntry[] {
+  return entries.map((entry) =>
+    entry.kind === "tool" && entry.id === toolCallId
+      ? { ...entry, status: isError ? "error" : "done" }
+      : entry,
+  );
+}
+
 export function reduceTranscript(
   entries: readonly TranscriptEntry[],
   event: AgentSessionEvent,
@@ -70,11 +114,7 @@ export function reduceTranscript(
         { kind: "tool", id: event.toolCallId, name: event.toolName, status: "running" },
       ];
     case "tool_execution_end":
-      return entries.map((entry) =>
-        entry.kind === "tool" && entry.id === event.toolCallId
-          ? { ...entry, status: event.isError ? "error" : "done" }
-          : entry,
-      );
+      return finishTool(entries, event.toolCallId, event.isError);
     default:
       return entries;
   }
