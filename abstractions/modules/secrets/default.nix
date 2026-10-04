@@ -27,7 +27,15 @@ in
       names = listOfOption (types.enum secretNames) [];
     };
 
-    hjem.ifEnabled = {config, ...}: {
+    hjem.ifEnabled = {
+      config,
+      pkgs,
+      ...
+    }: let
+      # Each secret path is a link into the RAM disk, dangling once a reboot discards it.
+      probe = config.security.nix-secrets.secrets.${builtins.head cfg.names}.path;
+      logDir = "${config.xdg.state.directory}/nix-secrets";
+    in {
       security.nix-secrets = {
         enable = true;
         storage = ../../../secrets;
@@ -39,6 +47,16 @@ in
           "age1fghhv0qqjj0z34cwru7xlepyechw8vsc2tz0zs4ug8ke3el34g3q5zmwwk"
         ];
         secrets = lib.genAttrs cfg.names (_: {});
+      };
+
+      # SSH sessions do not load the login LaunchAgent.
+      zsh.zshenv.nix-secrets = lib.mkIf (pkgs.stdenv.hostPlatform.isDarwin && cfg.names != []) {
+        text = ''
+          if [ ! -e ${lib.escapeShellArg probe} ]; then
+            mkdir -p ${lib.escapeShellArg logDir}
+            ${config.security.nix-secrets.activateScript} >>${lib.escapeShellArg "${logDir}/activate.log"} 2>&1
+          fi
+        '';
       };
     };
   })

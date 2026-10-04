@@ -61,7 +61,7 @@ def main [] {
   let uid = checked /usr/bin/id -u
   let username = checked /usr/bin/id -un
   let label = 'org.hjem.nix-secrets-probe'
-  let domain = $'user/($uid)/($label)'
+  let domain = $'gui/($uid)/($label)'
   for kind in [user gui] {
     let status = ^/bin/launchctl print $'($kind)/($uid)/($label)' | complete
     assert ($status.exit_code != 0) $'Existing job: ($label)'

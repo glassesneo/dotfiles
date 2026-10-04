@@ -8,13 +8,22 @@
   ...
 }: let
   cfg = config.security.nix-secrets;
+  lockDir = "${config.xdg.state.directory}/nix-secrets";
+  # Several triggers can start activation together, and upstream activation has no lock.
   activate = pkgs.writeShellScript "nix-secrets-activate" ''
     set -eu
     export HOME=${lib.escapeShellArg config.directory}
     export PATH=${lib.escapeShellArg "${lib.optionalString (cfg.extraPackages != []) "${lib.makeBinPath cfg.extraPackages}:"}/usr/bin:/bin:/usr/sbin:/sbin"}
-    exec ${cfg.activate.command false}
+    mkdir -p ${lib.escapeShellArg lockDir}
+    exec /usr/bin/lockf -k ${lib.escapeShellArg "${lockDir}/activate.lock"} ${cfg.activate.command false}
   '';
 in {
+  options.security.nix-secrets.activateScript = lib.mkOption {
+    type = lib.types.path;
+    readOnly = true;
+    description = "Darwin activation command, serialized with every other trigger that runs it.";
+  };
+
   imports = [inputs.nix-secrets.hjemModules.default];
   # Upstream defines systemd options even when automatic activation is disabled.
   disabledModules = ["${inputs.nix-secrets}/nix/hjem/activate/systemd.nix"];
@@ -35,6 +44,7 @@ in {
     }
     (lib.mkIf cfg.enable {
       security.nix-secrets = {
+        activateScript = activate;
         # CLI lookup uses this Hjem user's generated manifest regardless of
         # --flake; override nixEvalCommand to target another configuration.
         nixEvalCommand = lib.mkDefault "${pkgs.coreutils}/bin/cat ${pkgs.writeText "nix-secrets-manifest.json" cfg.manifest}";
@@ -44,13 +54,13 @@ in {
     (lib.mkIf (cfg.enable && cfg.activate.enable) {
       userServices.nix-secrets-activate = {
         command = ["${activate}"];
-        # Reconciliation kickstarts on initial registration too; avoid a second
-        # RunAtLoad start that could be killed midway through disk creation.
-        autoStart = false;
+        # The RAM disk is gone after a reboot, so secrets are activated at login too.
+        autoStart = true;
         restartOnSwitch = true;
       };
       platform.darwin.launchAgents.nix-secrets-activate = {
-        domain = "user";
+        # Login loads only Aqua agents; a Background agent runs only when bootstrapped.
+        domain = "gui";
         config = {
           Label = "org.hjem.nix-secrets-activate";
           # Hjem's service reconciler creates Library/LaunchAgents before bootstrap.

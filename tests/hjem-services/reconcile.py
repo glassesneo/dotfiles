@@ -78,7 +78,7 @@ with tempfile.TemporaryDirectory() as tmp:
             (p / 'plists' / (job['label'] + '.plist')).write_text(str(n))
         return p
 
-    job = dict(name='test', label='org.hjem.test', domain='user', restart=False)
+    job = dict(name='test', label='org.hjem.test', domain='user', restart=False, runAtLoad=False)
     one = generation(1, [job])
     def apply(p):
         m.reconcile(p, home, str(fake), ctl)
@@ -205,3 +205,36 @@ with tempfile.TemporaryDirectory() as tmp:
     assert {r.resolve() for r in alias_state.glob('root-*')} == {new_alias}
     alias_apply(empty)
     assert not ctl.jobs and not upper_path.exists() and not lower_path.exists()
+
+# RunAtLoad starts a just-bootstrapped job, so a restart would interrupt that
+# run; a job that was already loaded, or does not run at load, is restarted.
+with tempfile.TemporaryDirectory() as tmp:
+    tmp = Path(tmp)
+    ctl = Ctl()
+    fake = tmp / 'nix-store'
+    fake.write_text('#!/bin/sh\nln -sfn "$5" "$2"\n')
+    fake.chmod(0o755)
+
+    def generation(n, jobs):
+        p = tmp / ('generation-' + str(n))
+        (p / 'plists').mkdir(parents=True)
+        (p / 'services.json').write_text(json.dumps(jobs))
+        for job in jobs:
+            (p / 'plists' / (job['label'] + '.plist')).write_text(str(n))
+        return p
+
+    def apply(p, home='load'):
+        m.reconcile(p, tmp / home, str(fake), ctl)
+
+    loading = dict(name='test', label='org.hjem.test', domain='user', restart=True, runAtLoad=True)
+    first = generation(1, [loading])
+    apply(first)
+    assert ctl.starts == 1 and ctl.restarts == 0
+    apply(first)
+    assert ctl.starts == 1 and ctl.restarts == 1
+    apply(generation(2, [loading]))  # Changed content is bootstrapped again.
+    assert ctl.starts == 2 and ctl.restarts == 1
+
+    ctl.jobs.clear()
+    apply(generation(3, [dict(loading, runAtLoad=False)]), home='manual')
+    assert ctl.starts == 3 and ctl.restarts == 2

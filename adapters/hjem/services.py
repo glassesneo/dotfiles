@@ -124,7 +124,8 @@ def apply_locked(closure, state, agents, nix_store, ctl):
     for job in desired:
         wanted.append({"name": job["name"], "label": job["label"], "domain": job["domain"],
                        "content": (closure / "plists" / (job["label"] + ".plist")).read_text(),
-                       "root": str(root), "restart": job["restart"], "remove": False})
+                       "root": str(root), "restart": job["restart"], "runAtLoad": job["runAtLoad"],
+                       "remove": False})
     # A label in the other domain is not ours merely because its path matches.
     # Inspect both readable domains before file or live-job mutation. Owned old
     # identities are permitted here so domain migration can retire them below.
@@ -187,9 +188,11 @@ def apply_locked(closure, state, agents, nix_store, ctl):
         if ctl.disabled(dom, new["label"]):
             print(f"Manually disabled, startup skipped: {new['label']}")
             continue
-        if not ctl.loaded(dom, new["label"], path):
+        bootstrapped = not ctl.loaded(dom, new["label"], path)
+        if bootstrapped:
             ctl.bootstrap(dom, path)
-        if new["restart"]:
+        # RunAtLoad already started a just-bootstrapped job; kickstart -k would kill that run midway.
+        if new["restart"] and not (bootstrapped and new["runAtLoad"]):
             ctl.restart(dom, new["label"])
         record.update(new)
         save()

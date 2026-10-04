@@ -23,7 +23,8 @@ a forged RAM-disk marker. It does not register LaunchAgents or create disk image
 The sandboxed and live checks share `tests/nix-secrets/fixture.nix`.
 
 Inside the development shell, `nu scripts/nix-secrets-smoke.nu` runs the explicit
-macOS compatibility check outside the Nix sandbox. It verifies user LaunchAgent
+macOS compatibility check outside the Nix sandbox. It needs a GUI login session,
+because the activation LaunchAgent belongs to the GUI domain. It verifies user LaunchAgent
 activation, fresh RAM-disk creation, reuse and recreation, consumer-visible value
 updates and actual file ownership/mode. It also rejects a mounted disk-backed HFS
 image carrying the marker. These are observations of the current package,

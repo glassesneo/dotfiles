@@ -20,12 +20,12 @@
       autoStart = mkOption {
         type = types.bool;
         default = true;
-        description = "Request startup on registration, not on every switch or reboot.";
+        description = "Start whenever launchd loads the job: on registration and at each login, not on every switch.";
       };
       restartOnSwitch = mkOption {
         type = types.bool;
         default = false;
-        description = "Request a potentially interrupting restart on every switch.";
+        description = "Request a potentially interrupting restart on every switch, except right after registration has started an autoStart job.";
       };
       environment = mkOption {
         type = types.attrsOf types.str;
@@ -140,6 +140,7 @@
         if p != null
         then p.restartOnSwitch
         else n.restartOnSwitch;
+      runAtLoad = merged.RunAtLoad or false;
       config =
         merged
         // {

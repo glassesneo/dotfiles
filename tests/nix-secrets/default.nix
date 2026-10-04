@@ -80,14 +80,15 @@ in
     secret, = manifest['secrets']
     assert secret['owner'] == 'fixture' and secret['group'] == 20 and secret['mode'] == '0400'
     job, = json.loads((Path(os.environ['automatic']) / 'services.json').read_text())
-    assert job['domain'] == 'user' and job['restart']
+    assert job['domain'] == 'gui' and job['restart']
     assert job['label'] == job['config']['Label'] == 'org.hjem.nix-secrets-probe'
     production_job, = json.loads((Path(os.environ['production']) / 'services.json').read_text())
     assert production_job['label'] == 'org.hjem.nix-secrets-activate'
     assert production_job['label'] != job['label']
-    assert not job['config']['RunAtLoad'] and not job['config'].get('KeepAlive', False)
+    assert job['config']['RunAtLoad'] and job['runAtLoad'] and not job['config'].get('KeepAlive', False)
     script = Path(job['config']['ProgramArguments'][0]).read_text()
     assert ' activate ' in script and '--needed-for-users false' in script
+    assert re.search(r'^exec /usr/bin/lockf -k \S+/nix-secrets/activate.lock ', script, re.M)
     activation_manifest = re.search(r' activate (\S+) --needed-for-users', script)[1]
     assert json.loads(Path(activation_manifest).read_text()) == manifest
     def wrapper_path(job):
@@ -116,7 +117,7 @@ in
         secret['path'] = str(home / 'published')
         manifest_path = home / 'manifest.json'
         manifest_path.write_text(json.dumps(manifest))
-        package = re.search(r'exec (\S+)/bin/nix-secrets activate ', script)[1]
+        package = re.search(r' (\S+)/bin/nix-secrets activate ', script)[1]
         failed = subprocess.run([package + '/bin/nix-secrets', 'activate', str(manifest_path),
                                  '--needed-for-users', 'false'], capture_output=True, text=True)
         assert failed.returncode != 0 and 'Failed to decrypt secret' in failed.stderr
