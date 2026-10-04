@@ -39,12 +39,9 @@ in
     darwin.ifEnabled = {
       environment.shells = [myconfig.${cfg.loginShell}.package];
 
-      users.users =
-        builtins.mapAttrs
-        (_: _: {
-          ignoreShellProgramCheck = true;
-          shell = myconfig.${cfg.loginShell}.package;
-        })
-        myconfig.host.users;
+      users.users.${myconfig.host.user.name} = {
+        ignoreShellProgramCheck = true;
+        shell = myconfig.${cfg.loginShell}.package;
+      };
     };
   })

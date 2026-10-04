@@ -21,24 +21,19 @@ delib.module ({myconfig, ...}: {
     config,
     pkgs,
     ...
-  }: let
-    user = myconfig.host.users.${config.user};
-  in {
+  }: {
     packages = [
       pkgs.git
       pkgs.git-lfs
     ];
 
     git.settings = {
-      user =
-        lib.filterAttrs (_: value: value != null) {
-          name = user.fullName;
-          email = user.email;
-        }
-        // {
-          useConfigOnly = true;
-          signingkey = myconfig.ssh.mainIdentity;
-        };
+      user = {
+        name = myconfig.identity.fullName;
+        email = myconfig.identity.email;
+        useConfigOnly = true;
+        signingkey = myconfig.ssh.mainIdentity;
+      };
       commit = {
         verbose = true;
         template = "${config.xdg.config.directory}/git/gitmsg";

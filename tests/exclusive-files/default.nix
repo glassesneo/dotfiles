@@ -28,7 +28,7 @@
     delib.host {
       name = "fixture";
       system = system;
-      users.fixture = {};
+      user.name = "fixture";
       hjem.ifEnabled.files.${file}.text = "host";
     };
 

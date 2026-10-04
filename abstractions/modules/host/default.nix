@@ -12,8 +12,7 @@ in
     options = with delib; {
       name = readOnly (strOption host.name);
       system = readOnly (strOption host.system);
-      users = readOnly (attrsOption host.users);
-      primaryUser = readOnly (allowNull (strOption host.primaryUser));
+      user = readOnly (attrsOption host.user);
     };
 
     # Host-less operator commands find the host through `hostname -s`, so the OS names follow the Denix host name.

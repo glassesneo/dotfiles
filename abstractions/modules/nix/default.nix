@@ -5,6 +5,6 @@ delib.module ({myconfig, ...}: {
 
   darwin.always.nix.settings = {
     experimental-features = ["nix-command" "flakes"];
-    trusted-users = ["root" "@admin"] ++ builtins.attrNames myconfig.host.users;
+    trusted-users = ["root" "@admin" myconfig.host.user.name];
   };
 })

@@ -2,11 +2,7 @@
 delib.host {
   name = "seiran";
   system = "aarch64-darwin";
-  users.neo = {
-    fullName = "Neo Kitani";
-    email = "glassesneo@protonmail.com";
-  };
-  primaryUser = "neo";
+  user.name = "neo";
 
   myconfig.ifEnabled = {
     shell.loginShell = "zsh";

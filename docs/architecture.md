@@ -44,7 +44,7 @@ A concern has one owner. Shared outputs have one final writer, and adapters tran
 
 Each mechanism is specified at the top of its file and by its option descriptions.
 
-- `extensions/hosts.nix`: host attributes (system, users, primary user), exposed as read-only `myconfig.host` by the host module.
+- `extensions/hosts.nix`: host attributes (system and sole user), exposed as read-only `myconfig.host` by the host module.
 - `extensions/module-dependencies.nix`: a dotted module's `enable` depends on its immediate parent.
 - `extensions/module-metadata.nix`: required responsibility descriptions for modules.
 - `extensions/provenance.nix`: every module and host section is labelled with its origin as the location of its definitions.

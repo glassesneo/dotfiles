@@ -81,21 +81,18 @@
         hosts);
 
     hjemConfigurations =
-      lib.concatMapAttrs
+      lib.mapAttrs'
       (hostName: host:
-        lib.mapAttrs'
-        (userName: user:
-          lib.nameValuePair "${userName}@${hostName}" (configuration.genSystem {
-            moduleSystem = "hjem";
-            host = hostName;
+        lib.nameValuePair "${host.user.name}@${hostName}" (configuration.genSystem {
+          moduleSystem = "hjem";
+          host = hostName;
 
-            extraArgs = {
-              inherit (host) system;
-              inherit (user) homeDirectory;
-              username = userName;
-            };
-          }))
-        host.users)
+          extraArgs = {
+            inherit (host) system;
+            inherit (host.user) homeDirectory;
+            username = host.user.name;
+          };
+        }))
       hosts;
 
     packages.${system} =
