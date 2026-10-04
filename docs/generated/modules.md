@@ -25,6 +25,7 @@ Generated from Denix module metadata. Do not edit; run `just docs`.
 | <code>pay-respects.disrespectful</code> | Replace command-not-found handling with sl. | [<code>abstractions/modules/pay-respects/disrespectful/default.nix</code>](../../abstractions/modules/pay-respects/disrespectful/default.nix) |
 | <code>publication</code> | Centralize publication choices for feature-owned bundles. | [<code>abstractions/modules/publication/default.nix</code>](../../abstractions/modules/publication/default.nix) |
 | <code>ripgrep</code> | Provide ripgrep for searching file contents. | [<code>abstractions/modules/ripgrep/default.nix</code>](../../abstractions/modules/ripgrep/default.nix) |
+| <code>secrets</code> | Manage the selected encrypted secrets with nix-secrets. | [<code>abstractions/modules/secrets/default.nix</code>](../../abstractions/modules/secrets/default.nix) |
 | <code>shell</code> | Define a shared configuration interface for shells and configure the selected login shell. | [<code>abstractions/modules/shell/default.nix</code>](../../abstractions/modules/shell/default.nix) |
 | <code>users</code> | Apply the host's declared user information to OS user configuration. | [<code>abstractions/modules/users/default.nix</code>](../../abstractions/modules/users/default.nix) |
 | <code>zoxide</code> | Provide zoxide and initialize its directory navigation in Zsh. | [<code>abstractions/modules/zoxide/default.nix</code>](../../abstractions/modules/zoxide/default.nix) |

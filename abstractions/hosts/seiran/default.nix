@@ -5,7 +5,22 @@ delib.host {
   users.neo = {};
   primaryUser = "neo";
 
-  myconfig.ifEnabled.shell.loginShell = "zsh";
+  myconfig.ifEnabled = {
+    shell.loginShell = "zsh";
+    secrets.names = [
+      "vercel-ai-gateway-api-key"
+      "openrouter-api-key"
+      "opencode-api-key"
+      "mistral-api-key"
+      "zai-api-key"
+      "cohere-api-key"
+      "brave-api-key"
+      "brave-free-api-key"
+      "parallel-api-key"
+      "exa-api-key"
+      "command-code-api-key"
+    ];
+  };
 
   darwin.ifEnabled = {
     system.stateVersion = 4;
