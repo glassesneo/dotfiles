@@ -7,7 +7,7 @@ import pi from "./node_modules/@earendil-works/pi-coding-agent/package.json" wit
 import harness from "./package.json" with { type: "json" };
 
 const result = await Bun.build({
-  entrypoints: ["./src/index.tsx"],
+  entrypoints: ["./src/main.ts"],
   target: "bun",
   plugins: [solidPlugin],
   minify: true,
