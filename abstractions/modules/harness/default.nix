@@ -10,8 +10,10 @@ delib.module ({cfg, ...}: {
   options = {pkgs, ...}:
     with delib; {
       enable = boolOption true;
+      settings = attrsOfOption anything {};
       package = packageOption (pkgs.callPackage ./package.nix {
         bun2nix = inputs.bun2nix.packages.${pkgs.stdenv.hostPlatform.system}.default;
+        inherit (cfg) settings;
       });
     };
 
