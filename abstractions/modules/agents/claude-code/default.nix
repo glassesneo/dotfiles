@@ -6,7 +6,7 @@ delib.module ({myconfig, ...}: {
   options.enable = delib.boolOption true;
 
   hjem.ifEnabled = {
-    packages = [myconfig.agents.packages.cursor-agent];
+    packages = [myconfig.agents.packages.claude-code];
 
     files.".claude/settings.json" = {
       exclusive = true;
