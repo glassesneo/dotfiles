@@ -37,6 +37,8 @@ in
       };
 
     darwin.ifEnabled = {
+      environment.shells = [myconfig.${cfg.loginShell}.package];
+
       users.users =
         builtins.mapAttrs
         (_: _: {

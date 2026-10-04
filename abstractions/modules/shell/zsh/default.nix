@@ -4,7 +4,7 @@
   mylib,
   ...
 }:
-delib.module {
+delib.module ({cfg, ...}: {
   name = "zsh";
   meta.description = "Enable Zsh and provide the foundation required for its use.";
 
@@ -17,6 +17,8 @@ delib.module {
   hjem.always.options.zsh.zshenv = mylib.fragments.option;
 
   hjem.ifEnabled = {config, ...}: {
+    packages = [cfg.package];
+
     files.".zshenv" = {
       exclusive = true;
       text = mylib.fragments.render config.zsh.zshenv;
@@ -58,4 +60,4 @@ delib.module {
       };
     };
   };
-}
+})

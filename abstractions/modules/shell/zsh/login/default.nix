@@ -1,22 +1,9 @@
 {delib, ...}:
-delib.module ({
-  cfg,
-  myconfig,
-  ...
-}: {
+delib.module {
   name = "zsh.login";
   meta.description = "Configure the behavior required to use Zsh as a login shell.";
 
-  options = with delib; {
-    enable = boolOption false;
-    package = packageOption myconfig.zsh.package;
-  };
-
-  darwin.ifEnabled = {
-    environment = {
-      shells = [cfg.package];
-    };
-  };
+  options.enable = delib.boolOption false;
 
   hjem.ifEnabled = {config, ...}: {
     zsh.zshenv.hjem-environment.text = ''
@@ -26,4 +13,4 @@ delib.module ({
       fi
     '';
   };
-})
+}

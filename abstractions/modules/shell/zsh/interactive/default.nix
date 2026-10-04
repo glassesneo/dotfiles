@@ -4,14 +4,11 @@
   mylib,
   ...
 }:
-delib.module ({myconfig, ...}: {
+delib.module {
   name = "zsh.interactive";
   meta.description = "Build Zsh's interactive environment.";
 
-  options = with delib; {
-    enable = boolOption true;
-    package = packageOption myconfig.zsh.package;
-  };
+  options.enable = delib.boolOption true;
 
   hjem.always.options.zsh.zshrc = mylib.fragments.option;
 
@@ -56,4 +53,4 @@ delib.module ({myconfig, ...}: {
     # Without secondary_theme.zsh, fsh downloads the upstream free theme at startup.
     xdg.data.files."fsh/secondary_theme.zsh".source = "${fsh.src}/share/free_theme.zsh";
   };
-})
+}
