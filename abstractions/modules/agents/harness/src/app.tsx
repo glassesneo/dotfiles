@@ -3,8 +3,8 @@ import { getAgentDir, initTheme } from "@earendil-works/pi-coding-agent";
 import { render } from "@opentui/solid";
 import { createSessionHost } from "./core/session";
 import { createSettingsManager } from "./core/settings";
-import { notice } from "./core/transcript";
-import { Root } from "./ui/root";
+import { notice } from "./core/session-entries";
+import { Screen } from "./ui/screen";
 
 export async function run(options: { configPath: string | undefined }): Promise<void> {
   initTheme();
@@ -21,7 +21,7 @@ export async function run(options: { configPath: string | undefined }): Promise<
       : []),
   ];
 
-  await render(() => <Root host={host} startupNotices={startupNotices} />, {
+  await render(() => <Screen host={host} startupNotices={startupNotices} />, {
     // Ctrl+C is the quit action, which disposes the session before exiting.
     exitOnCtrlC: false,
   });

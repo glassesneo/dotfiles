@@ -1,1 +1,6 @@
 preload = ["@opentui/solid/preload"]
+
+# `bun run` and `bun test` read different preload lists; the renderer tests need
+# the same Solid transform as the app.
+[test]
+preload = ["@opentui/solid/preload"]

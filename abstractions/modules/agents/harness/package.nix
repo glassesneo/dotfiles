@@ -41,6 +41,7 @@
     checkPhase = ''
       runHook preCheck
       bun node_modules/typescript/bin/tsc --noEmit
+      bun test
       runHook postCheck
     '';
 
